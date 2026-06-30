@@ -10,7 +10,7 @@ import { getLatestPrediction, listPredictions } from "@/lib/predictions.function
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
+import { useLiveCandles, useLiveSpotPrice, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Home — BTC 15m" }] }),
@@ -42,6 +42,7 @@ function Dashboard() {
 
   const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
   const liveQ = useLiveCandles(liveSource, 5000);
+  const spotQ = useLiveSpotPrice(liveSource, 3000);
 
   // Realtime
   useEffect(() => {
@@ -80,7 +81,7 @@ function Dashboard() {
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
       <HeaderStrip
-        price={last?.close}
+        price={spotQ.data ?? last?.close}
         change={change24}
         isBull={isBull}
         lastCandleTs={last?.candle_ts}
