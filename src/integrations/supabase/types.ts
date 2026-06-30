@@ -14,13 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      api_runs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          request_payload: Json | null
+          response_payload: Json | null
+          run_type: string
+          success: boolean
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          request_payload?: Json | null
+          response_payload?: Json | null
+          run_type: string
+          success?: boolean
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          request_payload?: Json | null
+          response_payload?: Json | null
+          run_type?: string
+          success?: boolean
+        }
+        Relationships: []
+      }
+      candles: {
+        Row: {
+          candle_ts: string
+          close: number
+          confirm: boolean
+          created_at: string
+          high: number
+          id: string
+          low: number
+          open: number
+          raw: Json | null
+          symbol: string
+          timeframe: string
+          volume: number
+          volume_quote: number | null
+        }
+        Insert: {
+          candle_ts: string
+          close: number
+          confirm?: boolean
+          created_at?: string
+          high: number
+          id?: string
+          low: number
+          open: number
+          raw?: Json | null
+          symbol?: string
+          timeframe?: string
+          volume: number
+          volume_quote?: number | null
+        }
+        Update: {
+          candle_ts?: string
+          close?: number
+          confirm?: boolean
+          created_at?: string
+          high?: number
+          id?: string
+          low?: number
+          open?: number
+          raw?: Json | null
+          symbol?: string
+          timeframe?: string
+          volume?: number
+          volume_quote?: number | null
+        }
+        Relationships: []
+      }
+      model_settings: {
+        Row: {
+          auto_run_enabled: boolean
+          confidence_threshold: number
+          created_at: string
+          id: string
+          indicator_weights: Json
+          is_active: boolean
+          model_version: string
+          prompt_template: string
+          require_manual_approval: boolean
+          updated_at: string
+        }
+        Insert: {
+          auto_run_enabled?: boolean
+          confidence_threshold?: number
+          created_at?: string
+          id?: string
+          indicator_weights?: Json
+          is_active?: boolean
+          model_version: string
+          prompt_template?: string
+          require_manual_approval?: boolean
+          updated_at?: string
+        }
+        Update: {
+          auto_run_enabled?: boolean
+          confidence_threshold?: number
+          created_at?: string
+          id?: string
+          indicator_weights?: Json
+          is_active?: boolean
+          model_version?: string
+          prompt_template?: string
+          require_manual_approval?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      predictions: {
+        Row: {
+          actual_next_candle_close: number | null
+          actual_next_candle_high: number | null
+          actual_next_candle_low: number | null
+          actual_next_candle_open: number | null
+          btc_price_at_prediction: number
+          candle_ts: string
+          confidence: number
+          created_at: string
+          full_ai_response: Json | null
+          id: string
+          indicators: Json | null
+          market_condition: string | null
+          model_version: string
+          notes: string | null
+          prediction: string
+          reasoning_summary: string | null
+          resolved_at: string | null
+          setup_type: string | null
+          status: string
+          symbol: string
+          timeframe: string
+        }
+        Insert: {
+          actual_next_candle_close?: number | null
+          actual_next_candle_high?: number | null
+          actual_next_candle_low?: number | null
+          actual_next_candle_open?: number | null
+          btc_price_at_prediction: number
+          candle_ts: string
+          confidence: number
+          created_at?: string
+          full_ai_response?: Json | null
+          id?: string
+          indicators?: Json | null
+          market_condition?: string | null
+          model_version: string
+          notes?: string | null
+          prediction: string
+          reasoning_summary?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string
+          symbol?: string
+          timeframe?: string
+        }
+        Update: {
+          actual_next_candle_close?: number | null
+          actual_next_candle_high?: number | null
+          actual_next_candle_low?: number | null
+          actual_next_candle_open?: number | null
+          btc_price_at_prediction?: number
+          candle_ts?: string
+          confidence?: number
+          created_at?: string
+          full_ai_response?: Json | null
+          id?: string
+          indicators?: Json | null
+          market_condition?: string | null
+          model_version?: string
+          notes?: string | null
+          prediction?: string
+          reasoning_summary?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string
+          symbol?: string
+          timeframe?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      prediction_stats: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never
