@@ -41,7 +41,7 @@ function Dashboard() {
   const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
 
 
-  const [liveSource, setLiveSource] = useState<LiveSource>("binance");
+  const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
   const liveQ = useLiveCandles(liveSource, 5000);
 
   // Realtime
