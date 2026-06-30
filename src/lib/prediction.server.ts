@@ -293,7 +293,15 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
         .eq("timeframe", p.timeframe)
         .eq("candle_ts", p.candle_ts)
         .maybeSingle();
-      if (dbCandle && dbCandle.confirm) candle = dbCandle as typeof candle;
+      if (dbCandle && dbCandle.confirm) {
+        candle = {
+          open: Number(dbCandle.open),
+          high: Number(dbCandle.high),
+          low: Number(dbCandle.low),
+          close: Number(dbCandle.close),
+          confirm: true,
+        };
+      }
     }
 
     if (!candle) continue;
