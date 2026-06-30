@@ -24,12 +24,12 @@ function Dashboard() {
   const qc = useQueryClient();
   const router = useRouter();
 
-  const candlesFn = useServerFnRpc(listCandles);
-  const refreshFn = useServerFnRpc(fetchOkxCandles);
-  const latestFn = useServerFnRpc(getLatestPrediction);
-  const settingsFn = useServerFnRpc(getActiveSettings);
-  const cycleFn = useServerFnRpc(runFullCycle);
-  const autoToggleFn = useServerFnRpc(toggleAutoRun);
+  const candlesFn = useServerFn(listCandles);
+  const refreshFn = useServerFn(fetchOkxCandles);
+  const latestFn = useServerFn(getLatestPrediction);
+  const settingsFn = useServerFn(getActiveSettings);
+  const cycleFn = useServerFn(runFullCycle);
+  const autoToggleFn = useServerFn(toggleAutoRun);
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
