@@ -132,77 +132,60 @@ function Dashboard() {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <div className="flex items-center gap-3">
-              <CardTitle className="text-base font-mono">BTC-USD · 15m</CardTitle>
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                <span className={`inline-block size-1.5 rounded-full ${liveQ.isError ? "bg-bear" : "bg-bull animate-pulse"}`} />
-                {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={liveSource}
-                onChange={(e) => setLiveSource(e.target.value as LiveSource)}
-                className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
-                aria-label="Live data source"
-              >
-                {LIVE_SOURCES.map((s) => (
-                  <option key={s} value={s}>{sourceLabel(s)}</option>
-                ))}
-              </select>
-              <Button size="sm" variant="secondary" onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}>
-                {refreshMut.isPending ? "Syncing…" : "Sync DB"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {chartCandles.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-20 text-center">
-                {liveQ.isError ? `Couldn't reach ${sourceLabel(liveSource)} — try another source.` : "Loading candles…"}
-              </div>
-            ) : (
-              <CandleChart candles={chartCandles.slice(-100)} />
-            )}
-          </CardContent>
-        </Card>
-
-
         <div className="space-y-4">
-          <Card className="border-info/40">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Current Guess · Next Candle</CardTitle>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base font-mono">BTC-USD · 15m</CardTitle>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  <span className={`inline-block size-1.5 rounded-full ${liveQ.isError ? "bg-bear" : "bg-bull animate-pulse"}`} />
+                  {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={liveSource}
+                  onChange={(e) => setLiveSource(e.target.value as LiveSource)}
+                  className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                  aria-label="Live data source"
+                >
+                  {LIVE_SOURCES.map((s) => (
+                    <option key={s} value={s}>{sourceLabel(s)}</option>
+                  ))}
+                </select>
+                <Button size="sm" variant="secondary" onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}>
+                  {refreshMut.isPending ? "Syncing…" : "Sync DB"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {latestQ.data ? (
-                <div className="space-y-2 text-center">
-                  <div className={`font-mono text-5xl font-bold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
-                    {latestQ.data.prediction === "YES" ? "GREEN" : "RED"}
-                  </div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {Number(latestQ.data.confidence).toFixed(1)}% confidence · <StatusBadge status={latestQ.data.status} />
-                  </div>
-                  <div className="text-[11px] font-mono text-muted-foreground">
-                    Target candle: {new Date(latestQ.data.candle_ts).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}
-                  </div>
+              {chartCandles.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-20 text-center">
+                  {liveQ.isError ? `Couldn't reach ${sourceLabel(liveSource)} — try another source.` : "Loading candles…"}
+                </div>
+              ) : (
+                <CandleChart candles={chartCandles.slice(-100)} />
+              )}
+            </CardContent>
+          </Card>
 
+          <Card className="py-2">
+            <CardContent className="py-3">
+              {latestQ.data ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground uppercase tracking-wider text-[11px]">Current Candle</span>
+                  <span className={`font-mono font-semibold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
+                    {latestQ.data.prediction === "YES" ? "GREEN" : "RED"}
+                  </span>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
               )}
             </CardContent>
           </Card>
+        </div>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Latest Prediction</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {latestQ.data ? <PredictionDetail p={latestQ.data} /> : <p className="text-sm text-muted-foreground">No predictions yet.</p>}
-            </CardContent>
-          </Card>
-
+        <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Last Result</CardTitle>
@@ -239,7 +222,6 @@ function Dashboard() {
             </CardContent>
           </Card>
 
-
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Controls</CardTitle>
@@ -268,6 +250,7 @@ function Dashboard() {
           </Card>
         </div>
       </div>
+
     </div>
   );
 }
@@ -320,38 +303,3 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "bu
   );
 }
 
-type PredictionRow = Awaited<ReturnType<typeof getLatestPrediction>>;
-
-function PredictionDetail({ p }: { p: NonNullable<PredictionRow> }) {
-  return (
-    <div className="space-y-3 text-sm">
-      <div className="flex items-center justify-between">
-        <PredictionBadge value={p.prediction} />
-        <StatusBadge status={p.status} />
-      </div>
-      <div className="grid grid-cols-2 gap-2 font-mono text-xs">
-        <Field label="Confidence" value={`${Number(p.confidence).toFixed(1)}%`} />
-        <Field label="Price" value={`$${Number(p.btc_price_at_prediction).toLocaleString()}`} />
-        <Field label="Current Candle" value={`${new Date(new Date(p.candle_ts).getTime() - 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(p.candle_ts).toLocaleTimeString()}`} />
-        <Field label="Predicting Next" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
-
-      </div>
-      {p.setup_type && <Field label="Setup" value={p.setup_type} />}
-      {p.reasoning_summary && (
-        <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reasoning</div>
-          <p className="text-xs leading-relaxed">{p.reasoning_summary}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="font-mono">{value}</div>
-    </div>
-  );
-}
