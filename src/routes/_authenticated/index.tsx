@@ -30,13 +30,15 @@ function Dashboard() {
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const listFn = useServerFn(listPredictions);
   const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
-  const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
-
-  const last5 = useMemo(() => {
+  const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
-      .sort((a, b) => new Date(b.resolved_at ?? b.created_at).getTime() - new Date(a.resolved_at ?? a.created_at).getTime())
-      .slice(0, 5);
+      .sort((a, b) => new Date(b.resolved_at ?? b.created_at).getTime() - new Date(a.resolved_at ?? a.created_at).getTime());
+  }, [listQ.data]);
+  const lastResolved = resolvedSorted[0];
+
+  const last5 = useMemo(() => {
+    return resolvedSorted.slice(0, 5);
   }, [listQ.data]);
 
 
