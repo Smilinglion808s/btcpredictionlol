@@ -232,10 +232,30 @@ function HeaderStrip(props: {
   modelVersion?: string;
 }) {
   const [now, setNow] = useState(Date.now());
+  const [offset, setOffset] = useState(0); // serverTime - localTime (ms)
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const t0 = Date.now();
+        const r = await fetch("https://api.exchange.coinbase.com/time", { cache: "no-store" });
+        const t1 = Date.now();
+        const j = await r.json();
+        const serverMs = new Date(j.iso).getTime();
+        // adjust for round-trip latency
+        const localMid = (t0 + t1) / 2;
+        if (!cancelled) setOffset(serverMs - localMid);
+      } catch {}
+    };
+    sync();
+    const i = setInterval(sync, 60_000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, []);
+
   const TF = 15 * 60 * 1000;
   const nextClose = Math.floor(now / TF) * TF + TF;
   const fmt = (diff: number) => {
