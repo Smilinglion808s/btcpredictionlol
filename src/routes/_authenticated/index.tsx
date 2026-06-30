@@ -268,8 +268,9 @@ function HeaderStrip(props: {
   };
   // Prediction cron fires ~60s before each candle close (:14/:29/:44/:59)
   const nextPredictionAt = nextClose - 60_000;
-  const nextPrediction = fmt((nextPredictionAt > now ? nextPredictionAt : nextPredictionAt + TF) - now);
-  const timeLeft = fmt(nextClose - now);
+  const nextPrediction = fmt((nextPredictionAt > serverNow ? nextPredictionAt : nextPredictionAt + TF) - serverNow);
+  const timeLeft = fmt(nextClose - serverNow);
+
 
   return (
     <Card>
