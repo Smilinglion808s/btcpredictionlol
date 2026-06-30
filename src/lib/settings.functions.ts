@@ -1,31 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export const getActiveSettings = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("model_settings")
-      .select("*")
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
-  });
+async function admin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
 
-export const listAllSettings = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("model_settings")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    if (error) throw error;
-    return data ?? [];
-  });
+export const getActiveSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model_settings")
+    .select("*")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+});
+
+export const listAllSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model_settings")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+});
 
 const updateSchema = z.object({
   id: z.string().uuid(),
@@ -39,13 +41,13 @@ const updateSchema = z.object({
 });
 
 export const updateSettings = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => updateSchema.parse(input))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
+    const sb = await admin();
     if (data.is_active) {
-      await context.supabase.from("model_settings").update({ is_active: false }).neq("id", data.id);
+      await sb.from("model_settings").update({ is_active: false }).neq("id", data.id);
     }
-    const { error } = await context.supabase
+    const { error } = await sb
       .from("model_settings")
       .update({
         model_version: data.model_version,
@@ -62,19 +64,17 @@ export const updateSettings = createServerFn({ method: "POST" })
   });
 
 export const toggleAutoRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ enabled: z.boolean() }).parse(input),
-  )
-  .handler(async ({ context, data }) => {
-    const { data: active } = await context.supabase
+  .inputValidator((input: unknown) => z.object({ enabled: z.boolean() }).parse(input))
+  .handler(async ({ data }) => {
+    const sb = await admin();
+    const { data: active } = await sb
       .from("model_settings")
       .select("id")
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();
     if (!active) throw new Error("No active model settings");
-    const { error } = await context.supabase
+    const { error } = await sb
       .from("model_settings")
       .update({ auto_run_enabled: data.enabled })
       .eq("id", active.id);

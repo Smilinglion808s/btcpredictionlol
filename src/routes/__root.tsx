@@ -142,7 +142,7 @@ function TopNav() {
           <span className="font-mono text-sm tracking-wider">BTC 15m</span>
         </Link>
         <nav className="flex items-center gap-1">
-          <Link to="/" className={navItem} activeOptions={{ exact: true }} activeProps={{ className: `${navItem} ${active}` }}>Dashboard</Link>
+          <Link to="/" className={navItem} activeOptions={{ exact: true }} activeProps={{ className: `${navItem} ${active}` }}>Home</Link>
           <Link to="/stats" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Stats</Link>
           <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>History</Link>
           <Link to="/settings/model" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Settings</Link>

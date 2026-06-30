@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
-  head: () => ({ meta: [{ title: "Dashboard — BTC 15m" }] }),
+  head: () => ({ meta: [{ title: "Home — BTC 15m" }] }),
   component: Dashboard,
 });
 
@@ -64,6 +64,35 @@ function Dashboard() {
     onSuccess: () => { toast.success("Prediction saved"); qc.invalidateQueries(); router.invalidate(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Prediction failed"),
   });
+
+  // Auto-predict 15s before every 15m candle close.
+  // Ticks once per second; when the seconds-to-next-15m-close window hits ~15s, fire one cycle.
+  const lastFiredSlotRef = useRef<number | null>(null);
+  // (countdown is shown in HeaderStrip from lastCandleTs)
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const slotSize = 15 * 60 * 1000;
+      const nextClose = Math.ceil(now / slotSize) * slotSize;
+      const remainingMs = nextClose - now;
+
+
+      // Fire once when we cross into the 15s pre-close window, and only once per slot.
+      const slotId = nextClose;
+      if (
+        remainingMs <= 15_000 &&
+        remainingMs > 2_000 &&
+        lastFiredSlotRef.current !== slotId &&
+        !runMut.isPending
+      ) {
+        lastFiredSlotRef.current = slotId;
+        runMut.mutate();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [runMut]);
 
   const autoMut = useMutation({
     mutationFn: (enabled: boolean) => autoToggleFn({ data: { enabled } }),
