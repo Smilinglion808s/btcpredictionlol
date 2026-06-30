@@ -278,7 +278,7 @@ function HeaderStrip(props: {
       <CardContent className="py-4 grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <Stat label="BTC-USD" value={props.price ? `$${Number(props.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} />
         <Stat
-          label="24h Change"
+          label="15m Change"
           value={`${props.change >= 0 ? "+" : ""}${props.change.toFixed(2)}%`}
           tone={props.isBull ? "bull" : "bear"}
         />
