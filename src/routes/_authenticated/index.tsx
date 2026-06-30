@@ -184,8 +184,9 @@ function Dashboard() {
                     {Number(latestQ.data.confidence).toFixed(1)}% confidence · <StatusBadge status={latestQ.data.status} />
                   </div>
                   <div className="text-[11px] font-mono text-muted-foreground">
-                    Target candle: {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 30 * 60 * 1000).toLocaleTimeString()}
+                    Target candle: {new Date(latestQ.data.candle_ts).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}
                   </div>
+
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
