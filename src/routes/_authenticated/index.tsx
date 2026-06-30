@@ -343,16 +343,20 @@ function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred 
         <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">{title}</span>
         <span className="font-mono text-[11px] text-muted-foreground">{windowLabel}</span>
       </div>
-      {pred ? (
-        <div className="text-right">
-          <div className={`font-mono font-semibold ${pred.prediction === "YES" ? "text-bull" : "text-bear"}`}>
-            {pred.prediction === "YES" ? "GREEN" : "RED"}
+      {pred ? (() => {
+        const isSkip = pred.prediction === "NO CLEAR EDGE" || (pred as { status?: string }).status === "skip";
+        const isYes = pred.prediction === "YES";
+        return (
+          <div className="text-right">
+            <div className={`font-mono font-semibold ${isSkip ? "text-muted-foreground" : isYes ? "text-bull" : "text-bear"}`}>
+              {isSkip ? "NO CLEAR EDGE" : isYes ? "GREEN" : "RED"}
+            </div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {isSkip ? "model abstained" : `${Number(pred.confidence).toFixed(0)}% conf`}
+            </div>
           </div>
-          <div className="font-mono text-[11px] text-muted-foreground">
-            {Number(pred.confidence).toFixed(0)}% conf
-          </div>
-        </div>
-      ) : (
+        );
+      })() : (
         <span className="text-[11px] text-muted-foreground font-mono">{emptyText}</span>
       )}
     </div>
