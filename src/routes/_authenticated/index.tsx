@@ -11,7 +11,8 @@ import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
 import { fetchOkxCandles } from "@/lib/okx.functions";
-import { getLatestPrediction, runFullCycle } from "@/lib/predictions.functions";
+import { getLatestPrediction, listPredictions, runFullCycle } from "@/lib/predictions.functions";
+import { Link } from "@tanstack/react-router";
 import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
@@ -35,6 +36,10 @@ function Dashboard() {
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
+  const listFn = useServerFn(listPredictions);
+  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
+
 
   const [liveSource, setLiveSource] = useState<LiveSource>("binance");
   const liveQ = useLiveCandles(liveSource, 5000);
@@ -48,6 +53,7 @@ function Dashboard() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["latest-prediction"] });
+        qc.invalidateQueries({ queryKey: ["predictions-list"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -172,6 +178,43 @@ function Dashboard() {
               {latestQ.data ? <PredictionDetail p={latestQ.data} /> : <p className="text-sm text-muted-foreground">No predictions yet.</p>}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Last Result</CardTitle>
+              <Link to="/stats" className="text-[11px] uppercase tracking-wider text-info hover:underline">View stats →</Link>
+            </CardHeader>
+            <CardContent>
+              {lastResolved ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <PredictionBadge value={lastResolved.prediction} />
+                    <StatusBadge status={lastResolved.status} />
+                  </div>
+                  <div className="text-xs font-mono text-muted-foreground">
+                    {new Date(lastResolved.resolved_at ?? lastResolved.created_at).toLocaleString()}
+                  </div>
+                  {lastResolved.actual_next_candle_open != null && lastResolved.actual_next_candle_close != null && (
+                    <div className="text-xs font-mono grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-muted-foreground">Open </span>
+                        ${Number(lastResolved.actual_next_candle_open).toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Close </span>
+                        <span className={Number(lastResolved.actual_next_candle_close) >= Number(lastResolved.actual_next_candle_open) ? "text-bull" : "text-bear"}>
+                          ${Number(lastResolved.actual_next_candle_close).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Waiting for first candle to close…</p>
+              )}
+            </CardContent>
+          </Card>
+
 
           <Card>
             <CardHeader className="pb-2">
