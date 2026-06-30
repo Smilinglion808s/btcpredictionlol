@@ -11,21 +11,6 @@ export interface LiveCandle {
 }
 
 const SOURCES = {
-  binance: {
-    label: "Binance",
-    url: "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=120",
-    parse: (raw: unknown): LiveCandle[] => {
-      const arr = raw as Array<Array<string | number>>;
-      return arr.map((k) => ({
-        candle_ts: new Date(Number(k[0])).toISOString(),
-        open: Number(k[1]),
-        high: Number(k[2]),
-        low: Number(k[3]),
-        close: Number(k[4]),
-        volume: Number(k[5]),
-      }));
-    },
-  },
   coinbase: {
     label: "Coinbase",
     url: "https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=900",
@@ -66,10 +51,11 @@ const SOURCES = {
 } as const;
 
 export type LiveSource = keyof typeof SOURCES;
-export const LIVE_SOURCES: LiveSource[] = ["binance", "coinbase", "okx"];
+export const LIVE_SOURCES: LiveSource[] = ["coinbase", "okx"];
 export const sourceLabel = (s: LiveSource) => SOURCES[s].label;
 
-export function useLiveCandles(source: LiveSource = "binance", refetchMs = 5000) {
+export function useLiveCandles(source: LiveSource = "coinbase", refetchMs = 5000) {
+
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   const q = useQuery({
