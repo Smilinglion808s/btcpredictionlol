@@ -11,7 +11,7 @@ import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
 import { fetchOkxCandles } from "@/lib/okx.functions";
-import { getLatestPrediction, listPredictions, runFullCycle } from "@/lib/predictions.functions";
+import { getLatestPrediction, listPredictions, runFullCycle, resolvePredictions } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
