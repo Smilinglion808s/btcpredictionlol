@@ -245,13 +245,10 @@ function Dashboard() {
               <CardTitle className="text-base">Controls</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button
-                onClick={() => runMut.mutate()}
-                disabled={runMut.isPending}
-                className="w-full h-12 text-sm font-semibold tracking-wide"
-              >
-                {runMut.isPending ? "Running…" : "RUN NEXT CANDLE"}
-              </Button>
+              {runMut.isPending && (
+                <div className="text-xs text-center text-muted-foreground">Running prediction…</div>
+              )}
+
               <div className="flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <Label htmlFor="auto" className="text-sm">Auto Run Every 15m</Label>
