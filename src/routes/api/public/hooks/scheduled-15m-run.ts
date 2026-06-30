@@ -22,7 +22,17 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
 
-        const results: Record<string, unknown> = {};
+        // Phase controls what runs. "predict" = pre-close (fetch + predict).
+        // "resolve" = post-close (fetch + resolve only). Defaults to running both.
+        let phase: "predict" | "resolve" | "both" = "both";
+        try {
+          const body = (await request.json()) as { phase?: string } | null;
+          if (body?.phase === "predict" || body?.phase === "resolve") phase = body.phase;
+        } catch {
+          // empty body is fine
+        }
+
+        const results: Record<string, unknown> = { phase };
         try {
           const candles = await fetchAndUpsertOkxCandles(supabase);
           results.candles_count = candles.length;
@@ -30,28 +40,33 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           results.fetch_error = e instanceof Error ? e.message : String(e);
         }
 
-        try {
-          const resolved = await resolvePredictionsServer(supabase);
-          results.resolved = resolved;
-        } catch (e) {
-          results.resolve_error = e instanceof Error ? e.message : String(e);
+        if (phase === "resolve" || phase === "both") {
+          try {
+            const resolved = await resolvePredictionsServer(supabase);
+            results.resolved = resolved;
+          } catch (e) {
+            results.resolve_error = e instanceof Error ? e.message : String(e);
+          }
         }
 
-        try {
-          const { data: settings } = await supabase
-            .from("model_settings")
-            .select("auto_run_enabled")
-            .eq("is_active", true)
-            .maybeSingle();
-          if (settings?.auto_run_enabled) {
-            const prediction = await runAiPredictionServer(supabase);
-            results.prediction_id = prediction.id;
-          } else {
-            results.auto_run_skipped = true;
+        if (phase === "predict" || phase === "both") {
+          try {
+            const { data: settings } = await supabase
+              .from("model_settings")
+              .select("auto_run_enabled")
+              .eq("is_active", true)
+              .maybeSingle();
+            if (settings?.auto_run_enabled) {
+              const prediction = await runAiPredictionServer(supabase);
+              results.prediction_id = prediction.id;
+            } else {
+              results.auto_run_skipped = true;
+            }
+          } catch (e) {
+            results.predict_error = e instanceof Error ? e.message : String(e);
           }
-        } catch (e) {
-          results.predict_error = e instanceof Error ? e.message : String(e);
         }
+
 
         return new Response(JSON.stringify(results), {
           headers: { "content-type": "application/json" },
