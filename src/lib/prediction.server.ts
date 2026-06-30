@@ -52,10 +52,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     if (!settings) throw new Error("No active model settings");
 
     const last = indicators.last;
-    // Target candle = the candle CURRENTLY forming (floor to 15m boundary).
-    // Cron fires ~30s before close, so we predict how the in-progress candle closes.
+    // Target candle = the UPCOMING candle (next 15m boundary). Cron fires ~1m
+    // before that boundary so we predict the candle about to open.
     const TF_MS = 15 * 60 * 1000;
-    const targetCandleTs = new Date(Math.floor(Date.now() / TF_MS) * TF_MS).toISOString();
+    const targetCandleTs = new Date(Math.ceil(Date.now() / TF_MS) * TF_MS).toISOString();
     void nextCandleTs;
 
     // Idempotency: if a prediction already exists for this candle + model, return it.
