@@ -122,29 +122,8 @@ function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="py-2">
-            <CardContent className="py-3">
-              {latestQ.data ? (
-                <div className="flex items-center justify-between text-sm">
-                  <div className="leading-tight">
-                    <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">
-                      Current Candle (forming) — predicting close
-                    </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {new Date(latestQ.data.candle_ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      {" → "}
-                      {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  <span className={`font-mono font-semibold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
-                    {latestQ.data.prediction === "YES" ? "GREEN" : "RED"}
-                  </span>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
-              )}
-            </CardContent>
-          </Card>
+          <CandleStatusCards latestPrediction={latestQ.data} />
+
 
           <Card className="py-2">
             <CardHeader className="pb-2">
