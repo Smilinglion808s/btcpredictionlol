@@ -1,0 +1,2 @@
+ALTER TABLE public.predictions DROP CONSTRAINT predictions_prediction_check;
+ALTER TABLE public.predictions ADD CONSTRAINT predictions_prediction_check CHECK (prediction IN ('YES','NO','NO CLEAR EDGE'));
