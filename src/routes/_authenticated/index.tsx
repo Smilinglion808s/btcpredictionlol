@@ -14,6 +14,7 @@ import { fetchOkxCandles } from "@/lib/okx.functions";
 import { getLatestPrediction, runFullCycle } from "@/lib/predictions.functions";
 import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Dashboard — BTC 15m" }] }),
