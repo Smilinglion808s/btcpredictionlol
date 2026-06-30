@@ -3,12 +3,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
 
 const DEFAULT_INSTRUCTIONS =
-  "You are running BTCUSDT 15m Model 2 — reduced filter. Use only the supplied closed candles. Make a Run Next prediction for the next 15m candle. Return JSON only with fields: prediction (YES or NO), confidence (0-100), setup_type, market_condition, reasoning_summary, indicators (object of short strings).";
+  "You are running BTCUSDT 15m Model 2 — reduced filter. Use only the supplied closed candles. Make a Run Next prediction for the next 15m candle. Return JSON only with fields: prediction (YES or NO), confidence (0-100), final_interpretation (short label summarizing the setup, e.g. 'Bullish continuation', 'Range fade'), setup_type, market_condition, reasoning_summary, indicators (object of short strings).";
 
 
 interface AiOutput {
   prediction: "YES" | "NO";
   confidence: number;
+  final_interpretation?: string;
   setup_type: string;
   market_condition: string;
   reasoning_summary: string;
