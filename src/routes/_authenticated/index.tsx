@@ -332,8 +332,9 @@ function PredictionDetail({ p }: { p: NonNullable<PredictionRow> }) {
       <div className="grid grid-cols-2 gap-2 font-mono text-xs">
         <Field label="Confidence" value={`${Number(p.confidence).toFixed(1)}%`} />
         <Field label="Price" value={`$${Number(p.btc_price_at_prediction).toLocaleString()}`} />
-        <Field label="Current Candle" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
-        <Field label="Predicting Next" value={`${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 30 * 60 * 1000).toLocaleTimeString()}`} />
+        <Field label="Current Candle" value={`${new Date(new Date(p.candle_ts).getTime() - 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(p.candle_ts).toLocaleTimeString()}`} />
+        <Field label="Predicting Next" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
+
       </div>
       {p.setup_type && <Field label="Setup" value={p.setup_type} />}
       {p.reasoning_summary && (
