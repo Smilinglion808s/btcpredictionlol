@@ -55,43 +55,54 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     const lastCandleTs = last.candle_ts;
     const targetCandleTs = nextCandleTs(lastCandleTs);
 
-    const candlesForPrompt = ordered.slice(-40).map((c) => ({
-      t: c.candle_ts,
-      o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume,
-    }));
+    // Only closed/confirmed candles, most recent 80
+    const closedCandles = ordered.filter((c) => (c as Candle & { confirm?: boolean }).confirm !== false);
+    const candlesForPrompt = (closedCandles.length >= 30 ? closedCandles : ordered)
+      .slice(-80)
+      .map((c) => ({
+        t: c.candle_ts,
+        o: Number(c.open),
+        h: Number(c.high),
+        l: Number(c.low),
+        c: Number(c.close),
+        v: Number(c.volume),
+      }));
 
-    const promptFilled = (settings.prompt_template as string)
-      .replace("{{candles_json}}", JSON.stringify(candlesForPrompt))
-      .replace(
-        "{{model_settings_json}}",
-        JSON.stringify({
-          model_version: settings.model_version,
-          confidence_threshold: settings.confidence_threshold,
-          indicator_weights: settings.indicator_weights,
-          computed_indicators: {
-            trend: indicators.trend,
-            ema9: indicators.ema9,
-            ema21: indicators.ema21,
-            ema50: indicators.ema50,
-            body_pct: indicators.bodyPct,
-            upper_wick_pct: indicators.upperWickPct,
-            lower_wick_pct: indicators.lowerWickPct,
-            range_20_high: indicators.range20High,
-            range_20_low: indicators.range20Low,
-            volume_expansion: indicators.volumeExpansion,
-            failed_breakout_up: indicators.failedBreakoutUp,
-            failed_breakout_down: indicators.failedBreakoutDown,
-            choppy: indicators.choppy,
-          },
-        }),
-      );
+    const instructions =
+      (settings.prompt_template as string)?.trim() || DEFAULT_INSTRUCTIONS;
+    const modelId = (settings.model_version as string) || "gpt-5.5";
 
     aiPayload = {
-      model: "gpt-4.1-mini",
-      instructions: SYSTEM_PROMPT,
-      input: promptFilled,
+      model: modelId,
+      instructions,
+      input: {
+        symbol: "BTCUSDT",
+        interval: "15m",
+        run_type: "Run Next",
+        candles: candlesForPrompt,
+        computed_indicators: {
+          trend: indicators.trend,
+          ema9: indicators.ema9,
+          ema21: indicators.ema21,
+          ema50: indicators.ema50,
+          body_pct: indicators.bodyPct,
+          upper_wick_pct: indicators.upperWickPct,
+          lower_wick_pct: indicators.lowerWickPct,
+          range_20_high: indicators.range20High,
+          range_20_low: indicators.range20Low,
+          volume_expansion: indicators.volumeExpansion,
+          failed_breakout_up: indicators.failedBreakoutUp,
+          failed_breakout_down: indicators.failedBreakoutDown,
+          choppy: indicators.choppy,
+        },
+        model_settings: {
+          confidence_threshold: settings.confidence_threshold,
+          indicator_weights: settings.indicator_weights,
+        },
+      },
       text: { format: { type: "json_object" } },
     };
+
 
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
