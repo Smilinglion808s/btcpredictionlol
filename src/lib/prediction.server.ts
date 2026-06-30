@@ -254,12 +254,39 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       parsed = JSON.parse(m[0]);
     }
 
-    if (parsed.prediction !== "YES" && parsed.prediction !== "NO") {
-      throw new Error("AI prediction must be YES or NO");
+    const rawCall = (parsed.call ?? parsed.prediction ?? "").toString().toUpperCase().trim();
+    if (rawCall !== "YES" && rawCall !== "NO" && rawCall !== "NO CLEAR EDGE") {
+      throw new Error("AI call must be YES, NO, or NO CLEAR EDGE");
     }
 
-    const status =
-      settings.require_manual_approval ? "manual_review" : "pending";
+    // Confidence may arrive as "3/5", "3", or 60. Normalize to 0-100.
+    const parseConfidence = (v: unknown): number => {
+      if (typeof v === "number") return v <= 5 ? v * 20 : v;
+      if (typeof v === "string") {
+        const frac = v.match(/(\d+(?:\.\d+)?)\s*\/\s*5/);
+        if (frac) return Math.round(parseFloat(frac[1]) * 20);
+        const n = parseFloat(v);
+        if (!isNaN(n)) return n <= 5 ? n * 20 : n;
+      }
+      return 0;
+    };
+    const confidence100 = parseConfidence(parsed.confidence);
+
+    // NO CLEAR EDGE → record as 'skip' so history shows the pass but it's
+    // excluded from win/loss grading by the resolver.
+    const isSkip = rawCall === "NO CLEAR EDGE";
+    const status = isSkip
+      ? "skip"
+      : settings.require_manual_approval
+        ? "manual_review"
+        : "pending";
+
+    const notesParts = [
+      parsed.notes ?? parsed.reasoning_summary ?? null,
+      parsed.flip_level ? `flip: ${parsed.flip_level}` : null,
+      parsed.confirmation_level ? `confirm: ${parsed.confirmation_level}` : null,
+      parsed.trade_status ? `trade: ${parsed.trade_status}` : null,
+    ].filter(Boolean);
 
     const insertPayload = {
       symbol: "BTC-USDT",
@@ -267,12 +294,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       model_version: settings.model_version,
       api_model_id: (settings as any).api_model_id || null,
       candle_ts: targetCandleTs,
-      prediction: parsed.prediction,
-      confidence: Number(parsed.confidence) || 0,
+      prediction: rawCall,
+      confidence: confidence100,
       btc_price_at_prediction: last.close,
       setup_type: parsed.final_interpretation ?? parsed.setup_type ?? null,
       market_condition: parsed.market_condition ?? null,
-      reasoning_summary: parsed.reasoning_summary ?? null,
+      reasoning_summary: notesParts.join(" • ") || null,
       full_ai_response: json,
       indicators: indicators as unknown as Record<string, unknown>,
       status,
