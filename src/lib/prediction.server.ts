@@ -103,6 +103,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       instructions: `${instructions}\n\nRespond with JSON only.`,
       input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
+      max_output_tokens: 2048,
     };
 
 
@@ -122,12 +123,39 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       );
     }
 
-    const text: string =
-      json.output_text ??
-      json.output?.[0]?.content?.[0]?.text ??
-      json.choices?.[0]?.message?.content ??
-      "";
-    if (!text) throw new Error("OpenAI returned empty output");
+    // Robustly extract text from Responses API across output item shapes
+    const extractText = (j: Record<string, unknown>): string => {
+      if (typeof j.output_text === "string" && j.output_text) return j.output_text;
+      const out = j.output as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(out)) {
+        const parts: string[] = [];
+        for (const item of out) {
+          const content = item.content as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(content)) {
+            for (const c of content) {
+              if (typeof c.text === "string") parts.push(c.text);
+              else if (c.text && typeof (c.text as Record<string, unknown>).value === "string") {
+                parts.push((c.text as { value: string }).value);
+              }
+            }
+          }
+        }
+        if (parts.length) return parts.join("");
+      }
+      const choices = j.choices as Array<Record<string, unknown>> | undefined;
+      const msg = choices?.[0]?.message as Record<string, unknown> | undefined;
+      if (msg && typeof msg.content === "string") return msg.content;
+      return "";
+    };
+    const text: string = extractText(json);
+    if (!text) {
+      const status = (json as { status?: string }).status;
+      const incomplete = (json as { incomplete_details?: { reason?: string } }).incomplete_details?.reason;
+      throw new Error(
+        `OpenAI returned empty output (status=${status ?? "unknown"}${incomplete ? `, reason=${incomplete}` : ""}). Model "${modelId}" may not exist or hit token limits.`,
+      );
+    }
+
 
     let parsed: AiOutput;
     try {
