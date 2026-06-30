@@ -15,6 +15,47 @@ interface AiOutput {
   indicators: Record<string, string>;
 }
 
+type ResolutionCandle = {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  confirm?: boolean;
+};
+
+async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number): Promise<ResolutionCandle | null> {
+  const targetMs = new Date(candleTs).getTime();
+  const targetSec = Math.floor(targetMs / 1000);
+  const start = new Date(targetMs - timeframeMs).toISOString();
+  const end = new Date(targetMs + timeframeMs * 2).toISOString();
+  const url = new URL("https://api.exchange.coinbase.com/products/BTC-USD/candles");
+  url.searchParams.set("granularity", "900");
+  url.searchParams.set("start", start);
+  url.searchParams.set("end", end);
+
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "BTC-15m-Prediction-Dashboard/1.0",
+    },
+  });
+  if (!response.ok) return null;
+
+  const rows = (await response.json()) as Array<[number, number, number, number, number, number]>;
+  const hit = rows.find((row) => Number(row[0]) === targetSec);
+  if (!hit) return null;
+
+  return {
+    low: Number(hit[1]),
+    high: Number(hit[2]),
+    open: Number(hit[3]),
+    close: Number(hit[4]),
+    volume: Number(hit[5] ?? 0),
+    confirm: true,
+  };
+}
+
 export async function runAiPredictionServer(supabase: SupabaseClient) {
   const started = Date.now();
   let aiPayload: unknown = null;
@@ -246,40 +287,34 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
 
   const TF_MS = 15 * 60 * 1000;
   let resolved = 0;
+  const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean }> = [];
   for (const p of pending ?? []) {
     const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
     // Only attempt to resolve once the candle window has closed.
-    if (Date.now() < candleEndsAt + 5_000) continue;
+    if (Date.now() < candleEndsAt + 30_000) continue;
 
     // Source of truth: Coinbase closed 15m candle. Fall back to DB if Coinbase
     // is unreachable.
-    let candle: { open: number; high: number; low: number; close: number; confirm?: boolean } | null = null;
+    let candle: ResolutionCandle | null = null;
+    let source = "none";
     try {
-      const startIso = new Date(p.candle_ts).toISOString();
-      const endIso = new Date(candleEndsAt).toISOString();
-      const url = `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=900&start=${startIso}&end=${endIso}`;
-      const r = await fetch(url, { headers: { accept: "application/json" } });
-      if (r.ok) {
-        const rows = (await r.json()) as Array<[number, number, number, number, number, number]>;
-        const tsSec = Math.floor(new Date(p.candle_ts).getTime() / 1000);
-        const hit = rows.find((row) => row[0] === tsSec);
-        if (hit) {
-          candle = { low: hit[1], high: hit[2], open: hit[3], close: hit[4], confirm: true };
-          await supabase.from("candles").upsert(
-            {
-              symbol: p.symbol,
-              timeframe: p.timeframe,
-              candle_ts: p.candle_ts,
-              open: hit[3],
-              high: hit[2],
-              low: hit[1],
-              close: hit[4],
-              volume: hit[5],
-              confirm: true,
-            },
-            { onConflict: "symbol,timeframe,candle_ts" },
-          );
-        }
+      candle = await fetchCoinbaseClosedCandle(p.candle_ts, TF_MS);
+      if (candle) {
+        source = "coinbase";
+        await supabase.from("candles").upsert(
+          {
+            symbol: p.symbol,
+            timeframe: p.timeframe,
+            candle_ts: p.candle_ts,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume ?? 0,
+            confirm: true,
+          },
+          { onConflict: "symbol,timeframe,candle_ts" },
+        );
       }
     } catch {
       // fall through to DB fallback
@@ -301,10 +336,14 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
           close: Number(dbCandle.close),
           confirm: true,
         };
+        source = "database";
       }
     }
 
-    if (!candle) continue;
+    if (!candle) {
+      checked.push({ id: p.id, candle_ts: p.candle_ts, source, resolved: false });
+      continue;
+    }
 
     const open = Number(candle.open);
     const close = Number(candle.close);
@@ -325,12 +364,13 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
       })
       .eq("id", p.id);
     resolved++;
+    checked.push({ id: p.id, candle_ts: p.candle_ts, source, resolved: true });
   }
 
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pending?.length ?? 0 },
-    response_payload: { resolved },
+    response_payload: { resolved, checked },
     success: true,
   });
 
