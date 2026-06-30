@@ -23,7 +23,7 @@ function SettingsPage() {
   const q = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
 
   const [form, setForm] = useState<{
-    id: string; model_version: string; confidence_threshold: number;
+    id: string; model_version: string; api_model_id: string; confidence_threshold: number;
     auto_run_enabled: boolean; require_manual_approval: boolean;
     indicator_weights: Record<string, number>; prompt_template: string; is_active: boolean;
   } | null>(null);
@@ -33,6 +33,7 @@ function SettingsPage() {
       setForm({
         id: q.data.id,
         model_version: q.data.model_version,
+        api_model_id: ((q.data as any).api_model_id as string) || "",
         confidence_threshold: Number(q.data.confidence_threshold),
         auto_run_enabled: q.data.auto_run_enabled,
         require_manual_approval: q.data.require_manual_approval,
@@ -68,6 +69,10 @@ function SettingsPage() {
           <div>
             <Label>Model Name / Version</Label>
             <Input value={form.model_version} onChange={(e) => setForm({ ...form, model_version: e.target.value })} />
+          </div>
+          <div>
+            <Label>API Model ID</Label>
+            <Input value={form.api_model_id} onChange={(e) => setForm({ ...form, api_model_id: e.target.value })} placeholder="e.g. gpt-5.5" />
           </div>
           <div>
             <Label>Confidence Threshold (%)</Label>
