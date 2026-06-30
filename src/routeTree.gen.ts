@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
@@ -17,11 +16,6 @@ import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -56,14 +50,12 @@ const ApiPublicHooksScheduled15mRunRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/auth': typeof AuthRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
 }
 export interface FileRoutesByTo {
-  '/auth': typeof AuthRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -73,7 +65,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -84,14 +75,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/auth'
     | '/history'
     | '/stats'
     | '/settings/model'
     | '/api/public/hooks/scheduled-15m-run'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/auth'
     | '/history'
     | '/stats'
     | '/'
@@ -100,7 +89,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
-    | '/auth'
     | '/_authenticated/history'
     | '/_authenticated/stats'
     | '/_authenticated/'
@@ -110,19 +98,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -187,19 +167,8 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -6,7 +6,6 @@ import {
   useRouter,
   HeadContent,
   Scripts,
-  useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -121,9 +120,6 @@ function RootComponent() {
 }
 
 function AppShell({ children }: { children: ReactNode }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isAuth = pathname === "/auth";
-  if (isAuth) return <>{children}</>;
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
@@ -151,23 +147,8 @@ function TopNav() {
           <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>History</Link>
           <Link to="/settings/model" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Settings</Link>
         </nav>
-        <SignOutButton />
       </div>
     </header>
   );
 }
 
-function SignOutButton() {
-  const router = useRouter();
-  return (
-    <button
-      onClick={async () => {
-        await supabase.auth.signOut();
-        router.navigate({ to: "/auth", replace: true });
-      }}
-      className="text-xs text-muted-foreground hover:text-foreground"
-    >
-      Sign out
-    </button>
-  );
-}

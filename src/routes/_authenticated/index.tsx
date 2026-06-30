@@ -14,6 +14,7 @@ import { fetchOkxCandles } from "@/lib/okx.functions";
 import { getLatestPrediction, runFullCycle } from "@/lib/predictions.functions";
 import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Dashboard — BTC 15m" }] }),
@@ -34,6 +35,9 @@ function Dashboard() {
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
+
+  const [liveSource, setLiveSource] = useState<LiveSource>("binance");
+  const liveQ = useLiveCandles(liveSource, 5000);
 
   // Realtime
   useEffect(() => {
@@ -67,9 +71,18 @@ function Dashboard() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
   });
 
-  const candles = candlesQ.data ?? [];
-  const last = candles[candles.length - 1];
-  const first24 = candles.length >= 96 ? candles[candles.length - 96] : candles[0];
+  // Prefer live exchange candles for the chart; fall back to DB candles.
+  const liveCandles = liveQ.data ?? [];
+  const dbCandles = candlesQ.data ?? [];
+  const chartCandles = liveCandles.length
+    ? liveCandles
+    : dbCandles.map((c) => ({
+        candle_ts: c.candle_ts as string,
+        open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: Number(c.volume),
+      }));
+
+  const last = chartCandles[chartCandles.length - 1];
+  const first24 = chartCandles.length >= 96 ? chartCandles[chartCandles.length - 96] : chartCandles[0];
   const change24 = last && first24 ? ((last.close - first24.open) / first24.open) * 100 : 0;
   const isBull = change24 >= 0;
 
@@ -86,24 +99,40 @@ function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-base font-mono">BTC-USDT · 15m</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base font-mono">BTC-USDT · 15m</CardTitle>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                <span className={`inline-block size-1.5 rounded-full ${liveQ.isError ? "bg-bear" : "bg-bull animate-pulse"}`} />
+                {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
+              </span>
+            </div>
             <div className="flex gap-2">
+              <select
+                value={liveSource}
+                onChange={(e) => setLiveSource(e.target.value as LiveSource)}
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                aria-label="Live data source"
+              >
+                {LIVE_SOURCES.map((s) => (
+                  <option key={s} value={s}>{sourceLabel(s)}</option>
+                ))}
+              </select>
               <Button size="sm" variant="secondary" onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}>
-                {refreshMut.isPending ? "Refreshing…" : "Refresh Candles"}
+                {refreshMut.isPending ? "Syncing…" : "Sync DB"}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            {candlesQ.isLoading ? (
-              <div className="text-sm text-muted-foreground py-20 text-center">Loading candles…</div>
+            {chartCandles.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-20 text-center">
+                {liveQ.isError ? `Couldn't reach ${sourceLabel(liveSource)} — try another source.` : "Loading candles…"}
+              </div>
             ) : (
-              <CandleChart candles={candles.slice(-100).map((c: typeof candles[number]) => ({
-                candle_ts: c.candle_ts as string,
-                open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: Number(c.volume),
-              }))} />
+              <CandleChart candles={chartCandles.slice(-100)} />
             )}
           </CardContent>
         </Card>
+
 
         <div className="space-y-4">
           <Card>
