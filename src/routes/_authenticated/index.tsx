@@ -1,19 +1,14 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
-import { fetchOkxCandles } from "@/lib/okx.functions";
-import { getLatestPrediction, listPredictions, runFullCycle, resolvePredictions } from "@/lib/predictions.functions";
+import { getLatestPrediction, listPredictions } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
-import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
+import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
@@ -24,14 +19,11 @@ export const Route = createFileRoute("/_authenticated/")({
 
 function Dashboard() {
   const qc = useQueryClient();
-  const router = useRouter();
 
   const candlesFn = useServerFn(listCandles);
-  const refreshFn = useServerFn(fetchOkxCandles);
   const latestFn = useServerFn(getLatestPrediction);
   const settingsFn = useServerFn(getActiveSettings);
-  const cycleFn = useServerFn(runFullCycle);
-  const autoToggleFn = useServerFn(toggleAutoRun);
+
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
