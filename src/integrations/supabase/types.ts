@@ -134,6 +134,48 @@ export type Database = {
         }
         Relationships: []
       }
+      model_stats_archive: {
+        Row: {
+          archived_at: string
+          avg_confidence: number | null
+          id: string
+          losses: number
+          model_version: string
+          pending: number
+          pushes: number
+          stats: Json | null
+          total: number
+          win_rate: number | null
+          wins: number
+        }
+        Insert: {
+          archived_at?: string
+          avg_confidence?: number | null
+          id?: string
+          losses: number
+          model_version: string
+          pending: number
+          pushes: number
+          stats?: Json | null
+          total: number
+          win_rate?: number | null
+          wins: number
+        }
+        Update: {
+          archived_at?: string
+          avg_confidence?: number | null
+          id?: string
+          losses?: number
+          model_version?: string
+          pending?: number
+          pushes?: number
+          stats?: Json | null
+          total?: number
+          win_rate?: number | null
+          wins?: number
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           actual_next_candle_close: number | null
