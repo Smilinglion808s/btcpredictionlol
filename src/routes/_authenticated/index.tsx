@@ -180,7 +180,12 @@ function Dashboard() {
             <CardContent className="py-3">
               {latestQ.data ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground uppercase tracking-wider text-[11px]">Current Candle</span>
+                  <div className="leading-tight">
+                    <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">Current Candle</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {new Date(latestQ.data.candle_ts).toLocaleString()}
+                    </span>
+                  </div>
                   <span className={`font-mono font-semibold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
                     {latestQ.data.prediction === "YES" ? "GREEN" : "RED"}
                   </span>
