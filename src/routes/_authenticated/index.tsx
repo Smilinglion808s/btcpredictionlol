@@ -40,6 +40,13 @@ function Dashboard() {
   const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
   const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
 
+  const last5 = useMemo(() => {
+    return (listQ.data ?? [])
+      .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
+      .sort((a, b) => new Date(b.resolved_at ?? b.created_at).getTime() - new Date(a.resolved_at ?? a.created_at).getTime())
+      .slice(0, 5);
+  }, [listQ.data]);
+
 
   const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
   const liveQ = useLiveCandles(liveSource, 5000);
