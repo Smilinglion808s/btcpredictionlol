@@ -53,6 +53,7 @@ function Dashboard() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["latest-prediction"] });
+        qc.invalidateQueries({ queryKey: ["predictions-list"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
