@@ -231,31 +231,16 @@ function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Controls</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {runMut.isPending && (
-                <div className="text-xs text-center text-muted-foreground">Running prediction…</div>
-              )}
-
-              <div className="flex items-center justify-between rounded-md border border-border p-3">
-                <div>
-                  <Label htmlFor="auto" className="text-sm">Auto Run Every 15m</Label>
-                  <p className="text-xs text-muted-foreground">Runs on the 15m schedule.</p>
-                </div>
-                <Switch
-                  id="auto"
-                  checked={settingsQ.data?.auto_run_enabled ?? false}
-                  onCheckedChange={(v) => autoMut.mutate(v)}
-                  disabled={autoMut.isPending}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
+            <CardContent className="py-4">
+              <p className="text-[11px] text-muted-foreground text-center">
+                View-only · predictions run automatically ~30s before each 15m close.
+              </p>
+              <p className="text-[11px] text-muted-foreground text-center mt-1">
                 Prediction tracking only. Not financial advice.
               </p>
             </CardContent>
           </Card>
+
         </div>
       </div>
 
