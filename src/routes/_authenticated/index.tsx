@@ -10,7 +10,7 @@ import { getLatestPrediction, listPredictions } from "@/lib/predictions.function
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
+import { useLiveCandles, useLiveSpotPrice, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Home — BTC 15m" }] }),
