@@ -94,6 +94,7 @@ export type Database = {
       }
       model_settings: {
         Row: {
+          api_model_id: string | null
           auto_run_enabled: boolean
           confidence_threshold: number
           created_at: string
@@ -106,6 +107,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          api_model_id?: string | null
           auto_run_enabled?: boolean
           confidence_threshold?: number
           created_at?: string
@@ -118,6 +120,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          api_model_id?: string | null
           auto_run_enabled?: boolean
           confidence_threshold?: number
           created_at?: string
@@ -137,6 +140,7 @@ export type Database = {
           actual_next_candle_high: number | null
           actual_next_candle_low: number | null
           actual_next_candle_open: number | null
+          api_model_id: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
@@ -160,6 +164,7 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          api_model_id?: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
@@ -183,6 +188,7 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          api_model_id?: string | null
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
