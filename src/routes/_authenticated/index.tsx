@@ -76,15 +76,14 @@ function Dashboard() {
       }));
 
   const last = chartCandles[chartCandles.length - 1];
-  const first24 = chartCandles.length >= 96 ? chartCandles[chartCandles.length - 96] : chartCandles[0];
-  const change24 = last && first24 ? ((last.close - first24.open) / first24.open) * 100 : 0;
-  const isBull = change24 >= 0;
+  const change15 = last ? ((last.close - last.open) / last.open) * 100 : 0;
+  const isBull = change15 >= 0;
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
       <HeaderStrip
         price={spotQ.data ?? last?.close}
-        change={change24}
+        change={change15}
         isBull={isBull}
         lastCandleTs={last?.candle_ts}
         modelVersion={settingsQ.data?.model_version}
@@ -279,7 +278,7 @@ function HeaderStrip(props: {
       <CardContent className="py-4 grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <Stat label="BTC-USD" value={props.price ? `$${Number(props.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} />
         <Stat
-          label="24h Change"
+          label="15m Change"
           value={`${props.change >= 0 ? "+" : ""}${props.change.toFixed(2)}%`}
           tone={props.isBull ? "bull" : "bear"}
         />
@@ -307,6 +306,7 @@ type LatestPred = {
   candle_ts: string;
   prediction: string;
   confidence: number | string;
+  status?: string;
 } | null | undefined;
 
 function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred }) {
@@ -344,16 +344,20 @@ function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred 
         <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">{title}</span>
         <span className="font-mono text-[11px] text-muted-foreground">{windowLabel}</span>
       </div>
-      {pred ? (
-        <div className="text-right">
-          <div className={`font-mono font-semibold ${pred.prediction === "YES" ? "text-bull" : "text-bear"}`}>
-            {pred.prediction === "YES" ? "GREEN" : "RED"}
+      {pred ? (() => {
+        const isSkip = pred.prediction === "NO CLEAR EDGE" || (pred as { status?: string }).status === "skip";
+        const isYes = pred.prediction === "YES";
+        return (
+          <div className="text-right">
+            <div className={`font-mono font-semibold ${isSkip ? "text-muted-foreground" : isYes ? "text-bull" : "text-bear"}`}>
+              {isSkip ? "NO CLEAR EDGE" : isYes ? "GREEN" : "RED"}
+            </div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {isSkip ? "model abstained" : `${Number(pred.confidence).toFixed(0)}% conf`}
+            </div>
           </div>
-          <div className="font-mono text-[11px] text-muted-foreground">
-            {Number(pred.confidence).toFixed(0)}% conf
-          </div>
-        </div>
-      ) : (
+        );
+      })() : (
         <span className="text-[11px] text-muted-foreground font-mono">{emptyText}</span>
       )}
     </div>
