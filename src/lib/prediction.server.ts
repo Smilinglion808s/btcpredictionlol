@@ -100,8 +100,8 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     aiPayload = {
       model: modelId,
-      instructions,
-      input: JSON.stringify(inputPayload),
+      instructions: `${instructions}\n\nRespond with JSON only.`,
+      input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
     };
 
