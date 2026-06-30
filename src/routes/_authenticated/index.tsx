@@ -306,6 +306,7 @@ type LatestPred = {
   candle_ts: string;
   prediction: string;
   confidence: number | string;
+  status?: string;
 } | null | undefined;
 
 function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred }) {
