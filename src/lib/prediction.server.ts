@@ -74,7 +74,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     const instructions =
       (settings.prompt_template as string)?.trim() || DEFAULT_INSTRUCTIONS;
-    const modelId = (settings.model_version as string) || "gpt-5.5";
+    const modelId = ((settings as any).api_model_id as string)?.trim() || "gpt-5.5";
 
     const inputPayload = {
       symbol: "BTCUSDT",
@@ -177,23 +177,26 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     const status =
       settings.require_manual_approval ? "manual_review" : "pending";
 
+    const insertPayload = {
+      symbol: "BTC-USDT",
+      timeframe: "15m",
+      model_version: settings.model_version,
+      api_model_id: (settings as any).api_model_id || null,
+      candle_ts: targetCandleTs,
+      prediction: parsed.prediction,
+      confidence: Number(parsed.confidence) || 0,
+      btc_price_at_prediction: last.close,
+      setup_type: parsed.setup_type ?? null,
+      market_condition: parsed.market_condition ?? null,
+      reasoning_summary: parsed.reasoning_summary ?? null,
+      full_ai_response: json,
+      indicators: indicators as unknown as Record<string, unknown>,
+      status,
+    };
+
     const { data: inserted, error: insErr } = await supabase
       .from("predictions")
-      .insert({
-        symbol: "BTC-USDT",
-        timeframe: "15m",
-        model_version: settings.model_version,
-        candle_ts: targetCandleTs,
-        prediction: parsed.prediction,
-        confidence: Number(parsed.confidence) || 0,
-        btc_price_at_prediction: last.close,
-        setup_type: parsed.setup_type ?? null,
-        market_condition: parsed.market_condition ?? null,
-        reasoning_summary: parsed.reasoning_summary ?? null,
-        full_ai_response: json,
-        indicators: indicators as unknown as Record<string, unknown>,
-        status,
-      })
+      .insert(insertPayload as any)
       .select()
       .single();
     if (insErr) throw insErr;
