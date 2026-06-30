@@ -272,11 +272,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     };
     const confidence100 = parseConfidence(parsed.confidence);
 
-    // NO CLEAR EDGE → record as 'skip' so history shows the pass but it's
-    // excluded from win/loss grading by the resolver.
+    // NO CLEAR EDGE → record as 'push' so it shows on stats without affecting win rate.
     const isSkip = rawCall === "NO CLEAR EDGE";
     const status = isSkip
-      ? "skip"
+      ? "push"
       : settings.require_manual_approval
         ? "manual_review"
         : "pending";
@@ -322,11 +321,21 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     return inserted;
   } catch (e) {
     success = false;
-    errorMessage = e instanceof Error ? e.message : String(e);
+    const errDetail =
+      e instanceof Error
+        ? { message: e.message, stack: e.stack }
+        : typeof e === "object" && e !== null
+          ? (e as Record<string, unknown>)
+          : { message: String(e) };
+    errorMessage =
+      (errDetail as { message?: string }).message ?? JSON.stringify(errDetail);
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
       request_payload: aiPayload as Record<string, unknown> | null,
-      response_payload: aiResponse as Record<string, unknown> | null,
+      response_payload: {
+        ai: aiResponse as Record<string, unknown> | null,
+        error: errDetail,
+      },
       success: false,
       error_message: errorMessage,
     });

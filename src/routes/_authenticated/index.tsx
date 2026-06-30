@@ -345,7 +345,7 @@ function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred 
         <span className="font-mono text-[11px] text-muted-foreground">{windowLabel}</span>
       </div>
       {pred ? (() => {
-        const isSkip = pred.prediction === "NO CLEAR EDGE" || (pred as { status?: string }).status === "skip";
+        const isSkip = pred.prediction === "NO CLEAR EDGE";
         const isYes = pred.prediction === "YES";
         return (
           <div className="text-right">
