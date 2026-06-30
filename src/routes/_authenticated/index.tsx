@@ -236,32 +236,37 @@ function HeaderStrip(props: {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const countdown = useMemo(() => {
-    // Align with absolute 15m boundaries (matches Coinbase candle close times)
-    const TF = 15 * 60 * 1000;
-    const nextClose = Math.floor(now / TF) * TF + TF;
-    const diff = Math.max(0, nextClose - now);
-    const m = Math.floor(diff / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
+  const TF = 15 * 60 * 1000;
+  const nextClose = Math.floor(now / TF) * TF + TF;
+  const fmt = (diff: number) => {
+    const d = Math.max(0, diff);
+    const m = Math.floor(d / 60000);
+    const s = Math.floor((d % 60000) / 1000);
     return `${m}:${s.toString().padStart(2, "0")}`;
-  }, [now]);
+  };
+  // Prediction cron fires ~60s before each candle close (:14/:29/:44/:59)
+  const nextPredictionAt = nextClose - 60_000;
+  const nextPrediction = fmt((nextPredictionAt > now ? nextPredictionAt : nextPredictionAt + TF) - now);
+  const timeLeft = fmt(nextClose - now);
 
   return (
     <Card>
-      <CardContent className="py-4 grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+      <CardContent className="py-4 grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <Stat label="BTC-USD" value={props.price ? `$${Number(props.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} />
         <Stat
           label="24h Change"
           value={`${props.change >= 0 ? "+" : ""}${props.change.toFixed(2)}%`}
           tone={props.isBull ? "bull" : "bear"}
         />
-        <Stat label="Next 15m" value={countdown} tone="info" />
+        <Stat label="Time Left in Candle" value={timeLeft} tone="info" />
+        <Stat label="Next Prediction" value={nextPrediction} tone="info" />
         <Stat label="Last Updated" value={props.lastCandleTs ? new Date(props.lastCandleTs).toLocaleTimeString() : "—"} />
         <Stat label="Model" value={props.modelVersion ?? "—"} />
       </CardContent>
     </Card>
   );
 }
+
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "bull" | "bear" | "info" }) {
   const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "info" ? "text-info" : "";
