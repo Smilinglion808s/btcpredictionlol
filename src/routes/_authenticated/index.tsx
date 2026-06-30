@@ -75,7 +75,7 @@ function Dashboard() {
       const slotSize = 15 * 60 * 1000;
       const nextClose = Math.ceil(now / slotSize) * slotSize;
       const remainingMs = nextClose - now;
-      setSecondsToClose(Math.max(0, Math.round(remainingMs / 1000)));
+
 
       // Fire once when we cross into the 15s pre-close window, and only once per slot.
       const slotId = nextClose;
