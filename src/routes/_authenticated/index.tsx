@@ -67,7 +67,7 @@ function Dashboard() {
 
   // Auto-predict 15s before every 15m candle close.
   // Ticks once per second; when the seconds-to-next-15m-close window hits ~15s, fire one cycle.
-  const lastFiredSlotRef = (useRef as typeof useRef<number | null>)(null);
+  const lastFiredSlotRef = useRef<number | null>(null);
   const [secondsToClose, setSecondsToClose] = useState<number>(0);
   useEffect(() => {
     const tick = () => {
