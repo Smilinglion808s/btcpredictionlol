@@ -209,7 +209,7 @@ function Dashboard() {
           <Card>
             <CardContent className="py-4">
               <p className="text-[11px] text-muted-foreground text-center">
-                View-only · predictions run automatically ~30s before each 15m close.
+                View-only · predictions run automatically ~1m before each 15m candle opens.
               </p>
               <p className="text-[11px] text-muted-foreground text-center mt-1">
                 Prediction tracking only. Not financial advice.
