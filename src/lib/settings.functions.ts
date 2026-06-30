@@ -32,6 +32,7 @@ export const listAllSettings = createServerFn({ method: "GET" }).handler(async (
 const updateSchema = z.object({
   id: z.string().uuid(),
   model_version: z.string().min(1),
+  api_model_id: z.string().min(1),
   confidence_threshold: z.number().min(0).max(100),
   auto_run_enabled: z.boolean(),
   require_manual_approval: z.boolean(),
@@ -51,13 +52,14 @@ export const updateSettings = createServerFn({ method: "POST" })
       .from("model_settings")
       .update({
         model_version: data.model_version,
+        api_model_id: data.api_model_id,
         confidence_threshold: data.confidence_threshold,
         auto_run_enabled: data.auto_run_enabled,
         require_manual_approval: data.require_manual_approval,
         indicator_weights: data.indicator_weights,
         prompt_template: data.prompt_template,
         is_active: data.is_active,
-      })
+      } as any)
       .eq("id", data.id);
     if (error) throw error;
     return { ok: true };
