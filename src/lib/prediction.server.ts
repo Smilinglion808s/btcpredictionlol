@@ -59,13 +59,26 @@ async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number):
   url.searchParams.set("start", start);
   url.searchParams.set("end", end);
 
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      "user-agent": "BTC-15m-Prediction-Dashboard/1.0",
-    },
-  });
-  if (!response.ok) return null;
+  const fetchWithRetry = async (): Promise<Response | null> => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch(url, {
+          headers: {
+            accept: "application/json",
+            "user-agent":
+              "Mozilla/5.0 (compatible; BTC15mBot/1.0; +https://btcpredictionlol.lovable.app)",
+          },
+        });
+        if (r.ok) return r;
+      } catch {
+        // network blip — retry
+      }
+      await new Promise((res) => setTimeout(res, 400 * (i + 1)));
+    }
+    return null;
+  };
+  const response = await fetchWithRetry();
+  if (!response) return null;
 
   const rows = (await response.json()) as Array<[number, number, number, number, number, number]>;
   const hit = rows.find((row) => Number(row[0]) === targetSec);
