@@ -303,38 +303,3 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "bu
   );
 }
 
-type PredictionRow = Awaited<ReturnType<typeof getLatestPrediction>>;
-
-function PredictionDetail({ p }: { p: NonNullable<PredictionRow> }) {
-  return (
-    <div className="space-y-3 text-sm">
-      <div className="flex items-center justify-between">
-        <PredictionBadge value={p.prediction} />
-        <StatusBadge status={p.status} />
-      </div>
-      <div className="grid grid-cols-2 gap-2 font-mono text-xs">
-        <Field label="Confidence" value={`${Number(p.confidence).toFixed(1)}%`} />
-        <Field label="Price" value={`$${Number(p.btc_price_at_prediction).toLocaleString()}`} />
-        <Field label="Current Candle" value={`${new Date(new Date(p.candle_ts).getTime() - 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(p.candle_ts).toLocaleTimeString()}`} />
-        <Field label="Predicting Next" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
-
-      </div>
-      {p.setup_type && <Field label="Setup" value={p.setup_type} />}
-      {p.reasoning_summary && (
-        <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reasoning</div>
-          <p className="text-xs leading-relaxed">{p.reasoning_summary}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="font-mono">{value}</div>
-    </div>
-  );
-}
