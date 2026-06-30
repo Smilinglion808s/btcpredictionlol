@@ -39,7 +39,7 @@ function Dashboard() {
 
   const last5 = useMemo(() => {
     return resolvedSorted.slice(0, 5);
-  }, [listQ.data]);
+  }, [resolvedSorted]);
 
 
   const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
