@@ -29,7 +29,7 @@ function Dashboard() {
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const listFn = useServerFn(listPredictions);
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn(), refetchInterval: 30_000 });
   const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
