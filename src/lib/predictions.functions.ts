@@ -52,7 +52,7 @@ export const getPredictionStats = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase.rpc("prediction_stats");
     if (error) throw error;
-    return data as Record<string, unknown>;
+    return JSON.parse(JSON.stringify(data ?? {})) as Record<string, unknown>;
   });
 
 const overrideSchema = z.object({

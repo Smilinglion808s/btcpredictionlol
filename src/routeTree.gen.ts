@@ -9,27 +9,52 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 
-export interface FileRoutesByFullPath {}
-export interface FileRoutesByTo {}
+const ApiPublicHooksScheduled15mRunRoute =
+  ApiPublicHooksScheduled15mRunRouteImport.update({
+    id: '/api/public/hooks/scheduled-15m-run',
+    path: '/api/public/hooks/scheduled-15m-run',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+
+export interface FileRoutesByFullPath {
+  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+}
+export interface FileRoutesByTo {
+  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+}
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: never
+  fullPaths: '/api/public/hooks/scheduled-15m-run'
   fileRoutesByTo: FileRoutesByTo
-  to: never
-  id: '__root__'
+  to: '/api/public/hooks/scheduled-15m-run'
+  id: '__root__' | '/api/public/hooks/scheduled-15m-run'
   fileRoutesById: FileRoutesById
 }
-export interface RootRouteChildren {}
-
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {}
+export interface RootRouteChildren {
+  ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
 }
 
-const rootRouteChildren: RootRouteChildren = {}
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/api/public/hooks/scheduled-15m-run': {
+      id: '/api/public/hooks/scheduled-15m-run'
+      path: '/api/public/hooks/scheduled-15m-run'
+      fullPath: '/api/public/hooks/scheduled-15m-run'
+      preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+  }
+}
+
+const rootRouteChildren: RootRouteChildren = {
+  ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
