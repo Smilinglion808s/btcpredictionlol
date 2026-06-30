@@ -170,6 +170,29 @@ function Dashboard() {
 
 
         <div className="space-y-4">
+          <Card className="border-info/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Current Guess · Next Candle</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {latestQ.data ? (
+                <div className="space-y-2 text-center">
+                  <div className={`font-mono text-5xl font-bold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
+                    {latestQ.data.prediction === "YES" ? "GREEN" : "RED"}
+                  </div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {Number(latestQ.data.confidence).toFixed(1)}% confidence · <StatusBadge status={latestQ.data.status} />
+                  </div>
+                  <div className="text-[11px] font-mono text-muted-foreground">
+                    Target candle: {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 30 * 60 * 1000).toLocaleTimeString()}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Latest Prediction</CardTitle>
