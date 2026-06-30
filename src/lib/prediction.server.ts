@@ -52,11 +52,24 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     if (!settings) throw new Error("No active model settings");
 
     const last = indicators.last;
-    // Target candle = the next 15m candle that will OPEN at or after the next boundary.
-    // At 4:29 → target opens at 4:30. At 4:30:01 → target opens at 4:45.
+    // Target candle = the next 15m boundary (i.e. the candle that will be born
+    // ~30s after the pre-close cron fires). Snap to the NEAREST boundary so a
+    // delayed HTTP start can't accidentally skip a full 15m ahead.
     const TF_MS = 15 * 60 * 1000;
-    const targetCandleTs = new Date(Math.ceil((Date.now() + 1) / TF_MS) * TF_MS).toISOString();
+    const targetCandleTs = new Date(Math.round(Date.now() / TF_MS) * TF_MS).toISOString();
     void nextCandleTs;
+
+    // Idempotency: if a prediction already exists for this candle + model, return it.
+    const { data: existing } = await supabase
+      .from("predictions")
+      .select("*")
+      .eq("symbol", "BTC-USDT")
+      .eq("timeframe", "15m")
+      .eq("model_version", (await supabase.from("model_settings").select("model_version").eq("is_active", true).maybeSingle()).data?.model_version ?? "")
+      .eq("candle_ts", targetCandleTs)
+      .maybeSingle();
+    if (existing) return existing;
+
 
 
     // Only closed/confirmed candles, most recent 80
