@@ -81,7 +81,7 @@ function Dashboard() {
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
       <HeaderStrip
-        price={last?.close}
+        price={spotQ.data ?? last?.close}
         change={change24}
         isBull={isBull}
         lastCandleTs={last?.candle_ts}
