@@ -2,18 +2,42 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
 
-const DEFAULT_INSTRUCTIONS =
-  "You are running the BTCUSDT 15m prediction model with the supplied indicator_weights. Use only the supplied closed candles and weights to make a Run Next prediction for the next 15m candle. Return JSON only with fields: prediction (YES or NO), confidence (0-100), final_interpretation (short label summarizing the setup), setup_type, market_condition, reasoning_summary, indicators (object of short strings).";
+const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
+Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
+Confidence is on a 1/5 to 5/5 scale and represents the likelihood the call is correct (not signal strength). Only 3/5 or higher counts as a tradable edge.
+Apply the supplied indicator_weights and the confidence_rules: cap confidence at 2/5 when price is directly under resistance / above support / at a major round number, when the signal candle already made a large extended move, when there is a large wick against the prediction, when price is flipping around the candle open, when volume looks like absorption, or when Run Next would require chasing an extended candle. Allow 3/5+ only when the documented YES or NO conditions are clearly met.
+Use only the supplied closed candles and computed indicators.
+
+Respond with JSON only in this exact shape:
+{
+  "model": "BTC 15m Model 2.1",
+  "run_type": "Run Next",
+  "target_candle": "<15m UTC window e.g. 2026-06-30T20:00:00Z -> 20:15:00Z>",
+  "call": "YES" | "NO" | "NO CLEAR EDGE",
+  "confidence": "1/5" | "2/5" | "3/5" | "4/5" | "5/5",
+  "trade_status": "TRADE" | "SKIP",
+  "flip_level": "<price level invalidating the call>",
+  "confirmation_level": "<price level strengthening the call>",
+  "final_interpretation": "<short label summarizing the setup>",
+  "notes": "<short reason>"
+}`;
 
 
 interface AiOutput {
-  prediction: "YES" | "NO";
-  confidence: number;
+  // legacy fields kept for backward-compat parsing
+  prediction?: "YES" | "NO" | "NO CLEAR EDGE";
+  call?: "YES" | "NO" | "NO CLEAR EDGE";
+  confidence: number | string;
   final_interpretation?: string;
-  setup_type: string;
-  market_condition: string;
-  reasoning_summary: string;
-  indicators: Record<string, string>;
+  setup_type?: string;
+  market_condition?: string;
+  reasoning_summary?: string;
+  notes?: string;
+  trade_status?: string;
+  flip_level?: string | number;
+  confirmation_level?: string | number;
+  target_candle?: string;
+  indicators?: Record<string, string>;
 }
 
 type ResolutionCandle = {
@@ -230,12 +254,39 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       parsed = JSON.parse(m[0]);
     }
 
-    if (parsed.prediction !== "YES" && parsed.prediction !== "NO") {
-      throw new Error("AI prediction must be YES or NO");
+    const rawCall = (parsed.call ?? parsed.prediction ?? "").toString().toUpperCase().trim();
+    if (rawCall !== "YES" && rawCall !== "NO" && rawCall !== "NO CLEAR EDGE") {
+      throw new Error("AI call must be YES, NO, or NO CLEAR EDGE");
     }
 
-    const status =
-      settings.require_manual_approval ? "manual_review" : "pending";
+    // Confidence may arrive as "3/5", "3", or 60. Normalize to 0-100.
+    const parseConfidence = (v: unknown): number => {
+      if (typeof v === "number") return v <= 5 ? v * 20 : v;
+      if (typeof v === "string") {
+        const frac = v.match(/(\d+(?:\.\d+)?)\s*\/\s*5/);
+        if (frac) return Math.round(parseFloat(frac[1]) * 20);
+        const n = parseFloat(v);
+        if (!isNaN(n)) return n <= 5 ? n * 20 : n;
+      }
+      return 0;
+    };
+    const confidence100 = parseConfidence(parsed.confidence);
+
+    // NO CLEAR EDGE → record as 'skip' so history shows the pass but it's
+    // excluded from win/loss grading by the resolver.
+    const isSkip = rawCall === "NO CLEAR EDGE";
+    const status = isSkip
+      ? "skip"
+      : settings.require_manual_approval
+        ? "manual_review"
+        : "pending";
+
+    const notesParts = [
+      parsed.notes ?? parsed.reasoning_summary ?? null,
+      parsed.flip_level ? `flip: ${parsed.flip_level}` : null,
+      parsed.confirmation_level ? `confirm: ${parsed.confirmation_level}` : null,
+      parsed.trade_status ? `trade: ${parsed.trade_status}` : null,
+    ].filter(Boolean);
 
     const insertPayload = {
       symbol: "BTC-USDT",
@@ -243,12 +294,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       model_version: settings.model_version,
       api_model_id: (settings as any).api_model_id || null,
       candle_ts: targetCandleTs,
-      prediction: parsed.prediction,
-      confidence: Number(parsed.confidence) || 0,
+      prediction: rawCall,
+      confidence: confidence100,
       btc_price_at_prediction: last.close,
       setup_type: parsed.final_interpretation ?? parsed.setup_type ?? null,
       market_condition: parsed.market_condition ?? null,
-      reasoning_summary: parsed.reasoning_summary ?? null,
+      reasoning_summary: notesParts.join(" • ") || null,
       full_ai_response: json,
       indicators: indicators as unknown as Record<string, unknown>,
       status,
