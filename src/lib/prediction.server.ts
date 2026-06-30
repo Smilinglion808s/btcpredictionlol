@@ -232,16 +232,57 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
     .limit(200);
   if (error) throw error;
 
+  const TF_MS = 15 * 60 * 1000;
   let resolved = 0;
   for (const p of pending ?? []) {
-    const { data: candle } = await supabase
+    const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
+    // Only attempt to resolve once the candle window has closed.
+    if (Date.now() < candleEndsAt + 5_000) continue;
+
+    let { data: candle } = await supabase
       .from("candles")
       .select("open, high, low, close, confirm")
       .eq("symbol", p.symbol)
       .eq("timeframe", p.timeframe)
       .eq("candle_ts", p.candle_ts)
       .maybeSingle();
-    if (!candle || !candle.confirm) continue;
+
+    // Fallback: pull the specific closed 15m candle from Coinbase if the DB
+    // row is missing or not yet marked confirmed.
+    if (!candle || !candle.confirm) {
+      try {
+        const startIso = new Date(p.candle_ts).toISOString();
+        const endIso = new Date(candleEndsAt).toISOString();
+        const url = `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=900&start=${startIso}&end=${endIso}`;
+        const r = await fetch(url, { headers: { accept: "application/json" } });
+        if (r.ok) {
+          const rows = (await r.json()) as Array<[number, number, number, number, number, number]>;
+          const tsSec = Math.floor(new Date(p.candle_ts).getTime() / 1000);
+          const hit = rows.find((row) => row[0] === tsSec);
+          if (hit) {
+            candle = { low: hit[1], high: hit[2], open: hit[3], close: hit[4], confirm: true } as typeof candle;
+            await supabase.from("candles").upsert(
+              {
+                symbol: p.symbol,
+                timeframe: p.timeframe,
+                candle_ts: p.candle_ts,
+                open: hit[3],
+                high: hit[2],
+                low: hit[1],
+                close: hit[4],
+                volume: hit[5],
+                confirm: true,
+              },
+              { onConflict: "symbol,timeframe,candle_ts" },
+            );
+          }
+        }
+      } catch {
+        // ignore; will retry next cycle
+      }
+    }
+
+    if (!candle) continue;
 
     const open = Number(candle.open);
     const close = Number(candle.close);
