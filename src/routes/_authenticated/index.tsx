@@ -65,6 +65,35 @@ function Dashboard() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Prediction failed"),
   });
 
+  // Auto-predict 15s before every 15m candle close.
+  // Ticks once per second; when the seconds-to-next-15m-close window hits ~15s, fire one cycle.
+  const lastFiredSlotRef = (useRef as typeof useRef<number | null>)(null);
+  const [secondsToClose, setSecondsToClose] = useState<number>(0);
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const slotSize = 15 * 60 * 1000;
+      const nextClose = Math.ceil(now / slotSize) * slotSize;
+      const remainingMs = nextClose - now;
+      setSecondsToClose(Math.max(0, Math.round(remainingMs / 1000)));
+
+      // Fire once when we cross into the 15s pre-close window, and only once per slot.
+      const slotId = nextClose;
+      if (
+        remainingMs <= 15_000 &&
+        remainingMs > 2_000 &&
+        lastFiredSlotRef.current !== slotId &&
+        !runMut.isPending
+      ) {
+        lastFiredSlotRef.current = slotId;
+        runMut.mutate();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [runMut]);
+
   const autoMut = useMutation({
     mutationFn: (enabled: boolean) => autoToggleFn({ data: { enabled } }),
     onSuccess: () => { toast.success("Auto-run updated"); qc.invalidateQueries({ queryKey: ["active-settings"] }); },
