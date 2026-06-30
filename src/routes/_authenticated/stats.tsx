@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPredictionStats, listPredictions } from "@/lib/predictions.functions";
+import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -16,8 +17,10 @@ function StatsPage() {
   const qc = useQueryClient();
   const statsFn = useServerFn(getPredictionStats);
   const listFn = useServerFn(listPredictions);
+  const settingsFn = useServerFn(getActiveSettings);
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: () => statsFn() });
   const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
 
   useEffect(() => {
     const ch = supabase
@@ -33,9 +36,51 @@ function StatsPage() {
   const s = (statsQ.data ?? {}) as Record<string, unknown>;
   const num = (k: string) => Number(s[k] ?? 0);
 
+  const modelVersion = settingsQ.data?.model_version ?? "—";
+  const totalRuns = num("total");
+  const resolved = num("wins") + num("losses") + num("pushes");
+  const wr = num("overall_win_rate");
+  const isLive = Boolean(settingsQ.data?.auto_run_enabled);
+
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
-      <h1 className="text-xl font-semibold">Performance Stats</h1>
+      <Card className="border-bull/40 bg-gradient-to-br from-bull/10 via-card to-card">
+        <CardContent className="py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="size-12 rounded-md bg-bull/20 border border-bull/40 flex items-center justify-center font-mono font-bold text-bull">
+              M2
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model 2 Status</div>
+              <div className="font-mono text-lg font-semibold flex items-center gap-2">
+                BTCUSDT 15m · Reduced Filter
+                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
+                  <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
+                  {isLive ? "AUTO LIVE" : "MANUAL"}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground font-mono mt-0.5">model: {modelVersion}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</div>
+              <div className="font-mono text-2xl font-bold text-bull">{wr}%</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Resolved</div>
+              <div className="font-mono text-2xl font-bold">{resolved}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Runs</div>
+              <div className="font-mono text-2xl font-bold">{totalRuns}</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <h2 className="text-xl font-semibold">Performance Stats</h2>
+
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
         <Kpi label="Overall WR" value={`${num("overall_win_rate")}%`} tone="bull" />
