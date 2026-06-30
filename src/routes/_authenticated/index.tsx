@@ -66,6 +66,24 @@ function Dashboard() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
+  // Periodically resolve pending predictions whose candle has closed.
+  const resolveFn = useServerFn(resolvePredictions);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await resolveFn();
+        if (!cancelled && r?.resolved) {
+          qc.invalidateQueries({ queryKey: ["predictions-list"] });
+          qc.invalidateQueries({ queryKey: ["latest-prediction"] });
+        }
+      } catch { /* ignore */ }
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [qc, resolveFn]);
+
   const refreshMut = useMutation({
     mutationFn: () => refreshFn(),
     onSuccess: () => { toast.success("Candles refreshed"); qc.invalidateQueries({ queryKey: ["candles"] }); },
