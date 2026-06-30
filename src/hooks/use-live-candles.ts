@@ -78,3 +78,25 @@ export function useLiveCandles(source: LiveSource = "coinbase", refetchMs = 5000
 
   return { ...q, lastUpdated };
 }
+
+export function useLiveSpotPrice(source: LiveSource = "coinbase", refetchMs = 3000) {
+  return useQuery({
+    queryKey: ["live-spot", source],
+    queryFn: async (): Promise<number> => {
+      if (source === "coinbase") {
+        const r = await fetch("https://api.exchange.coinbase.com/products/BTC-USD/ticker", { cache: "no-store" });
+        if (!r.ok) throw new Error(`Coinbase ${r.status}`);
+        const j = (await r.json()) as { price: string };
+        return Number(j.price);
+      }
+      const r = await fetch("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", { cache: "no-store" });
+      if (!r.ok) throw new Error(`OKX ${r.status}`);
+      const j = (await r.json()) as { data: Array<{ last: string }> };
+      return Number(j.data[0].last);
+    },
+    refetchInterval: refetchMs,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
+}
+
