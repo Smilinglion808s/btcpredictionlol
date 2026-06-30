@@ -83,7 +83,7 @@ function Dashboard() {
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
       <HeaderStrip
         price={spotQ.data ?? last?.close}
-        change={change24}
+        change={change15}
         isBull={isBull}
         lastCandleTs={last?.candle_ts}
         modelVersion={settingsQ.data?.model_version}
