@@ -72,34 +72,36 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       (settings.prompt_template as string)?.trim() || DEFAULT_INSTRUCTIONS;
     const modelId = (settings.model_version as string) || "gpt-5.5";
 
+    const inputPayload = {
+      symbol: "BTCUSDT",
+      interval: "15m",
+      run_type: "Run Next",
+      candles: candlesForPrompt,
+      computed_indicators: {
+        trend: indicators.trend,
+        ema9: indicators.ema9,
+        ema21: indicators.ema21,
+        ema50: indicators.ema50,
+        body_pct: indicators.bodyPct,
+        upper_wick_pct: indicators.upperWickPct,
+        lower_wick_pct: indicators.lowerWickPct,
+        range_20_high: indicators.range20High,
+        range_20_low: indicators.range20Low,
+        volume_expansion: indicators.volumeExpansion,
+        failed_breakout_up: indicators.failedBreakoutUp,
+        failed_breakout_down: indicators.failedBreakoutDown,
+        choppy: indicators.choppy,
+      },
+      model_settings: {
+        confidence_threshold: settings.confidence_threshold,
+        indicator_weights: settings.indicator_weights,
+      },
+    };
+
     aiPayload = {
       model: modelId,
       instructions,
-      input: {
-        symbol: "BTCUSDT",
-        interval: "15m",
-        run_type: "Run Next",
-        candles: candlesForPrompt,
-        computed_indicators: {
-          trend: indicators.trend,
-          ema9: indicators.ema9,
-          ema21: indicators.ema21,
-          ema50: indicators.ema50,
-          body_pct: indicators.bodyPct,
-          upper_wick_pct: indicators.upperWickPct,
-          lower_wick_pct: indicators.lowerWickPct,
-          range_20_high: indicators.range20High,
-          range_20_low: indicators.range20Low,
-          volume_expansion: indicators.volumeExpansion,
-          failed_breakout_up: indicators.failedBreakoutUp,
-          failed_breakout_down: indicators.failedBreakoutDown,
-          choppy: indicators.choppy,
-        },
-        model_settings: {
-          confidence_threshold: settings.confidence_threshold,
-          indicator_weights: settings.indicator_weights,
-        },
-      },
+      input: JSON.stringify(inputPayload),
       text: { format: { type: "json_object" } },
     };
 
