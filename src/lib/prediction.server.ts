@@ -166,7 +166,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
-      request_payload: { promptLen: promptFilled.length, model: "gpt-4.1-mini" },
+      request_payload: { model: modelId, candle_count: candlesForPrompt.length },
       response_payload: { prediction_id: inserted.id, confidence: inserted.confidence, prediction: inserted.prediction, duration_ms: Date.now() - started },
       success: true,
     });
