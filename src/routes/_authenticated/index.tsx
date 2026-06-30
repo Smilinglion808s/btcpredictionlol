@@ -97,7 +97,7 @@ function Dashboard() {
             {candlesQ.isLoading ? (
               <div className="text-sm text-muted-foreground py-20 text-center">Loading candles…</div>
             ) : (
-              <CandleChart candles={candles.slice(-100).map((c) => ({
+              <CandleChart candles={candles.slice(-100).map((c: typeof candles[number]) => ({
                 candle_ts: c.candle_ts as string,
                 open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: Number(c.volume),
               }))} />
