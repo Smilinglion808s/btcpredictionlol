@@ -52,8 +52,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     if (!settings) throw new Error("No active model settings");
 
     const last = indicators.last;
-    const lastCandleTs = last.candle_ts;
-    const targetCandleTs = nextCandleTs(lastCandleTs);
+    // Target candle = the next 15m candle that will OPEN at or after the next boundary.
+    // At 4:29 → target opens at 4:30. At 4:30:01 → target opens at 4:45.
+    const TF_MS = 15 * 60 * 1000;
+    const targetCandleTs = new Date(Math.ceil((Date.now() + 1) / TF_MS) * TF_MS).toISOString();
+    void nextCandleTs;
+
 
     // Only closed/confirmed candles, most recent 80
     const closedCandles = ordered.filter((c) => (c as Candle & { confirm?: boolean }).confirm !== false);
