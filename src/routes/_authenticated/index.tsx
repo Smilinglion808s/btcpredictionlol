@@ -127,9 +127,13 @@ function Dashboard() {
               {latestQ.data ? (
                 <div className="flex items-center justify-between text-sm">
                   <div className="leading-tight">
-                    <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">Current Candle</span>
+                    <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">
+                      Current Candle (forming) — predicting close
+                    </span>
                     <span className="font-mono text-[11px] text-muted-foreground">
-                      {new Date(latestQ.data.candle_ts).toLocaleString()}
+                      {new Date(latestQ.data.candle_ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {" → "}
+                      {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
                   <span className={`font-mono font-semibold ${latestQ.data.prediction === "YES" ? "text-bull" : "text-bear"}`}>
