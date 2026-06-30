@@ -2,8 +2,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
 
-const SYSTEM_PROMPT =
-  "You are a BTC 15-minute candle prediction assistant. You analyze only the next 15-minute candle. Return YES if the next candle is more likely to close bullish versus its open. Return NO if the next candle is more likely to close bearish versus its open. Consider wick rejection, failed breakouts, reclaim/failure behavior, support/resistance, EMA structure, candle body strength, volume, and chop risk. Do not give financial advice. Do not recommend trades. Return strict JSON only.";
+const DEFAULT_INSTRUCTIONS =
+  "You are running BTCUSDT 15m Model 2 — reduced filter. Use only the supplied closed candles. Make a Run Next prediction for the next 15m candle. Return JSON only with fields: prediction (YES or NO), confidence (0-100), setup_type, market_condition, reasoning_summary, indicators (object of short strings).";
+
 
 interface AiOutput {
   prediction: "YES" | "NO";
