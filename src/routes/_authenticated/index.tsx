@@ -135,7 +135,7 @@ function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <div className="flex items-center gap-3">
-              <CardTitle className="text-base font-mono">BTC-USDT · 15m</CardTitle>
+              <CardTitle className="text-base font-mono">BTC-USD · 15m</CardTitle>
               <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                 <span className={`inline-block size-1.5 rounded-full ${liveQ.isError ? "bg-bear" : "bg-bull animate-pulse"}`} />
                 {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
@@ -275,7 +275,7 @@ function HeaderStrip(props: {
   return (
     <Card>
       <CardContent className="py-4 grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
-        <Stat label="BTC-USDT" value={props.price ? `$${Number(props.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} />
+        <Stat label="BTC-USD" value={props.price ? `$${Number(props.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} />
         <Stat
           label="24h Change"
           value={`${props.change >= 0 ? "+" : ""}${props.change.toFixed(2)}%`}
