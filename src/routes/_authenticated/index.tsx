@@ -40,6 +40,13 @@ function Dashboard() {
   const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
   const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
 
+  const last5 = useMemo(() => {
+    return (listQ.data ?? [])
+      .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
+      .sort((a, b) => new Date(b.resolved_at ?? b.created_at).getTime() - new Date(a.resolved_at ?? a.created_at).getTime())
+      .slice(0, 5);
+  }, [listQ.data]);
+
 
   const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
   const liveQ = useLiveCandles(liveSource, 5000);
@@ -180,6 +187,49 @@ function Dashboard() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="py-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades</CardTitle>
+            </CardHeader>
+            <CardContent className="py-0">
+              {last5.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-3">Waiting for trades…</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-[11px] text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="text-left py-2 pr-3">Candle Time</th>
+                        <th className="text-left py-2 pr-3">Prediction</th>
+                        <th className="text-left py-2 pr-3">Actual</th>
+                        <th className="text-right py-2">Conf</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                      {last5.map((p) => {
+                        const open = Number(p.actual_next_candle_open ?? 0);
+                        const close = Number(p.actual_next_candle_close ?? 0);
+                        const actual = open === 0 && close === 0 ? "—" : close >= open ? "GREEN" : "RED";
+                        return (
+                          <tr key={p.id} className="border-b border-border/50">
+                            <td className="py-2 pr-3">{new Date(p.candle_ts).toLocaleString()}</td>
+                            <td className={`py-2 pr-3 ${p.prediction === "YES" ? "text-bull" : "text-bear"}`}>
+                              {p.prediction === "YES" ? "GREEN" : "RED"}
+                            </td>
+                            <td className={`py-2 pr-3 ${actual === "GREEN" ? "text-bull" : actual === "RED" ? "text-bear" : "text-muted-foreground"}`}>
+                              {actual}
+                            </td>
+                            <td className="py-2 text-right">{Number(p.confidence).toFixed(0)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>
