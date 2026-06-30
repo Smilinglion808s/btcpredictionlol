@@ -184,8 +184,9 @@ function Dashboard() {
                     {Number(latestQ.data.confidence).toFixed(1)}% confidence · <StatusBadge status={latestQ.data.status} />
                   </div>
                   <div className="text-[11px] font-mono text-muted-foreground">
-                    Target candle: {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 30 * 60 * 1000).toLocaleTimeString()}
+                    Target candle: {new Date(latestQ.data.candle_ts).toLocaleTimeString()} → {new Date(new Date(latestQ.data.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}
                   </div>
+
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center">Waiting for first prediction…</p>
@@ -244,13 +245,10 @@ function Dashboard() {
               <CardTitle className="text-base">Controls</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button
-                onClick={() => runMut.mutate()}
-                disabled={runMut.isPending}
-                className="w-full h-12 text-sm font-semibold tracking-wide"
-              >
-                {runMut.isPending ? "Running…" : "RUN NEXT CANDLE"}
-              </Button>
+              {runMut.isPending && (
+                <div className="text-xs text-center text-muted-foreground">Running prediction…</div>
+              )}
+
               <div className="flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <Label htmlFor="auto" className="text-sm">Auto Run Every 15m</Label>
@@ -334,8 +332,9 @@ function PredictionDetail({ p }: { p: NonNullable<PredictionRow> }) {
       <div className="grid grid-cols-2 gap-2 font-mono text-xs">
         <Field label="Confidence" value={`${Number(p.confidence).toFixed(1)}%`} />
         <Field label="Price" value={`$${Number(p.btc_price_at_prediction).toLocaleString()}`} />
-        <Field label="Current Candle" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
-        <Field label="Predicting Next" value={`${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 30 * 60 * 1000).toLocaleTimeString()}`} />
+        <Field label="Current Candle" value={`${new Date(new Date(p.candle_ts).getTime() - 15 * 60 * 1000).toLocaleTimeString()} → ${new Date(p.candle_ts).toLocaleTimeString()}`} />
+        <Field label="Predicting Next" value={`${new Date(p.candle_ts).toLocaleTimeString()} → ${new Date(new Date(p.candle_ts).getTime() + 15 * 60 * 1000).toLocaleTimeString()}`} />
+
       </div>
       {p.setup_type && <Field label="Setup" value={p.setup_type} />}
       {p.reasoning_summary && (
