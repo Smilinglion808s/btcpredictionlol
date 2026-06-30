@@ -44,6 +44,9 @@ function StatsPage() {
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 italic">
+        Actual candle outcomes are determined by the Kalshi KXBTC15M 15-minute prediction market (CF Benchmarks BRTI settlement).
+      </p>
       <Card className="border-bull/40 bg-gradient-to-br from-bull/10 via-card to-card">
         <CardContent className="py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
