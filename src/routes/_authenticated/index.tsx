@@ -36,6 +36,10 @@ function Dashboard() {
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
+  const listFn = useServerFn(listPredictions);
+  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const lastResolved = (listQ.data ?? []).find((p) => p.status === "win" || p.status === "loss" || p.status === "push");
+
 
   const [liveSource, setLiveSource] = useState<LiveSource>("binance");
   const liveQ = useLiveCandles(liveSource, 5000);
