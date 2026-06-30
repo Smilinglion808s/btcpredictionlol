@@ -106,21 +106,17 @@ function Dashboard() {
                   {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
                 </span>
               </div>
-              <div className="flex gap-2">
-                <select
-                  value={liveSource}
-                  onChange={(e) => setLiveSource(e.target.value as LiveSource)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
-                  aria-label="Live data source"
-                >
-                  {LIVE_SOURCES.map((s) => (
-                    <option key={s} value={s}>{sourceLabel(s)}</option>
-                  ))}
-                </select>
-                <Button size="sm" variant="secondary" onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}>
-                  {refreshMut.isPending ? "Syncing…" : "Sync DB"}
-                </Button>
-              </div>
+              <select
+                value={liveSource}
+                onChange={(e) => setLiveSource(e.target.value as LiveSource)}
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                aria-label="Live data source"
+              >
+                {LIVE_SOURCES.map((s) => (
+                  <option key={s} value={s}>{sourceLabel(s)}</option>
+                ))}
+              </select>
+
             </CardHeader>
             <CardContent>
               {chartCandles.length === 0 ? (
