@@ -71,8 +71,8 @@ function Dashboard() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Prediction failed"),
   });
 
-  // Auto-predict 15s before every 15m candle close.
-  // Ticks once per second; when the seconds-to-next-15m-close window hits ~15s, fire one cycle.
+  // Auto-predict 25s before every 15m candle close.
+  // Ticks once per second; when the seconds-to-next-15m-close window hits ~25s, fire one cycle.
   const lastFiredSlotRef = useRef<number | null>(null);
   // (countdown is shown in HeaderStrip from lastCandleTs)
   useEffect(() => {
@@ -83,10 +83,10 @@ function Dashboard() {
       const remainingMs = nextClose - now;
 
 
-      // Fire once when we cross into the 15s pre-close window, and only once per slot.
+      // Fire once when we cross into the 25s pre-close window, and only once per slot.
       const slotId = nextClose;
       if (
-        remainingMs <= 15_000 &&
+        remainingMs <= 25_000 &&
         remainingMs > 2_000 &&
         lastFiredSlotRef.current !== slotId &&
         !runMut.isPending
