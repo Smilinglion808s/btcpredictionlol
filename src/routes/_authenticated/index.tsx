@@ -237,13 +237,14 @@ function HeaderStrip(props: {
     return () => clearInterval(t);
   }, []);
   const countdown = useMemo(() => {
-    if (!props.lastCandleTs) return "—";
-    const next = new Date(props.lastCandleTs).getTime() + 15 * 60 * 1000;
-    const diff = Math.max(0, next - now);
+    // Align with absolute 15m boundaries (matches Coinbase candle close times)
+    const TF = 15 * 60 * 1000;
+    const nextClose = Math.floor(now / TF) * TF + TF;
+    const diff = Math.max(0, nextClose - now);
     const m = Math.floor(diff / 60000);
     const s = Math.floor((diff % 60000) / 1000);
     return `${m}:${s.toString().padStart(2, "0")}`;
-  }, [props.lastCandleTs, now]);
+  }, [now]);
 
   return (
     <Card>
