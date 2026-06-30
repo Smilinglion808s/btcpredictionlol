@@ -47,12 +47,14 @@ export const getLatestPrediction = createServerFn({ method: "GET" })
     return data;
   });
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
+
 export const getPredictionStats = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase.rpc("prediction_stats");
     if (error) throw error;
-    return JSON.parse(JSON.stringify(data ?? {})) as Record<string, unknown>;
+    return (JSON.parse(JSON.stringify(data ?? {})) as JsonValue) as { [k: string]: JsonValue };
   });
 
 const overrideSchema = z.object({
