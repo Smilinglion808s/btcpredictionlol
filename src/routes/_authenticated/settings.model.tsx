@@ -71,6 +71,10 @@ function SettingsPage() {
             <Input value={form.model_version} onChange={(e) => setForm({ ...form, model_version: e.target.value })} />
           </div>
           <div>
+            <Label>API Model ID</Label>
+            <Input value={form.api_model_id} onChange={(e) => setForm({ ...form, api_model_id: e.target.value })} placeholder="e.g. gpt-5.5" />
+          </div>
+          <div>
             <Label>Confidence Threshold (%)</Label>
             <Input type="number" min={0} max={100} value={form.confidence_threshold}
               onChange={(e) => setForm({ ...form, confidence_threshold: Number(e.target.value) })} />
