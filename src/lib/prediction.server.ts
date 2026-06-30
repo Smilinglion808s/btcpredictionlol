@@ -357,6 +357,8 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 }
 
 export async function resolvePredictionsServer(supabase: SupabaseClient) {
+  const { fetchKalshiResolution } = await import("./kalshi.server");
+
   const { data: pending, error } = await supabase
     .from("predictions")
     .select("id, prediction, candle_ts, symbol, timeframe")
@@ -367,90 +369,46 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
 
   const TF_MS = 15 * 60 * 1000;
   let resolved = 0;
-  const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean }> = [];
+  const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean; ticker?: string }> = [];
+
   for (const p of pending ?? []) {
     const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
-    // Only attempt to resolve once the candle window has closed.
-    if (Date.now() < candleEndsAt + 30_000) continue;
+    // Wait until Kalshi has had time to settle (settlement_timer ~1s but allow margin).
+    if (Date.now() < candleEndsAt + 15_000) continue;
 
-    // Source of truth: Coinbase closed 15m candle. Fall back to DB if Coinbase
-    // is unreachable.
-    let candle: ResolutionCandle | null = null;
-    let source = "none";
+    let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
     try {
-      candle = await fetchCoinbaseClosedCandle(p.candle_ts, TF_MS);
-      if (candle) {
-        source = "coinbase";
-        await supabase.from("candles").upsert(
-          {
-            symbol: p.symbol,
-            timeframe: p.timeframe,
-            candle_ts: p.candle_ts,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-            volume: candle.volume ?? 0,
-            confirm: true,
-          },
-          { onConflict: "symbol,timeframe,candle_ts" },
-        );
-      }
+      kalshi = await fetchKalshiResolution(p.candle_ts);
     } catch {
-      // fall through to DB fallback
+      // fall through
     }
 
-    if (!candle) {
-      const { data: dbCandle } = await supabase
-        .from("candles")
-        .select("open, high, low, close, confirm")
-        .eq("symbol", p.symbol)
-        .eq("timeframe", p.timeframe)
-        .eq("candle_ts", p.candle_ts)
-        .maybeSingle();
-      if (dbCandle && dbCandle.confirm) {
-        candle = {
-          open: Number(dbCandle.open),
-          high: Number(dbCandle.high),
-          low: Number(dbCandle.low),
-          close: Number(dbCandle.close),
-          confirm: true,
-        };
-        source = "database";
-      }
-    }
-
-    if (!candle) {
-      checked.push({ id: p.id, candle_ts: p.candle_ts, source, resolved: false });
+    if (!kalshi) {
+      checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
       continue;
     }
 
-    const open = Number(candle.open);
-    const close = Number(candle.close);
     let status: "win" | "loss" | "push";
-    if (close === open) status = "push";
-    else if (p.prediction === "YES") status = close > open ? "win" : "loss";
-    else status = close < open ? "win" : "loss";
+    if (p.prediction === "YES") status = kalshi.result === "YES" ? "win" : "loss";
+    else if (p.prediction === "NO") status = kalshi.result === "NO" ? "win" : "loss";
+    else status = "push";
 
     await supabase
       .from("predictions")
       .update({
         status,
-        actual_next_candle_open: candle.open,
-        actual_next_candle_high: candle.high,
-        actual_next_candle_low: candle.low,
-        actual_next_candle_close: candle.close,
+        actual_next_candle_close: kalshi.settlement_value ?? null,
         resolved_at: new Date().toISOString(),
       })
       .eq("id", p.id);
     resolved++;
-    checked.push({ id: p.id, candle_ts: p.candle_ts, source, resolved: true });
+    checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
   }
 
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pending?.length ?? 0 },
-    response_payload: { resolved, checked },
+    response_payload: { resolved, checked, resolver: "kalshi" },
     success: true,
   });
 
