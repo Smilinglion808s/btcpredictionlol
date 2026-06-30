@@ -66,70 +66,9 @@ function Dashboard() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  // Periodically resolve pending predictions whose candle has closed.
-  const resolveFn = useServerFn(resolvePredictions);
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const r = await resolveFn();
-        if (!cancelled && r?.resolved) {
-          qc.invalidateQueries({ queryKey: ["predictions-list"] });
-          qc.invalidateQueries({ queryKey: ["latest-prediction"] });
-        }
-      } catch { /* ignore */ }
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [qc, resolveFn]);
+  // View-only: predictions and resolution are driven server-side by pg_cron.
+  // The page reflects updates via realtime subscriptions above; no client triggers.
 
-  const refreshMut = useMutation({
-    mutationFn: () => refreshFn(),
-    onSuccess: () => { toast.success("Candles refreshed"); qc.invalidateQueries({ queryKey: ["candles"] }); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Refresh failed"),
-  });
-
-  const runMut = useMutation({
-    mutationFn: () => cycleFn(),
-    onSuccess: () => { toast.success("Prediction saved"); qc.invalidateQueries(); router.invalidate(); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Prediction failed"),
-  });
-
-  // Auto-predict 25s before every 15m candle close.
-  // Ticks once per second; when the seconds-to-next-15m-close window hits ~25s, fire one cycle.
-  const lastFiredSlotRef = useRef<number | null>(null);
-  // (countdown is shown in HeaderStrip from lastCandleTs)
-  useEffect(() => {
-    const tick = () => {
-      const now = Date.now();
-      const slotSize = 15 * 60 * 1000;
-      const nextClose = Math.ceil(now / slotSize) * slotSize;
-      const remainingMs = nextClose - now;
-
-
-      // Fire once when we cross into the 25s pre-close window, and only once per slot.
-      const slotId = nextClose;
-      if (
-        remainingMs <= 25_000 &&
-        remainingMs > 2_000 &&
-        lastFiredSlotRef.current !== slotId &&
-        !runMut.isPending
-      ) {
-        lastFiredSlotRef.current = slotId;
-        runMut.mutate();
-      }
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [runMut]);
-
-  const autoMut = useMutation({
-    mutationFn: (enabled: boolean) => autoToggleFn({ data: { enabled } }),
-    onSuccess: () => { toast.success("Auto-run updated"); qc.invalidateQueries({ queryKey: ["active-settings"] }); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
-  });
 
   // Prefer live exchange candles for the chart; fall back to DB candles.
   const liveCandles = liveQ.data ?? [];
