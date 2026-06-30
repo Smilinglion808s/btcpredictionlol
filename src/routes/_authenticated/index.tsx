@@ -257,7 +257,9 @@ function HeaderStrip(props: {
   }, []);
 
   const TF = 15 * 60 * 1000;
-  const nextClose = Math.floor(now / TF) * TF + TF;
+  const serverNow = now + offset;
+  const nextClose = Math.floor(serverNow / TF) * TF + TF;
+
   const fmt = (diff: number) => {
     const d = Math.max(0, diff);
     const m = Math.floor(d / 60000);
