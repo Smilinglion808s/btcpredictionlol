@@ -9,8 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksScheduled15mRunRoute =
   ApiPublicHooksScheduled15mRunRouteImport.update({
     id: '/api/public/hooks/scheduled-15m-run',
@@ -19,29 +30,55 @@ const ApiPublicHooksScheduled15mRunRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AuthenticatedRouteRoute
+  '/auth': typeof AuthRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AuthenticatedRouteRoute
+  '/auth': typeof AuthRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_authenticated': typeof AuthenticatedRouteRoute
+  '/auth': typeof AuthRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/api/public/hooks/scheduled-15m-run'
+  fullPaths: '/' | '/auth' | '/api/public/hooks/scheduled-15m-run'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/public/hooks/scheduled-15m-run'
-  id: '__root__' | '/api/public/hooks/scheduled-15m-run'
+  to: '/' | '/auth' | '/api/public/hooks/scheduled-15m-run'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/auth'
+    | '/api/public/hooks/scheduled-15m-run'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRoute
+  AuthRoute: typeof AuthRoute
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/scheduled-15m-run': {
       id: '/api/public/hooks/scheduled-15m-run'
       path: '/api/public/hooks/scheduled-15m-run'
@@ -53,6 +90,8 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  AuthenticatedRouteRoute: AuthenticatedRouteRoute,
+  AuthRoute: AuthRoute,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
 }
 export const routeTree = rootRouteImport
