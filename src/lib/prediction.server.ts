@@ -240,7 +240,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       prediction: parsed.prediction,
       confidence: Number(parsed.confidence) || 0,
       btc_price_at_prediction: last.close,
-      setup_type: parsed.setup_type ?? null,
+      setup_type: parsed.final_interpretation ?? parsed.setup_type ?? null,
       market_condition: parsed.market_condition ?? null,
       reasoning_summary: parsed.reasoning_summary ?? null,
       full_ai_response: json,
