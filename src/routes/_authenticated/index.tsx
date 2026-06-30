@@ -76,9 +76,8 @@ function Dashboard() {
       }));
 
   const last = chartCandles[chartCandles.length - 1];
-  const first24 = chartCandles.length >= 96 ? chartCandles[chartCandles.length - 96] : chartCandles[0];
-  const change24 = last && first24 ? ((last.close - first24.open) / first24.open) * 100 : 0;
-  const isBull = change24 >= 0;
+  const change15 = last ? ((last.close - last.open) / last.open) * 100 : 0;
+  const isBull = change15 >= 0;
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
