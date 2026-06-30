@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
 export const Route = createFileRoute("/_authenticated/")({
-  head: () => ({ meta: [{ title: "Dashboard — BTC 15m" }] }),
+  head: () => ({ meta: [{ title: "Home — BTC 15m" }] }),
   component: Dashboard,
 });
 
