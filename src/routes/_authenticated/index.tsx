@@ -272,3 +272,85 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "bu
   );
 }
 
+type LatestPred = {
+  candle_ts: string;
+  prediction: string;
+  confidence: number | string;
+} | null | undefined;
+
+function CandleStatusCards({ latestPrediction }: { latestPrediction: LatestPred }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const TF = 15 * 60 * 1000;
+  const currentStart = Math.floor(now / TF) * TF;
+  const currentEnd = currentStart + TF;
+  const upcomingStart = currentEnd;
+  const upcomingEnd = upcomingStart + TF;
+
+  const fmt = (ms: number) =>
+    new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const predTs = latestPrediction ? new Date(latestPrediction.candle_ts).getTime() : 0;
+  const currentPred = predTs === currentStart ? latestPrediction : null;
+  const upcomingPred = predTs === upcomingStart ? latestPrediction : null;
+
+  const Row = ({
+    title,
+    windowLabel,
+    pred,
+    emptyText,
+  }: {
+    title: string;
+    windowLabel: string;
+    pred: LatestPred;
+    emptyText: string;
+  }) => (
+    <div className="flex items-center justify-between text-sm">
+      <div className="leading-tight">
+        <span className="text-muted-foreground uppercase tracking-wider text-[11px] block">{title}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{windowLabel}</span>
+      </div>
+      {pred ? (
+        <div className="text-right">
+          <div className={`font-mono font-semibold ${pred.prediction === "YES" ? "text-bull" : "text-bear"}`}>
+            {pred.prediction === "YES" ? "GREEN" : "RED"}
+          </div>
+          <div className="font-mono text-[11px] text-muted-foreground">
+            {Number(pred.confidence).toFixed(0)}% conf
+          </div>
+        </div>
+      ) : (
+        <span className="text-[11px] text-muted-foreground font-mono">{emptyText}</span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Card className="py-2">
+        <CardContent className="py-3">
+          <Row
+            title="Current Candle · in progress"
+            windowLabel={`${fmt(currentStart)} → ${fmt(currentEnd)}`}
+            pred={currentPred}
+            emptyText="forming…"
+          />
+        </CardContent>
+      </Card>
+      <Card className="py-2 border-info/40">
+        <CardContent className="py-3">
+          <Row
+            title="Upcoming Candle · pending"
+            windowLabel={`${fmt(upcomingStart)} → ${fmt(upcomingEnd)}`}
+            pred={upcomingPred}
+            emptyText="awaiting prediction"
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
