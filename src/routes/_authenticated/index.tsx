@@ -42,6 +42,7 @@ function Dashboard() {
 
   const [liveSource, setLiveSource] = useState<LiveSource>("coinbase");
   const liveQ = useLiveCandles(liveSource, 5000);
+  const spotQ = useLiveSpotPrice(liveSource, 3000);
 
   // Realtime
   useEffect(() => {
