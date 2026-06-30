@@ -180,6 +180,43 @@ function Dashboard() {
           </Card>
 
           <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Last Result</CardTitle>
+              <Link to="/stats" className="text-[11px] uppercase tracking-wider text-info hover:underline">View stats →</Link>
+            </CardHeader>
+            <CardContent>
+              {lastResolved ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <PredictionBadge value={lastResolved.prediction} />
+                    <StatusBadge status={lastResolved.status} />
+                  </div>
+                  <div className="text-xs font-mono text-muted-foreground">
+                    {new Date(lastResolved.resolved_at ?? lastResolved.created_at).toLocaleString()}
+                  </div>
+                  {lastResolved.actual_next_candle_open != null && lastResolved.actual_next_candle_close != null && (
+                    <div className="text-xs font-mono grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-muted-foreground">Open </span>
+                        ${Number(lastResolved.actual_next_candle_open).toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Close </span>
+                        <span className={Number(lastResolved.actual_next_candle_close) >= Number(lastResolved.actual_next_candle_open) ? "text-bull" : "text-bear"}>
+                          ${Number(lastResolved.actual_next_candle_close).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Waiting for first candle to close…</p>
+              )}
+            </CardContent>
+          </Card>
+
+
+          <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Controls</CardTitle>
             </CardHeader>
