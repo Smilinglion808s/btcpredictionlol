@@ -2,18 +2,42 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
 
-const DEFAULT_INSTRUCTIONS =
-  "You are running the BTCUSDT 15m prediction model with the supplied indicator_weights. Use only the supplied closed candles and weights to make a Run Next prediction for the next 15m candle. Return JSON only with fields: prediction (YES or NO), confidence (0-100), final_interpretation (short label summarizing the setup), setup_type, market_condition, reasoning_summary, indicators (object of short strings).";
+const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
+Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
+Confidence is on a 1/5 to 5/5 scale and represents the likelihood the call is correct (not signal strength). Only 3/5 or higher counts as a tradable edge.
+Apply the supplied indicator_weights and the confidence_rules: cap confidence at 2/5 when price is directly under resistance / above support / at a major round number, when the signal candle already made a large extended move, when there is a large wick against the prediction, when price is flipping around the candle open, when volume looks like absorption, or when Run Next would require chasing an extended candle. Allow 3/5+ only when the documented YES or NO conditions are clearly met.
+Use only the supplied closed candles and computed indicators.
+
+Respond with JSON only in this exact shape:
+{
+  "model": "BTC 15m Model 2.1",
+  "run_type": "Run Next",
+  "target_candle": "<15m UTC window e.g. 2026-06-30T20:00:00Z -> 20:15:00Z>",
+  "call": "YES" | "NO" | "NO CLEAR EDGE",
+  "confidence": "1/5" | "2/5" | "3/5" | "4/5" | "5/5",
+  "trade_status": "TRADE" | "SKIP",
+  "flip_level": "<price level invalidating the call>",
+  "confirmation_level": "<price level strengthening the call>",
+  "final_interpretation": "<short label summarizing the setup>",
+  "notes": "<short reason>"
+}`;
 
 
 interface AiOutput {
-  prediction: "YES" | "NO";
-  confidence: number;
+  // legacy fields kept for backward-compat parsing
+  prediction?: "YES" | "NO" | "NO CLEAR EDGE";
+  call?: "YES" | "NO" | "NO CLEAR EDGE";
+  confidence: number | string;
   final_interpretation?: string;
-  setup_type: string;
-  market_condition: string;
-  reasoning_summary: string;
-  indicators: Record<string, string>;
+  setup_type?: string;
+  market_condition?: string;
+  reasoning_summary?: string;
+  notes?: string;
+  trade_status?: string;
+  flip_level?: string | number;
+  confirmation_level?: string | number;
+  target_candle?: string;
+  indicators?: Record<string, string>;
 }
 
 type ResolutionCandle = {
