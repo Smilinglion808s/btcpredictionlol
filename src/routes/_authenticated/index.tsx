@@ -1,19 +1,14 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
-import { fetchOkxCandles } from "@/lib/okx.functions";
-import { getLatestPrediction, listPredictions, runFullCycle, resolvePredictions } from "@/lib/predictions.functions";
+import { getLatestPrediction, listPredictions } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
-import { getActiveSettings, toggleAutoRun } from "@/lib/settings.functions";
+import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useLiveCandles, LIVE_SOURCES, sourceLabel, type LiveSource } from "@/hooks/use-live-candles";
 
@@ -24,14 +19,11 @@ export const Route = createFileRoute("/_authenticated/")({
 
 function Dashboard() {
   const qc = useQueryClient();
-  const router = useRouter();
 
   const candlesFn = useServerFn(listCandles);
-  const refreshFn = useServerFn(fetchOkxCandles);
   const latestFn = useServerFn(getLatestPrediction);
   const settingsFn = useServerFn(getActiveSettings);
-  const cycleFn = useServerFn(runFullCycle);
-  const autoToggleFn = useServerFn(toggleAutoRun);
+
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
@@ -66,70 +58,9 @@ function Dashboard() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  // Periodically resolve pending predictions whose candle has closed.
-  const resolveFn = useServerFn(resolvePredictions);
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const r = await resolveFn();
-        if (!cancelled && r?.resolved) {
-          qc.invalidateQueries({ queryKey: ["predictions-list"] });
-          qc.invalidateQueries({ queryKey: ["latest-prediction"] });
-        }
-      } catch { /* ignore */ }
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [qc, resolveFn]);
+  // View-only: predictions and resolution are driven server-side by pg_cron.
+  // The page reflects updates via realtime subscriptions above; no client triggers.
 
-  const refreshMut = useMutation({
-    mutationFn: () => refreshFn(),
-    onSuccess: () => { toast.success("Candles refreshed"); qc.invalidateQueries({ queryKey: ["candles"] }); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Refresh failed"),
-  });
-
-  const runMut = useMutation({
-    mutationFn: () => cycleFn(),
-    onSuccess: () => { toast.success("Prediction saved"); qc.invalidateQueries(); router.invalidate(); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Prediction failed"),
-  });
-
-  // Auto-predict 25s before every 15m candle close.
-  // Ticks once per second; when the seconds-to-next-15m-close window hits ~25s, fire one cycle.
-  const lastFiredSlotRef = useRef<number | null>(null);
-  // (countdown is shown in HeaderStrip from lastCandleTs)
-  useEffect(() => {
-    const tick = () => {
-      const now = Date.now();
-      const slotSize = 15 * 60 * 1000;
-      const nextClose = Math.ceil(now / slotSize) * slotSize;
-      const remainingMs = nextClose - now;
-
-
-      // Fire once when we cross into the 25s pre-close window, and only once per slot.
-      const slotId = nextClose;
-      if (
-        remainingMs <= 25_000 &&
-        remainingMs > 2_000 &&
-        lastFiredSlotRef.current !== slotId &&
-        !runMut.isPending
-      ) {
-        lastFiredSlotRef.current = slotId;
-        runMut.mutate();
-      }
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [runMut]);
-
-  const autoMut = useMutation({
-    mutationFn: (enabled: boolean) => autoToggleFn({ data: { enabled } }),
-    onSuccess: () => { toast.success("Auto-run updated"); qc.invalidateQueries({ queryKey: ["active-settings"] }); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
-  });
 
   // Prefer live exchange candles for the chart; fall back to DB candles.
   const liveCandles = liveQ.data ?? [];
@@ -167,21 +98,17 @@ function Dashboard() {
                   {liveQ.isError ? "offline" : "live"} · {sourceLabel(liveSource)}
                 </span>
               </div>
-              <div className="flex gap-2">
-                <select
-                  value={liveSource}
-                  onChange={(e) => setLiveSource(e.target.value as LiveSource)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
-                  aria-label="Live data source"
-                >
-                  {LIVE_SOURCES.map((s) => (
-                    <option key={s} value={s}>{sourceLabel(s)}</option>
-                  ))}
-                </select>
-                <Button size="sm" variant="secondary" onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}>
-                  {refreshMut.isPending ? "Syncing…" : "Sync DB"}
-                </Button>
-              </div>
+              <select
+                value={liveSource}
+                onChange={(e) => setLiveSource(e.target.value as LiveSource)}
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                aria-label="Live data source"
+              >
+                {LIVE_SOURCES.map((s) => (
+                  <option key={s} value={s}>{sourceLabel(s)}</option>
+                ))}
+              </select>
+
             </CardHeader>
             <CardContent>
               {chartCandles.length === 0 ? (
@@ -296,31 +223,16 @@ function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Controls</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {runMut.isPending && (
-                <div className="text-xs text-center text-muted-foreground">Running prediction…</div>
-              )}
-
-              <div className="flex items-center justify-between rounded-md border border-border p-3">
-                <div>
-                  <Label htmlFor="auto" className="text-sm">Auto Run Every 15m</Label>
-                  <p className="text-xs text-muted-foreground">Runs on the 15m schedule.</p>
-                </div>
-                <Switch
-                  id="auto"
-                  checked={settingsQ.data?.auto_run_enabled ?? false}
-                  onCheckedChange={(v) => autoMut.mutate(v)}
-                  disabled={autoMut.isPending}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
+            <CardContent className="py-4">
+              <p className="text-[11px] text-muted-foreground text-center">
+                View-only · predictions run automatically ~30s before each 15m close.
+              </p>
+              <p className="text-[11px] text-muted-foreground text-center mt-1">
                 Prediction tracking only. Not financial advice.
               </p>
             </CardContent>
           </Card>
+
         </div>
       </div>
 
