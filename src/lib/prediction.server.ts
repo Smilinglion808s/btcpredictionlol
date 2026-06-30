@@ -128,12 +128,18 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     const instructions =
       (settings.prompt_template as string)?.trim() || DEFAULT_INSTRUCTIONS;
-    const modelId = ((settings as any).api_model_id as string)?.trim() || "gpt-5.5";
+    const rawModelId = ((settings as any).api_model_id as string)?.trim() || "gpt-4o";
+    // If the configured api_model_id is a spec id (not a real OpenAI model), use gpt-4o and pass the spec id in the prompt.
+    const isLikelyOpenAiModel = /^(gpt|o\d|chatgpt|text-)/i.test(rawModelId);
+    const modelId = isLikelyOpenAiModel ? rawModelId : "gpt-4o";
+    const specModelId = isLikelyOpenAiModel ? null : rawModelId;
 
     const inputPayload = {
       symbol: "BTCUSDT",
       interval: "15m",
       run_type: "Run Next",
+      spec_model_id: specModelId,
+      model_version: settings.model_version,
       candles: candlesForPrompt,
       computed_indicators: {
         trend: indicators.trend,
