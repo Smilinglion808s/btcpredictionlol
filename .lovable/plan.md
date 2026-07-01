@@ -1,82 +1,45 @@
-# Public Prediction API + Webhook for External Bots
+## Problem
 
-Two ways for another bot to consume the 15m prediction the moment it's made:
+Current live rate: **15 of 39 predictions (38%) are NO CLEAR EDGE**. Target is 5–10%.
 
-1. **Pull:** a public JSON endpoint the bot can hit any time.
-2. **Push:** a webhook we POST to the bot's URL the instant a prediction is created.
+Root cause: the active Model 2.1 prompt uses a symmetric NCE band of `-6.5 < total_score < 6.5`. Because most 15m setups land in the low-single-digits of weighted score, the band swallows the majority of candles.
 
-## 1. Public GET endpoints
+## Fix (three levers, applied together)
 
-Stable published host: `https://btcpredictionlol.lovable.app`
+**1. Tighten the NCE band in the prompt**
+Update the active `model_settings.prompt_template` so the final-call rules read:
 
-- `GET /api/public/predictions/latest` — most recent prediction.
-- `GET /api/public/predictions/upcoming` — prediction for the next 15m boundary (or `{ prediction: null }` if not yet generated).
-
-No auth. JSON only. `Cache-Control: no-store`. CORS `*` + `OPTIONS` handler.
-
-### Response shape
-
-```json
-{
-  "model_version": "btc15m_m2_1",
-  "candle_ts": "2026-07-01T20:15:00Z",
-  "candle_ends_at": "2026-07-01T20:30:00Z",
-  "prediction": "YES" | "NO" | "NO CLEAR EDGE",
-  "confidence": 60,
-  "confidence_fraction": "3/5",
-  "btc_price_at_prediction": 62450.12,
-  "setup_type": "bullish reclaim",
-  "reasoning_summary": "flip: 62200 • confirm: 62650 • trade: TRADE",
-  "status": "pending" | "win" | "loss" | "push",
-  "created_at": "2026-07-01T20:14:02Z",
-  "resolved_at": null
-}
+```
+YES if total_score >= 2.5
+NO if total_score <= -2.5
+NO CLEAR EDGE if -2.5 < total_score < 2.5
 ```
 
-## 2. Outbound webhook (push)
+Also re-map the confidence tiers so the ranges stay meaningful with the lower threshold:
+- 2/5 = 2.5–9.99 (directional lean / cap active)
+- 3/5 = 10–19.99 (tradable)
+- 4/5 = 20–34.99 (strong)
+- 5/5 = 35+ (rare)
 
-We POST the same JSON to a URL you provide, right after each prediction is created (and again when it resolves, so the bot sees win/loss).
+Rule of thumb: NCE band ≈ 2.5% of the ±100 score range → historically hits ~5–10% of candles.
 
-### Delivery details
+**2. Loosen the "abstain if data insufficient" guidance**
+Add a line telling the model that a marginal directional lean should be called YES/NO with 2/5 confidence rather than abstaining. NCE is reserved for true two-sided conflict (bull and bear weighted scores both above ~10 and within 20% of each other).
 
-- Method: `POST`
-- Content-Type: `application/json`
-- Headers:
-  - `X-BTC15M-Event: prediction.created` or `prediction.resolved`
-  - `X-BTC15M-Signature: sha256=<hex>` — HMAC-SHA256 of the raw body using your shared secret (bot verifies to confirm it's really us).
-- Body: same shape as the GET endpoint, plus `"event": "prediction.created" | "prediction.resolved"`.
-- Retries: up to 3 attempts with backoff (2s, 10s, 30s). Non-2xx = retry. All attempts logged in `api_runs` for debugging.
-- Timeout: 5s per attempt.
+**3. Keep `trade_status` gated at 3/5**
+Confidence ≥ 3/5 still required for `TRADE` (webhook consumer / bot logic unchanged). So more directional calls get logged and graded, but only the higher-conviction ones get flagged as tradable. Win-rate accounting is unaffected because NCE remains status=`push`.
 
-### Config
+## What changes in code / DB
 
-Stored in a new `webhook_endpoints` table (so you can add/disable without a redeploy). Fields: `url`, `secret`, `events` (array), `is_active`, `created_at`, `last_delivery_at`, `last_status`.
+- **DB migration:** `UPDATE public.model_settings` on the active row to swap the three threshold lines and confidence tiers in `prompt_template`, and append the "prefer 2/5 lean over NCE" clause.
+- **No app code changes.** `prediction.server.ts` already reads the prompt from `model_settings`, normalizes confidence, and records NCE as `push`. Webhook payload and stats page behavior stay the same.
 
-To register your bot's endpoint I'll need from you (after the plan is approved):
+## Validation
 
-- The **URL** to POST to.
-- Whether you want `created`, `resolved`, or **both** (default: both).
+- Watch the next ~20 predictions; NCE share should drop toward 1–2 out of 20.
+- If NCE is still >15% after 20 candles, drop threshold to ±1.5.
+- If NCE falls to 0% and 2/5 calls dominate, raise to ±3.5.
 
-The HMAC secret will be auto-generated and shown to you once so you can paste it into the bot.
+## Open question
 
-## Implementation (technical)
-
-1. `src/routes/api/public/predictions/latest.ts` and `.../upcoming.ts` — GET handlers using a publishable-key Supabase client, projecting only safe columns.
-2. Migration:
-   - `GRANT SELECT` (safe columns) + `TO anon` SELECT RLS policy on `predictions` so publishable reads work. Sensitive columns (`full_ai_response`, `indicators`) stay non-anon via column-level grant.
-   - New `webhook_endpoints` table (service_role write, no anon access) + `webhook_deliveries` log table.
-3. `src/lib/webhooks.server.ts` — `deliverWebhook(event, payload)` that loads active endpoints, signs with HMAC, POSTs with retry, logs to `webhook_deliveries`.
-4. Hook it into `prediction.server.ts`:
-   - After successful insert → fire `prediction.created`.
-   - Inside `resolvePredictionsServer` after each update → fire `prediction.resolved`.
-5. No changes to cron, UI, or the model pipeline.
-
-## Sample verification (for the bot)
-
-```js
-const expected = crypto
-  .createHmac("sha256", process.env.BTC15M_WEBHOOK_SECRET)
-  .update(rawBody)
-  .digest("hex");
-const ok = header === `sha256=${expected}`; // timing-safe compare
-```
+Do you want me to also **archive current Model 2.1 stats** (like we did for 1.9) before the threshold change so the win-rate comparison is clean, or keep the running stats continuous?
