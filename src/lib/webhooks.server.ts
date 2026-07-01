@@ -14,16 +14,46 @@ interface Endpoint {
 
 const BACKOFFS_MS = [0, 2_000, 10_000, 30_000];
 
+function formatMountainTime(iso: string): string {
+  const d = new Date(iso);
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Denver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Denver",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(d);
+  const tz = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Denver",
+    timeZoneName: "short",
+  })
+    .formatToParts(d)
+    .find((p) => p.type === "timeZoneName")?.value ?? "MT";
+  return `${date} ${time} ${tz}`;
+}
+
 export function buildPredictionPayload(row: Record<string, any>) {
   const TF_MS = 15 * 60 * 1000;
   const candleTs = row.candle_ts as string;
   const endsAt = new Date(new Date(candleTs).getTime() + TF_MS).toISOString();
   const confNum = Number(row.confidence ?? 0);
+  const nowIso = new Date().toISOString();
   return {
     model_version: row.model_version ?? null,
     api_model_id: row.api_model_id ?? null,
     candle_ts: candleTs,
+    candle_ts_mt: formatMountainTime(candleTs),
     candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
     prediction: row.prediction,
     confidence: confNum,
     confidence_fraction: `${Math.max(1, Math.min(5, Math.round(confNum / 20)))}/5`,
