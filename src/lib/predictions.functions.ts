@@ -16,6 +16,18 @@ export const resolvePredictions = createServerFn({ method: "POST" }).handler(asy
   return resolvePredictionsServer(await admin());
 });
 
+export const listDailyArchives = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model_stats_archive")
+    .select("*")
+    .order("archived_at", { ascending: false })
+    .limit(365);
+  if (error) throw error;
+  return data ?? [];
+});
+
+
 /** Full cycle: fetch -> resolve -> run AI. */
 export const runFullCycle = createServerFn({ method: "POST" }).handler(async () => {
   const sb = await admin();

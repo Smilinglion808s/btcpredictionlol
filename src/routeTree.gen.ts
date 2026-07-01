@@ -13,10 +13,12 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
+import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
+import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -35,6 +37,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
+  id: '/daily',
+  path: '/daily',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsModelRoute =
@@ -61,21 +68,31 @@ const ApiPublicHooksScheduled15mRunRoute =
     path: '/api/public/hooks/scheduled-15m-run',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksDailyArchiveRoute =
+  ApiPublicHooksDailyArchiveRouteImport.update({
+    id: '/api/public/hooks/daily-archive',
+    path: '/api/public/hooks/daily-archive',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
 }
 export interface FileRoutesByTo {
+  '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -83,10 +100,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/_authenticated/daily': typeof AuthenticatedDailyRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -95,28 +114,34 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/daily'
     | '/history'
     | '/stats'
     | '/settings/model'
+    | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/daily'
     | '/history'
     | '/stats'
     | '/'
     | '/settings/model'
+    | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
   id:
     | '__root__'
     | '/_authenticated'
+    | '/_authenticated/daily'
     | '/_authenticated/history'
     | '/_authenticated/stats'
     | '/_authenticated/'
     | '/_authenticated/settings/model'
+    | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -124,6 +149,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
@@ -159,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHistoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/daily': {
+      id: '/_authenticated/daily'
+      path: '/daily'
+      fullPath: '/daily'
+      preLoaderRoute: typeof AuthenticatedDailyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/model': {
       id: '/_authenticated/settings/model'
       path: '/settings/model'
@@ -187,10 +220,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/daily-archive': {
+      id: '/api/public/hooks/daily-archive'
+      path: '/api/public/hooks/daily-archive'
+      fullPath: '/api/public/hooks/daily-archive'
+      preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedDailyRoute: typeof AuthenticatedDailyRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -198,6 +239,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedDailyRoute: AuthenticatedDailyRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -209,6 +251,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
