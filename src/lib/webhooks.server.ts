@@ -16,26 +16,22 @@ const BACKOFFS_MS = [0, 2_000, 10_000, 30_000];
 
 function formatMountainTime(iso: string): string {
   const d = new Date(iso);
-  const date = new Intl.DateTimeFormat("en-CA", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Denver",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(d);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Denver",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  }).format(d);
-  const tz = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Denver",
-    timeZoneName: "short",
-  })
-    .formatToParts(d)
-    .find((p) => p.type === "timeZoneName")?.value ?? "MT";
-  return `${date} ${time} ${tz}`;
+    timeZoneName: "longOffset",
+  }).formatToParts(d);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const offset = get("timeZoneName").replace("GMT", "");
+
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}${offset}`;
 }
 
 export function buildPredictionPayload(row: Record<string, any>) {
