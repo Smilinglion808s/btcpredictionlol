@@ -18,8 +18,8 @@ function StatsPage() {
   const statsFn = useServerFn(getPredictionStats);
   const listFn = useServerFn(listPredictions);
   const settingsFn = useServerFn(getActiveSettings);
-  const statsQ = useQuery({ queryKey: ["stats"], queryFn: () => statsFn() });
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const statsQ = useQuery({ queryKey: ["stats"], queryFn: () => statsFn(), refetchInterval: 15_000 });
+  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn(), refetchInterval: 15_000 });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
 
   useEffect(() => {

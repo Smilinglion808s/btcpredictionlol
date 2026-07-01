@@ -29,7 +29,7 @@ function Dashboard() {
   const latestQ = useQuery({ queryKey: ["latest-prediction"], queryFn: () => latestFn() });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const listFn = useServerFn(listPredictions);
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn(), refetchInterval: 30_000 });
+  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn(), refetchInterval: 15_000 });
   const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
@@ -146,14 +146,18 @@ function Dashboard() {
                     </thead>
                     <tbody className="font-mono">
                       {last5.map((p) => {
-                        const open = Number(p.actual_next_candle_open ?? 0);
-                        const close = Number(p.actual_next_candle_close ?? 0);
-                        const actual = open === 0 && close === 0 ? "—" : close >= open ? "GREEN" : "RED";
+                        const actualCall = p.status === "win"
+                          ? p.prediction
+                          : p.status === "loss"
+                            ? p.prediction === "YES" ? "NO" : p.prediction === "NO" ? "YES" : "NO CLEAR EDGE"
+                            : p.prediction === "NO CLEAR EDGE" ? "NO CLEAR EDGE" : "PUSH";
+                        const predicted = p.prediction === "YES" ? "GREEN" : p.prediction === "NO" ? "RED" : "NO EDGE";
+                        const actual = actualCall === "YES" ? "GREEN" : actualCall === "NO" ? "RED" : actualCall === "NO CLEAR EDGE" ? "NO EDGE" : "PUSH";
                         return (
                           <tr key={p.id} className="border-b border-border/50">
                             <td className="py-2 pr-3">{new Date(p.candle_ts).toLocaleString()}</td>
-                            <td className={`py-2 pr-3 ${p.prediction === "YES" ? "text-bull" : "text-bear"}`}>
-                              {p.prediction === "YES" ? "GREEN" : "RED"}
+                            <td className={`py-2 pr-3 ${p.prediction === "YES" ? "text-bull" : p.prediction === "NO" ? "text-bear" : "text-muted-foreground"}`}>
+                              {predicted}
                             </td>
                             <td className={`py-2 pr-3 ${actual === "GREEN" ? "text-bull" : actual === "RED" ? "text-bear" : "text-muted-foreground"}`}>
                               {actual}

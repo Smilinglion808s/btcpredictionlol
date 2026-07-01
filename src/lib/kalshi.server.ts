@@ -51,32 +51,52 @@ interface KalshiEventResponse {
   markets?: KalshiMarket[];
 }
 
+interface KalshiMarketsResponse {
+  markets?: KalshiMarket[];
+}
+
+const KALSHI_HEADERS = {
+  accept: "application/json",
+  "user-agent": "Mozilla/5.0 (compatible; BTC15mDashboard/1.0)",
+};
+
+function parseResolvedMarket(markets: KalshiMarket[] | undefined): KalshiResolution | null {
+  const market = (markets ?? []).find(
+    (m) => m.market_type === "binary" && /up in next 15/i.test(m.title ?? ""),
+  ) ?? (markets ?? [])[0];
+  if (!market) return null;
+  if (market.status !== "finalized" && market.status !== "settled") return null;
+  const raw = (market.result ?? "").toLowerCase();
+  if (raw !== "yes" && raw !== "no") return null;
+  return {
+    result: raw === "yes" ? "YES" : "NO",
+    settlement_value: market.settlement_value_dollars
+      ? Number(market.settlement_value_dollars)
+      : undefined,
+    ticker: market.ticker,
+  };
+}
+
 // Fetch the resolved up/down result for the candle. Returns null when the
 // market has not finalized yet, or when Kalshi is unreachable.
 export async function fetchKalshiResolution(candleTsUtc: string): Promise<KalshiResolution | null> {
   const eventTicker = buildKalshiEventTicker(candleTsUtc);
-  const url = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}`;
+  const eventUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}`;
+  const marketsUrl = `https://api.elections.kalshi.com/trade-api/v2/markets?event_ticker=${eventTicker}`;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await fetch(url, { headers: { accept: "application/json" } });
+      const r = await fetch(eventUrl, { headers: KALSHI_HEADERS });
       if (r.ok) {
         const json = (await r.json()) as KalshiEventResponse;
-        // The up/down market is a binary with title "BTC price up in next 15 mins?".
-        // There is exactly one such market per event.
-        const market = (json.markets ?? []).find(
-          (m) => m.market_type === "binary" && /up in next 15/i.test(m.title ?? ""),
-        ) ?? (json.markets ?? [])[0];
-        if (!market) return null;
-        if (market.status !== "finalized" && market.status !== "settled") return null;
-        const raw = (market.result ?? "").toLowerCase();
-        if (raw !== "yes" && raw !== "no") return null;
-        return {
-          result: raw === "yes" ? "YES" : "NO",
-          settlement_value: market.settlement_value_dollars
-            ? Number(market.settlement_value_dollars)
-            : undefined,
-          ticker: market.ticker,
-        };
+        const resolved = parseResolvedMarket(json.markets);
+        if (resolved) return resolved;
+      }
+
+      const fallback = await fetch(marketsUrl, { headers: KALSHI_HEADERS });
+      if (fallback.ok) {
+        const json = (await fallback.json()) as KalshiMarketsResponse;
+        const resolved = parseResolvedMarket(json.markets);
+        if (resolved) return resolved;
       }
     } catch {
       // retry

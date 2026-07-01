@@ -14,10 +14,11 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function PredictionBadge({ value }: { value: string }) {
   const isYes = value === "YES";
+  const isNo = value === "NO";
   return (
     <Badge
       variant="outline"
-      className={`font-mono font-semibold ${isYes ? "bg-bull/15 text-bull border-bull/40" : "bg-bear/15 text-bear border-bear/40"}`}
+      className={`font-mono font-semibold ${isYes ? "bg-bull/15 text-bull border-bull/40" : isNo ? "bg-bear/15 text-bear border-bear/40" : "bg-muted text-muted-foreground border-border"}`}
     >
       {value}
     </Badge>

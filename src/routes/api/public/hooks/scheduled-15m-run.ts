@@ -33,11 +33,13 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
         }
 
         const results: Record<string, unknown> = { phase };
-        try {
-          const candles = await fetchAndUpsertOkxCandles(supabase);
-          results.candles_count = candles.length;
-        } catch (e) {
-          results.fetch_error = e instanceof Error ? e.message : String(e);
+        if (phase === "predict" || phase === "both") {
+          try {
+            const candles = await fetchAndUpsertOkxCandles(supabase);
+            results.candles_count = candles.length;
+          } catch (e) {
+            results.fetch_error = e instanceof Error ? e.message : String(e);
+          }
         }
 
         if (phase === "resolve" || phase === "both") {
