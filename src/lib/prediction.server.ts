@@ -443,6 +443,20 @@ export async function resolvePredictionsServer(
       if (checked.length < 30) {
         checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
       }
+      // Fire prediction.resolved webhook (best-effort)
+      try {
+        const { data: full } = await supabase
+          .from("predictions")
+          .select("*")
+          .eq("id", p.id)
+          .maybeSingle();
+        if (full) {
+          const { deliverWebhook, buildPredictionPayload } = await import("./webhooks.server");
+          await deliverWebhook(supabase, "prediction.resolved", buildPredictionPayload(full));
+        }
+      } catch {
+        // ignore — do not block resolution loop
+      }
     }
 
     if (!watchMs || Date.now() >= deadline || unresolvedClosed === 0) {
