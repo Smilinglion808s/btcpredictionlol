@@ -373,8 +373,9 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
 
   for (const p of pending ?? []) {
     const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
-    // Wait until Kalshi has had time to settle (settlement_timer ~1s but allow margin).
-    if (Date.now() < candleEndsAt + 15_000) continue;
+    // Start checking almost immediately after candle close. Kalshi may finalize
+    // within seconds, and the cron job retries every minute until it does.
+    if (Date.now() < candleEndsAt + 2_000) continue;
 
     let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
     try {
