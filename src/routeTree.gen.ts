@@ -14,6 +14,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
+import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -41,6 +42,12 @@ const AuthenticatedSettingsModelRoute =
     path: '/settings/model',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicPredictionsLatestRoute =
+  ApiPublicPredictionsLatestRouteImport.update({
+    id: '/api/public/predictions/latest',
+    path: '/api/public/predictions/latest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksScheduled15mRunRoute =
   ApiPublicHooksScheduled15mRunRouteImport.update({
     id: '/api/public/hooks/scheduled-15m-run',
@@ -54,6 +61,7 @@ export interface FileRoutesByFullPath {
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
 }
 export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
@@ -61,6 +69,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,6 +79,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -79,6 +89,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/settings/model'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/predictions/latest'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/history'
@@ -86,6 +97,7 @@ export interface FileRouteTypes {
     | '/'
     | '/settings/model'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/predictions/latest'
   id:
     | '__root__'
     | '/_authenticated'
@@ -94,11 +106,13 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/settings/model'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/predictions/latest'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
+  ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -138,6 +152,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsModelRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/predictions/latest': {
+      id: '/api/public/predictions/latest'
+      path: '/api/public/predictions/latest'
+      fullPath: '/api/public/predictions/latest'
+      preLoaderRoute: typeof ApiPublicPredictionsLatestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/scheduled-15m-run': {
       id: '/api/public/hooks/scheduled-15m-run'
       path: '/api/public/hooks/scheduled-15m-run'
@@ -168,6 +189,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
+  ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
