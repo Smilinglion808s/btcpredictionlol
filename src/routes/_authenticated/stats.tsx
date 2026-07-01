@@ -123,15 +123,30 @@ function StatsPage() {
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {(listQ.data ?? []).slice(0, 25).map((p) => (
-                  <tr key={p.id} className="border-b border-border/50">
-                    <td className="px-3 py-2">{new Date(p.created_at).toLocaleString()}</td>
-                    <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
-                    <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
-                    <td className="px-3 py-2 text-xs">{p.setup_type ?? "—"}</td>
-                    <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
-                  </tr>
-                ))}
+                {(listQ.data ?? []).slice(0, 25).map((p) => {
+                  const reasoning = (p.reasoning_summary ?? p.notes ?? "").toString().trim();
+                  const firstPoint = reasoning
+                    ? reasoning.split(/\s•\s|(?<=[.!?])\s+/)[0]?.trim()
+                    : "";
+                  return (
+                    <tr key={p.id} className="border-b border-border/50 align-top">
+                      <td className="px-3 py-2 whitespace-nowrap">{new Date(p.created_at).toLocaleString()}</td>
+                      <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
+                      <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
+                      <td className="px-3 py-2 text-xs max-w-[420px]">
+                        <div className="font-semibold">{p.setup_type ?? "—"}</div>
+                        {firstPoint ? (
+                          <div className="text-muted-foreground mt-1 whitespace-normal leading-snug">
+                            → {firstPoint}
+                          </div>
+                        ) : (
+                          <div className="text-muted-foreground/60 mt-1 italic">no reasoning recorded</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
