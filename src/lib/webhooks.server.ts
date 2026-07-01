@@ -43,6 +43,8 @@ export function buildPredictionPayload(row: Record<string, any>) {
   return {
     model_version: row.model_version ?? null,
     api_model_id: row.api_model_id ?? null,
+    candle_starts_at: candleTs,
+    candle_starts_at_mt: formatMountainTime(candleTs),
     candle_ts: candleTs,
     candle_ts_mt: formatMountainTime(candleTs),
     candle_ends_at: endsAt,
