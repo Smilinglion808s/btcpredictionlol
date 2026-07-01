@@ -25,9 +25,11 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
         // Phase controls what runs. "predict" = pre-close (fetch + predict).
         // "resolve" = post-close (fetch + resolve only). Defaults to running both.
         let phase: "predict" | "resolve" | "both" = "both";
+        let watch = false;
         try {
-          const body = (await request.json()) as { phase?: string } | null;
+          const body = (await request.json()) as { phase?: string; watch?: boolean } | null;
           if (body?.phase === "predict" || body?.phase === "resolve") phase = body.phase;
+          watch = body?.watch === true;
         } catch {
           // empty body is fine
         }
@@ -44,7 +46,10 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
 
         if (phase === "resolve" || phase === "both") {
           try {
-            const resolved = await resolvePredictionsServer(supabase);
+            const resolved = await resolvePredictionsServer(supabase, {
+              watchMs: watch ? 55_000 : 0,
+              pollMs: 3_000,
+            });
             results.resolved = resolved;
           } catch (e) {
             results.resolve_error = e instanceof Error ? e.message : String(e);

@@ -356,66 +356,97 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
   }
 }
 
-export async function resolvePredictionsServer(supabase: SupabaseClient) {
+export async function resolvePredictionsServer(
+  supabase: SupabaseClient,
+  options: { watchMs?: number; pollMs?: number } = {},
+) {
   const { fetchKalshiResolution } = await import("./kalshi.server");
 
-  const { data: pending, error } = await supabase
-    .from("predictions")
-    .select("id, prediction, candle_ts, symbol, timeframe")
-    .eq("status", "pending")
-    .order("candle_ts", { ascending: true })
-    .limit(200);
-  if (error) throw error;
-
   const TF_MS = 15 * 60 * 1000;
+  const watchMs = Math.max(0, options.watchMs ?? 0);
+  const pollMs = Math.max(1_000, options.pollMs ?? 3_000);
+  const startedAt = Date.now();
+  const deadline = startedAt + watchMs;
   let resolved = 0;
+  let pendingCount = 0;
+  let attempts = 0;
   const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean; ticker?: string; error?: string }> = [];
 
-  for (const p of pending ?? []) {
-    const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
-    // Start checking almost immediately after candle close. Kalshi may finalize
-    // within seconds, and the cron job retries every minute until it does.
-    if (Date.now() < candleEndsAt + 2_000) continue;
-
-    let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
-    try {
-      kalshi = await fetchKalshiResolution(p.candle_ts);
-    } catch {
-      // fall through
-    }
-
-    if (!kalshi) {
-      checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
-      continue;
-    }
-
-    let status: "win" | "loss" | "push";
-    if (p.prediction === "YES") status = kalshi.result === "YES" ? "win" : "loss";
-    else if (p.prediction === "NO") status = kalshi.result === "NO" ? "win" : "loss";
-    else status = "push";
-
-    const { error: updateError } = await supabase
+  do {
+    attempts++;
+    const { data: pending, error } = await supabase
       .from("predictions")
-      .update({
-        status,
-        actual_next_candle_close: kalshi.settlement_value ?? null,
-        resolved_at: new Date().toISOString(),
-      })
-      .eq("id", p.id);
-    if (updateError) {
-      checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false, ticker: kalshi.ticker, error: updateError.message });
-      continue;
+      .select("id, prediction, candle_ts, symbol, timeframe")
+      .eq("status", "pending")
+      .order("candle_ts", { ascending: true })
+      .limit(200);
+    if (error) throw error;
+    pendingCount = pending?.length ?? 0;
+
+    let unresolvedClosed = 0;
+
+    for (const p of pending ?? []) {
+      const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
+      // Check as soon as the target candle has closed. The boundary watcher
+      // keeps polling for under a minute so Kalshi can finalize within seconds.
+      if (Date.now() < candleEndsAt) continue;
+
+      unresolvedClosed++;
+      let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
+      try {
+        kalshi = await fetchKalshiResolution(p.candle_ts);
+      } catch {
+        // fall through
+      }
+
+      if (!kalshi) {
+        if (checked.length < 30) {
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
+        }
+        continue;
+      }
+
+      let status: "win" | "loss" | "push";
+      if (p.prediction === "YES") status = kalshi.result === "YES" ? "win" : "loss";
+      else if (p.prediction === "NO") status = kalshi.result === "NO" ? "win" : "loss";
+      else status = "push";
+
+      const { error: updateError } = await supabase
+        .from("predictions")
+        .update({
+          status,
+          actual_next_candle_close: kalshi.settlement_value ?? null,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", p.id)
+        .eq("status", "pending");
+      if (updateError) {
+        if (checked.length < 30) {
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false, ticker: kalshi.ticker, error: updateError.message });
+        }
+        continue;
+      }
+      resolved++;
+      if (checked.length < 30) {
+        checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
+      }
     }
-    resolved++;
-    checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
-  }
+
+    if (!watchMs || Date.now() >= deadline || unresolvedClosed === 0) {
+      break;
+    }
+    const waitMs = Math.min(pollMs, Math.max(0, deadline - Date.now()));
+    if (waitMs > 0) {
+      await new Promise((res) => setTimeout(res, waitMs));
+    }
+  } while (Date.now() < deadline);
 
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
-    request_payload: { pending_count: pending?.length ?? 0 },
-    response_payload: { resolved, checked, resolver: "kalshi" },
+    request_payload: { pending_count: pendingCount, watch_ms: watchMs },
+    response_payload: { resolved, checked, resolver: "kalshi", attempts },
     success: true,
   });
 
-  return { resolved, pending: pending?.length ?? 0 };
+  return { resolved, pending: pendingCount, attempts };
 }
