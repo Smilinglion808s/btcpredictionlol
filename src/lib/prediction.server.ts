@@ -369,7 +369,7 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
 
   const TF_MS = 15 * 60 * 1000;
   let resolved = 0;
-  const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean; ticker?: string }> = [];
+  const checked: Array<{ id: string; candle_ts: string; source: string; resolved: boolean; ticker?: string; error?: string }> = [];
 
   for (const p of pending ?? []) {
     const candleEndsAt = new Date(p.candle_ts).getTime() + TF_MS;
@@ -393,7 +393,7 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
     else if (p.prediction === "NO") status = kalshi.result === "NO" ? "win" : "loss";
     else status = "push";
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("predictions")
       .update({
         status,
@@ -401,6 +401,10 @@ export async function resolvePredictionsServer(supabase: SupabaseClient) {
         resolved_at: new Date().toISOString(),
       })
       .eq("id", p.id);
+    if (updateError) {
+      checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false, ticker: kalshi.ticker, error: updateError.message });
+      continue;
+    }
     resolved++;
     checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
   }
