@@ -324,6 +324,19 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .single();
     if (insErr) throw insErr;
 
+    // Fire prediction.created webhooks (best-effort; failure logged, not fatal)
+    try {
+      const { deliverWebhook, buildPredictionPayload } = await import("./webhooks.server");
+      await deliverWebhook(supabase, "prediction.created", buildPredictionPayload(inserted));
+    } catch (whErr) {
+      await supabase.from("api_runs").insert({
+        run_type: "webhook-created-error",
+        response_payload: { error: whErr instanceof Error ? whErr.message : String(whErr), prediction_id: inserted.id },
+        success: false,
+        error_message: whErr instanceof Error ? whErr.message : String(whErr),
+      });
+    }
+
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
       request_payload: { model: modelId, candle_count: candlesForPrompt.length },
