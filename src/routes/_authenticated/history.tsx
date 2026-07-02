@@ -141,8 +141,9 @@ function enrich(p: PredRow): PredRow {
       : "";
 
   const ind = (p.indicators ?? {}) as Record<string, unknown>;
+  const ai = extractAiJson(p.full_ai_response) ?? {};
 
-  return {
+  const enriched: PredRow = {
     ...p,
     created_at_mt: fmtMT(String(p.created_at)),
     candle_ts_mt: fmtMT(candleTs),
@@ -173,7 +174,28 @@ function enrich(p: PredRow): PredRow {
     ind_failedBreakoutUp: ind.failedBreakoutUp ?? "",
     ind_failedBreakoutDown: ind.failedBreakoutDown ?? "",
     ind_choppy: ind.choppy ?? "",
+    ai_trade_status: ai.trade_status ?? "",
+    ai_total_score: ai.total_score ?? "",
+    ai_bullish_score: ai.bullish_score ?? "",
+    ai_bearish_score: ai.bearish_score ?? "",
+    ai_flip_level: ai.flip_level ?? "",
+    ai_confirmation_level: ai.confirmation_level ?? "",
   };
+
+  // Flatten per-indicator score/weight/weighted/direction into columns.
+  const breakdown = ai.indicator_breakdown;
+  if (Array.isArray(breakdown)) {
+    for (const item of breakdown) {
+      const it = item as Record<string, unknown>;
+      const name = String(it.indicator ?? "").trim();
+      if (!name) continue;
+      enriched[`bd_${name}_weight`] = it.weight ?? "";
+      enriched[`bd_${name}_score`] = it.score ?? "";
+      enriched[`bd_${name}_weighted`] = it.weighted_score ?? "";
+      enriched[`bd_${name}_direction`] = it.direction ?? "";
+    }
+  }
+  return enriched;
 }
 
 function csvEscape(v: unknown) {
@@ -183,10 +205,34 @@ function csvEscape(v: unknown) {
   return s;
 }
 
-function toCsv(rows: PredRow[]) {
-  const header = COLUMNS.map((c) => c.label).join(",");
+function columnsForRows(rows: PredRow[]): { key: string; label: string }[] {
+  const seen = new Set<string>();
+  const extras: { key: string; label: string }[] = [];
+  const indicatorNames = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r)) {
+      if (!k.startsWith("bd_")) continue;
+      // bd_<name>_(weight|score|weighted|direction)
+      const m = k.match(/^bd_(.+)_(weight|score|weighted|direction)$/);
+      if (m) indicatorNames.add(m[1]);
+    }
+  }
+  const sortedNames = Array.from(indicatorNames).sort();
+  for (const name of sortedNames) {
+    for (const suffix of ["weight", "score", "weighted", "direction"] as const) {
+      const key = `bd_${name}_${suffix}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      extras.push({ key, label: `${name}_${suffix}` });
+    }
+  }
+  return [...BASE_COLUMNS, ...extras];
+}
+
+function toCsv(rows: PredRow[], columns: { key: string; label: string }[]) {
+  const header = columns.map((c) => c.label).join(",");
   const body = rows
-    .map((r) => COLUMNS.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
+    .map((r) => columns.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
     .join("\n");
   return `${header}\n${body}\n`;
 }
@@ -194,6 +240,7 @@ function toCsv(rows: PredRow[]) {
 type ModelGroup = {
   model: string;
   rows: PredRow[];
+  columns: { key: string; label: string }[];
   firstTs: number;
   lastTs: number;
   wins: number;
@@ -201,6 +248,7 @@ type ModelGroup = {
   pushes: number;
   pending: number;
 };
+
 
 function CsvDataPage() {
   const qc = useQueryClient();
