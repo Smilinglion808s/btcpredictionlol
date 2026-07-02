@@ -412,7 +412,36 @@ export async function resolvePredictionsServer(
         // fall through
       }
 
-      if (!kalshi) {
+      let resolution:
+        | { result: "YES" | "NO"; settlement_value: number | null; source: string; ticker?: string }
+        | null = null;
+
+      if (kalshi) {
+        resolution = {
+          result: kalshi.result,
+          settlement_value: kalshi.settlement_value ?? null,
+          source: "kalshi",
+          ticker: kalshi.ticker,
+        };
+      } else {
+        // Fallback: Kalshi doesn't offer BTC 15m markets during their daily
+        // maintenance window (roughly 03:00–21:00 EDT). Once the candle has
+        // been closed for 2+ minutes and Kalshi still has nothing, grade off
+        // the Coinbase 15m candle (close vs open on the target window).
+        const ageMs = Date.now() - candleEndsAt;
+        if (ageMs >= 2 * 60 * 1000) {
+          const cb = await fetchCoinbaseClosedCandle(p.candle_ts, TF_MS);
+          if (cb) {
+            resolution = {
+              result: cb.close >= cb.open ? "YES" : "NO",
+              settlement_value: cb.close,
+              source: "coinbase",
+            };
+          }
+        }
+      }
+
+      if (!resolution) {
         if (checked.length < 30) {
           checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
         }
@@ -420,28 +449,28 @@ export async function resolvePredictionsServer(
       }
 
       let status: "win" | "loss" | "push";
-      if (p.prediction === "YES") status = kalshi.result === "YES" ? "win" : "loss";
-      else if (p.prediction === "NO") status = kalshi.result === "NO" ? "win" : "loss";
+      if (p.prediction === "YES") status = resolution.result === "YES" ? "win" : "loss";
+      else if (p.prediction === "NO") status = resolution.result === "NO" ? "win" : "loss";
       else status = "push";
 
       const { error: updateError } = await supabase
         .from("predictions")
         .update({
           status,
-          actual_next_candle_close: kalshi.settlement_value ?? null,
+          actual_next_candle_close: resolution.settlement_value,
           resolved_at: new Date().toISOString(),
         })
         .eq("id", p.id)
         .eq("status", "pending");
       if (updateError) {
         if (checked.length < 30) {
-          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false, ticker: kalshi.ticker, error: updateError.message });
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: resolution.source, resolved: false, ticker: resolution.ticker, error: updateError.message });
         }
         continue;
       }
       resolved++;
       if (checked.length < 30) {
-        checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: true, ticker: kalshi.ticker });
+        checked.push({ id: p.id, candle_ts: p.candle_ts, source: resolution.source, resolved: true, ticker: resolution.ticker });
       }
       // Fire prediction.resolved webhook (best-effort)
       try {
