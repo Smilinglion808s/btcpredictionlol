@@ -353,7 +353,7 @@ function CsvDataPage() {
                 <table className="w-full text-xs font-mono">
                   <thead className="text-[10px] uppercase text-muted-foreground border-b border-border sticky top-0 bg-card">
                     <tr>
-                      {COLUMNS.map((c) => (
+                      {g.columns.map((c) => (
                         <th key={c.key} className="text-left px-2 py-2 whitespace-nowrap">{c.label}</th>
                       ))}
                     </tr>
@@ -361,7 +361,7 @@ function CsvDataPage() {
                   <tbody>
                     {g.rows.slice(0, 50).map((r, i) => (
                       <tr key={String(r.id) + i} className="border-b border-border/40 hover:bg-muted/20">
-                        {COLUMNS.map((c) => {
+                        {g.columns.map((c) => {
                           const v = (r as Record<string, unknown>)[c.key];
                           const s = v === null || v === undefined ? "" : String(v);
                           return (
@@ -370,6 +370,7 @@ function CsvDataPage() {
                             </td>
                           );
                         })}
+
                       </tr>
                     ))}
                   </tbody>
