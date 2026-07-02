@@ -15,8 +15,8 @@ export const Route = createFileRoute("/_authenticated/history")({
 
 const MT_TZ = "America/Denver";
 
-// Every field we export — order matters for the CSV header.
-const COLUMNS: { key: string; label: string }[] = [
+// Base fields — indicator scores/weights are appended dynamically per model group.
+const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "id", label: "id" },
   { key: "created_at", label: "created_at_utc" },
   { key: "created_at_mt", label: "created_at_mt" },
@@ -32,6 +32,12 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "prediction", label: "prediction" },
   { key: "confidence", label: "confidence" },
   { key: "confidence_bucket", label: "confidence_bucket" },
+  { key: "ai_trade_status", label: "trade_status" },
+  { key: "ai_total_score", label: "total_score" },
+  { key: "ai_bullish_score", label: "bullish_score" },
+  { key: "ai_bearish_score", label: "bearish_score" },
+  { key: "ai_flip_level", label: "flip_level" },
+  { key: "ai_confirmation_level", label: "confirmation_level" },
   { key: "status", label: "status" },
   { key: "correct", label: "correct" },
   { key: "setup_type", label: "setup_type" },
@@ -51,7 +57,6 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "lower_wick", label: "lower_wick" },
   { key: "upper_wick_pct", label: "upper_wick_pct" },
   { key: "lower_wick_pct", label: "lower_wick_pct" },
-  // indicators
   { key: "ind_ema9", label: "ema9" },
   { key: "ind_ema21", label: "ema21" },
   { key: "ind_ema50", label: "ema50" },
@@ -68,6 +73,35 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "reasoning_summary", label: "reasoning_summary" },
   { key: "notes", label: "notes" },
 ];
+
+// Dig the parsed AI JSON out of the raw OpenAI Responses payload.
+function extractAiJson(full: unknown): Record<string, unknown> | null {
+  if (!full || typeof full !== "object") return null;
+  const f = full as Record<string, unknown>;
+  const tryParse = (s: unknown): Record<string, unknown> | null => {
+    if (typeof s !== "string") return null;
+    try {
+      const v = JSON.parse(s);
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+    } catch { return null; }
+  };
+  const direct = tryParse(f.output_text);
+  if (direct) return direct;
+  const output = f.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const content = (item as { content?: unknown })?.content;
+      if (Array.isArray(content)) {
+        for (const c of content) {
+          const parsed = tryParse((c as { text?: unknown })?.text);
+          if (parsed) return parsed;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
