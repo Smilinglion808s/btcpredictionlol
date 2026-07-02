@@ -159,15 +159,21 @@ function toCsv(rows: PredRow[]) {
   return `${header}\n${body}\n`;
 }
 
+type ModelGroup = {
+  model: string;
+  rows: PredRow[];
+  firstTs: number;
+  lastTs: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  pending: number;
+};
+
 function CsvDataPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listPredictions);
   const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
-
-  const [model, setModel] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
 
   useEffect(() => {
     const ch = supabase
@@ -179,156 +185,129 @@ function CsvDataPage() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  const models = useMemo(() => {
-    const set = new Set<string>();
-    (listQ.data ?? []).forEach((p) => p.model_version && set.add(p.model_version));
-    return Array.from(set).sort();
+  const groups = useMemo<ModelGroup[]>(() => {
+    const map = new Map<string, PredRow[]>();
+    (listQ.data ?? []).forEach((p) => {
+      const key = (p.model_version as string) || "unknown";
+      const arr = map.get(key) ?? [];
+      arr.push(enrich(p as PredRow));
+      map.set(key, arr);
+    });
+    return Array.from(map.entries())
+      .map(([model, rows]) => {
+        const times = rows.map((r) => new Date(String(r.candle_ts)).getTime()).filter(Number.isFinite);
+        return {
+          model,
+          rows,
+          firstTs: Math.min(...times),
+          lastTs: Math.max(...times),
+          wins: rows.filter((r) => r.status === "win").length,
+          losses: rows.filter((r) => r.status === "loss").length,
+          pushes: rows.filter((r) => r.status === "push").length,
+          pending: rows.filter((r) => r.status === "pending" || r.status === "manual_review").length,
+        };
+      })
+      .sort((a, b) => b.lastTs - a.lastTs);
   }, [listQ.data]);
 
-  const enriched = useMemo(() => (listQ.data ?? []).map(enrich), [listQ.data]);
-
-  const filtered = useMemo(() => {
-    return enriched.filter((p) => {
-      if (model !== "all" && p.model_version !== model) return false;
-      if (status !== "all" && p.status !== status) return false;
-      const t = new Date(String(p.created_at)).getTime();
-      if (from && t < new Date(from).getTime()) return false;
-      if (to && t > new Date(to).getTime() + 86400000) return false;
-      return true;
-    });
-  }, [enriched, model, status, from, to]);
-
-  const stats = useMemo(() => {
-    const total = filtered.length;
-    const wins = filtered.filter((r) => r.status === "win").length;
-    const losses = filtered.filter((r) => r.status === "loss").length;
-    const pushes = filtered.filter((r) => r.status === "push").length;
-    const pending = total - wins - losses - pushes;
-    const wr = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(2) : "0.00";
-    return { total, wins, losses, pushes, pending, wr };
-  }, [filtered]);
-
-  const download = () => {
-    const csv = toCsv(filtered);
+  const downloadModel = (g: ModelGroup) => {
+    const csv = toCsv(g.rows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safe = g.model.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const from = fmtDate(g.firstTs);
+    const to = fmtDate(g.lastTs);
     a.href = url;
-    a.download = `btc15m_training_data_${stamp}.csv`;
+    a.download = `btc15m_${safe}_${from}_to_${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1800px] mx-auto">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">CSV Training Data</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Every prediction with enriched trade + indicator fields for model training.
-          </p>
-        </div>
-        <Button onClick={download} className="gap-2">
-          <Download className="size-4" /> Download CSV ({filtered.length})
-        </Button>
+    <div className="px-4 sm:px-6 py-5 space-y-4 max-w-[1400px] mx-auto">
+      <div>
+        <h1 className="text-xl font-semibold">CSV Training Data</h1>
+        <p className="text-xs text-muted-foreground mt-1">
+          One downloadable CSV per model — enriched trade + indicator fields for training.
+        </p>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filters</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Field label="Model">
-            <Select value={model} onValueChange={setModel}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All models</SelectItem>
-                {models.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Status">
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="win">Win</SelectItem>
-                <SelectItem value="loss">Loss</SelectItem>
-                <SelectItem value="push">Push</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-          <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-        </CardContent>
-      </Card>
+      {groups.length === 0 && (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
+          {listQ.isLoading ? "Loading…" : "No predictions yet."}
+        </CardContent></Card>
+      )}
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <Kpi label="Rows" value={stats.total} />
-        <Kpi label="Wins" value={stats.wins} className="text-bull" />
-        <Kpi label="Losses" value={stats.losses} className="text-bear" />
-        <Kpi label="Pushes" value={stats.pushes} />
-        <Kpi label="Pending" value={stats.pending} />
-        <Kpi label="Win Rate" value={`${stats.wr}%`} />
-      </div>
-
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Preview ({COLUMNS.length} columns)</CardTitle>
-          <span className="text-xs text-muted-foreground">Showing first 100 rows — full set in CSV</span>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto max-h-[70vh]">
-            <table className="w-full text-xs font-mono">
-              <thead className="text-[10px] uppercase text-muted-foreground border-b border-border sticky top-0 bg-card">
-                <tr>
-                  {COLUMNS.map((c) => (
-                    <th key={c.key} className="text-left px-2 py-2 whitespace-nowrap">{c.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, 100).map((r, i) => (
-                  <tr key={String(r.id) + i} className="border-b border-border/40 hover:bg-muted/20">
-                    {COLUMNS.map((c) => {
-                      const v = (r as Record<string, unknown>)[c.key];
-                      const s = v === null || v === undefined ? "" : String(v);
-                      return (
-                        <td key={c.key} className="px-2 py-1.5 whitespace-nowrap max-w-[240px] truncate" title={s}>
-                          {s}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={COLUMNS.length} className="px-3 py-10 text-center text-sm text-muted-foreground">No rows match these filters.</td></tr>
+      <div className="space-y-3">
+        {groups.map((g) => {
+          const wr = g.wins + g.losses > 0 ? ((g.wins / (g.wins + g.losses)) * 100).toFixed(1) : "—";
+          return (
+            <details key={g.model} className="group rounded-lg border border-border bg-card">
+              <summary className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 cursor-pointer list-none">
+                <div className="flex flex-col">
+                  <span className="font-mono font-semibold">{g.model}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {fmtDate(g.firstTs)} → {fmtDate(g.lastTs)} · {g.rows.length} rows
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-mono">
+                  <span className="text-bull">{g.wins}W</span>
+                  <span className="text-bear">{g.losses}L</span>
+                  <span className="text-muted-foreground">{g.pushes}P</span>
+                  <span className="text-muted-foreground">{g.pending} pending</span>
+                  <span>WR {wr}{wr === "—" ? "" : "%"}</span>
+                  <Button
+                    size="sm"
+                    className="gap-2"
+                    onClick={(e) => { e.preventDefault(); downloadModel(g); }}
+                  >
+                    <Download className="size-4" /> CSV
+                  </Button>
+                  <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span>
+                </div>
+              </summary>
+              <div className="border-t border-border overflow-x-auto max-h-[60vh]">
+                <table className="w-full text-xs font-mono">
+                  <thead className="text-[10px] uppercase text-muted-foreground border-b border-border sticky top-0 bg-card">
+                    <tr>
+                      {COLUMNS.map((c) => (
+                        <th key={c.key} className="text-left px-2 py-2 whitespace-nowrap">{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.rows.slice(0, 50).map((r, i) => (
+                      <tr key={String(r.id) + i} className="border-b border-border/40 hover:bg-muted/20">
+                        {COLUMNS.map((c) => {
+                          const v = (r as Record<string, unknown>)[c.key];
+                          const s = v === null || v === undefined ? "" : String(v);
+                          return (
+                            <td key={c.key} className="px-2 py-1.5 whitespace-nowrap max-w-[220px] truncate" title={s}>
+                              {s}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {g.rows.length > 50 && (
+                  <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
+                    Preview limited to 50 rows — full {g.rows.length} rows in CSV.
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            </details>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
-      {children}
-    </div>
-  );
+function fmtDate(ts: number) {
+  if (!Number.isFinite(ts)) return "n-a";
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
-function Kpi({ label, value, className }: { label: string; value: string | number; className?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-3">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div className={`text-lg font-mono font-semibold ${className ?? ""}`}>{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
