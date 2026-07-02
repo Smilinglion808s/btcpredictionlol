@@ -279,6 +279,7 @@ function CsvDataPage() {
         return {
           model,
           rows,
+          columns: columnsForRows(rows),
           firstTs: Math.min(...times),
           lastTs: Math.max(...times),
           wins: rows.filter((r) => r.status === "win").length,
@@ -291,7 +292,7 @@ function CsvDataPage() {
   }, [listQ.data]);
 
   const downloadModel = (g: ModelGroup) => {
-    const csv = toCsv(g.rows);
+    const csv = toCsv(g.rows, g.columns);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -303,6 +304,7 @@ function CsvDataPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-4 max-w-[1400px] mx-auto">
