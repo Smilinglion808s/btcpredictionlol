@@ -185,7 +185,7 @@ function CsvDataPage() {
 
   const groups = useMemo<ModelGroup[]>(() => {
     const map = new Map<string, PredRow[]>();
-    (listQ.data ?? []).forEach((p) => {
+    (listQ.data ?? []).forEach((p: PredRow) => {
       const key = (p.model_version as string) || "unknown";
       const arr = map.get(key) ?? [];
       arr.push(enrich(p as PredRow));
