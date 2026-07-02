@@ -15,8 +15,8 @@ export const Route = createFileRoute("/_authenticated/history")({
 
 const MT_TZ = "America/Denver";
 
-// Every field we export — order matters for the CSV header.
-const COLUMNS: { key: string; label: string }[] = [
+// Base fields — indicator scores/weights are appended dynamically per model group.
+const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "id", label: "id" },
   { key: "created_at", label: "created_at_utc" },
   { key: "created_at_mt", label: "created_at_mt" },
@@ -32,6 +32,12 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "prediction", label: "prediction" },
   { key: "confidence", label: "confidence" },
   { key: "confidence_bucket", label: "confidence_bucket" },
+  { key: "ai_trade_status", label: "trade_status" },
+  { key: "ai_total_score", label: "total_score" },
+  { key: "ai_bullish_score", label: "bullish_score" },
+  { key: "ai_bearish_score", label: "bearish_score" },
+  { key: "ai_flip_level", label: "flip_level" },
+  { key: "ai_confirmation_level", label: "confirmation_level" },
   { key: "status", label: "status" },
   { key: "correct", label: "correct" },
   { key: "setup_type", label: "setup_type" },
@@ -51,7 +57,6 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "lower_wick", label: "lower_wick" },
   { key: "upper_wick_pct", label: "upper_wick_pct" },
   { key: "lower_wick_pct", label: "lower_wick_pct" },
-  // indicators
   { key: "ind_ema9", label: "ema9" },
   { key: "ind_ema21", label: "ema21" },
   { key: "ind_ema50", label: "ema50" },
@@ -68,6 +73,35 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: "reasoning_summary", label: "reasoning_summary" },
   { key: "notes", label: "notes" },
 ];
+
+// Dig the parsed AI JSON out of the raw OpenAI Responses payload.
+function extractAiJson(full: unknown): Record<string, unknown> | null {
+  if (!full || typeof full !== "object") return null;
+  const f = full as Record<string, unknown>;
+  const tryParse = (s: unknown): Record<string, unknown> | null => {
+    if (typeof s !== "string") return null;
+    try {
+      const v = JSON.parse(s);
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+    } catch { return null; }
+  };
+  const direct = tryParse(f.output_text);
+  if (direct) return direct;
+  const output = f.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const content = (item as { content?: unknown })?.content;
+      if (Array.isArray(content)) {
+        for (const c of content) {
+          const parsed = tryParse((c as { text?: unknown })?.text);
+          if (parsed) return parsed;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
@@ -107,8 +141,9 @@ function enrich(p: PredRow): PredRow {
       : "";
 
   const ind = (p.indicators ?? {}) as Record<string, unknown>;
+  const ai = extractAiJson(p.full_ai_response) ?? {};
 
-  return {
+  const enriched: PredRow = {
     ...p,
     created_at_mt: fmtMT(String(p.created_at)),
     candle_ts_mt: fmtMT(candleTs),
@@ -139,7 +174,28 @@ function enrich(p: PredRow): PredRow {
     ind_failedBreakoutUp: ind.failedBreakoutUp ?? "",
     ind_failedBreakoutDown: ind.failedBreakoutDown ?? "",
     ind_choppy: ind.choppy ?? "",
+    ai_trade_status: ai.trade_status ?? "",
+    ai_total_score: ai.total_score ?? "",
+    ai_bullish_score: ai.bullish_score ?? "",
+    ai_bearish_score: ai.bearish_score ?? "",
+    ai_flip_level: ai.flip_level ?? "",
+    ai_confirmation_level: ai.confirmation_level ?? "",
   };
+
+  // Flatten per-indicator score/weight/weighted/direction into columns.
+  const breakdown = ai.indicator_breakdown;
+  if (Array.isArray(breakdown)) {
+    for (const item of breakdown) {
+      const it = item as Record<string, unknown>;
+      const name = String(it.indicator ?? "").trim();
+      if (!name) continue;
+      enriched[`bd_${name}_weight`] = it.weight ?? "";
+      enriched[`bd_${name}_score`] = it.score ?? "";
+      enriched[`bd_${name}_weighted`] = it.weighted_score ?? "";
+      enriched[`bd_${name}_direction`] = it.direction ?? "";
+    }
+  }
+  return enriched;
 }
 
 function csvEscape(v: unknown) {
@@ -149,10 +205,34 @@ function csvEscape(v: unknown) {
   return s;
 }
 
-function toCsv(rows: PredRow[]) {
-  const header = COLUMNS.map((c) => c.label).join(",");
+function columnsForRows(rows: PredRow[]): { key: string; label: string }[] {
+  const seen = new Set<string>();
+  const extras: { key: string; label: string }[] = [];
+  const indicatorNames = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r)) {
+      if (!k.startsWith("bd_")) continue;
+      // bd_<name>_(weight|score|weighted|direction)
+      const m = k.match(/^bd_(.+)_(weight|score|weighted|direction)$/);
+      if (m) indicatorNames.add(m[1]);
+    }
+  }
+  const sortedNames = Array.from(indicatorNames).sort();
+  for (const name of sortedNames) {
+    for (const suffix of ["weight", "score", "weighted", "direction"] as const) {
+      const key = `bd_${name}_${suffix}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      extras.push({ key, label: `${name}_${suffix}` });
+    }
+  }
+  return [...BASE_COLUMNS, ...extras];
+}
+
+function toCsv(rows: PredRow[], columns: { key: string; label: string }[]) {
+  const header = columns.map((c) => c.label).join(",");
   const body = rows
-    .map((r) => COLUMNS.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
+    .map((r) => columns.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
     .join("\n");
   return `${header}\n${body}\n`;
 }
@@ -160,6 +240,7 @@ function toCsv(rows: PredRow[]) {
 type ModelGroup = {
   model: string;
   rows: PredRow[];
+  columns: { key: string; label: string }[];
   firstTs: number;
   lastTs: number;
   wins: number;
@@ -167,6 +248,7 @@ type ModelGroup = {
   pushes: number;
   pending: number;
 };
+
 
 function CsvDataPage() {
   const qc = useQueryClient();
@@ -197,6 +279,7 @@ function CsvDataPage() {
         return {
           model,
           rows,
+          columns: columnsForRows(rows),
           firstTs: Math.min(...times),
           lastTs: Math.max(...times),
           wins: rows.filter((r) => r.status === "win").length,
@@ -209,7 +292,7 @@ function CsvDataPage() {
   }, [listQ.data]);
 
   const downloadModel = (g: ModelGroup) => {
-    const csv = toCsv(g.rows);
+    const csv = toCsv(g.rows, g.columns);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -221,6 +304,7 @@ function CsvDataPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-4 max-w-[1400px] mx-auto">
@@ -269,7 +353,7 @@ function CsvDataPage() {
                 <table className="w-full text-xs font-mono">
                   <thead className="text-[10px] uppercase text-muted-foreground border-b border-border sticky top-0 bg-card">
                     <tr>
-                      {COLUMNS.map((c) => (
+                      {g.columns.map((c) => (
                         <th key={c.key} className="text-left px-2 py-2 whitespace-nowrap">{c.label}</th>
                       ))}
                     </tr>
@@ -277,7 +361,7 @@ function CsvDataPage() {
                   <tbody>
                     {g.rows.slice(0, 50).map((r, i) => (
                       <tr key={String(r.id) + i} className="border-b border-border/40 hover:bg-muted/20">
-                        {COLUMNS.map((c) => {
+                        {g.columns.map((c) => {
                           const v = (r as Record<string, unknown>)[c.key];
                           const s = v === null || v === undefined ? "" : String(v);
                           return (
@@ -286,6 +370,7 @@ function CsvDataPage() {
                             </td>
                           );
                         })}
+
                       </tr>
                     ))}
                   </tbody>
