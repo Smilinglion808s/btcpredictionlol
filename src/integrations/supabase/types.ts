@@ -251,6 +251,84 @@ export type Database = {
         }
         Relationships: []
       }
+      predictions_archive: {
+        Row: {
+          actual_next_candle_close: number | null
+          actual_next_candle_high: number | null
+          actual_next_candle_low: number | null
+          actual_next_candle_open: number | null
+          api_model_id: string | null
+          archived_at: string
+          btc_price_at_prediction: number
+          candle_ts: string
+          confidence: number
+          created_at: string
+          full_ai_response: Json | null
+          id: string
+          indicators: Json | null
+          market_condition: string | null
+          model_version: string
+          notes: string | null
+          prediction: string
+          reasoning_summary: string | null
+          resolved_at: string | null
+          setup_type: string | null
+          status: string
+          symbol: string
+          timeframe: string
+        }
+        Insert: {
+          actual_next_candle_close?: number | null
+          actual_next_candle_high?: number | null
+          actual_next_candle_low?: number | null
+          actual_next_candle_open?: number | null
+          api_model_id?: string | null
+          archived_at?: string
+          btc_price_at_prediction: number
+          candle_ts: string
+          confidence: number
+          created_at?: string
+          full_ai_response?: Json | null
+          id?: string
+          indicators?: Json | null
+          market_condition?: string | null
+          model_version: string
+          notes?: string | null
+          prediction: string
+          reasoning_summary?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string
+          symbol?: string
+          timeframe?: string
+        }
+        Update: {
+          actual_next_candle_close?: number | null
+          actual_next_candle_high?: number | null
+          actual_next_candle_low?: number | null
+          actual_next_candle_open?: number | null
+          api_model_id?: string | null
+          archived_at?: string
+          btc_price_at_prediction?: number
+          candle_ts?: string
+          confidence?: number
+          created_at?: string
+          full_ai_response?: Json | null
+          id?: string
+          indicators?: Json | null
+          market_condition?: string | null
+          model_version?: string
+          notes?: string | null
+          prediction?: string
+          reasoning_summary?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string
+          symbol?: string
+          timeframe?: string
+        }
+        Relationships: []
+      }
       webhook_deliveries: {
         Row: {
           attempt: number

@@ -84,6 +84,22 @@ export const Route = createFileRoute("/api/public/hooks/daily-archive")({
           return Response.json({ error: insertErr.message }, { status: 500 });
         }
 
+        // Copy predictions into the archive (preserves History CSV) before wiping.
+        const { data: toArchive, error: fetchErr } = await supabase
+          .from("predictions")
+          .select("*");
+        if (fetchErr) {
+          return Response.json({ error: fetchErr.message, archived: true }, { status: 500 });
+        }
+        if (toArchive && toArchive.length > 0) {
+          const { error: copyErr } = await supabase
+            .from("predictions_archive")
+            .upsert(toArchive, { onConflict: "id" });
+          if (copyErr) {
+            return Response.json({ error: copyErr.message, archived: true }, { status: 500 });
+          }
+        }
+
         // Wipe predictions to start a fresh 24h window.
         const { error: delErr } = await supabase
           .from("predictions")

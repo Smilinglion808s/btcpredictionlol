@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listPredictions } from "@/lib/predictions.functions";
+import { listAllPredictionsForHistory } from "@/lib/predictions.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
 
@@ -170,8 +170,8 @@ type ModelGroup = {
 
 function CsvDataPage() {
   const qc = useQueryClient();
-  const listFn = useServerFn(listPredictions);
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const listFn = useServerFn(listAllPredictionsForHistory);
+  const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
 
   useEffect(() => {
     const ch = supabase
@@ -185,7 +185,7 @@ function CsvDataPage() {
 
   const groups = useMemo<ModelGroup[]>(() => {
     const map = new Map<string, PredRow[]>();
-    (listQ.data ?? []).forEach((p) => {
+    (listQ.data ?? []).forEach((p: PredRow) => {
       const key = (p.model_version as string) || "unknown";
       const arr = map.get(key) ?? [];
       arr.push(enrich(p as PredRow));
