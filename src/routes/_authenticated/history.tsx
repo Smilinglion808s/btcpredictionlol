@@ -170,8 +170,8 @@ type ModelGroup = {
 
 function CsvDataPage() {
   const qc = useQueryClient();
-  const listFn = useServerFn(listPredictions);
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn() });
+  const listFn = useServerFn(listAllPredictionsForHistory);
+  const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
 
   useEffect(() => {
     const ch = supabase
