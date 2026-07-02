@@ -48,6 +48,25 @@ export const listPredictions = createServerFn({ method: "GET" }).handler(async (
   return data ?? [];
 });
 
+/** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
+export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const [live, arch] = await Promise.all([
+    sb.from("predictions").select("*").order("created_at", { ascending: false }).limit(5000),
+    sb.from("predictions_archive").select("*").order("created_at", { ascending: false }).limit(20000),
+  ]);
+  if (live.error) throw live.error;
+  if (arch.error) throw arch.error;
+  const seen = new Set<string>();
+  const merged: typeof live.data = [];
+  for (const row of [...(live.data ?? []), ...(arch.data ?? [])]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+  return merged;
+});
+
 export const getLatestPrediction = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const { data, error } = await sb
