@@ -82,7 +82,7 @@ function fmtMT(iso: string | null | undefined) {
 
 type PredRow = Record<string, unknown>;
 
-function enrich(p: PredRow) {
+function enrich(p: PredRow): PredRow {
   const open = Number(p.actual_next_candle_open);
   const high = Number(p.actual_next_candle_high);
   const low = Number(p.actual_next_candle_low);
