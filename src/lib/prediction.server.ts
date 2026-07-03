@@ -198,7 +198,40 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         indicator_weights: settings.indicator_weights,
       },
       orderbook_aggregate: null as unknown,
+      recent_prediction_context: null as unknown,
     };
+
+    // Recent prediction context for 2.3.2 continuation guard
+    try {
+      const { data: recent } = await supabase
+        .from("predictions")
+        .select("prediction, status, setup_type, candle_ts, resolved_at")
+        .in("status", ["win", "loss", "push"])
+        .order("candle_ts", { ascending: false })
+        .limit(8);
+      const arr = recent ?? [];
+      const lastResolved = arr.find((r) => r.status === "win" || r.status === "loss") ?? null;
+      // Count same-direction losses in last 4 resolved (win/loss only)
+      const last4 = arr.filter((r) => r.status === "win" || r.status === "loss").slice(0, 4);
+      const lastDir = lastResolved?.prediction ?? null;
+      const sameDirLossStreak = lastDir
+        ? last4.filter((r) => r.prediction === lastDir && r.status === "loss").length
+        : 0;
+      (inputPayload as Record<string, unknown>).recent_prediction_context = {
+        previous_directional_call: lastResolved?.prediction ?? null,
+        previous_directional_result: lastResolved?.status ?? null,
+        previous_setup_type: lastResolved?.setup_type ?? null,
+        same_direction_loss_streak_count: sameDirLossStreak,
+        recent_calls: arr.map((r) => ({
+          candle_ts: r.candle_ts,
+          prediction: r.prediction,
+          result: r.status,
+          setup_type: r.setup_type,
+        })),
+      };
+    } catch {
+      (inputPayload as Record<string, unknown>).recent_prediction_context = { enabled: false };
+    }
 
     let orderbookAggregate: Record<string, unknown> | null = null;
     try {
@@ -208,6 +241,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       orderbookAggregate = { enabled: false, fetch_error: e instanceof Error ? e.message : String(e) };
     }
     (inputPayload as Record<string, unknown>).orderbook_aggregate = orderbookAggregate;
+
 
     aiPayload = {
       model: modelId,
