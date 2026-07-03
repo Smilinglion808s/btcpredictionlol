@@ -92,6 +92,48 @@ export type Database = {
         }
         Relationships: []
       }
+      model_archives: {
+        Row: {
+          api_model_id: string | null
+          archived_at: string
+          auto_run_enabled: boolean | null
+          confidence_threshold: number | null
+          created_at: string
+          id: string
+          indicator_weights: Json
+          model_version: string
+          notes: string | null
+          prompt_template: string
+          require_manual_approval: boolean | null
+        }
+        Insert: {
+          api_model_id?: string | null
+          archived_at?: string
+          auto_run_enabled?: boolean | null
+          confidence_threshold?: number | null
+          created_at?: string
+          id?: string
+          indicator_weights?: Json
+          model_version: string
+          notes?: string | null
+          prompt_template: string
+          require_manual_approval?: boolean | null
+        }
+        Update: {
+          api_model_id?: string | null
+          archived_at?: string
+          auto_run_enabled?: boolean | null
+          confidence_threshold?: number | null
+          created_at?: string
+          id?: string
+          indicator_weights?: Json
+          model_version?: string
+          notes?: string | null
+          prompt_template?: string
+          require_manual_approval?: boolean | null
+        }
+        Relationships: []
+      }
       model_settings: {
         Row: {
           api_model_id: string | null
