@@ -9,12 +9,6 @@ interface DepthResp {
   asks: Level[];
 }
 
-interface AggTrade {
-  p: string;
-  q: string;
-  T: number;
-  m: boolean; // buyer is maker => sell aggressor
-}
 
 interface Snapshot {
   t: number;
