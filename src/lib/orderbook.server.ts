@@ -59,7 +59,66 @@ export interface OrderbookAggregate {
   fetch_error?: string;
 }
 
-// Binance blocks Cloudflare Worker egress from all three hosts, so we source
+function sumQtyInBand(levels: Level[], mid: number, pct: number): number {
+  const lo = mid * (1 - pct);
+  const hi = mid * (1 + pct);
+  let s = 0;
+  for (const [p, q] of levels) {
+    const price = Number(p);
+    if (price < lo || price > hi) continue;
+    s += Number(q);
+  }
+  return s;
+}
+
+function obi(bids: Level[], asks: Level[], mid: number, pct: number): number {
+  const b = sumQtyInBand(bids, mid, pct);
+  const a = sumQtyInBand(asks, mid, pct);
+  const tot = b + a;
+  if (tot === 0) return 0;
+  return Number(((b - a) / tot).toFixed(4));
+}
+
+function detectWall(levels: Level[], mid: number, pct: number, mult = 6): boolean {
+  const inBand = levels
+    .map(([p, q]) => ({ price: Number(p), qty: Number(q) }))
+    .filter((l) => Math.abs(l.price - mid) / mid <= pct);
+  if (inBand.length < 5) return false;
+  const median = inBand
+    .map((l) => l.qty)
+    .sort((a, b) => a - b)[Math.floor(inBand.length / 2)];
+  return inBand.some((l) => l.qty >= median * mult && l.qty >= 50);
+}
+
+function disabled(reason: string): OrderbookAggregate {
+  return {
+    enabled: false,
+    mode: "confidence_filter_only",
+    weight: 0,
+    source: orderbookSource,
+    symbol: "BTCUSDT",
+    timestamp_ms: Date.now(),
+    samples_taken: 0,
+    sample_span_ms: 0,
+    mid_price: 0,
+    mid_price_drift: 0,
+    obi_30s: 0, obi_2m: 0, obi_5m: 0,
+    obi_2m_avg: 0, obi_2m_trend: 0,
+    delta_1m: 0, delta_3m: 0, delta_15m: 0,
+    bid_wall_near_support: false,
+    ask_wall_near_resistance: false,
+    bid_liquidity_pulling: false,
+    ask_liquidity_pulling: false,
+    absorption_signal: "none",
+    orderbook_pressure: "neutral",
+    orderbook_momentum: "flat",
+    confidence_effect: "ignore",
+    snapshots: [],
+    fetch_error: reason,
+  };
+}
+
+
 // the orderbook from Coinbase (primary, always reachable — same host we use
 // for candle grading) with OKX as a fallback. Both return aggregated depth
 // and recent trades with an aggressor side, which is all we need for OBI +
