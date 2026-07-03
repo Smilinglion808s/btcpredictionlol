@@ -324,6 +324,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       reasoning_summary: notesParts.join(" • ") || null,
       full_ai_response: json,
       indicators: indicators as unknown as Record<string, unknown>,
+      orderbook: orderbookAggregate,
       status,
     };
 
