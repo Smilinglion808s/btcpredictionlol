@@ -70,6 +70,28 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "ind_failedBreakoutUp", label: "failed_breakout_up" },
   { key: "ind_failedBreakoutDown", label: "failed_breakout_down" },
   { key: "ind_choppy", label: "choppy" },
+  { key: "ob_enabled", label: "ob_enabled" },
+  { key: "ob_samples_taken", label: "ob_samples_taken" },
+  { key: "ob_sample_span_ms", label: "ob_sample_span_ms" },
+  { key: "ob_mid_price", label: "ob_mid_price" },
+  { key: "ob_mid_price_drift", label: "ob_mid_price_drift" },
+  { key: "ob_obi_30s", label: "ob_obi_30s" },
+  { key: "ob_obi_2m", label: "ob_obi_2m" },
+  { key: "ob_obi_5m", label: "ob_obi_5m" },
+  { key: "ob_obi_2m_avg", label: "ob_obi_2m_avg" },
+  { key: "ob_obi_2m_trend", label: "ob_obi_2m_trend" },
+  { key: "ob_delta_1m", label: "ob_delta_1m" },
+  { key: "ob_delta_3m", label: "ob_delta_3m" },
+  { key: "ob_delta_15m", label: "ob_delta_15m" },
+  { key: "ob_bid_wall_near_support", label: "ob_bid_wall_near_support" },
+  { key: "ob_ask_wall_near_resistance", label: "ob_ask_wall_near_resistance" },
+  { key: "ob_bid_liquidity_pulling", label: "ob_bid_liquidity_pulling" },
+  { key: "ob_ask_liquidity_pulling", label: "ob_ask_liquidity_pulling" },
+  { key: "ob_absorption_signal", label: "ob_absorption_signal" },
+  { key: "ob_orderbook_pressure", label: "ob_orderbook_pressure" },
+  { key: "ob_orderbook_momentum", label: "ob_orderbook_momentum" },
+  { key: "ob_confidence_effect", label: "ob_confidence_effect" },
+  { key: "ob_fetch_error", label: "ob_fetch_error" },
   { key: "reasoning_summary", label: "reasoning_summary" },
   { key: "notes", label: "notes" },
 ];
@@ -142,6 +164,7 @@ function enrich(p: PredRow): PredRow {
 
   const ind = (p.indicators ?? {}) as Record<string, unknown>;
   const ai = extractAiJson(p.full_ai_response) ?? {};
+  const ob = (p.orderbook ?? {}) as Record<string, unknown>;
 
   const enriched: PredRow = {
     ...p,
@@ -180,6 +203,28 @@ function enrich(p: PredRow): PredRow {
     ai_bearish_score: ai.bearish_score ?? "",
     ai_flip_level: ai.flip_level ?? "",
     ai_confirmation_level: ai.confirmation_level ?? "",
+    ob_enabled: ob.enabled ?? "",
+    ob_samples_taken: ob.samples_taken ?? "",
+    ob_sample_span_ms: ob.sample_span_ms ?? "",
+    ob_mid_price: ob.mid_price ?? "",
+    ob_mid_price_drift: ob.mid_price_drift ?? "",
+    ob_obi_30s: ob.obi_30s ?? "",
+    ob_obi_2m: ob.obi_2m ?? "",
+    ob_obi_5m: ob.obi_5m ?? "",
+    ob_obi_2m_avg: ob.obi_2m_avg ?? "",
+    ob_obi_2m_trend: ob.obi_2m_trend ?? "",
+    ob_delta_1m: ob.delta_1m ?? "",
+    ob_delta_3m: ob.delta_3m ?? "",
+    ob_delta_15m: ob.delta_15m ?? "",
+    ob_bid_wall_near_support: ob.bid_wall_near_support ?? "",
+    ob_ask_wall_near_resistance: ob.ask_wall_near_resistance ?? "",
+    ob_bid_liquidity_pulling: ob.bid_liquidity_pulling ?? "",
+    ob_ask_liquidity_pulling: ob.ask_liquidity_pulling ?? "",
+    ob_absorption_signal: ob.absorption_signal ?? "",
+    ob_orderbook_pressure: ob.orderbook_pressure ?? "",
+    ob_orderbook_momentum: ob.orderbook_momentum ?? "",
+    ob_confidence_effect: ob.confidence_effect ?? "",
+    ob_fetch_error: ob.fetch_error ?? "",
   };
 
   // Flatten per-indicator score/weight/weighted/direction into columns.

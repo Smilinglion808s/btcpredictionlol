@@ -193,6 +193,7 @@ export type Database = {
           market_condition: string | null
           model_version: string
           notes: string | null
+          orderbook: Json | null
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
@@ -217,6 +218,7 @@ export type Database = {
           market_condition?: string | null
           model_version: string
           notes?: string | null
+          orderbook?: Json | null
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -241,6 +243,7 @@ export type Database = {
           market_condition?: string | null
           model_version?: string
           notes?: string | null
+          orderbook?: Json | null
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -269,6 +272,7 @@ export type Database = {
           market_condition: string | null
           model_version: string
           notes: string | null
+          orderbook: Json | null
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
@@ -294,6 +298,7 @@ export type Database = {
           market_condition?: string | null
           model_version: string
           notes?: string | null
+          orderbook?: Json | null
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -319,6 +324,7 @@ export type Database = {
           market_condition?: string | null
           model_version?: string
           notes?: string | null
+          orderbook?: Json | null
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
