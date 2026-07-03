@@ -260,20 +260,19 @@ export async function fetchBinanceOrderbookAggregate(
 
     // trades (last 15m)
     const now = Date.now();
-    const tradesRes = await tryFetch(
-      `/api/v3/aggTrades?symbol=BTCUSDT&startTime=${now - 15 * 60 * 1000}&limit=1000`,
-    );
+    const trades = await fetchRecentTrades();
     let delta1 = 0, delta3 = 0, delta15 = 0;
-    if (tradesRes) {
-      const trades = (await tradesRes.json()) as AggTrade[];
+    if (trades) {
       for (const t of trades) {
         const age = now - t.T;
-        const signed = (t.m ? -1 : 1) * Number(t.q);
+        if (age < 0 || age > 15 * 60 * 1000) continue;
+        const signed = (t.aggressor === "buy" ? 1 : -1) * t.q;
         if (age <= 60_000) delta1 += signed;
         if (age <= 180_000) delta3 += signed;
-        if (age <= 900_000) delta15 += signed;
+        delta15 += signed;
       }
     }
+
 
     // absorption: strong aggressor delta but wall not breaking + book not tipping
     let absorption: OrderbookAggregate["absorption_signal"] = "none";
