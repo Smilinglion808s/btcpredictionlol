@@ -197,6 +197,14 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         confidence_threshold: settings.confidence_threshold,
         indicator_weights: settings.indicator_weights,
       },
+      orderbook_aggregate: await (async () => {
+        try {
+          const { fetchBinanceOrderbookAggregate } = await import("./orderbook.server");
+          return await fetchBinanceOrderbookAggregate();
+        } catch (e) {
+          return { enabled: false, fetch_error: e instanceof Error ? e.message : String(e) };
+        }
+      })(),
     };
 
     aiPayload = {
