@@ -142,6 +142,7 @@ function enrich(p: PredRow): PredRow {
 
   const ind = (p.indicators ?? {}) as Record<string, unknown>;
   const ai = extractAiJson(p.full_ai_response) ?? {};
+  const ob = (p.orderbook ?? {}) as Record<string, unknown>;
 
   const enriched: PredRow = {
     ...p,
