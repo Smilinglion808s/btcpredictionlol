@@ -244,7 +244,7 @@ export async function fetchBinanceOrderbookAggregate(
       if (s) snaps.push(s);
       if (i < samples - 1) await new Promise((r) => setTimeout(r, intervalMs));
     }
-    if (snaps.length === 0) return disabled("binance_unreachable");
+    if (snaps.length === 0) return disabled("orderbook_unreachable");
 
     const first = snaps[0];
     const last = snaps[snaps.length - 1];
