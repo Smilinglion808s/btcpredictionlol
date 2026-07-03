@@ -203,7 +203,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     let orderbookAggregate: Record<string, unknown> | null = null;
     try {
       const { fetchBinanceOrderbookAggregate } = await import("./orderbook.server");
-      orderbookAggregate = (await fetchBinanceOrderbookAggregate()) as Record<string, unknown>;
+      orderbookAggregate = (await fetchBinanceOrderbookAggregate()) as unknown as Record<string, unknown>;
     } catch (e) {
       orderbookAggregate = { enabled: false, fetch_error: e instanceof Error ? e.message : String(e) };
     }
