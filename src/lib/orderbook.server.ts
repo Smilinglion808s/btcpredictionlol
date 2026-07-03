@@ -9,12 +9,6 @@ interface DepthResp {
   asks: Level[];
 }
 
-interface AggTrade {
-  p: string;
-  q: string;
-  T: number;
-  m: boolean; // buyer is maker => sell aggressor
-}
 
 interface Snapshot {
   t: number;
@@ -59,26 +53,6 @@ export interface OrderbookAggregate {
   fetch_error?: string;
 }
 
-const HOSTS = [
-  "https://data-api.binance.vision",
-  "https://api.binance.com",
-  "https://api.binance.us",
-];
-
-async function tryFetch(path: string): Promise<Response | null> {
-  for (const host of HOSTS) {
-    try {
-      const r = await fetch(host + path, {
-        headers: { accept: "application/json", "user-agent": "BTC15mBot/1.0" },
-      });
-      if (r.ok) return r;
-    } catch {
-      // try next host
-    }
-  }
-  return null;
-}
-
 function sumQtyInBand(levels: Level[], mid: number, pct: number): number {
   const lo = mid * (1 - pct);
   const hi = mid * (1 + pct);
@@ -115,7 +89,7 @@ function disabled(reason: string): OrderbookAggregate {
     enabled: false,
     mode: "confidence_filter_only",
     weight: 0,
-    source: "binance_spot",
+    source: orderbookSource,
     symbol: "BTCUSDT",
     timestamp_ms: Date.now(),
     samples_taken: 0,
@@ -138,10 +112,96 @@ function disabled(reason: string): OrderbookAggregate {
   };
 }
 
+
+// the orderbook from Coinbase (primary, always reachable — same host we use
+// for candle grading) with OKX as a fallback. Both return aggregated depth
+// and recent trades with an aggressor side, which is all we need for OBI +
+// signed delta.
+
+async function fetchJson(url: string, timeoutMs = 5000): Promise<unknown | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const r = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        accept: "application/json",
+        "user-agent":
+          "Mozilla/5.0 (compatible; BTC15mBot/1.0; +https://btcpredictionlol.lovable.app)",
+      },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+let orderbookSource = "coinbase_spot";
+
+async function fetchDepth(): Promise<DepthResp | null> {
+  // Coinbase level=2: aggregated book, top ~50 bids/asks. Enough for tight-band OBI.
+  const cb = (await fetchJson(
+    "https://api.exchange.coinbase.com/products/BTC-USD/book?level=2",
+  )) as { bids?: [string, string, number][]; asks?: [string, string, number][] } | null;
+  if (cb?.bids && cb?.asks) {
+    orderbookSource = "coinbase_spot";
+    return {
+      bids: cb.bids.map(([p, q]) => [p, q] as Level),
+      asks: cb.asks.map(([p, q]) => [p, q] as Level),
+    };
+  }
+  // OKX fallback: sz=400 full aggregated book.
+  const okx = (await fetchJson(
+    "https://www.okx.com/api/v5/market/books?instId=BTC-USDT&sz=400",
+  )) as { data?: Array<{ bids: string[][]; asks: string[][] }> } | null;
+  const row = okx?.data?.[0];
+  if (row?.bids && row?.asks) {
+    orderbookSource = "okx_spot";
+    return {
+      bids: row.bids.map((r) => [r[0], r[1]] as Level),
+      asks: row.asks.map((r) => [r[0], r[1]] as Level),
+    };
+  }
+  return null;
+}
+
+interface UnifiedTrade {
+  T: number;         // ms
+  q: number;         // size
+  aggressor: "buy" | "sell";
+}
+
+async function fetchRecentTrades(): Promise<UnifiedTrade[] | null> {
+  // Coinbase trades endpoint returns up to 1000 recent trades with side = aggressor side.
+  const cb = (await fetchJson(
+    "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=1000",
+  )) as Array<{ time: string; size: string; price: string; side: "buy" | "sell" }> | null;
+  if (cb && Array.isArray(cb)) {
+    return cb.map((t) => ({
+      T: new Date(t.time).getTime(),
+      q: Number(t.size),
+      aggressor: t.side,
+    }));
+  }
+  // OKX fallback: side is aggressor side ("buy"|"sell"), ts is ms string.
+  const okx = (await fetchJson(
+    "https://www.okx.com/api/v5/market/trades?instId=BTC-USDT&limit=500",
+  )) as { data?: Array<{ ts: string; sz: string; px: string; side: "buy" | "sell" }> } | null;
+  if (okx?.data) {
+    return okx.data.map((t) => ({
+      T: Number(t.ts),
+      q: Number(t.sz),
+      aggressor: t.side,
+    }));
+  }
+  return null;
+}
+
 async function takeSnapshot(): Promise<Snapshot | null> {
-  const res = await tryFetch("/api/v3/depth?symbol=BTCUSDT&limit=500");
-  if (!res) return null;
-  const depth = (await res.json()) as DepthResp;
+  const depth = await fetchDepth();
+  if (!depth || !depth.bids.length || !depth.asks.length) return null;
   const bestBid = Number(depth.bids[0]?.[0] ?? 0);
   const bestAsk = Number(depth.asks[0]?.[0] ?? 0);
   const mid = (bestBid + bestAsk) / 2 || bestBid || bestAsk;
@@ -157,6 +217,7 @@ async function takeSnapshot(): Promise<Snapshot | null> {
     ask_wall: detectWall(depth.asks, mid, 0.003),
   };
 }
+
 
 /**
  * Take `samples` depth snapshots spaced `intervalMs` apart (default 4 samples
@@ -177,7 +238,7 @@ export async function fetchBinanceOrderbookAggregate(
       if (s) snaps.push(s);
       if (i < samples - 1) await new Promise((r) => setTimeout(r, intervalMs));
     }
-    if (snaps.length === 0) return disabled("binance_unreachable");
+    if (snaps.length === 0) return disabled("orderbook_unreachable");
 
     const first = snaps[0];
     const last = snaps[snaps.length - 1];
@@ -193,20 +254,19 @@ export async function fetchBinanceOrderbookAggregate(
 
     // trades (last 15m)
     const now = Date.now();
-    const tradesRes = await tryFetch(
-      `/api/v3/aggTrades?symbol=BTCUSDT&startTime=${now - 15 * 60 * 1000}&limit=1000`,
-    );
+    const trades = await fetchRecentTrades();
     let delta1 = 0, delta3 = 0, delta15 = 0;
-    if (tradesRes) {
-      const trades = (await tradesRes.json()) as AggTrade[];
+    if (trades) {
       for (const t of trades) {
         const age = now - t.T;
-        const signed = (t.m ? -1 : 1) * Number(t.q);
+        if (age < 0 || age > 15 * 60 * 1000) continue;
+        const signed = (t.aggressor === "buy" ? 1 : -1) * t.q;
         if (age <= 60_000) delta1 += signed;
         if (age <= 180_000) delta3 += signed;
-        if (age <= 900_000) delta15 += signed;
+        delta15 += signed;
       }
     }
+
 
     // absorption: strong aggressor delta but wall not breaking + book not tipping
     let absorption: OrderbookAggregate["absorption_signal"] = "none";
@@ -233,7 +293,7 @@ export async function fetchBinanceOrderbookAggregate(
       enabled: true,
       mode: "confidence_filter_only",
       weight: 0,
-      source: "binance_spot",
+      source: orderbookSource,
       symbol: "BTCUSDT",
       timestamp_ms: now,
       samples_taken: snaps.length,
