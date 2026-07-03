@@ -299,7 +299,7 @@ export async function fetchBinanceOrderbookAggregate(
       enabled: true,
       mode: "confidence_filter_only",
       weight: 0,
-      source: "binance_spot",
+      source: orderbookSource,
       symbol: "BTCUSDT",
       timestamp_ms: now,
       samples_taken: snaps.length,
