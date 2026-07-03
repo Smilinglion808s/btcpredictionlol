@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
@@ -32,6 +33,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: '/stats',
   path: '/stats',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedModelsRoute = AuthenticatedModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
+  '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
+  '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/daily': typeof AuthenticatedDailyRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
+  '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/history'
+    | '/models'
     | '/stats'
     | '/settings/model'
     | '/api/public/hooks/daily-archive'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
   to:
     | '/daily'
     | '/history'
+    | '/models'
     | '/stats'
     | '/'
     | '/settings/model'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/_authenticated/daily'
     | '/_authenticated/history'
+    | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
     | '/_authenticated/settings/model'
@@ -176,6 +188,13 @@ declare module '@tanstack/react-router' {
       path: '/stats'
       fullPath: '/stats'
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/models': {
+      id: '/_authenticated/models'
+      path: '/models'
+      fullPath: '/models'
+      preLoaderRoute: typeof AuthenticatedModelsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/history': {
@@ -233,6 +252,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDailyRoute: typeof AuthenticatedDailyRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
+  AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedSettingsModelRoute: typeof AuthenticatedSettingsModelRoute
@@ -241,6 +261,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDailyRoute: AuthenticatedDailyRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
+  AuthenticatedModelsRoute: AuthenticatedModelsRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedSettingsModelRoute: AuthenticatedSettingsModelRoute,
