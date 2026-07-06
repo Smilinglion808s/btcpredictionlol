@@ -1,6 +1,7 @@
 // Server-only AI prediction + resolution logic. Imported by server fns and the cron route.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
+import { computeIndicatorBundle, type Candle } from "./indicators";
+import { fetchAndUpsertOkxCandles, fetchOkxClosedCandle } from "./okx.server";
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
@@ -48,6 +49,51 @@ type ResolutionCandle = {
   volume?: number;
   confirm?: boolean;
 };
+
+type PredictionCandle = Candle & { confirm?: boolean };
+
+const TF_MS = 15 * 60 * 1000;
+const MAX_FEATURE_AGE_MS = TF_MS;
+
+function actualDirection(candle: Pick<ResolutionCandle, "open" | "close">) {
+  return candle.close > candle.open ? "GREEN" : candle.close < candle.open ? "RED" : "DOJI";
+}
+
+function candleResult(candle: Pick<ResolutionCandle, "open" | "close">) {
+  return candle.close > candle.open ? "YES" : candle.close < candle.open ? "NO" : "DOJI";
+}
+
+function freshnessFor(candleTs: string, now = Date.now()) {
+  const inputMs = new Date(candleTs).getTime();
+  const ageMs = now - inputMs;
+  return {
+    inputCandleTs: candleTs,
+    inputCandleAgeSeconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
+    inputFeaturesFresh: Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= MAX_FEATURE_AGE_MS,
+  };
+}
+
+async function loadPredictionCandles(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("candles")
+    .select("candle_ts, open, high, low, close, volume, confirm")
+    .eq("symbol", "BTC-USDT")
+    .eq("timeframe", "15m")
+    .order("candle_ts", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data ?? []).slice().reverse() as PredictionCandle[];
+}
+
+async function fetchActualResolutionCandle(candleTs: string, timeframeMs: number): Promise<(ResolutionCandle & { source: string }) | null> {
+  const okx = await fetchOkxClosedCandle(candleTs);
+  if (okx) return { ...okx, source: "okx" };
+
+  const coinbase = await fetchCoinbaseClosedCandle(candleTs, timeframeMs);
+  if (coinbase) return { ...coinbase, source: "coinbase" };
+
+  return null;
+}
 
 async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number): Promise<ResolutionCandle | null> {
   const targetMs = new Date(candleTs).getTime();
@@ -102,25 +148,26 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
   let errorMessage: string | null = null;
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not set. Add it in project settings.");
-    }
-
-    const { data: candles, error: cErr } = await supabase
-      .from("candles")
-      .select("candle_ts, open, high, low, close, volume")
-      .eq("symbol", "BTC-USDT")
-      .eq("timeframe", "15m")
-      .order("candle_ts", { ascending: false })
-      .limit(100);
-    if (cErr) throw cErr;
-    if (!candles || candles.length < 30)
+    let ordered = await loadPredictionCandles(supabase);
+    if (ordered.length < 30)
       throw new Error("Not enough candle history. Click Refresh Candles first.");
 
-    const ordered: Candle[] = candles.slice().reverse() as Candle[];
-    const indicators = computeIndicatorBundle(ordered);
-    if (!indicators) throw new Error("Failed to compute indicators");
+    let latestInput = ordered[ordered.length - 1];
+    let freshness = freshnessFor(latestInput.candle_ts);
+    let freshnessAction = freshness.inputFeaturesFresh ? "fresh" : "stale_refetch_attempted";
+
+    if (!freshness.inputFeaturesFresh) {
+      try {
+        await fetchAndUpsertOkxCandles(supabase);
+        ordered = await loadPredictionCandles(supabase);
+        if (ordered.length < 30) throw new Error("Not enough candle history after refresh.");
+        latestInput = ordered[ordered.length - 1];
+        freshness = freshnessFor(latestInput.candle_ts);
+        freshnessAction = freshness.inputFeaturesFresh ? "refetched_fresh" : "forced_no_clear_edge_stale_after_refetch";
+      } catch (e) {
+        freshnessAction = `forced_no_clear_edge_refetch_failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
 
     const { data: settings } = await supabase
       .from("model_settings")
@@ -130,12 +177,13 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .maybeSingle();
     if (!settings) throw new Error("No active model settings");
 
+    const indicators = computeIndicatorBundle(ordered);
+    if (!indicators) throw new Error("Failed to compute indicators");
+
     const last = indicators.last;
     // Target candle = the UPCOMING candle (next 15m boundary). Cron fires ~1m
     // before that boundary so we predict the candle about to open.
-    const TF_MS = 15 * 60 * 1000;
     const targetCandleTs = new Date(Math.ceil(Date.now() / TF_MS) * TF_MS).toISOString();
-    void nextCandleTs;
 
     // Idempotency: if a prediction already exists for this candle + model, return it.
     const { data: existing } = await supabase
@@ -143,16 +191,67 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .select("*")
       .eq("symbol", "BTC-USDT")
       .eq("timeframe", "15m")
-      .eq("model_version", (await supabase.from("model_settings").select("model_version").eq("is_active", true).maybeSingle()).data?.model_version ?? "")
+      .eq("model_version", settings.model_version)
       .eq("candle_ts", targetCandleTs)
       .maybeSingle();
     if (existing) return existing;
 
+    if (!freshness.inputFeaturesFresh) {
+      const staleMessage = `Forced NO CLEAR EDGE: latest input candle ${freshness.inputCandleTs} is ${freshness.inputCandleAgeSeconds}s old.`;
+      const forcedPayload = {
+        symbol: "BTC-USDT",
+        timeframe: "15m",
+        model_version: settings.model_version,
+        api_model_id: (settings as any).api_model_id || null,
+        candle_ts: targetCandleTs,
+        prediction: "NO CLEAR EDGE",
+        confidence: 0,
+        btc_price_at_prediction: Number(last.close),
+        setup_type: "STALE_INPUT_FORCED_SKIP",
+        market_condition: null,
+        reasoning_summary: staleMessage,
+        full_ai_response: {
+          forced_no_clear_edge: true,
+          reason: "stale_input_features",
+          input_candle_ts: freshness.inputCandleTs,
+          input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+          freshness_action: freshnessAction,
+        },
+        indicators: indicators as unknown as Record<string, unknown>,
+        orderbook: null,
+        status: "pending",
+        input_candle_ts: freshness.inputCandleTs,
+        input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+        input_features_fresh: false,
+        freshness_action: freshnessAction,
+      };
+
+      const { data: forced, error: forcedErr } = await supabase
+        .from("predictions")
+        .insert(forcedPayload as any)
+        .select()
+        .single();
+      if (forcedErr) throw forcedErr;
+
+      await supabase.from("api_runs").insert({
+        run_type: "run-ai-prediction",
+        request_payload: { skipped_openai: true, reason: "stale_input_features", freshness: forcedPayload.full_ai_response },
+        response_payload: { prediction_id: forced.id, prediction: forced.prediction, duration_ms: Date.now() - started },
+        success: true,
+      });
+
+      return forced;
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not set. Add it in project settings.");
+    }
 
 
-    // Only closed/confirmed candles, most recent 80
-    const closedCandles = ordered.filter((c) => (c as Candle & { confirm?: boolean }).confirm !== false);
-    const candlesForPrompt = (closedCandles.length >= 30 ? closedCandles : ordered)
+
+    // Most recent 80 candles, including the live in-progress candle when present.
+    const candlesForPrompt = ordered
       .slice(-80)
       .map((c) => ({
         t: c.candle_ts,
@@ -161,6 +260,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         l: Number(c.low),
         c: Number(c.close),
         v: Number(c.volume),
+        confirm: (c as PredictionCandle).confirm ?? true,
       }));
 
     const instructions =
@@ -179,6 +279,9 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       model_version: settings.model_version,
       candles: candlesForPrompt,
       computed_indicators: {
+        input_candle_ts: freshness.inputCandleTs,
+        input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+        input_features_fresh: freshness.inputFeaturesFresh,
         trend: indicators.trend,
         ema9: indicators.ema9,
         ema21: indicators.ema21,
@@ -205,11 +308,11 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     try {
       const { data: recent } = await supabase
         .from("predictions")
-        .select("prediction, status, setup_type, candle_ts, resolved_at")
+        .select("prediction, status, setup_type, candle_ts, resolved_at, input_features_fresh")
         .in("status", ["win", "loss", "push"])
         .order("candle_ts", { ascending: false })
         .limit(8);
-      const arr = recent ?? [];
+      const arr = (recent ?? []).filter((r) => r.input_features_fresh === true);
       const lastResolved = arr.find((r) => r.status === "win" || r.status === "loss") ?? null;
       // Count same-direction losses in last 4 resolved (win/loss only)
       const last4 = arr.filter((r) => r.status === "win" || r.status === "loss").slice(0, 4);
@@ -329,10 +432,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     };
     const confidence100 = parseConfidence(parsed.confidence);
 
-    // NO CLEAR EDGE → record as 'push' so it shows on stats without affecting win rate.
+    // NO CLEAR EDGE still stays pending until the candle closes so actual OHLC/direction is logged.
     const isSkip = rawCall === "NO CLEAR EDGE";
     const status = isSkip
-      ? "push"
+      ? "pending"
       : settings.require_manual_approval
         ? "manual_review"
         : "pending";
@@ -360,6 +463,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
       status,
+      input_candle_ts: freshness.inputCandleTs,
+      input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+      input_features_fresh: freshness.inputFeaturesFresh,
+      freshness_action: freshnessAction,
     };
 
     const { data: inserted, error: insErr } = await supabase
@@ -384,7 +491,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
-      request_payload: { model: modelId, candle_count: candlesForPrompt.length },
+      request_payload: { model: modelId, candle_count: candlesForPrompt.length, input_candle_ts: freshness.inputCandleTs, input_candle_age_seconds: freshness.inputCandleAgeSeconds, freshness_action: freshnessAction },
       response_payload: { prediction_id: inserted.id, confidence: inserted.confidence, prediction: inserted.prediction, duration_ms: Date.now() - started },
       success: true,
     });
@@ -418,9 +525,6 @@ export async function resolvePredictionsServer(
   supabase: SupabaseClient,
   options: { watchMs?: number; pollMs?: number } = {},
 ) {
-  const { fetchKalshiResolution } = await import("./kalshi.server");
-
-  const TF_MS = 15 * 60 * 1000;
   const watchMs = Math.max(0, options.watchMs ?? 0);
   const pollMs = Math.max(1_000, options.pollMs ?? 3_000);
   const startedAt = Date.now();
@@ -450,51 +554,25 @@ export async function resolvePredictionsServer(
       if (Date.now() < candleEndsAt) continue;
 
       unresolvedClosed++;
-      let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
-      try {
-        kalshi = await fetchKalshiResolution(p.candle_ts);
-      } catch {
-        // fall through
-      }
-
       let resolution:
-        | { result: "YES" | "NO"; settlement_value: number | null; source: string; ticker?: string }
+        | { result: "YES" | "NO" | "DOJI"; candle: ResolutionCandle; source: string; ticker?: string }
         | null = null;
 
-      if (kalshi) {
-        resolution = {
-          result: kalshi.result,
-          settlement_value: kalshi.settlement_value ?? null,
-          source: "kalshi",
-          ticker: kalshi.ticker,
-        };
-      } else {
-        // Fallback: Kalshi doesn't offer BTC 15m markets during their daily
-        // maintenance window (roughly 03:00–21:00 EDT). Once the candle has
-        // been closed for 2+ minutes and Kalshi still has nothing, grade off
-        // the Coinbase 15m candle (close vs open on the target window).
-        const ageMs = Date.now() - candleEndsAt;
-        if (ageMs >= 2 * 60 * 1000) {
-          const cb = await fetchCoinbaseClosedCandle(p.candle_ts, TF_MS);
-          if (cb) {
-            resolution = {
-              result: cb.close >= cb.open ? "YES" : "NO",
-              settlement_value: cb.close,
-              source: "coinbase",
-            };
-          }
-        }
+      const actual = await fetchActualResolutionCandle(p.candle_ts, TF_MS);
+      if (actual) {
+        resolution = { result: candleResult(actual), candle: actual, source: actual.source };
       }
 
       if (!resolution) {
         if (checked.length < 30) {
-          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "okx/coinbase", resolved: false });
         }
         continue;
       }
 
       let status: "win" | "loss" | "push";
-      if (p.prediction === "YES") status = resolution.result === "YES" ? "win" : "loss";
+      if (resolution.result === "DOJI") status = "push";
+      else if (p.prediction === "YES") status = resolution.result === "YES" ? "win" : "loss";
       else if (p.prediction === "NO") status = resolution.result === "NO" ? "win" : "loss";
       else status = "push";
 
@@ -502,7 +580,11 @@ export async function resolvePredictionsServer(
         .from("predictions")
         .update({
           status,
-          actual_next_candle_close: resolution.settlement_value,
+          actual_next_candle_open: resolution.candle.open,
+          actual_next_candle_high: resolution.candle.high,
+          actual_next_candle_low: resolution.candle.low,
+          actual_next_candle_close: resolution.candle.close,
+          actual_direction: actualDirection(resolution.candle),
           resolved_at: new Date().toISOString(),
         })
         .eq("id", p.id)
@@ -545,7 +627,7 @@ export async function resolvePredictionsServer(
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pendingCount, watch_ms: watchMs },
-    response_payload: { resolved, checked, resolver: "kalshi", attempts },
+    response_payload: { resolved, checked, resolver: "okx_primary_coinbase_fallback", attempts },
     success: true,
   });
 

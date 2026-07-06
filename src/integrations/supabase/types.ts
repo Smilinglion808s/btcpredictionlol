@@ -220,6 +220,7 @@ export type Database = {
       }
       predictions: {
         Row: {
+          actual_direction: string | null
           actual_next_candle_close: number | null
           actual_next_candle_high: number | null
           actual_next_candle_low: number | null
@@ -229,9 +230,13 @@ export type Database = {
           candle_ts: string
           confidence: number
           created_at: string
+          freshness_action: string | null
           full_ai_response: Json | null
           id: string
           indicators: Json | null
+          input_candle_age_seconds: number | null
+          input_candle_ts: string | null
+          input_features_fresh: boolean | null
           market_condition: string | null
           model_version: string
           notes: string | null
@@ -245,6 +250,7 @@ export type Database = {
           timeframe: string
         }
         Insert: {
+          actual_direction?: string | null
           actual_next_candle_close?: number | null
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
@@ -254,9 +260,13 @@ export type Database = {
           candle_ts: string
           confidence: number
           created_at?: string
+          freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
           indicators?: Json | null
+          input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
+          input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version: string
           notes?: string | null
@@ -270,6 +280,7 @@ export type Database = {
           timeframe?: string
         }
         Update: {
+          actual_direction?: string | null
           actual_next_candle_close?: number | null
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
@@ -279,9 +290,13 @@ export type Database = {
           candle_ts?: string
           confidence?: number
           created_at?: string
+          freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
           indicators?: Json | null
+          input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
+          input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version?: string
           notes?: string | null
@@ -298,6 +313,7 @@ export type Database = {
       }
       predictions_archive: {
         Row: {
+          actual_direction: string | null
           actual_next_candle_close: number | null
           actual_next_candle_high: number | null
           actual_next_candle_low: number | null
@@ -308,9 +324,13 @@ export type Database = {
           candle_ts: string
           confidence: number
           created_at: string
+          freshness_action: string | null
           full_ai_response: Json | null
           id: string
           indicators: Json | null
+          input_candle_age_seconds: number | null
+          input_candle_ts: string | null
+          input_features_fresh: boolean | null
           market_condition: string | null
           model_version: string
           notes: string | null
@@ -324,6 +344,7 @@ export type Database = {
           timeframe: string
         }
         Insert: {
+          actual_direction?: string | null
           actual_next_candle_close?: number | null
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
@@ -334,9 +355,13 @@ export type Database = {
           candle_ts: string
           confidence: number
           created_at?: string
+          freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
           indicators?: Json | null
+          input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
+          input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version: string
           notes?: string | null
@@ -350,6 +375,7 @@ export type Database = {
           timeframe?: string
         }
         Update: {
+          actual_direction?: string | null
           actual_next_candle_close?: number | null
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
@@ -360,9 +386,13 @@ export type Database = {
           candle_ts?: string
           confidence?: number
           created_at?: string
+          freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
           indicators?: Json | null
+          input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
+          input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version?: string
           notes?: string | null
