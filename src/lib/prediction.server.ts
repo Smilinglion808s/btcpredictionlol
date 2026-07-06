@@ -7,6 +7,7 @@ import {
   fetchCurrentPartialCandle,
   type PartialCandle,
 } from "./okx.server";
+import { fetchKalshiResolution } from "./kalshi.server";
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
