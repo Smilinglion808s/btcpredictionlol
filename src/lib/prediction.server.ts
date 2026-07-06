@@ -348,6 +348,19 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       },
       orderbook_aggregate: null as unknown,
       recent_prediction_context: null as unknown,
+      current_candle_partial: partial
+        ? {
+            start_ts: partial.start_ts,
+            minutes_elapsed: partial.minutes_elapsed,
+            o: partial.open,
+            h: partial.high,
+            l: partial.low,
+            c: partial.close,
+            v: partial.volume,
+            source: partial.source,
+            note: "This is the CURRENTLY-FORMING (unconfirmed) candle, sampled in real time. Use it for momentum/level-reclaim reads on the candle just before the target. It is NOT lookahead — the target candle has not opened yet.",
+          }
+        : null,
     };
 
     // Recent prediction context for 2.3.2 continuation guard
