@@ -50,6 +50,7 @@ export type Database = {
           close: number
           confirm: boolean
           created_at: string
+          fetch_source: string | null
           high: number
           id: string
           low: number
@@ -65,6 +66,7 @@ export type Database = {
           close: number
           confirm?: boolean
           created_at?: string
+          fetch_source?: string | null
           high: number
           id?: string
           low: number
@@ -80,6 +82,7 @@ export type Database = {
           close?: number
           confirm?: boolean
           created_at?: string
+          fetch_source?: string | null
           high?: number
           id?: string
           low?: number
@@ -225,11 +228,15 @@ export type Database = {
           actual_next_candle_high: number | null
           actual_next_candle_low: number | null
           actual_next_candle_open: number | null
+          advance_check_passed: boolean | null
           api_model_id: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
           created_at: string
+          current_partial_minutes_elapsed: number | null
+          current_partial_snapshot: Json | null
+          fetch_source: string | null
           freshness_action: string | null
           full_ai_response: Json | null
           id: string
@@ -255,11 +262,15 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          advance_check_passed?: boolean | null
           api_model_id?: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
           created_at?: string
+          current_partial_minutes_elapsed?: number | null
+          current_partial_snapshot?: Json | null
+          fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -285,11 +296,15 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          advance_check_passed?: boolean | null
           api_model_id?: string | null
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
           created_at?: string
+          current_partial_minutes_elapsed?: number | null
+          current_partial_snapshot?: Json | null
+          fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -318,12 +333,16 @@ export type Database = {
           actual_next_candle_high: number | null
           actual_next_candle_low: number | null
           actual_next_candle_open: number | null
+          advance_check_passed: boolean | null
           api_model_id: string | null
           archived_at: string
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
           created_at: string
+          current_partial_minutes_elapsed: number | null
+          current_partial_snapshot: Json | null
+          fetch_source: string | null
           freshness_action: string | null
           full_ai_response: Json | null
           id: string
@@ -349,12 +368,16 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          advance_check_passed?: boolean | null
           api_model_id?: string | null
           archived_at?: string
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
           created_at?: string
+          current_partial_minutes_elapsed?: number | null
+          current_partial_snapshot?: Json | null
+          fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -380,12 +403,16 @@ export type Database = {
           actual_next_candle_high?: number | null
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
+          advance_check_passed?: boolean | null
           api_model_id?: string | null
           archived_at?: string
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
           created_at?: string
+          current_partial_minutes_elapsed?: number | null
+          current_partial_snapshot?: Json | null
+          fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
