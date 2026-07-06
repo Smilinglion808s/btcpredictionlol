@@ -1,6 +1,7 @@
 // Server-only AI prediction + resolution logic. Imported by server fns and the cron route.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { computeIndicatorBundle, nextCandleTs, type Candle } from "./indicators";
+import { computeIndicatorBundle, type Candle } from "./indicators";
+import { fetchAndUpsertOkxCandles, fetchOkxClosedCandle } from "./okx.server";
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
@@ -48,6 +49,51 @@ type ResolutionCandle = {
   volume?: number;
   confirm?: boolean;
 };
+
+type PredictionCandle = Candle & { confirm?: boolean };
+
+const TF_MS = 15 * 60 * 1000;
+const MAX_FEATURE_AGE_MS = TF_MS;
+
+function actualDirection(candle: Pick<ResolutionCandle, "open" | "close">) {
+  return candle.close > candle.open ? "GREEN" : candle.close < candle.open ? "RED" : "DOJI";
+}
+
+function candleResult(candle: Pick<ResolutionCandle, "open" | "close">) {
+  return candle.close > candle.open ? "YES" : candle.close < candle.open ? "NO" : "DOJI";
+}
+
+function freshnessFor(candleTs: string, now = Date.now()) {
+  const inputMs = new Date(candleTs).getTime();
+  const ageMs = now - inputMs;
+  return {
+    inputCandleTs: candleTs,
+    inputCandleAgeSeconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
+    inputFeaturesFresh: Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= MAX_FEATURE_AGE_MS,
+  };
+}
+
+async function loadPredictionCandles(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("candles")
+    .select("candle_ts, open, high, low, close, volume, confirm")
+    .eq("symbol", "BTC-USDT")
+    .eq("timeframe", "15m")
+    .order("candle_ts", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data ?? []).slice().reverse() as PredictionCandle[];
+}
+
+async function fetchActualResolutionCandle(candleTs: string, timeframeMs: number): Promise<(ResolutionCandle & { source: string }) | null> {
+  const okx = await fetchOkxClosedCandle(candleTs);
+  if (okx) return { ...okx, source: "okx" };
+
+  const coinbase = await fetchCoinbaseClosedCandle(candleTs, timeframeMs);
+  if (coinbase) return { ...coinbase, source: "coinbase" };
+
+  return null;
+}
 
 async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number): Promise<ResolutionCandle | null> {
   const targetMs = new Date(candleTs).getTime();
