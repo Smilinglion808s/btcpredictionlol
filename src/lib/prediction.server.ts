@@ -219,7 +219,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         },
         indicators: indicators as unknown as Record<string, unknown>,
         orderbook: null,
-        status: "push",
+        status: "pending",
         input_candle_ts: freshness.inputCandleTs,
         input_candle_age_seconds: freshness.inputCandleAgeSeconds,
         input_features_fresh: false,
@@ -432,10 +432,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     };
     const confidence100 = parseConfidence(parsed.confidence);
 
-    // NO CLEAR EDGE → record as 'push' so it shows on stats without affecting win rate.
+    // NO CLEAR EDGE still stays pending until the candle closes so actual OHLC/direction is logged.
     const isSkip = rawCall === "NO CLEAR EDGE";
     const status = isSkip
-      ? "push"
+      ? "pending"
       : settings.require_manual_approval
         ? "manual_review"
         : "pending";
