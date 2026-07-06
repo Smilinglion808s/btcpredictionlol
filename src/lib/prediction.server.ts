@@ -623,6 +623,23 @@ export async function resolvePredictionsServer(
 
       const actual = await fetchActualResolutionCandle(p.candle_ts, TF_MS);
       if (actual) {
+        const validOhlc =
+          Number.isFinite(actual.open) && Number.isFinite(actual.close) &&
+          Number.isFinite(actual.high) && Number.isFinite(actual.low) &&
+          actual.open > 0 && actual.close > 0;
+        if (!validOhlc) {
+          await supabase.from("api_runs").insert({
+            run_type: "resolve-predictions",
+            request_payload: { prediction_id: p.id, candle_ts: p.candle_ts, source: actual.source },
+            response_payload: { rejected: true, reason: "invalid_ohlc", actual },
+            success: false,
+            error_message: `Invalid OHLC from ${actual.source} for ${p.candle_ts}`,
+          });
+          if (checked.length < 30) {
+            checked.push({ id: p.id, candle_ts: p.candle_ts, source: actual.source, resolved: false, error: "invalid_ohlc" });
+          }
+          continue;
+        }
         resolution = { result: candleResult(actual), candle: actual, source: actual.source };
       }
 
