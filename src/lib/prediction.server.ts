@@ -526,6 +526,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       input_candle_age_seconds: freshness.inputCandleAgeSeconds,
       input_features_fresh: freshness.inputFeaturesFresh,
       freshness_action: freshnessAction,
+      fetch_source: fetchSource,
+      advance_check_passed: advanceCheckPassed,
+      current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
+      current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
     };
 
     const { data: inserted, error: insErr } = await supabase
