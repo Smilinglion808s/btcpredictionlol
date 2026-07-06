@@ -525,9 +525,6 @@ export async function resolvePredictionsServer(
   supabase: SupabaseClient,
   options: { watchMs?: number; pollMs?: number } = {},
 ) {
-  const { fetchKalshiResolution } = await import("./kalshi.server");
-
-  const TF_MS = 15 * 60 * 1000;
   const watchMs = Math.max(0, options.watchMs ?? 0);
   const pollMs = Math.max(1_000, options.pollMs ?? 3_000);
   const startedAt = Date.now();
@@ -557,51 +554,25 @@ export async function resolvePredictionsServer(
       if (Date.now() < candleEndsAt) continue;
 
       unresolvedClosed++;
-      let kalshi: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
-      try {
-        kalshi = await fetchKalshiResolution(p.candle_ts);
-      } catch {
-        // fall through
-      }
-
       let resolution:
-        | { result: "YES" | "NO"; settlement_value: number | null; source: string; ticker?: string }
+        | { result: "YES" | "NO" | "DOJI"; candle: ResolutionCandle; source: string; ticker?: string }
         | null = null;
 
-      if (kalshi) {
-        resolution = {
-          result: kalshi.result,
-          settlement_value: kalshi.settlement_value ?? null,
-          source: "kalshi",
-          ticker: kalshi.ticker,
-        };
-      } else {
-        // Fallback: Kalshi doesn't offer BTC 15m markets during their daily
-        // maintenance window (roughly 03:00–21:00 EDT). Once the candle has
-        // been closed for 2+ minutes and Kalshi still has nothing, grade off
-        // the Coinbase 15m candle (close vs open on the target window).
-        const ageMs = Date.now() - candleEndsAt;
-        if (ageMs >= 2 * 60 * 1000) {
-          const cb = await fetchCoinbaseClosedCandle(p.candle_ts, TF_MS);
-          if (cb) {
-            resolution = {
-              result: cb.close >= cb.open ? "YES" : "NO",
-              settlement_value: cb.close,
-              source: "coinbase",
-            };
-          }
-        }
+      const actual = await fetchActualResolutionCandle(p.candle_ts, TF_MS);
+      if (actual) {
+        resolution = { result: candleResult(actual), candle: actual, source: actual.source };
       }
 
       if (!resolution) {
         if (checked.length < 30) {
-          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi", resolved: false });
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "okx/coinbase", resolved: false });
         }
         continue;
       }
 
       let status: "win" | "loss" | "push";
-      if (p.prediction === "YES") status = resolution.result === "YES" ? "win" : "loss";
+      if (resolution.result === "DOJI") status = "push";
+      else if (p.prediction === "YES") status = resolution.result === "YES" ? "win" : "loss";
       else if (p.prediction === "NO") status = resolution.result === "NO" ? "win" : "loss";
       else status = "push";
 
@@ -609,7 +580,11 @@ export async function resolvePredictionsServer(
         .from("predictions")
         .update({
           status,
-          actual_next_candle_close: resolution.settlement_value,
+          actual_next_candle_open: resolution.candle.open,
+          actual_next_candle_high: resolution.candle.high,
+          actual_next_candle_low: resolution.candle.low,
+          actual_next_candle_close: resolution.candle.close,
+          actual_direction: actualDirection(resolution.candle),
           resolved_at: new Date().toISOString(),
         })
         .eq("id", p.id)
@@ -652,7 +627,7 @@ export async function resolvePredictionsServer(
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pendingCount, watch_ms: watchMs },
-    response_payload: { resolved, checked, resolver: "kalshi", attempts },
+    response_payload: { resolved, checked, resolver: "okx_primary_coinbase_fallback", attempts },
     success: true,
   });
 
