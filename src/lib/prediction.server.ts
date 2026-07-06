@@ -250,9 +250,8 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
 
 
-    // Only closed/confirmed candles, most recent 80
-    const closedCandles = ordered.filter((c) => (c as Candle & { confirm?: boolean }).confirm !== false);
-    const candlesForPrompt = (closedCandles.length >= 30 ? closedCandles : ordered)
+    // Most recent 80 candles, including the live in-progress candle when present.
+    const candlesForPrompt = ordered
       .slice(-80)
       .map((c) => ({
         t: c.candle_ts,
@@ -261,6 +260,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         l: Number(c.low),
         c: Number(c.close),
         v: Number(c.volume),
+        confirm: (c as PredictionCandle).confirm ?? true,
       }));
 
     const instructions =
