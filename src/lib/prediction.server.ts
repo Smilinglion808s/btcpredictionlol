@@ -1,7 +1,12 @@
 // Server-only AI prediction + resolution logic. Imported by server fns and the cron route.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, type Candle } from "./indicators";
-import { fetchAndUpsertOkxCandles, fetchOkxClosedCandle } from "./okx.server";
+import {
+  fetchAndUpsertCandles,
+  fetchOkxClosedCandle,
+  fetchCurrentPartialCandle,
+  type PartialCandle,
+} from "./okx.server";
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
