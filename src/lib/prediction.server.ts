@@ -4,7 +4,7 @@ import { computeIndicatorBundle, type Candle } from "./indicators";
 import {
   fetchAndUpsertCandles,
   fetchOkxClosedCandle,
-  fetchCurrentPartialCandle,
+  buildPartialCandleContext,
   type PartialCandle,
 } from "./okx.server";
 import { fetchKalshiResolution } from "./kalshi.server";
