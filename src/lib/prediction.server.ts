@@ -160,10 +160,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     let latestInput = ordered[ordered.length - 1];
     let freshness = freshnessFor(latestInput.candle_ts);
     let freshnessAction = freshness.inputFeaturesFresh ? "fresh" : "stale_refetch_attempted";
+    let fetchSource: "okx" | "coinbase" | null = null;
 
     if (!freshness.inputFeaturesFresh) {
       try {
-        await fetchAndUpsertOkxCandles(supabase);
+        const refresh = await fetchAndUpsertCandles(supabase);
+        fetchSource = refresh.primary_source;
         ordered = await loadPredictionCandles(supabase);
         if (ordered.length < 30) throw new Error("Not enough candle history after refresh.");
         latestInput = ordered[ordered.length - 1];
@@ -181,6 +183,29 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .limit(1)
       .maybeSingle();
     if (!settings) throw new Error("No active model settings");
+
+    // "Advanced since last run" assertion — catches the case where the fetch
+    // returned 200 but no NEW candle rows landed (feed frozen, upstream lag,
+    // etc.). If max(candle_ts) hasn't moved past the previous prediction's
+    // input_candle_ts for this model, force NO CLEAR EDGE.
+    const { data: prevPredForModel } = await supabase
+      .from("predictions")
+      .select("input_candle_ts, candle_ts")
+      .eq("symbol", "BTC-USDT")
+      .eq("timeframe", "15m")
+      .eq("model_version", settings.model_version)
+      .not("input_candle_ts", "is", null)
+      .order("candle_ts", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const prevInputMs = prevPredForModel?.input_candle_ts
+      ? new Date(prevPredForModel.input_candle_ts as string).getTime()
+      : 0;
+    const currentInputMs = new Date(freshness.inputCandleTs as string).getTime();
+    const advanceCheckPassed = !prevInputMs || currentInputMs > prevInputMs;
+    if (!advanceCheckPassed) {
+      freshnessAction = "no_advance_since_last_prediction";
+    }
 
     const indicators = computeIndicatorBundle(ordered);
     if (!indicators) throw new Error("Failed to compute indicators");
@@ -201,8 +226,18 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .maybeSingle();
     if (existing) return existing;
 
-    if (!freshness.inputFeaturesFresh) {
-      const staleMessage = `Forced NO CLEAR EDGE: latest input candle ${freshness.inputCandleTs} is ${freshness.inputCandleAgeSeconds}s old.`;
+    // Fetch the currently-forming candle (best-effort — never blocks predict).
+    let partial: PartialCandle | null = null;
+    try {
+      partial = await fetchCurrentPartialCandle();
+    } catch {
+      partial = null;
+    }
+
+    if (!freshness.inputFeaturesFresh || !advanceCheckPassed) {
+      const staleMessage = !advanceCheckPassed
+        ? `Forced NO CLEAR EDGE: input candle ${freshness.inputCandleTs} did not advance past previous prediction's input (${prevPredForModel?.input_candle_ts}).`
+        : `Forced NO CLEAR EDGE: latest input candle ${freshness.inputCandleTs} is ${freshness.inputCandleAgeSeconds}s old.`;
       const forcedPayload = {
         symbol: "BTC-USDT",
         timeframe: "15m",
@@ -212,23 +247,29 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         prediction: "NO CLEAR EDGE",
         confidence: 0,
         btc_price_at_prediction: Number(last.close),
-        setup_type: "STALE_INPUT_FORCED_SKIP",
+        setup_type: !advanceCheckPassed ? "NO_ADVANCE_FORCED_SKIP" : "STALE_INPUT_FORCED_SKIP",
         market_condition: null,
         reasoning_summary: staleMessage,
         full_ai_response: {
           forced_no_clear_edge: true,
-          reason: "stale_input_features",
+          reason: !advanceCheckPassed ? "no_advance_since_last_prediction" : "stale_input_features",
           input_candle_ts: freshness.inputCandleTs,
           input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+          previous_input_candle_ts: prevPredForModel?.input_candle_ts ?? null,
           freshness_action: freshnessAction,
+          current_candle_partial: partial,
         },
         indicators: indicators as unknown as Record<string, unknown>,
         orderbook: null,
         status: "pending",
         input_candle_ts: freshness.inputCandleTs,
         input_candle_age_seconds: freshness.inputCandleAgeSeconds,
-        input_features_fresh: false,
+        input_features_fresh: freshness.inputFeaturesFresh,
         freshness_action: freshnessAction,
+        fetch_source: fetchSource,
+        advance_check_passed: advanceCheckPassed,
+        current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
+        current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
       };
 
       const { data: forced, error: forcedErr } = await supabase
@@ -240,7 +281,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
       await supabase.from("api_runs").insert({
         run_type: "run-ai-prediction",
-        request_payload: { skipped_openai: true, reason: "stale_input_features", freshness: forcedPayload.full_ai_response },
+        request_payload: { skipped_openai: true, reason: forcedPayload.full_ai_response.reason, freshness: forcedPayload.full_ai_response },
         response_payload: { prediction_id: forced.id, prediction: forced.prediction, duration_ms: Date.now() - started },
         success: true,
       });
