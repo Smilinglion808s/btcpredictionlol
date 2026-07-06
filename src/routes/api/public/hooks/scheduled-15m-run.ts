@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { fetchAndUpsertOkxCandles } from "@/lib/okx.server";
+import { fetchAndUpsertCandles } from "@/lib/okx.server";
 import { resolvePredictionsServer, runAiPredictionServer } from "@/lib/prediction.server";
 
 // Public cron endpoint hit by pg_cron every 15 minutes.
@@ -9,6 +9,7 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const overallStart = Date.now();
         const apikey = request.headers.get("apikey");
         const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!expected || apikey !== expected) {
@@ -35,16 +36,23 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
         }
 
         const results: Record<string, unknown> = { phase };
-        if (phase === "predict" || phase === "both") {
+        const timings: Record<string, number> = {};
+
+        if (phase === "predict" || phase === "both" || phase === "resolve") {
+          const t0 = Date.now();
           try {
-            const candles = await fetchAndUpsertOkxCandles(supabase);
-            results.candles_count = candles.length;
+            const fetched = await fetchAndUpsertCandles(supabase);
+            results.candles_count = fetched.candles.length;
+            results.fetch_primary_source = fetched.primary_source;
+            results.fetch_attempts = fetched.attempts;
           } catch (e) {
             results.fetch_error = e instanceof Error ? e.message : String(e);
           }
+          timings.fetch_ms = Date.now() - t0;
         }
 
         if (phase === "resolve" || phase === "both") {
+          const t0 = Date.now();
           try {
             const resolved = await resolvePredictionsServer(supabase, {
               watchMs: watch ? 55_000 : 0,
@@ -54,9 +62,11 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           } catch (e) {
             results.resolve_error = e instanceof Error ? e.message : String(e);
           }
+          timings.resolve_ms = Date.now() - t0;
         }
 
         if (phase === "predict" || phase === "both") {
+          const t0 = Date.now();
           try {
             const { data: settings } = await supabase
               .from("model_settings")
@@ -72,8 +82,11 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           } catch (e) {
             results.predict_error = e instanceof Error ? e.message : String(e);
           }
+          timings.predict_ms = Date.now() - t0;
         }
 
+        timings.total_ms = Date.now() - overallStart;
+        results.timings = timings;
 
         return new Response(JSON.stringify(results), {
           headers: { "content-type": "application/json" },
@@ -82,3 +95,4 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
     },
   },
 });
+
