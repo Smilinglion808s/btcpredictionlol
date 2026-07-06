@@ -242,11 +242,11 @@ export async function fetchAndUpsertCandles(supabase: SupabaseClient): Promise<{
       upsert_error: upsertErrorMessage,
     },
     success,
-    error_message: success ? null : (upsertErrorMessage ?? attempts.map((a) => a.error).filter(Boolean).join(" | ") || "No candles from any source"),
+    error_message: success ? null : (upsertErrorMessage ?? (attempts.map((a) => a.error).filter(Boolean).join(" | ") || "No candles from any source")),
   });
 
   if (!success) {
-    throw new Error(upsertErrorMessage ?? attempts.map((a) => a.error).filter(Boolean).join(" | ") || "No candles from any source");
+    throw new Error(upsertErrorMessage ?? (attempts.map((a) => a.error).filter(Boolean).join(" | ") || "No candles from any source"));
   }
 
   const { data, error } = await supabase
