@@ -202,6 +202,7 @@ function enrich(p: PredRow): PredRow {
     confidence_bucket: bucket,
     correct,
     actual_direction: actualDir,
+    current_partial_snapshot_json: p.current_partial_snapshot ? JSON.stringify(p.current_partial_snapshot) : "",
     price_change_abs: hasActual ? changeAbs.toFixed(2) : "",
     price_change_pct: hasActual ? changePct.toFixed(4) : "",
     candle_range: hasActual ? range.toFixed(2) : "",
