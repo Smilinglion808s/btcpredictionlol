@@ -4,7 +4,7 @@ import { computeIndicatorBundle, type Candle } from "./indicators";
 import {
   fetchAndUpsertCandles,
   fetchOkxClosedCandle,
-  fetchCurrentPartialCandle,
+  buildPartialCandleContext,
   type PartialCandle,
 } from "./okx.server";
 import { fetchKalshiResolution } from "./kalshi.server";
@@ -227,13 +227,54 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .maybeSingle();
     if (existing) return existing;
 
-    // Fetch the currently-forming candle (best-effort — never blocks predict).
+    // Fetch the currently-forming candle. buildPartialCandleContext tries DB
+    // (populated by the fetch phase seconds earlier) then OKX/Binance/Coinbase
+    // live, and finally synthesizes from spot ticker so the snapshot is
+    // effectively always available. Every attempt is recorded for auditing.
     let partial: PartialCandle | null = null;
+    let partialPath = "unavailable" as
+      | "db_unconfirmed" | "okx_live" | "binance_live" | "coinbase_live"
+      | "synthesized_from_spot" | "unavailable";
+    let partialAttempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }> = [];
+    let partialSynthesized = false;
     try {
-      partial = await fetchCurrentPartialCandle();
-    } catch {
-      partial = null;
+      const ctx = await buildPartialCandleContext(supabase);
+      partial = ctx.snapshot;
+      partialPath = ctx.path;
+      partialAttempts = ctx.attempts;
+      partialSynthesized = ctx.synthesized;
+    } catch (e) {
+      partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
     }
+
+    if (!partial || partialSynthesized) {
+      await supabase.from("api_runs").insert({
+        run_type: "partial-candle-fetch",
+        request_payload: { target_candle_ts_hint: null },
+        response_payload: { path: partialPath, synthesized: partialSynthesized, attempts: partialAttempts },
+        success: !!partial,
+        error_message: !partial ? `No partial candle: ${partialAttempts.map((a) => `${a.source}:${a.reason ?? "ok"}`).join(" | ")}` : null,
+      });
+    }
+
+    // fetch_source: always populate. Prefer the source that produced the
+    // latest candle row in the DB (works on the fresh-path too, not just refetch).
+    if (!fetchSource) {
+      try {
+        const { data: latestCandleRow } = await supabase
+          .from("candles")
+          .select("fetch_source")
+          .eq("symbol", "BTC-USDT").eq("timeframe", "15m")
+          .order("candle_ts", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const fs = (latestCandleRow as { fetch_source?: string } | null)?.fetch_source;
+        if (fs === "okx" || fs === "coinbase") fetchSource = fs;
+      } catch {
+        // non-fatal
+      }
+    }
+
 
     if (!freshness.inputFeaturesFresh || !advanceCheckPassed) {
       const staleMessage = !advanceCheckPassed
@@ -405,10 +446,126 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     }
     (inputPayload as Record<string, unknown>).orderbook_aggregate = orderbookAggregate;
 
+    // -------- Partial-candle module: derived features + explicit prompt addendum --------
+    // Compute ATR(14) and VWAP(20) locally so the module has the context the
+    // spec expects. Kept simple: TR = high - low (skip prev close variant).
+    const last20 = ordered.slice(-20);
+    const last14 = ordered.slice(-14);
+    const atr14 =
+      last14.length > 0
+        ? last14.reduce((s, c) => s + (Number(c.high) - Number(c.low)), 0) / last14.length
+        : 0;
+    const vwap20 = (() => {
+      if (!last20.length) return null;
+      let pv = 0, vv = 0;
+      for (const c of last20) {
+        const typ = (Number(c.high) + Number(c.low) + Number(c.close)) / 3;
+        const v = Math.max(Number(c.volume) || 0, 0);
+        pv += typ * v; vv += v;
+      }
+      return vv > 0 ? pv / vv : null;
+    })();
+    const lastCompletedClose = Number(last.close);
+
+    let partialModule: Record<string, unknown> = {
+      partial_snapshot_present: false,
+      degraded_mode: true,
+      note: "current_partial_snapshot missing after DB + OKX + Binance + Coinbase + spot ticker attempts",
+    };
+    if (partial) {
+      const range = Math.max(partial.high - partial.low, 1e-9);
+      const denom = Math.max(range, 0.05 * (atr14 || range));
+      const completeness = Math.min(1, partial.minutes_elapsed / 15);
+      const flatEps = 0.02 * (atr14 || Math.abs(partial.close - partial.open) || 1);
+      const partialDirection =
+        Math.abs(partial.close - partial.open) < flatEps
+          ? "flat"
+          : partial.close > partial.open ? "green" : "red";
+      const partialClosePositionPct = (partial.close - partial.low) / denom;
+      const partialRangeVsAtr = atr14 > 0 ? range / atr14 : null;
+      const partialBodyStrength = Math.abs(partial.close - partial.open) / Math.max(range, 1e-9);
+      const upperWickPct = (partial.high - Math.max(partial.open, partial.close)) / Math.max(range, 1e-9);
+      const lowerWickPct = (Math.min(partial.open, partial.close) - partial.low) / Math.max(range, 1e-9);
+      // VWAP reclaim/loss vs the last completed candle's close relative to vwap20.
+      let partialVwapEvent: "reclaim" | "loss" | "none" = "none";
+      if (vwap20 != null) {
+        if (lastCompletedClose < vwap20 && partial.close > vwap20) partialVwapEvent = "reclaim";
+        else if (lastCompletedClose > vwap20 && partial.close < vwap20) partialVwapEvent = "loss";
+      }
+      // Feed sanity: partial.open shouldn't wildly diverge from last completed close.
+      const openDrift = lastCompletedClose > 0 ? Math.abs(partial.open - lastCompletedClose) / lastCompletedClose : 0;
+      const feedMismatch = openDrift > 0.003;
+
+      partialModule = {
+        partial_snapshot_present: true,
+        source_path: partialPath,
+        synthesized: partialSynthesized,
+        completeness,
+        minutes_elapsed: partial.minutes_elapsed,
+        partial_direction: partialDirection,
+        partial_close_position_pct: Number(partialClosePositionPct.toFixed(3)),
+        partial_range_vs_atr: partialRangeVsAtr != null ? Number(partialRangeVsAtr.toFixed(3)) : null,
+        partial_body_strength: Number(partialBodyStrength.toFixed(3)),
+        upper_wick_pct: Number(upperWickPct.toFixed(3)),
+        lower_wick_pct: Number(lowerWickPct.toFixed(3)),
+        partial_vwap_event: partialVwapEvent,
+        vwap_at_snapshot: vwap20,
+        atr_14: atr14,
+        last_completed_close: lastCompletedClose,
+        feed_mismatch: feedMismatch,
+        degraded_mode: partialSynthesized || feedMismatch,
+        trust_tier:
+          completeness >= 0.8 ? "full_trust" : completeness >= 0.53 ? "partial_trust" : "low_trust",
+        completeness_weight_multiplier:
+          completeness >= 0.8 ? 1.0 : completeness >= 0.53 ? 0.6 : 0.3,
+      };
+    }
+    (inputPayload as Record<string, unknown>).partial_candle_module = partialModule;
+
+    const partialModuleAddendum = `
+
+PARTIAL CANDLE CONFIRMATION MODULE (module_id: partial_candle_confirmation, weight: 12, MUST be applied on every prediction).
+
+You are given both current_candle_partial (raw OHLC of the 15m candle that is currently forming, minutes_elapsed/15 complete) and partial_candle_module (pre-computed derived features and trust tier). This is your FRESHEST evidence — fresher than every completed candle in the candles array. Never ignore it.
+
+Trust tiers by completeness = minutes_elapsed/15:
+- completeness >= 0.80 → full_trust, module_weight × 1.0, override_power = true (may fire hard overrides + vetoes below)
+- 0.53 ≤ completeness < 0.80 → partial_trust, module_weight × 0.6, no overrides
+- completeness < 0.53 → low_trust, module_weight × 0.3, no overrides
+- partial_snapshot_present = false OR feed_mismatch = true → degraded_mode: module contributes 0, cap final confidence at 60 (i.e. 3/5), and be MORE conservative — never more aggressive.
+
+Scoring (apply after trust multiplier, cap at module weight = 12):
+  Bullish:
+    +12 if partial_direction=green AND partial_close_position_pct ≥ 0.65 AND partial_range_vs_atr ≥ 0.5
+    +9  if partial_vwap_event=reclaim AND partial_close_position_pct ≥ 0.55
+    +7  if partial_direction=green AND partial_close_position_pct ≥ 0.5
+    +5  if partial_direction=red AND lower_wick_pct ≥ 0.5 AND partial_close_position_pct ≥ 0.5 (absorption / failed flush)
+  Bearish (symmetric):
+    +12 if partial_direction=red AND partial_close_position_pct ≤ 0.35 AND partial_range_vs_atr ≥ 0.5
+    +9  if partial_vwap_event=loss AND partial_close_position_pct ≤ 0.45
+    +7  if partial_direction=red AND partial_close_position_pct ≤ 0.5
+    +5  if partial_direction=green AND upper_wick_pct ≥ 0.5 AND partial_close_position_pct ≤ 0.5 (rejection / failed pop)
+  Exhaustion caution: if partial_range_vs_atr ≥ 1.5 AND |partial.close − vwap_at_snapshot| ≥ 1.25 × atr_14, halve module points in the extension direction.
+
+At full_trust ONLY, apply hard overrides and vetoes BEFORE finalizing the call:
+  New hard YES:
+    - partial_vwap_event=reclaim AND partial_close_position_pct ≥ 0.65 AND partial_range_vs_atr ≥ 0.75
+    - partial breaks above range_20_high AND partial_close_position_pct ≥ 0.70
+  New hard NO (symmetric)
+  VETO:
+    - Any bullish call if partial_direction=red AND partial_close_position_pct ≤ 0.25 AND partial_range_vs_atr ≥ 0.75 → downgrade to NO CLEAR EDGE
+    - Any bearish call if partial_direction=green AND partial_close_position_pct ≥ 0.75 AND partial_range_vs_atr ≥ 0.75 → downgrade to NO CLEAR EDGE
+  Conflict downgrade: if partial disagrees with your proposed call AND partial_range_vs_atr ≥ 0.5 AND no hard override survives → subtract 8 from confidence and set trade_status=SKIP unless score margin ≥ 16.
+
+Real-time VWAP events (reclaim/loss) at completeness ≥ 0.8 OUTRANK the completed-candle vwap_state signal.
+
+If the partial strongly opposes what completed candles suggest, the market is turning against that read right now — stand down or downgrade.
+
+You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick opposes YES → downgraded"). Absence of that reference means you ignored the freshest input, which is an error.`;
 
     aiPayload = {
       model: modelId,
-      instructions: `${instructions}\n\nRespond with JSON only.`,
+      instructions: `${instructions}\n${partialModuleAddendum}\n\nRespond with JSON only.`,
       input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
       max_output_tokens: 2048,

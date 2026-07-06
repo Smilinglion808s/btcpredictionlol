@@ -158,39 +158,184 @@ export async function fetchOkxClosedCandle(candleTs: string): Promise<ClosedCand
 }
 
 /**
- * Fetches the currently-forming (unconfirmed) 15m candle from OKX, with
- * Coinbase fallback. Returns null if neither source is available.
+ * Backwards-compat wrapper. New code should use `buildPartialCandleContext`
+ * which returns full provenance + attempt diagnostics.
  */
 export async function fetchCurrentPartialCandle(): Promise<PartialCandle | null> {
+  const ctx = await buildPartialCandleContext();
+  return ctx.snapshot;
+}
+
+async function tryBinancePartial(currentStart: number, minutesElapsed: number): Promise<{ partial: PartialCandle | null; status: number; error?: string }> {
+  const url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=2";
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return { partial: null, status: res.status, error: `Binance HTTP ${res.status}` };
+    const rows = (await res.json()) as Array<[number, string, string, string, string, string]>;
+    const row = rows.find((r) => Number(r[0]) === currentStart);
+    if (!row) return { partial: null, status: 200, error: "Binance: no row at currentStart" };
+    return {
+      partial: {
+        start_ts: new Date(currentStart).toISOString(),
+        open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]),
+        volume: Number(row[5]),
+        minutes_elapsed: minutesElapsed,
+        source: "okx" as PartialCandle["source"], // schema restricts, tag path separately
+      },
+      status: 200,
+    };
+  } catch (e) {
+    return { partial: null, status: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function trySpotSynthesizedPartial(
+  currentStart: number,
+  minutesElapsed: number,
+  lastClosedClose: number | null,
+): Promise<{ partial: PartialCandle | null; status: number; error?: string }> {
+  const sources: Array<{ label: PartialCandle["source"]; url: string; extract: (j: unknown) => number | null }> = [
+    { label: "coinbase", url: "https://api.exchange.coinbase.com/products/BTC-USD/ticker", extract: (j) => Number((j as { price?: string }).price ?? NaN) },
+    { label: "okx", url: "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", extract: (j) => Number((j as { data?: Array<{ last?: string }> }).data?.[0]?.last ?? NaN) },
+  ];
+  const errors: string[] = [];
+  for (const s of sources) {
+    try {
+      const r = await fetch(s.url, { headers: { accept: "application/json", "user-agent": "BTC15mBot/1.0" } });
+      if (!r.ok) { errors.push(`${s.label} ${r.status}`); continue; }
+      const j = await r.json();
+      const price = s.extract(j);
+      if (!Number.isFinite(price) || !price || (price as number) <= 0) { errors.push(`${s.label} invalid price`); continue; }
+      const open = lastClosedClose && Number.isFinite(lastClosedClose) ? lastClosedClose : (price as number);
+      const high = Math.max(open, price as number);
+      const low = Math.min(open, price as number);
+      return {
+        partial: {
+          start_ts: new Date(currentStart).toISOString(),
+          open, high, low, close: price as number, volume: 0,
+          minutes_elapsed: minutesElapsed,
+          source: s.label,
+        },
+        status: 200,
+      };
+    } catch (e) {
+      errors.push(`${s.label} ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { partial: null, status: 0, error: `spot ticker: ${errors.join(" | ")}` };
+}
+
+/**
+ * Ordered partial-candle lookup with full provenance:
+ *   1. DB unconfirmed row (populated by fetch phase seconds earlier)
+ *   2. OKX live /market/candles
+ *   3. Binance live /klines
+ *   4. Coinbase live /candles
+ *   5. Synthesized from spot ticker (open = last closed close, close = ticker)
+ * The snapshot is only null when every source failed.
+ */
+export async function buildPartialCandleContext(
+  supabase?: SupabaseClient,
+): Promise<{
+  snapshot: PartialCandle | null;
+  path: "db_unconfirmed" | "okx_live" | "binance_live" | "coinbase_live" | "synthesized_from_spot" | "unavailable";
+  attempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }>;
+  synthesized: boolean;
+  last_closed_close: number | null;
+}> {
   const now = Date.now();
   const currentStart = Math.floor(now / TF_MS) * TF_MS;
   const minutesElapsed = Math.min(15, Math.floor((now - currentStart) / 60_000));
+  const attempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }> = [];
+  let lastClosedClose: number | null = null;
 
-  // OKX first
+  if (supabase) {
+    try {
+      const startIso = new Date(currentStart).toISOString();
+      const { data, error } = await supabase
+        .from("candles")
+        .select("candle_ts, open, high, low, close, volume, confirm, fetch_source")
+        .eq("symbol", SYMBOL).eq("timeframe", TF).eq("candle_ts", startIso)
+        .maybeSingle();
+      if (error) attempts.push({ source: "db", ok: false, reason: error.message });
+      else if (data && data.confirm === false) {
+        attempts.push({ source: "db", ok: true });
+        return {
+          snapshot: {
+            start_ts: new Date(data.candle_ts as string).toISOString(),
+            open: Number(data.open), high: Number(data.high), low: Number(data.low),
+            close: Number(data.close), volume: Number(data.volume ?? 0),
+            minutes_elapsed: minutesElapsed,
+            source: ((data.fetch_source as string) === "coinbase" ? "coinbase" : "okx"),
+          },
+          path: "db_unconfirmed", attempts, synthesized: false, last_closed_close: null,
+        };
+      } else {
+        attempts.push({ source: "db", ok: false, reason: data ? "row is confirmed, no partial yet" : "no row at currentStart" });
+      }
+      const { data: lastClosed } = await supabase
+        .from("candles").select("close")
+        .eq("symbol", SYMBOL).eq("timeframe", TF).eq("confirm", true)
+        .order("candle_ts", { ascending: false }).limit(1).maybeSingle();
+      if (lastClosed) lastClosedClose = Number(lastClosed.close);
+    } catch (e) {
+      attempts.push({ source: "db", ok: false, reason: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   const okx = await tryOkxCandles();
   if (okx.candles.length) {
     const partial = okx.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart && !c.confirm);
     if (partial) {
+      attempts.push({ source: "okx_live", ok: true, status: okx.status });
       return {
-        start_ts: partial.candle_ts,
-        open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
-        minutes_elapsed: minutesElapsed,
-        source: "okx",
+        snapshot: {
+          start_ts: partial.candle_ts,
+          open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
+          minutes_elapsed: minutesElapsed, source: "okx",
+        },
+        path: "okx_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
       };
     }
+    attempts.push({ source: "okx_live", ok: false, status: okx.status, reason: "no unconfirmed row at currentStart" });
+  } else {
+    attempts.push({ source: "okx_live", ok: false, status: okx.status, reason: okx.error ?? "empty response" });
   }
-  // Coinbase fallback
+
+  const bn = await tryBinancePartial(currentStart, minutesElapsed);
+  if (bn.partial) {
+    attempts.push({ source: "binance_live", ok: true, status: bn.status });
+    return { snapshot: bn.partial, path: "binance_live", attempts, synthesized: false, last_closed_close: lastClosedClose };
+  }
+  attempts.push({ source: "binance_live", ok: false, status: bn.status, reason: bn.error });
+
   const cb = await tryCoinbaseCandles();
-  const partial = cb.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart);
-  if (partial) {
-    return {
-      start_ts: partial.candle_ts,
-      open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
-      minutes_elapsed: minutesElapsed,
-      source: "coinbase",
-    };
+  if (cb.candles.length) {
+    const partial = cb.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart);
+    if (partial) {
+      attempts.push({ source: "coinbase_live", ok: true, status: cb.status });
+      return {
+        snapshot: {
+          start_ts: partial.candle_ts,
+          open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
+          minutes_elapsed: minutesElapsed, source: "coinbase",
+        },
+        path: "coinbase_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
+      };
+    }
+    attempts.push({ source: "coinbase_live", ok: false, status: cb.status, reason: "no row at currentStart" });
+  } else {
+    attempts.push({ source: "coinbase_live", ok: false, status: cb.status, reason: cb.error ?? "empty response" });
   }
-  return null;
+
+  const synth = await trySpotSynthesizedPartial(currentStart, minutesElapsed, lastClosedClose);
+  if (synth.partial) {
+    attempts.push({ source: "spot_synth", ok: true });
+    return { snapshot: synth.partial, path: "synthesized_from_spot", attempts, synthesized: true, last_closed_close: lastClosedClose };
+  }
+  attempts.push({ source: "spot_synth", ok: false, reason: synth.error });
+
+  return { snapshot: null, path: "unavailable", attempts, synthesized: false, last_closed_close: lastClosedClose };
 }
 
 /**
