@@ -23,6 +23,11 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "candle_ts", label: "candle_ts_utc" },
   { key: "candle_ts_mt", label: "candle_ts_mt" },
   { key: "candle_ends_at", label: "candle_ends_at_utc" },
+  { key: "input_candle_ts", label: "input_candle_ts_utc" },
+  { key: "input_candle_ts_mt", label: "input_candle_ts_mt" },
+  { key: "input_candle_age_seconds", label: "input_candle_age_seconds" },
+  { key: "input_features_fresh", label: "input_features_fresh" },
+  { key: "freshness_action", label: "freshness_action" },
   { key: "resolved_at", label: "resolved_at_utc" },
   { key: "seconds_to_resolve", label: "seconds_to_resolve" },
   { key: "symbol", label: "symbol" },
@@ -163,7 +168,7 @@ function enrich(p: PredRow): PredRow {
   const body = hasActual ? Math.abs(close - open) : NaN;
   const upperWick = hasActual ? high - Math.max(open, close) : NaN;
   const lowerWick = hasActual ? Math.min(open, close) - low : NaN;
-  const actualDir = hasActual ? (close > open ? "GREEN" : close < open ? "RED" : "DOJI") : "";
+  const actualDir = p.actual_direction ?? (hasActual ? (close > open ? "GREEN" : close < open ? "RED" : "DOJI") : "");
   const changeAbs = hasActual ? close - open : NaN;
   const changePct = hasActual && open ? (changeAbs / open) * 100 : NaN;
 
@@ -187,6 +192,7 @@ function enrich(p: PredRow): PredRow {
     ...p,
     created_at_mt: fmtMT(String(p.created_at)),
     candle_ts_mt: fmtMT(candleTs),
+    input_candle_ts_mt: fmtMT(typeof p.input_candle_ts === "string" ? p.input_candle_ts : null),
     candle_ends_at: candleEnds,
     seconds_to_resolve: secondsToResolve,
     confidence_bucket: bucket,
