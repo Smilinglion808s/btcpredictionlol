@@ -737,12 +737,66 @@ export async function resolvePredictionsServer(
     }
   } while (Date.now() < deadline);
 
+  // Reconciliation pass: re-check recently-resolved predictions that fell back
+  // to OHLC because Kalshi wasn't finalized yet. Kalshi is source of truth —
+  // if it now disagrees with the OHLC-based grade, correct the row.
+  let reconciled = 0;
+  const reconciledDetails: Array<{ id: string; from: string; to: string; ticker?: string }> = [];
+  try {
+    const cutoffIso = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await supabase
+      .from("predictions")
+      .select("id, prediction, candle_ts, status, settlement_source")
+      .in("status", ["win", "loss", "push"])
+      .gte("candle_ts", cutoffIso)
+      .order("candle_ts", { ascending: false })
+      .limit(50);
+    for (const p of recent ?? []) {
+      const src = ((p as { settlement_source?: string }).settlement_source ?? "") as string;
+      if (src.startsWith("kalshi")) continue;
+      const kalshi = await fetchKalshiResolution(p.candle_ts);
+      if (!kalshi) continue;
+      let newStatus: "win" | "loss" | "push";
+      if (p.prediction === "YES") newStatus = kalshi.result === "YES" ? "win" : "loss";
+      else if (p.prediction === "NO") newStatus = kalshi.result === "NO" ? "win" : "loss";
+      else newStatus = "push";
+      if (newStatus === p.status) {
+        await supabase
+          .from("predictions")
+          .update({
+            settlement_source: `kalshi+${src || "reconciled"}`,
+            settlement_ticker: kalshi.ticker,
+            settlement_value: kalshi.settlement_value ?? null,
+          })
+          .eq("id", p.id);
+        continue;
+      }
+      await supabase
+        .from("predictions")
+        .update({
+          status: newStatus,
+          actual_direction: kalshi.result === "YES" ? "GREEN" : kalshi.result === "NO" ? "RED" : "DOJI",
+          settlement_source: `kalshi+${src || "reconciled"}`,
+          settlement_ticker: kalshi.ticker,
+          settlement_value: kalshi.settlement_value ?? null,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", p.id);
+      reconciled++;
+      if (reconciledDetails.length < 20) {
+        reconciledDetails.push({ id: p.id, from: p.status as string, to: newStatus, ticker: kalshi.ticker });
+      }
+    }
+  } catch {
+    // best-effort — never fail resolve loop on reconcile errors
+  }
+
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pendingCount, watch_ms: watchMs },
-    response_payload: { resolved, checked, resolver: "kalshi_primary_okx_coinbase_fallback", attempts },
+    response_payload: { resolved, checked, resolver: "kalshi_primary_okx_coinbase_fallback", attempts, reconciled, reconciledDetails },
     success: true,
   });
 
-  return { resolved, pending: pendingCount, attempts };
+  return { resolved, pending: pendingCount, attempts, reconciled };
 }
