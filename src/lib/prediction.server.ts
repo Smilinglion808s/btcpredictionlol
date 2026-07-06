@@ -619,15 +619,41 @@ export async function resolvePredictionsServer(
 
       unresolvedClosed++;
       let resolution:
-        | { result: "YES" | "NO" | "DOJI"; candle: ResolutionCandle; source: string; ticker?: string }
+        | {
+            result: "YES" | "NO" | "DOJI";
+            candle: ResolutionCandle;
+            source: string;
+            ticker?: string;
+            settlement_value?: number;
+          }
         | null = null;
 
+      // 1) Kalshi is the settlement source of truth (KXBTC15M — CF Benchmarks BRTI).
+      const kalshi = await fetchKalshiResolution(p.candle_ts);
+
+      // 2) Always try to fetch OHLC audit candle from OKX/Coinbase (used for
+      //    audit columns even when Kalshi decides the outcome).
       const actual = await fetchActualResolutionCandle(p.candle_ts, TF_MS);
-      if (actual) {
-        const validOhlc =
-          Number.isFinite(actual.open) && Number.isFinite(actual.close) &&
-          Number.isFinite(actual.high) && Number.isFinite(actual.low) &&
-          actual.open > 0 && actual.close > 0;
+      const validOhlc =
+        !!actual &&
+        Number.isFinite(actual.open) && Number.isFinite(actual.close) &&
+        Number.isFinite(actual.high) && Number.isFinite(actual.low) &&
+        actual.open > 0 && actual.close > 0;
+
+      if (kalshi) {
+        // Fall back to a zeroed candle only if OHLC is unavailable — Kalshi
+        // decides the outcome; OHLC is descriptive.
+        const candle: ResolutionCandle = validOhlc
+          ? (actual as ResolutionCandle)
+          : { open: 0, high: 0, low: 0, close: 0, confirm: true };
+        resolution = {
+          result: kalshi.result,
+          candle,
+          source: `kalshi${validOhlc ? `+${(actual as any).source}` : ""}`,
+          ticker: kalshi.ticker,
+          settlement_value: kalshi.settlement_value,
+        };
+      } else if (actual) {
         if (!validOhlc) {
           await supabase.from("api_runs").insert({
             run_type: "resolve-predictions",
@@ -641,12 +667,14 @@ export async function resolvePredictionsServer(
           }
           continue;
         }
+        // Kalshi not finalized yet — use OHLC-based fallback so we don't
+        // block indefinitely if Kalshi is unreachable.
         resolution = { result: candleResult(actual), candle: actual, source: actual.source };
       }
 
       if (!resolution) {
         if (checked.length < 30) {
-          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "okx/coinbase", resolved: false });
+          checked.push({ id: p.id, candle_ts: p.candle_ts, source: "kalshi/okx/coinbase", resolved: false });
         }
         continue;
       }
@@ -657,15 +685,19 @@ export async function resolvePredictionsServer(
       else if (p.prediction === "NO") status = resolution.result === "NO" ? "win" : "loss";
       else status = "push";
 
+      const hasOhlc = resolution.candle.open > 0;
       const { error: updateError } = await supabase
         .from("predictions")
         .update({
           status,
-          actual_next_candle_open: resolution.candle.open,
-          actual_next_candle_high: resolution.candle.high,
-          actual_next_candle_low: resolution.candle.low,
-          actual_next_candle_close: resolution.candle.close,
-          actual_direction: actualDirection(resolution.candle),
+          actual_next_candle_open: hasOhlc ? resolution.candle.open : null,
+          actual_next_candle_high: hasOhlc ? resolution.candle.high : null,
+          actual_next_candle_low: hasOhlc ? resolution.candle.low : null,
+          actual_next_candle_close: hasOhlc ? resolution.candle.close : null,
+          actual_direction: hasOhlc ? actualDirection(resolution.candle) : null,
+          settlement_source: resolution.source,
+          settlement_ticker: resolution.ticker ?? null,
+          settlement_value: resolution.settlement_value ?? null,
           resolved_at: new Date().toISOString(),
         })
         .eq("id", p.id)
