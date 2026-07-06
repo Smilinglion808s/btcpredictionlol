@@ -227,13 +227,54 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .maybeSingle();
     if (existing) return existing;
 
-    // Fetch the currently-forming candle (best-effort — never blocks predict).
+    // Fetch the currently-forming candle. buildPartialCandleContext tries DB
+    // (populated by the fetch phase seconds earlier) then OKX/Binance/Coinbase
+    // live, and finally synthesizes from spot ticker so the snapshot is
+    // effectively always available. Every attempt is recorded for auditing.
     let partial: PartialCandle | null = null;
+    let partialPath = "unavailable" as
+      | "db_unconfirmed" | "okx_live" | "binance_live" | "coinbase_live"
+      | "synthesized_from_spot" | "unavailable";
+    let partialAttempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }> = [];
+    let partialSynthesized = false;
     try {
-      partial = await fetchCurrentPartialCandle();
-    } catch {
-      partial = null;
+      const ctx = await buildPartialCandleContext(supabase);
+      partial = ctx.snapshot;
+      partialPath = ctx.path;
+      partialAttempts = ctx.attempts;
+      partialSynthesized = ctx.synthesized;
+    } catch (e) {
+      partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
     }
+
+    if (!partial || partialSynthesized) {
+      await supabase.from("api_runs").insert({
+        run_type: "partial-candle-fetch",
+        request_payload: { target_candle_ts_hint: null },
+        response_payload: { path: partialPath, synthesized: partialSynthesized, attempts: partialAttempts },
+        success: !!partial,
+        error_message: !partial ? `No partial candle: ${partialAttempts.map((a) => `${a.source}:${a.reason ?? "ok"}`).join(" | ")}` : null,
+      });
+    }
+
+    // fetch_source: always populate. Prefer the source that produced the
+    // latest candle row in the DB (works on the fresh-path too, not just refetch).
+    if (!fetchSource) {
+      try {
+        const { data: latestCandleRow } = await supabase
+          .from("candles")
+          .select("fetch_source")
+          .eq("symbol", "BTC-USDT").eq("timeframe", "15m")
+          .order("candle_ts", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const fs = (latestCandleRow as { fetch_source?: string } | null)?.fetch_source;
+        if (fs === "okx" || fs === "coinbase") fetchSource = fs;
+      } catch {
+        // non-fatal
+      }
+    }
+
 
     if (!freshness.inputFeaturesFresh || !advanceCheckPassed) {
       const staleMessage = !advanceCheckPassed
