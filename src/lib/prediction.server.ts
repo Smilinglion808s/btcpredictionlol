@@ -148,25 +148,26 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
   let errorMessage: string | null = null;
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not set. Add it in project settings.");
-    }
-
-    const { data: candles, error: cErr } = await supabase
-      .from("candles")
-      .select("candle_ts, open, high, low, close, volume")
-      .eq("symbol", "BTC-USDT")
-      .eq("timeframe", "15m")
-      .order("candle_ts", { ascending: false })
-      .limit(100);
-    if (cErr) throw cErr;
-    if (!candles || candles.length < 30)
+    let ordered = await loadPredictionCandles(supabase);
+    if (ordered.length < 30)
       throw new Error("Not enough candle history. Click Refresh Candles first.");
 
-    const ordered: Candle[] = candles.slice().reverse() as Candle[];
-    const indicators = computeIndicatorBundle(ordered);
-    if (!indicators) throw new Error("Failed to compute indicators");
+    let latestInput = ordered[ordered.length - 1];
+    let freshness = freshnessFor(latestInput.candle_ts);
+    let freshnessAction = freshness.inputFeaturesFresh ? "fresh" : "stale_refetch_attempted";
+
+    if (!freshness.inputFeaturesFresh) {
+      try {
+        await fetchAndUpsertOkxCandles(supabase);
+        ordered = await loadPredictionCandles(supabase);
+        if (ordered.length < 30) throw new Error("Not enough candle history after refresh.");
+        latestInput = ordered[ordered.length - 1];
+        freshness = freshnessFor(latestInput.candle_ts);
+        freshnessAction = freshness.inputFeaturesFresh ? "refetched_fresh" : "forced_no_clear_edge_stale_after_refetch";
+      } catch (e) {
+        freshnessAction = `forced_no_clear_edge_refetch_failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
 
     const { data: settings } = await supabase
       .from("model_settings")
@@ -176,12 +177,13 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .maybeSingle();
     if (!settings) throw new Error("No active model settings");
 
+    const indicators = computeIndicatorBundle(ordered);
+    if (!indicators) throw new Error("Failed to compute indicators");
+
     const last = indicators.last;
     // Target candle = the UPCOMING candle (next 15m boundary). Cron fires ~1m
     // before that boundary so we predict the candle about to open.
-    const TF_MS = 15 * 60 * 1000;
     const targetCandleTs = new Date(Math.ceil(Date.now() / TF_MS) * TF_MS).toISOString();
-    void nextCandleTs;
 
     // Idempotency: if a prediction already exists for this candle + model, return it.
     const { data: existing } = await supabase
@@ -189,10 +191,62 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       .select("*")
       .eq("symbol", "BTC-USDT")
       .eq("timeframe", "15m")
-      .eq("model_version", (await supabase.from("model_settings").select("model_version").eq("is_active", true).maybeSingle()).data?.model_version ?? "")
+      .eq("model_version", settings.model_version)
       .eq("candle_ts", targetCandleTs)
       .maybeSingle();
     if (existing) return existing;
+
+    if (!freshness.inputFeaturesFresh) {
+      const staleMessage = `Forced NO CLEAR EDGE: latest input candle ${freshness.inputCandleTs} is ${freshness.inputCandleAgeSeconds}s old.`;
+      const forcedPayload = {
+        symbol: "BTC-USDT",
+        timeframe: "15m",
+        model_version: settings.model_version,
+        api_model_id: (settings as any).api_model_id || null,
+        candle_ts: targetCandleTs,
+        prediction: "NO CLEAR EDGE",
+        confidence: 0,
+        btc_price_at_prediction: Number(last.close),
+        setup_type: "STALE_INPUT_FORCED_SKIP",
+        market_condition: null,
+        reasoning_summary: staleMessage,
+        full_ai_response: {
+          forced_no_clear_edge: true,
+          reason: "stale_input_features",
+          input_candle_ts: freshness.inputCandleTs,
+          input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+          freshness_action: freshnessAction,
+        },
+        indicators: indicators as unknown as Record<string, unknown>,
+        orderbook: null,
+        status: "push",
+        input_candle_ts: freshness.inputCandleTs,
+        input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+        input_features_fresh: false,
+        freshness_action: freshnessAction,
+      };
+
+      const { data: forced, error: forcedErr } = await supabase
+        .from("predictions")
+        .insert(forcedPayload as any)
+        .select()
+        .single();
+      if (forcedErr) throw forcedErr;
+
+      await supabase.from("api_runs").insert({
+        run_type: "run-ai-prediction",
+        request_payload: { skipped_openai: true, reason: "stale_input_features", freshness: forcedPayload.full_ai_response },
+        response_payload: { prediction_id: forced.id, prediction: forced.prediction, duration_ms: Date.now() - started },
+        success: true,
+      });
+
+      return forced;
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not set. Add it in project settings.");
+    }
 
 
 
