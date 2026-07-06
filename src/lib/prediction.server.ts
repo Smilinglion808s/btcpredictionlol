@@ -279,6 +279,9 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       model_version: settings.model_version,
       candles: candlesForPrompt,
       computed_indicators: {
+        input_candle_ts: freshness.inputCandleTs,
+        input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+        input_features_fresh: freshness.inputFeaturesFresh,
         trend: indicators.trend,
         ema9: indicators.ema9,
         ema21: indicators.ema21,
@@ -305,11 +308,11 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     try {
       const { data: recent } = await supabase
         .from("predictions")
-        .select("prediction, status, setup_type, candle_ts, resolved_at")
+        .select("prediction, status, setup_type, candle_ts, resolved_at, input_features_fresh")
         .in("status", ["win", "loss", "push"])
         .order("candle_ts", { ascending: false })
         .limit(8);
-      const arr = recent ?? [];
+      const arr = (recent ?? []).filter((r) => r.input_features_fresh === true);
       const lastResolved = arr.find((r) => r.status === "win" || r.status === "loss") ?? null;
       // Count same-direction losses in last 4 resolved (win/loss only)
       const last4 = arr.filter((r) => r.status === "win" || r.status === "loss").slice(0, 4);
@@ -460,6 +463,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
       status,
+      input_candle_ts: freshness.inputCandleTs,
+      input_candle_age_seconds: freshness.inputCandleAgeSeconds,
+      input_features_fresh: freshness.inputFeaturesFresh,
+      freshness_action: freshnessAction,
     };
 
     const { data: inserted, error: insErr } = await supabase
@@ -484,7 +491,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
-      request_payload: { model: modelId, candle_count: candlesForPrompt.length },
+      request_payload: { model: modelId, candle_count: candlesForPrompt.length, input_candle_ts: freshness.inputCandleTs, input_candle_age_seconds: freshness.inputCandleAgeSeconds, freshness_action: freshnessAction },
       response_payload: { prediction_id: inserted.id, confidence: inserted.confidence, prediction: inserted.prediction, duration_ms: Date.now() - started },
       success: true,
     });
