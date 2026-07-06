@@ -740,7 +740,7 @@ export async function resolvePredictionsServer(
   await supabase.from("api_runs").insert({
     run_type: "resolve-predictions",
     request_payload: { pending_count: pendingCount, watch_ms: watchMs },
-    response_payload: { resolved, checked, resolver: "okx_primary_coinbase_fallback", attempts },
+    response_payload: { resolved, checked, resolver: "kalshi_primary_okx_coinbase_fallback", attempts },
     success: true,
   });
 
