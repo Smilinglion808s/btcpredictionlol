@@ -251,6 +251,9 @@ export type Database = {
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
+          settlement_source: string | null
+          settlement_ticker: string | null
+          settlement_value: number | null
           setup_type: string | null
           status: string
           symbol: string
@@ -285,6 +288,9 @@ export type Database = {
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          settlement_source?: string | null
+          settlement_ticker?: string | null
+          settlement_value?: number | null
           setup_type?: string | null
           status?: string
           symbol?: string
@@ -319,6 +325,9 @@ export type Database = {
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          settlement_source?: string | null
+          settlement_ticker?: string | null
+          settlement_value?: number | null
           setup_type?: string | null
           status?: string
           symbol?: string
@@ -357,6 +366,9 @@ export type Database = {
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
+          settlement_source: string | null
+          settlement_ticker: string | null
+          settlement_value: number | null
           setup_type: string | null
           status: string
           symbol: string
@@ -392,6 +404,9 @@ export type Database = {
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          settlement_source?: string | null
+          settlement_ticker?: string | null
+          settlement_value?: number | null
           setup_type?: string | null
           status?: string
           symbol?: string
@@ -427,6 +442,9 @@ export type Database = {
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          settlement_source?: string | null
+          settlement_ticker?: string | null
+          settlement_value?: number | null
           setup_type?: string | null
           status?: string
           symbol?: string
