@@ -855,6 +855,41 @@ Server enforces these rules regardless of your output — but you must reason ab
     const vetoDirection: "blocked_yes" | "blocked_no" | null =
       vetoDirRaw === "blocked_yes" || vetoDirRaw === "blocked_no" ? vetoDirRaw : null;
 
+    // ---- Model 5 agreement money gate (server-enforced) ----
+    const modelReportedTradeStatusRaw = String(parsed.trade_status ?? "").toUpperCase().trim();
+    const rawSetupLabel = String(parsed.final_interpretation ?? parsed.setup_type ?? "").toLowerCase();
+    const isStrong = /strong_directional/.test(rawSetupLabel);
+    const isPremium = /premium_directional/.test(rawSetupLabel);
+    const model5Active = isModel5(settings.model_version);
+    let agreementGateApplied = false;
+    let agreementGateReason: string | null = null;
+    let finalTradeStatus: string | null = modelReportedTradeStatusRaw || null;
+
+    if (model5Active) {
+      if (rawCall === "NO CLEAR EDGE") {
+        agreementGateReason = "n/a_nce";
+        finalTradeStatus = "SKIP";
+      } else if (serverAgreement === "disagree") {
+        agreementGateApplied = true;
+        agreementGateReason = "disagree";
+        finalTradeStatus = "AVOID";
+      } else if ((isStrong || isPremium) && serverAgreement !== "agree") {
+        agreementGateApplied = true;
+        agreementGateReason = isPremium ? "premium_requires_agree" : "strong_requires_agree";
+        finalTradeStatus = "AVOID";
+      } else {
+        agreementGateReason = "pass";
+        if (!finalTradeStatus) finalTradeStatus = rawCall === "NO CLEAR EDGE" ? "SKIP" : "TRADE";
+      }
+    }
+
+    const gateNote = agreementGateApplied
+      ? `Model5 gate: AVOID (${agreementGateReason})`
+      : null;
+    if (gateNote) notesParts.push(gateNote);
+
+    const configHash = computeConfigHash(settings as Record<string, unknown>);
+
     const insertPayload = {
       symbol: "BTC-USDT",
       timeframe: "15m",
@@ -875,6 +910,9 @@ Server enforces these rules regardless of your output — but you must reason ab
         partial_candle_synthesized: partialSynthesized,
         model_reported_partial_agreement: modelAgreementRaw || null,
         server_computed_partial_agreement: serverAgreement,
+        model_reported_trade_status: modelReportedTradeStatusRaw || null,
+        model_reported_agreement_gate_applied: asBool(parsedRec.agreement_gate_applied),
+        model_reported_agreement_gate_reason: String(parsedRec.agreement_gate_reason ?? "") || null,
       },
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
@@ -896,7 +934,12 @@ Server enforces these rules regardless of your output — but you must reason ab
       partial_veto_direction: vetoDirection,
       partial_hard_override_fired: asBool(parsedRec.partial_hard_override_fired),
       conflict_downgrade_applied: asBool(parsedRec.conflict_downgrade_applied),
+      config_hash: configHash,
+      agreement_gate_applied: agreementGateApplied,
+      agreement_gate_reason: agreementGateReason,
+      final_trade_status: finalTradeStatus,
     };
+
 
 
     const { data: inserted, error: insErr } = await supabase
