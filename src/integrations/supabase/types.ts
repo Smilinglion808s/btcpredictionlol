@@ -667,6 +667,10 @@ export type Database = {
     }
     Functions: {
       prediction_stats: { Args: never; Returns: Json }
+      prediction_stats_filtered: {
+        Args: { model_version_filter?: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
