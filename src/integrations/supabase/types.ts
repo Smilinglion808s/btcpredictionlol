@@ -233,9 +233,12 @@ export type Database = {
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          conflict_downgrade_applied: boolean
           created_at: string
           current_partial_minutes_elapsed: number | null
           current_partial_snapshot: Json | null
+          degraded_mode: boolean
+          feed_mismatch: boolean
           fetch_source: string | null
           freshness_action: string | null
           full_ai_response: Json | null
@@ -248,6 +251,21 @@ export type Database = {
           model_version: string
           notes: string | null
           orderbook: Json | null
+          partial_agreement: string
+          partial_close_position_pct: number | null
+          partial_completeness: number | null
+          partial_direction: string | null
+          partial_fetch_source: string | null
+          partial_hard_override_fired: boolean
+          partial_module_bear_pts: number
+          partial_module_bull_pts: number
+          partial_range_vs_atr: number | null
+          partial_snapshot_failure_reason: string | null
+          partial_snapshot_present: boolean
+          partial_veto_active: boolean
+          partial_veto_direction: string | null
+          partial_veto_tier: string
+          partial_vwap_event: string
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
@@ -270,9 +288,12 @@ export type Database = {
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
+          degraded_mode?: boolean
+          feed_mismatch?: boolean
           fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
@@ -285,6 +306,21 @@ export type Database = {
           model_version: string
           notes?: string | null
           orderbook?: Json | null
+          partial_agreement?: string
+          partial_close_position_pct?: number | null
+          partial_completeness?: number | null
+          partial_direction?: string | null
+          partial_fetch_source?: string | null
+          partial_hard_override_fired?: boolean
+          partial_module_bear_pts?: number
+          partial_module_bull_pts?: number
+          partial_range_vs_atr?: number | null
+          partial_snapshot_failure_reason?: string | null
+          partial_snapshot_present?: boolean
+          partial_veto_active?: boolean
+          partial_veto_direction?: string | null
+          partial_veto_tier?: string
+          partial_vwap_event?: string
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -307,9 +343,12 @@ export type Database = {
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
+          conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
+          degraded_mode?: boolean
+          feed_mismatch?: boolean
           fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
@@ -322,6 +361,21 @@ export type Database = {
           model_version?: string
           notes?: string | null
           orderbook?: Json | null
+          partial_agreement?: string
+          partial_close_position_pct?: number | null
+          partial_completeness?: number | null
+          partial_direction?: string | null
+          partial_fetch_source?: string | null
+          partial_hard_override_fired?: boolean
+          partial_module_bear_pts?: number
+          partial_module_bull_pts?: number
+          partial_range_vs_atr?: number | null
+          partial_snapshot_failure_reason?: string | null
+          partial_snapshot_present?: boolean
+          partial_veto_active?: boolean
+          partial_veto_direction?: string | null
+          partial_veto_tier?: string
+          partial_vwap_event?: string
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -348,9 +402,12 @@ export type Database = {
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          conflict_downgrade_applied: boolean
           created_at: string
           current_partial_minutes_elapsed: number | null
           current_partial_snapshot: Json | null
+          degraded_mode: boolean
+          feed_mismatch: boolean
           fetch_source: string | null
           freshness_action: string | null
           full_ai_response: Json | null
@@ -363,6 +420,21 @@ export type Database = {
           model_version: string
           notes: string | null
           orderbook: Json | null
+          partial_agreement: string
+          partial_close_position_pct: number | null
+          partial_completeness: number | null
+          partial_direction: string | null
+          partial_fetch_source: string | null
+          partial_hard_override_fired: boolean
+          partial_module_bear_pts: number
+          partial_module_bull_pts: number
+          partial_range_vs_atr: number | null
+          partial_snapshot_failure_reason: string | null
+          partial_snapshot_present: boolean
+          partial_veto_active: boolean
+          partial_veto_direction: string | null
+          partial_veto_tier: string
+          partial_vwap_event: string
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
@@ -386,9 +458,12 @@ export type Database = {
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
+          degraded_mode?: boolean
+          feed_mismatch?: boolean
           fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
@@ -401,6 +476,21 @@ export type Database = {
           model_version: string
           notes?: string | null
           orderbook?: Json | null
+          partial_agreement?: string
+          partial_close_position_pct?: number | null
+          partial_completeness?: number | null
+          partial_direction?: string | null
+          partial_fetch_source?: string | null
+          partial_hard_override_fired?: boolean
+          partial_module_bear_pts?: number
+          partial_module_bull_pts?: number
+          partial_range_vs_atr?: number | null
+          partial_snapshot_failure_reason?: string | null
+          partial_snapshot_present?: boolean
+          partial_veto_active?: boolean
+          partial_veto_direction?: string | null
+          partial_veto_tier?: string
+          partial_vwap_event?: string
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
@@ -424,9 +514,12 @@ export type Database = {
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
+          conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
+          degraded_mode?: boolean
+          feed_mismatch?: boolean
           fetch_source?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
@@ -439,6 +532,21 @@ export type Database = {
           model_version?: string
           notes?: string | null
           orderbook?: Json | null
+          partial_agreement?: string
+          partial_close_position_pct?: number | null
+          partial_completeness?: number | null
+          partial_direction?: string | null
+          partial_fetch_source?: string | null
+          partial_hard_override_fired?: boolean
+          partial_module_bear_pts?: number
+          partial_module_bull_pts?: number
+          partial_range_vs_atr?: number | null
+          partial_snapshot_failure_reason?: string | null
+          partial_snapshot_present?: boolean
+          partial_veto_active?: boolean
+          partial_veto_direction?: string | null
+          partial_veto_tier?: string
+          partial_vwap_event?: string
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
