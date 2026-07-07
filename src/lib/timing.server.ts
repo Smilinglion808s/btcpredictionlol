@@ -28,6 +28,21 @@ async function fetchCoinbaseTime() {
   return { serverMs, rttMs: t1 - t0 };
 }
 
+async function fetchOkxTime() {
+  const t0 = Date.now();
+  const r = await fetch("https://www.okx.com/api/v5/public/time", {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+  const t1 = Date.now();
+  if (!r.ok) throw new Error(`OKX time ${r.status}`);
+  const json = (await r.json()) as { data?: Array<{ ts?: string }> };
+  const serverMs = Number(json.data?.[0]?.ts);
+  if (!Number.isFinite(serverMs)) throw new Error("OKX time invalid");
+  return { serverMs, rttMs: t1 - t0 };
+}
+
+
 async function fetchKalshiCloseTime(nextCloseMs: number) {
   const candleStartIso = new Date(nextCloseMs - BTC_15M_TF_MS).toISOString();
   const ticker = buildKalshiEventTicker(candleStartIso);
