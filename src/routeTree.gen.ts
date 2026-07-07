@@ -16,6 +16,7 @@ import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
+import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
@@ -56,6 +57,11 @@ const AuthenticatedSettingsModelRoute =
     path: '/settings/model',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
+  id: '/api/public/timing/btc-15m',
+  path: '/api/public/timing/btc-15m',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicPredictionsUpcomingRoute =
   ApiPublicPredictionsUpcomingRouteImport.update({
     id: '/api/public/predictions/upcoming',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
+  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesByTo {
   '/daily': typeof AuthenticatedDailyRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
+  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
+  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
+    | '/api/public/timing/btc-15m'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/daily'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
+    | '/api/public/timing/btc-15m'
   id:
     | '__root__'
     | '/_authenticated'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
+    | '/api/public/timing/btc-15m'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
+  ApiPublicTimingBtc15mRoute: typeof ApiPublicTimingBtc15mRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -217,6 +230,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/model'
       preLoaderRoute: typeof AuthenticatedSettingsModelRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/timing/btc-15m': {
+      id: '/api/public/timing/btc-15m'
+      path: '/api/public/timing/btc-15m'
+      fullPath: '/api/public/timing/btc-15m'
+      preLoaderRoute: typeof ApiPublicTimingBtc15mRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/predictions/upcoming': {
       id: '/api/public/predictions/upcoming'
@@ -276,17 +296,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
+  ApiPublicTimingBtc15mRoute: ApiPublicTimingBtc15mRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

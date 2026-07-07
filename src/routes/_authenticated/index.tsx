@@ -238,29 +238,33 @@ function HeaderStrip(props: {
 }) {
   const [now, setNow] = useState(Date.now());
   const [offset, setOffset] = useState(0); // serverTime - localTime (ms)
-  const [kalshiNextClose, setKalshiNextClose] = useState<number | null>(null);
+  const [exchangeNextClose, setExchangeNextClose] = useState<number | null>(null);
+  const [exchangeNextPrediction, setExchangeNextPrediction] = useState<number | null>(null);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
     let cancelled = false;
-    const fetchCoinbaseTime = async () => {
-      const t0 = Date.now();
-      const r = await fetch("https://api.exchange.coinbase.com/time", { cache: "no-store" });
-      const t1 = Date.now();
-      if (!r.ok) throw new Error(`Coinbase time ${r.status}`);
-      const j = (await r.json()) as { iso: string; epoch?: number };
-      const serverMs = Number.isFinite(j.epoch) ? Number(j.epoch) * 1000 : new Date(j.iso).getTime();
-      return { serverMs, rtt: t1 - t0 };
-    };
     const sync = async () => {
-      const coinbase = await fetchCoinbaseTime();
-      if (!Number.isFinite(coinbase.serverMs) || cancelled) return;
-      // Adjust for one-way latency (~half RTT) to estimate true server time at t1.
-      const localAtResponse = Date.now();
-      const serverAtResponse = coinbase.serverMs + coinbase.rtt / 2;
-      setOffset(serverAtResponse - localAtResponse);
+      try {
+        const r = await fetch("/api/public/timing/btc-15m", { cache: "no-store" });
+        if (!r.ok) throw new Error(`Timing ${r.status}`);
+        const data = (await r.json()) as {
+          server_now_ms: number;
+          next_close_ms: number;
+          next_prediction_ms: number;
+        };
+        if (cancelled || !Number.isFinite(data.server_now_ms)) return;
+        setOffset(data.server_now_ms - Date.now());
+        setExchangeNextClose(Number.isFinite(data.next_close_ms) ? data.next_close_ms : null);
+        setExchangeNextPrediction(Number.isFinite(data.next_prediction_ms) ? data.next_prediction_ms : null);
+      } catch {
+        if (!cancelled) {
+          setExchangeNextClose(null);
+          setExchangeNextPrediction(null);
+        }
+      }
     };
     sync();
     const i = setInterval(sync, 20_000);
@@ -269,48 +273,10 @@ function HeaderStrip(props: {
 
   const TF = 15 * 60 * 1000;
   const serverNow = now + offset;
-  useEffect(() => {
-    let cancelled = false;
-    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-    const tickerForClose = (closeMs: number) => {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        year: "2-digit",
-        month: "numeric",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).formatToParts(new Date(closeMs));
-      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-      const monthIndex = Math.max(0, Number(get("month")) - 1);
-      const hour = get("hour") === "24" ? "00" : get("hour").padStart(2, "0");
-      return `KXBTC15M-${get("year")}${months[monthIndex]}${get("day")}${hour}${get("minute")}`;
-    };
-    const syncKalshiClose = async () => {
-      const currentServerNow = Date.now() + offset;
-      const fallbackClose = Math.floor(currentServerNow / TF) * TF + TF;
-      const ticker = tickerForClose(fallbackClose);
-      try {
-        const r = await fetch(`https://api.elections.kalshi.com/trade-api/v2/events/${ticker}`, {
-          cache: "no-store",
-          headers: { accept: "application/json" },
-        });
-        if (!r.ok) throw new Error(`Kalshi event ${r.status}`);
-        const json = (await r.json()) as { markets?: Array<{ close_time?: string }> };
-        const closeMs = new Date(json.markets?.[0]?.close_time ?? "").getTime();
-        if (!cancelled && Number.isFinite(closeMs)) setKalshiNextClose(closeMs);
-      } catch {
-        if (!cancelled) setKalshiNextClose(null);
-      }
-    };
-    syncKalshiClose();
-    const i = setInterval(syncKalshiClose, 20_000);
-    return () => { cancelled = true; clearInterval(i); };
-  }, [offset]);
-  const nextClose = kalshiNextClose && kalshiNextClose > serverNow - 1000
-    ? kalshiNextClose
-    : Math.floor(serverNow / TF) * TF + TF;
+  const fallbackNextClose = Math.floor(serverNow / TF) * TF + TF;
+  const nextClose = exchangeNextClose && exchangeNextClose > serverNow - 1000
+    ? exchangeNextClose
+    : fallbackNextClose;
 
   const fmt = (diff: number) => {
     // Use ceil so the display matches Kalshi/Coinbase (which tick 5:00 → 4:59 at rollover).
@@ -321,7 +287,9 @@ function HeaderStrip(props: {
   };
   // Prediction cron fires ~20s before each candle close
   // (cron at :14/:29/:44/:59 + pg_sleep(40) → ~:14:40/:29:40/:44:40/:59:40)
-  const nextPredictionAt = nextClose - 20_000;
+  const nextPredictionAt = exchangeNextPrediction && exchangeNextPrediction > serverNow - 1000
+    ? exchangeNextPrediction
+    : nextClose - 20_000;
   const nextPrediction = fmt((nextPredictionAt > serverNow ? nextPredictionAt : nextPredictionAt + TF) - serverNow);
   const timeLeft = fmt(nextClose - serverNow);
 
