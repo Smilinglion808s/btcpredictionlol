@@ -90,7 +90,7 @@ export const getPredictionStats = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row, error } = await sb.rpc("prediction_stats_filtered", {
-      model_version_filter: data.modelVersion ?? null,
+      model_version_filter: data.modelVersion ?? undefined,
     });
     if (error) throw error;
     return (JSON.parse(JSON.stringify(row ?? {})) as JsonValue) as { [k: string]: JsonValue };
