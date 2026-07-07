@@ -59,8 +59,22 @@ async function fetchKalshiCloseTime(nextCloseMs: number) {
 }
 
 export async function getBtc15mExchangeTiming(): Promise<Btc15mTiming> {
-  const coinbase = await fetchCoinbaseTime();
-  const serverNowMs = coinbase.serverMs + coinbase.rttMs / 2;
+  let serverNowMs = Date.now();
+  let timeSource: Btc15mTiming["timeSource"] = "local";
+  try {
+    const cb = await fetchCoinbaseTime();
+    serverNowMs = cb.serverMs + cb.rttMs / 2;
+    timeSource = "coinbase";
+  } catch (cbErr) {
+    try {
+      const okx = await fetchOkxTime();
+      serverNowMs = okx.serverMs + okx.rttMs / 2;
+      timeSource = "okx";
+    } catch {
+      console.warn("timing: falling back to local Date.now()", cbErr);
+    }
+  }
+
   const utcNextCloseMs = Math.floor(serverNowMs / BTC_15M_TF_MS) * BTC_15M_TF_MS + BTC_15M_TF_MS;
   let nextCloseMs = utcNextCloseMs;
   let kalshiTicker: string | null = null;
@@ -72,18 +86,19 @@ export async function getBtc15mExchangeTiming(): Promise<Btc15mTiming> {
     kalshiTicker = kalshi.ticker;
     closeSource = "kalshi";
   } catch {
-    // Coinbase time still anchors the 15m UTC candle boundary.
+    // Exchange time still anchors the 15m UTC candle boundary.
   }
 
   return {
     serverNowMs,
     nextCloseMs,
     nextPredictionMs: nextCloseMs - BTC_15M_PREDICTION_LEAD_MS,
-    timeSource: "coinbase",
+    timeSource,
     closeSource,
     kalshiTicker,
   };
 }
+
 
 export async function waitForBtc15mPredictionWindow(maxWaitMs = 70_000) {
   const timing = await getBtc15mExchangeTiming();
