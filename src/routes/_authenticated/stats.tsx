@@ -1,26 +1,53 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions } from "@/lib/predictions.functions";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/stats")({
   head: () => ({ meta: [{ title: "Stats — BTC 15m" }] }),
   component: StatsPage,
 });
 
+const ALL_VERSIONS = "__all__";
+
 function StatsPage() {
   const qc = useQueryClient();
   const statsFn = useServerFn(getPredictionStats);
   const listFn = useServerFn(listPredictions);
   const settingsFn = useServerFn(getActiveSettings);
-  const statsQ = useQuery({ queryKey: ["stats"], queryFn: () => statsFn(), refetchInterval: 15_000 });
-  const listQ = useQuery({ queryKey: ["predictions-list"], queryFn: () => listFn(), refetchInterval: 15_000 });
+  const versionsFn = useServerFn(listModelVersions);
+
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
+  const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
+
+  const activeVersion = settingsQ.data?.model_version ?? null;
+  const [selected, setSelected] = useState<string>(ALL_VERSIONS);
+
+  // Default the selector to the active model version once we know it.
+  useEffect(() => {
+    if (activeVersion && selected === ALL_VERSIONS) setSelected(activeVersion);
+    // only run when activeVersion first arrives
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVersion]);
+
+  const versionFilter = selected === ALL_VERSIONS ? null : selected;
+
+  const statsQ = useQuery({
+    queryKey: ["stats", versionFilter ?? "all"],
+    queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
+    refetchInterval: 15_000,
+  });
+  const listQ = useQuery({
+    queryKey: ["predictions-list", versionFilter ?? "all"],
+    queryFn: () => listFn({ data: { modelVersion: versionFilter } }),
+    refetchInterval: 15_000,
+  });
 
   useEffect(() => {
     const ch = supabase
@@ -28,6 +55,7 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["stats"] });
         qc.invalidateQueries({ queryKey: ["predictions-list"] });
+        qc.invalidateQueries({ queryKey: ["model-versions"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -36,11 +64,21 @@ function StatsPage() {
   const s = (statsQ.data ?? {}) as Record<string, unknown>;
   const num = (k: string) => Number(s[k] ?? 0);
 
-  const modelVersion = settingsQ.data?.model_version ?? "—";
+  const modelVersion = activeVersion ?? "—";
   const totalRuns = num("total");
   const resolved = num("wins") + num("losses") + num("pushes");
   const wr = num("overall_win_rate");
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
+
+  const versions = versionsQ.data ?? [];
+  const versionOptions = useMemo(() => {
+    const list = versions.map((v) => v.version);
+    if (activeVersion && !list.includes(activeVersion)) list.unshift(activeVersion);
+    return list;
+  }, [versions, activeVersion]);
+
+  const badge = /^5/.test(modelVersion) ? "M5" : /^4/.test(modelVersion) ? "M4" : /^3/.test(modelVersion) ? "M3" : "M";
+  const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
@@ -51,34 +89,52 @@ function StatsPage() {
         <CardContent className="py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="size-12 rounded-md bg-bull/20 border border-bull/40 flex items-center justify-center font-mono font-bold text-bull">
-              M2
+              {badge}
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model 2 Status</div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
               <div className="font-mono text-lg font-semibold flex items-center gap-2">
-                BTCUSDT 15m · Reduced Filter
+                BTCUSDT 15m
                 <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
                   <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
                 </span>
               </div>
-              <div className="text-xs text-muted-foreground font-mono mt-0.5">model: {modelVersion}</div>
+              <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                active: {modelVersion} · showing: {scopeLabel}
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</div>
-              <div className="font-mono text-2xl font-bold text-bull">{wr}%</div>
+          <div className="flex items-center gap-4">
+            <div className="w-44">
+              <Select value={selected} onValueChange={setSelected}>
+                <SelectTrigger className="h-9 text-xs font-mono">
+                  <SelectValue placeholder="Filter version" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_VERSIONS}>All versions</SelectItem>
+                  {versionOptions.map((v) => (
+                    <SelectItem key={v} value={v}>Model {v}{v === activeVersion ? " (active)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Resolved</div>
-              <div className="font-mono text-2xl font-bold">{resolved}</div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Runs</div>
-              <div className="font-mono text-2xl font-bold">{totalRuns}</div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</div>
+                <div className="font-mono text-2xl font-bold text-bull">{wr}%</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Resolved</div>
+                <div className="font-mono text-2xl font-bold">{resolved}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Runs</div>
+                <div className="font-mono text-2xl font-bold">{totalRuns}</div>
+              </div>
             </div>
           </div>
+
         </CardContent>
       </Card>
 
