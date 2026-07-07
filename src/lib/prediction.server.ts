@@ -8,6 +8,7 @@ import {
   type PartialCandle,
 } from "./okx.server";
 import { fetchKalshiResolution } from "./kalshi.server";
+import { getBtc15mExchangeTiming } from "./timing.server";
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
@@ -154,12 +155,13 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
   let errorMessage: string | null = null;
 
   try {
+    const exchangeTiming = await getBtc15mExchangeTiming();
     let ordered = await loadPredictionCandles(supabase);
     if (ordered.length < 30)
       throw new Error("Not enough candle history. Click Refresh Candles first.");
 
     let latestInput = ordered[ordered.length - 1];
-    let freshness = freshnessFor(latestInput.candle_ts);
+    let freshness = freshnessFor(latestInput.candle_ts, exchangeTiming.serverNowMs);
     let freshnessAction = freshness.inputFeaturesFresh ? "fresh" : "stale_refetch_attempted";
     let fetchSource: "okx" | "coinbase" | null = null;
 
@@ -170,7 +172,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         ordered = await loadPredictionCandles(supabase);
         if (ordered.length < 30) throw new Error("Not enough candle history after refresh.");
         latestInput = ordered[ordered.length - 1];
-        freshness = freshnessFor(latestInput.candle_ts);
+        freshness = freshnessFor(latestInput.candle_ts, exchangeTiming.serverNowMs);
         freshnessAction = freshness.inputFeaturesFresh ? "refetched_fresh" : "forced_no_clear_edge_stale_after_refetch";
       } catch (e) {
         freshnessAction = `forced_no_clear_edge_refetch_failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -212,9 +214,9 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     if (!indicators) throw new Error("Failed to compute indicators");
 
     const last = indicators.last;
-    // Target candle = the UPCOMING candle (next 15m boundary). Cron fires ~1m
-    // before that boundary so we predict the candle about to open.
-    const targetCandleTs = new Date(Math.ceil(Date.now() / TF_MS) * TF_MS).toISOString();
+    // Target candle = the UPCOMING candle (next 15m boundary), aligned to
+    // Coinbase time and Kalshi's market close_time when available.
+    const targetCandleTs = new Date(exchangeTiming.nextCloseMs).toISOString();
 
     // Idempotency: if a prediction already exists for this candle + model, return it.
     const { data: existing } = await supabase

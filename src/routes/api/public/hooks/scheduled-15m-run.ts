@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { fetchAndUpsertCandles } from "@/lib/okx.server";
 import { resolvePredictionsServer, runAiPredictionServer } from "@/lib/prediction.server";
+import { waitForBtc15mPredictionWindow } from "@/lib/timing.server";
 
 // Public cron endpoint hit by pg_cron every 15 minutes.
 // Auth: requires the project's anon key in the `apikey` header (pg_cron convention).
@@ -27,16 +28,36 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
         // "resolve" = post-close (fetch + resolve only). Defaults to running both.
         let phase: "predict" | "resolve" | "both" = "both";
         let watch = false;
+        let align = false;
         try {
-          const body = (await request.json()) as { phase?: string; watch?: boolean } | null;
+          const body = (await request.json()) as { phase?: string; watch?: boolean; align?: boolean } | null;
           if (body?.phase === "predict" || body?.phase === "resolve") phase = body.phase;
           watch = body?.watch === true;
+          align = body?.align === true;
         } catch {
           // empty body is fine
         }
 
         const results: Record<string, unknown> = { phase };
         const timings: Record<string, number> = {};
+
+        if (align && (phase === "predict" || phase === "both")) {
+          const t0 = Date.now();
+          try {
+            const timing = await waitForBtc15mPredictionWindow();
+            results.exchange_timing = {
+              server_now_ms: timing.serverNowMs,
+              next_close_ms: timing.nextCloseMs,
+              next_prediction_ms: timing.nextPredictionMs,
+              time_source: timing.timeSource,
+              close_source: timing.closeSource,
+              kalshi_ticker: timing.kalshiTicker,
+            };
+          } catch (e) {
+            results.exchange_timing_error = e instanceof Error ? e.message : String(e);
+          }
+          timings.align_ms = Date.now() - t0;
+        }
 
         if (phase === "predict" || phase === "both" || phase === "resolve") {
           const t0 = Date.now();

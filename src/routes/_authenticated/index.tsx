@@ -238,51 +238,33 @@ function HeaderStrip(props: {
 }) {
   const [now, setNow] = useState(Date.now());
   const [offset, setOffset] = useState(0); // serverTime - localTime (ms)
+  const [exchangeNextClose, setExchangeNextClose] = useState<number | null>(null);
+  const [exchangeNextPrediction, setExchangeNextPrediction] = useState<number | null>(null);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
     let cancelled = false;
-    // Try multiple time sources; use the one with the smallest RTT.
-    const SOURCES: Array<() => Promise<{ serverMs: number; rtt: number }>> = [
-      async () => {
-        const t0 = Date.now();
-        const r = await fetch("https://api.exchange.coinbase.com/time", { cache: "no-store" });
-        const t1 = Date.now();
-        const j = (await r.json()) as { iso: string; epoch?: number };
-        return { serverMs: new Date(j.iso).getTime(), rtt: t1 - t0 };
-      },
-      async () => {
-        const t0 = Date.now();
-        const r = await fetch("https://www.okx.com/api/v5/public/time", { cache: "no-store" });
-        const t1 = Date.now();
-        const j = (await r.json()) as { data: Array<{ ts: string }> };
-        return { serverMs: Number(j.data[0].ts), rtt: t1 - t0 };
-      },
-      async () => {
-        // Any endpoint with a Date response header works as a fallback.
-        const t0 = Date.now();
-        const r = await fetch("https://api.exchange.coinbase.com/products/BTC-USD/ticker", { cache: "no-store" });
-        const t1 = Date.now();
-        const dateHdr = r.headers.get("date");
-        if (!dateHdr) throw new Error("no date header");
-        return { serverMs: new Date(dateHdr).getTime(), rtt: t1 - t0 };
-      },
-    ];
     const sync = async () => {
-      const results = await Promise.allSettled(SOURCES.map((fn) => fn()));
-      const ok = results
-        .filter((r): r is PromiseFulfilledResult<{ serverMs: number; rtt: number }> => r.status === "fulfilled")
-        .map((r) => r.value)
-        .filter((v) => Number.isFinite(v.serverMs));
-      if (!ok.length || cancelled) return;
-      ok.sort((a, b) => a.rtt - b.rtt);
-      const best = ok[0];
-      // Adjust for one-way latency (~half RTT) to estimate true server time at t1.
-      const localAtResponse = Date.now();
-      const serverAtResponse = best.serverMs + best.rtt / 2;
-      setOffset(serverAtResponse - localAtResponse);
+      try {
+        const r = await fetch("/api/public/timing/btc-15m", { cache: "no-store" });
+        if (!r.ok) throw new Error(`Timing ${r.status}`);
+        const data = (await r.json()) as {
+          server_now_ms: number;
+          next_close_ms: number;
+          next_prediction_ms: number;
+        };
+        if (cancelled || !Number.isFinite(data.server_now_ms)) return;
+        setOffset(data.server_now_ms - Date.now());
+        setExchangeNextClose(Number.isFinite(data.next_close_ms) ? data.next_close_ms : null);
+        setExchangeNextPrediction(Number.isFinite(data.next_prediction_ms) ? data.next_prediction_ms : null);
+      } catch {
+        if (!cancelled) {
+          setExchangeNextClose(null);
+          setExchangeNextPrediction(null);
+        }
+      }
     };
     sync();
     const i = setInterval(sync, 20_000);
@@ -291,7 +273,10 @@ function HeaderStrip(props: {
 
   const TF = 15 * 60 * 1000;
   const serverNow = now + offset;
-  const nextClose = Math.floor(serverNow / TF) * TF + TF;
+  const fallbackNextClose = Math.floor(serverNow / TF) * TF + TF;
+  const nextClose = exchangeNextClose && exchangeNextClose > serverNow - 1000
+    ? exchangeNextClose
+    : fallbackNextClose;
 
   const fmt = (diff: number) => {
     // Use ceil so the display matches Kalshi/Coinbase (which tick 5:00 → 4:59 at rollover).
@@ -302,7 +287,9 @@ function HeaderStrip(props: {
   };
   // Prediction cron fires ~20s before each candle close
   // (cron at :14/:29/:44/:59 + pg_sleep(40) → ~:14:40/:29:40/:44:40/:59:40)
-  const nextPredictionAt = nextClose - 20_000;
+  const nextPredictionAt = exchangeNextPrediction && exchangeNextPrediction > serverNow - 1000
+    ? exchangeNextPrediction
+    : nextClose - 20_000;
   const nextPrediction = fmt((nextPredictionAt > serverNow ? nextPredictionAt : nextPredictionAt + TF) - serverNow);
   const timeLeft = fmt(nextClose - serverNow);
 
