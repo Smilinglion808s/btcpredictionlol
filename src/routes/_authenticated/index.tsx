@@ -271,8 +271,9 @@ function HeaderStrip(props: {
     const s = Math.floor((d % 60000) / 1000);
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
-  // Prediction cron fires ~60s before each candle close (:14/:29/:44/:59)
-  const nextPredictionAt = nextClose - 60_000;
+  // Prediction cron fires ~20s before each candle close
+  // (cron at :14/:29/:44/:59 + pg_sleep(40) → ~:14:40/:29:40/:44:40/:59:40)
+  const nextPredictionAt = nextClose - 20_000;
   const nextPrediction = fmt((nextPredictionAt > serverNow ? nextPredictionAt : nextPredictionAt + TF) - serverNow);
   const timeLeft = fmt(nextClose - serverNow);
 
