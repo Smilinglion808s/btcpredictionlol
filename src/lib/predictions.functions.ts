@@ -37,16 +37,18 @@ export const runFullCycle = createServerFn({ method: "POST" }).handler(async () 
   return { resolved, prediction };
 });
 
-export const listPredictions = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = await admin();
-  const { data, error } = await sb
-    .from("predictions")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return data ?? [];
-});
+export const listPredictions = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ modelVersion: z.string().optional().nullable() }).parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const sb = await admin();
+    let q = sb.from("predictions").select("*").order("created_at", { ascending: false }).limit(500);
+    if (data.modelVersion) q = q.eq("model_version", data.modelVersion);
+    const { data: rows, error } = await q;
+    if (error) throw error;
+    return rows ?? [];
+  });
 
 /** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
@@ -81,12 +83,38 @@ export const getLatestPrediction = createServerFn({ method: "GET" }).handler(asy
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
-export const getPredictionStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getPredictionStats = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ modelVersion: z.string().optional().nullable() }).parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const sb = await admin();
+    const { data: row, error } = await sb.rpc("prediction_stats_filtered", {
+      model_version_filter: data.modelVersion ?? null,
+    });
+    if (error) throw error;
+    return (JSON.parse(JSON.stringify(row ?? {})) as JsonValue) as { [k: string]: JsonValue };
+  });
+
+/** List of every distinct model_version present across live + archive, newest activity first. */
+export const listModelVersions = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb.rpc("prediction_stats");
-  if (error) throw error;
-  return (JSON.parse(JSON.stringify(data ?? {})) as JsonValue) as { [k: string]: JsonValue };
+  const [live, arch] = await Promise.all([
+    sb.from("predictions").select("model_version, created_at").order("created_at", { ascending: false }).limit(5000),
+    sb.from("predictions_archive").select("model_version, created_at").order("created_at", { ascending: false }).limit(5000),
+  ]);
+  const map = new Map<string, string>();
+  for (const r of [...(live.data ?? []), ...(arch.data ?? [])]) {
+    const v = (r as any).model_version as string | null;
+    if (!v) continue;
+    const t = (r as any).created_at as string;
+    if (!map.has(v) || t > (map.get(v) ?? "")) map.set(v, t);
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => (b[1] > a[1] ? 1 : -1))
+    .map(([version, last_seen]) => ({ version, last_seen }));
 });
+
 
 const overrideSchema = z.object({
   id: z.string().uuid(),
