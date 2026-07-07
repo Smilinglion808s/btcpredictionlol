@@ -1,5 +1,6 @@
 // Server-only AI prediction + resolution logic. Imported by server fns and the cron route.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import { computeIndicatorBundle, type Candle } from "./indicators";
 import {
   fetchAndUpsertCandles,
@@ -9,6 +10,24 @@ import {
 } from "./okx.server";
 import { fetchKalshiResolution } from "./kalshi.server";
 import { getBtc15mExchangeTiming } from "./timing.server";
+
+function computeConfigHash(settings: Record<string, unknown>): string {
+  const canon = JSON.stringify({
+    model_version: settings.model_version ?? null,
+    api_model_id: (settings as any).api_model_id ?? null,
+    confidence_threshold: settings.confidence_threshold ?? null,
+    indicator_weights: settings.indicator_weights ?? null,
+    prompt_template: settings.prompt_template ?? null,
+    require_manual_approval: settings.require_manual_approval ?? null,
+  });
+  return createHash("sha256").update(canon).digest("hex").slice(0, 16);
+}
+
+function isModel5(modelVersion: unknown): boolean {
+  const v = String(modelVersion ?? "").trim();
+  return /^5(\.|$)/.test(v);
+}
+
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
@@ -438,7 +457,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
         ...partialCols,
         partial_agreement: "nce" as const,
+        config_hash: computeConfigHash(settings as Record<string, unknown>),
+        agreement_gate_applied: false,
+        agreement_gate_reason: "n/a_nce",
+        final_trade_status: "SKIP",
       };
+
 
 
       const { data: forced, error: forcedErr } = await supabase
@@ -676,10 +700,34 @@ MANDATORY OUTPUT TRACKING FIELDS (module v1.1 — include ALL of these top-level
   "conflict_downgrade_applied": <boolean>                                       // whether -5 conflict downgrade was applied
 Emit these on EVERY prediction (use 0 / false / "missing" / null when not applicable — never omit).`;
 
+    const model5Addendum = isModel5(settings.model_version)
+      ? `
+
+MODEL 5 AGREEMENT MONEY GATE (v5.0 — MUST enforce before finalizing trade_status).
+
+You are running Model 5. All Model 4 logic above stays intact. Two additional trade-gating rules apply AFTER scoring, overrides, and vetoes:
+
+  RULE A — Universal agreement gate:
+    - If partial_agreement = "disagree" → trade_status MUST be "AVOID" (or "SKIP"). Never flip the prediction to the opposite side; keep the directional call, only withhold the bet.
+    - If partial_agreement IN ("agree", "neutral") → gate passes for RULE A.
+
+  RULE B — Strong/premium demotion (stricter than Rule A):
+    - If final_interpretation / setup_type is "strong_directional" or "premium_directional", trade_status = "TRADE" REQUIRES partial_agreement = "agree". "neutral" is NOT sufficient for these two tiers. If neutral or disagree → trade_status = "AVOID".
+    - All other setup tiers use RULE A only.
+
+  RULE C — Always log:
+    - Still produce the full prediction (call, confidence, all tracking fields) even when the gate withholds the bet. Shadow data is free.
+    - Include top-level "agreement_gate_applied" (boolean) and "agreement_gate_reason" (short string: "disagree", "strong_requires_agree", "premium_requires_agree", "pass", or "n/a_nce") in your JSON output.
+
+Server enforces these rules regardless of your output — but you must reason about them and set trade_status consistently.`
+      : "";
+
+
+
 
     aiPayload = {
       model: modelId,
-      instructions: `${instructions}\n${partialModuleAddendum}\n\nRespond with JSON only.`,
+      instructions: `${instructions}\n${partialModuleAddendum}${model5Addendum}\n\nRespond with JSON only.`,
       input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
       max_output_tokens: 2048,
@@ -812,6 +860,42 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
     const vetoDirection: "blocked_yes" | "blocked_no" | null =
       vetoDirRaw === "blocked_yes" || vetoDirRaw === "blocked_no" ? vetoDirRaw : null;
 
+    // ---- Model 5 agreement money gate (server-enforced) ----
+    const modelReportedTradeStatusRaw = String(parsed.trade_status ?? "").toUpperCase().trim();
+    const rawSetupLabel = String(parsed.final_interpretation ?? parsed.setup_type ?? "").toLowerCase();
+    const isStrong = /strong_directional/.test(rawSetupLabel);
+    const isPremium = /premium_directional/.test(rawSetupLabel);
+    const model5Active = isModel5(settings.model_version);
+    let agreementGateApplied = false;
+    let agreementGateReason: string | null = null;
+    let finalTradeStatus: string | null = modelReportedTradeStatusRaw || null;
+
+    if (model5Active) {
+      if (rawCall === "NO CLEAR EDGE") {
+        agreementGateReason = "n/a_nce";
+        finalTradeStatus = "SKIP";
+      } else if (serverAgreement === "disagree") {
+        agreementGateApplied = true;
+        agreementGateReason = "disagree";
+        finalTradeStatus = "AVOID";
+      } else if ((isStrong || isPremium) && serverAgreement !== "agree") {
+        agreementGateApplied = true;
+        agreementGateReason = isPremium ? "premium_requires_agree" : "strong_requires_agree";
+        finalTradeStatus = "AVOID";
+      } else {
+        agreementGateReason = "pass";
+        if (!finalTradeStatus) finalTradeStatus = "TRADE";
+      }
+
+    }
+
+    const gateNote = agreementGateApplied
+      ? `Model5 gate: AVOID (${agreementGateReason})`
+      : null;
+    if (gateNote) notesParts.push(gateNote);
+
+    const configHash = computeConfigHash(settings as Record<string, unknown>);
+
     const insertPayload = {
       symbol: "BTC-USDT",
       timeframe: "15m",
@@ -832,6 +916,9 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
         partial_candle_synthesized: partialSynthesized,
         model_reported_partial_agreement: modelAgreementRaw || null,
         server_computed_partial_agreement: serverAgreement,
+        model_reported_trade_status: modelReportedTradeStatusRaw || null,
+        model_reported_agreement_gate_applied: asBool(parsedRec.agreement_gate_applied),
+        model_reported_agreement_gate_reason: String(parsedRec.agreement_gate_reason ?? "") || null,
       },
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
@@ -853,7 +940,12 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
       partial_veto_direction: vetoDirection,
       partial_hard_override_fired: asBool(parsedRec.partial_hard_override_fired),
       conflict_downgrade_applied: asBool(parsedRec.conflict_downgrade_applied),
+      config_hash: configHash,
+      agreement_gate_applied: agreementGateApplied,
+      agreement_gate_reason: agreementGateReason,
+      final_trade_status: finalTradeStatus,
     };
+
 
 
     const { data: inserted, error: insErr } = await supabase

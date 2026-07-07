@@ -139,7 +139,12 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "degraded_mode", label: "degraded_mode" },
   { key: "feed_mismatch", label: "feed_mismatch" },
   { key: "partial_fetch_source", label: "partial_fetch_source" },
+  { key: "config_hash", label: "config_hash" },
+  { key: "agreement_gate_applied", label: "agreement_gate_applied" },
+  { key: "agreement_gate_reason", label: "agreement_gate_reason" },
+  { key: "final_trade_status", label: "final_trade_status" },
 ];
+
 
 
 // Dig the parsed AI JSON out of the raw OpenAI Responses payload.
