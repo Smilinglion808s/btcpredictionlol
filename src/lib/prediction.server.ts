@@ -663,7 +663,19 @@ Fallback / whipsaw: block weak_bearish_fallback_inversion when partial_direction
 
 If the partial strongly opposes what completed candles suggest, the market is turning against that read right now — stand down or downgrade.
 
-You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick, soft veto → capped at 62"). Absence of that reference means you ignored the freshest input, which is an error.`;
+You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick, soft veto → capped at 62"). Absence of that reference means you ignored the freshest input, which is an error.
+
+MANDATORY OUTPUT TRACKING FIELDS (module v1.1 — include ALL of these top-level keys in your JSON response, in addition to the base fields; never omit them):
+  "partial_agreement": "agree" | "disagree" | "neutral" | "nce" | "missing"   // vs your FINAL post-override call
+  "partial_module_bull_pts": <number>                                          // bullish pts contributed AFTER trust multiplier + cap
+  "partial_module_bear_pts": <number>                                          // bearish pts contributed AFTER trust multiplier + cap
+  "partial_veto_active": <boolean>
+  "partial_veto_tier": "hard" | "soft" | "none"
+  "partial_veto_direction": "blocked_yes" | "blocked_no" | null                // null when no veto fired
+  "partial_hard_override_fired": <boolean>
+  "conflict_downgrade_applied": <boolean>                                       // whether -5 conflict downgrade was applied
+Emit these on EVERY prediction (use 0 / false / "missing" / null when not applicable — never omit).`;
+
 
     aiPayload = {
       model: modelId,
