@@ -288,7 +288,8 @@ function HeaderStrip(props: {
       return `KXBTC15M-${get("year")}${months[monthIndex]}${get("day")}${hour}${get("minute")}`;
     };
     const syncKalshiClose = async () => {
-      const fallbackClose = Math.floor(serverNow / TF) * TF + TF;
+      const currentServerNow = Date.now() + offset;
+      const fallbackClose = Math.floor(currentServerNow / TF) * TF + TF;
       const ticker = tickerForClose(fallbackClose);
       try {
         const r = await fetch(`https://api.elections.kalshi.com/trade-api/v2/events/${ticker}`, {
@@ -306,7 +307,7 @@ function HeaderStrip(props: {
     syncKalshiClose();
     const i = setInterval(syncKalshiClose, 20_000);
     return () => { cancelled = true; clearInterval(i); };
-  }, [serverNow]);
+  }, [offset]);
   const nextClose = kalshiNextClose && kalshiNextClose > serverNow - 1000
     ? kalshiNextClose
     : Math.floor(serverNow / TF) * TF + TF;
