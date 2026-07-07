@@ -7,10 +7,11 @@ export type Btc15mTiming = {
   serverNowMs: number;
   nextCloseMs: number;
   nextPredictionMs: number;
-  timeSource: "coinbase";
+  timeSource: "coinbase" | "okx" | "local";
   closeSource: "kalshi" | "coinbase_boundary";
   kalshiTicker: string | null;
 };
+
 
 async function fetchCoinbaseTime() {
   const t0 = Date.now();
