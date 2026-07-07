@@ -695,6 +695,30 @@ MANDATORY OUTPUT TRACKING FIELDS (module v1.1 — include ALL of these top-level
   "conflict_downgrade_applied": <boolean>                                       // whether -5 conflict downgrade was applied
 Emit these on EVERY prediction (use 0 / false / "missing" / null when not applicable — never omit).`;
 
+    const model5Addendum = isModel5(settings.model_version)
+      ? `
+
+MODEL 5 AGREEMENT MONEY GATE (v5.0 — MUST enforce before finalizing trade_status).
+
+You are running Model 5. All Model 4 logic above stays intact. Two additional trade-gating rules apply AFTER scoring, overrides, and vetoes:
+
+  RULE A — Universal agreement gate:
+    - If partial_agreement = "disagree" → trade_status MUST be "AVOID" (or "SKIP"). Never flip the prediction to the opposite side; keep the directional call, only withhold the bet.
+    - If partial_agreement IN ("agree", "neutral") → gate passes for RULE A.
+
+  RULE B — Strong/premium demotion (stricter than Rule A):
+    - If final_interpretation / setup_type is "strong_directional" or "premium_directional", trade_status = "TRADE" REQUIRES partial_agreement = "agree". "neutral" is NOT sufficient for these two tiers. If neutral or disagree → trade_status = "AVOID".
+    - All other setup tiers use RULE A only.
+
+  RULE C — Always log:
+    - Still produce the full prediction (call, confidence, all tracking fields) even when the gate withholds the bet. Shadow data is free.
+    - Include top-level "agreement_gate_applied" (boolean) and "agreement_gate_reason" (short string: "disagree", "strong_requires_agree", "premium_requires_agree", "pass", or "n/a_nce") in your JSON output.
+
+Server enforces these rules regardless of your output — but you must reason about them and set trade_status consistently.`
+      : "";
+
+
+
 
     aiPayload = {
       model: modelId,
