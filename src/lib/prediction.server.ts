@@ -436,7 +436,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         advance_check_passed: advanceCheckPassed,
         current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
+        ...partialCols,
+        partial_agreement: "nce" as const,
       };
+
 
       const { data: forced, error: forcedErr } = await supabase
         .from("predictions")
