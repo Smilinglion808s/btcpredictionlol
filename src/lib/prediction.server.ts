@@ -457,7 +457,12 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
         ...partialCols,
         partial_agreement: "nce" as const,
+        config_hash: computeConfigHash(settings as Record<string, unknown>),
+        agreement_gate_applied: false,
+        agreement_gate_reason: "n/a_nce",
+        final_trade_status: "SKIP",
       };
+
 
 
       const { data: forced, error: forcedErr } = await supabase
