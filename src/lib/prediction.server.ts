@@ -879,8 +879,9 @@ Server enforces these rules regardless of your output — but you must reason ab
         finalTradeStatus = "AVOID";
       } else {
         agreementGateReason = "pass";
-        if (!finalTradeStatus) finalTradeStatus = rawCall === "NO CLEAR EDGE" ? "SKIP" : "TRADE";
+        if (!finalTradeStatus) finalTradeStatus = "TRADE";
       }
+
     }
 
     const gateNote = agreementGateApplied
