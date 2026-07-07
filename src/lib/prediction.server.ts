@@ -722,7 +722,7 @@ Server enforces these rules regardless of your output — but you must reason ab
 
     aiPayload = {
       model: modelId,
-      instructions: `${instructions}\n${partialModuleAddendum}\n\nRespond with JSON only.`,
+      instructions: `${instructions}\n${partialModuleAddendum}${model5Addendum}\n\nRespond with JSON only.`,
       input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
       max_output_tokens: 2048,
