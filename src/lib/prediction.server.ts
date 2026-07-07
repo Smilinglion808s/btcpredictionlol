@@ -1,5 +1,6 @@
 // Server-only AI prediction + resolution logic. Imported by server fns and the cron route.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import { computeIndicatorBundle, type Candle } from "./indicators";
 import {
   fetchAndUpsertCandles,
@@ -9,6 +10,24 @@ import {
 } from "./okx.server";
 import { fetchKalshiResolution } from "./kalshi.server";
 import { getBtc15mExchangeTiming } from "./timing.server";
+
+function computeConfigHash(settings: Record<string, unknown>): string {
+  const canon = JSON.stringify({
+    model_version: settings.model_version ?? null,
+    api_model_id: (settings as any).api_model_id ?? null,
+    confidence_threshold: settings.confidence_threshold ?? null,
+    indicator_weights: settings.indicator_weights ?? null,
+    prompt_template: settings.prompt_template ?? null,
+    require_manual_approval: settings.require_manual_approval ?? null,
+  });
+  return createHash("sha256").update(canon).digest("hex").slice(0, 16);
+}
+
+function isModel5(modelVersion: unknown): boolean {
+  const v = String(modelVersion ?? "").trim();
+  return /^5(\.|$)/.test(v);
+}
+
 
 const DEFAULT_INSTRUCTIONS = `You are running BTC 15m Model 2.1 (spec id btc15m_m2_1) on BTCUSDT 15m candles.
 Default run_type = "Run Next" → predict whether the NEXT 15m candle closes above (YES) or below (NO) its own open. Use "NO CLEAR EDGE" when no clean directional edge exists.
