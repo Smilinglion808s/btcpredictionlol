@@ -778,6 +778,40 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
       parsed.trade_status ? `trade: ${parsed.trade_status}` : null,
     ].filter(Boolean);
 
+    // Compute agreement server-side (cross-check vs model-emitted value).
+    const serverAgreement: "agree" | "disagree" | "neutral" | "nce" | "missing" = (() => {
+      if (rawCall === "NO CLEAR EDGE") return "nce";
+      if (!partialCols.partial_snapshot_present) return "missing";
+      const d = partialCols.partial_direction;
+      if (d === "flat") return "neutral";
+      if ((d === "green" && rawCall === "YES") || (d === "red" && rawCall === "NO")) return "agree";
+      if ((d === "green" && rawCall === "NO") || (d === "red" && rawCall === "YES")) return "disagree";
+      return "missing";
+    })();
+    const parsedRec = parsed as unknown as Record<string, unknown>;
+    const modelAgreementRaw = String(parsedRec.partial_agreement ?? "").toLowerCase();
+    const allowedAgreement = new Set(["agree", "disagree", "neutral", "nce", "missing"]);
+    if (allowedAgreement.has(modelAgreementRaw) && modelAgreementRaw !== serverAgreement) {
+      await supabase.from("api_runs").insert({
+        run_type: "partial-agreement-mismatch",
+        request_payload: { model_agreement: modelAgreementRaw, server_agreement: serverAgreement, partial_direction: partialCols.partial_direction, prediction: rawCall },
+        response_payload: null,
+        success: false,
+        error_message: `Model-reported partial_agreement '${modelAgreementRaw}' != server-computed '${serverAgreement}'`,
+      });
+    }
+
+    const asBool = (v: unknown): boolean => v === true || v === "true" || v === 1;
+    const asNum = (v: unknown): number => {
+      const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+      return Number.isFinite(n) ? n : 0;
+    };
+    const vetoTierRaw = String(parsedRec.partial_veto_tier ?? "none").toLowerCase();
+    const vetoTier: "hard" | "soft" | "none" = vetoTierRaw === "hard" || vetoTierRaw === "soft" ? vetoTierRaw : "none";
+    const vetoDirRaw = String(parsedRec.partial_veto_direction ?? "").toLowerCase();
+    const vetoDirection: "blocked_yes" | "blocked_no" | null =
+      vetoDirRaw === "blocked_yes" || vetoDirRaw === "blocked_no" ? vetoDirRaw : null;
+
     const insertPayload = {
       symbol: "BTC-USDT",
       timeframe: "15m",
@@ -796,6 +830,8 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
         partial_candle_source_path: partialPath,
         partial_candle_attempts: partialAttempts,
         partial_candle_synthesized: partialSynthesized,
+        model_reported_partial_agreement: modelAgreementRaw || null,
+        server_computed_partial_agreement: serverAgreement,
       },
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
@@ -808,7 +844,17 @@ Emit these on EVERY prediction (use 0 / false / "missing" / null when not applic
       advance_check_passed: advanceCheckPassed,
       current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
       current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
+      ...partialCols,
+      partial_agreement: serverAgreement,
+      partial_module_bull_pts: asNum(parsedRec.partial_module_bull_pts),
+      partial_module_bear_pts: asNum(parsedRec.partial_module_bear_pts),
+      partial_veto_active: asBool(parsedRec.partial_veto_active),
+      partial_veto_tier: vetoTier,
+      partial_veto_direction: vetoDirection,
+      partial_hard_override_fired: asBool(parsedRec.partial_hard_override_fired),
+      conflict_downgrade_applied: asBool(parsedRec.conflict_downgrade_applied),
     };
+
 
     const { data: inserted, error: insErr } = await supabase
       .from("predictions")
