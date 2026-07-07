@@ -120,7 +120,27 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "ob_fetch_error", label: "ob_fetch_error" },
   { key: "reasoning_summary", label: "reasoning_summary" },
   { key: "notes", label: "notes" },
+  // Partial-candle logging columns (persisted on predictions row) — v1.0 spec
+  { key: "partial_snapshot_present", label: "partial_snapshot_present" },
+  { key: "partial_snapshot_failure_reason", label: "partial_snapshot_failure_reason" },
+  { key: "partial_completeness", label: "partial_completeness" },
+  { key: "partial_direction", label: "partial_direction" },
+  { key: "partial_close_position_pct", label: "partial_close_position_pct" },
+  { key: "partial_range_vs_atr", label: "partial_range_vs_atr" },
+  { key: "partial_vwap_event", label: "partial_vwap_event" },
+  { key: "partial_agreement", label: "partial_agreement" },
+  { key: "partial_module_bull_pts", label: "partial_module_bull_pts" },
+  { key: "partial_module_bear_pts", label: "partial_module_bear_pts" },
+  { key: "partial_veto_active", label: "partial_veto_active" },
+  { key: "partial_veto_tier", label: "partial_veto_tier" },
+  { key: "partial_veto_direction", label: "partial_veto_direction" },
+  { key: "partial_hard_override_fired", label: "partial_hard_override_fired" },
+  { key: "conflict_downgrade_applied", label: "conflict_downgrade_applied" },
+  { key: "degraded_mode", label: "degraded_mode" },
+  { key: "feed_mismatch", label: "feed_mismatch" },
+  { key: "partial_fetch_source", label: "partial_fetch_source" },
 ];
+
 
 // Dig the parsed AI JSON out of the raw OpenAI Responses payload.
 function extractAiJson(full: unknown): Record<string, unknown> | null {
