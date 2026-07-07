@@ -278,6 +278,128 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     }
 
 
+    // -------- Partial-candle derived metrics (computed ONCE; used for prompt + persisted columns) --------
+    const last20 = ordered.slice(-20);
+    const last14 = ordered.slice(-14);
+    const atr14 =
+      last14.length > 0
+        ? last14.reduce((s, c) => s + (Number(c.high) - Number(c.low)), 0) / last14.length
+        : 0;
+    const vwap20 = (() => {
+      if (!last20.length) return null;
+      let pv = 0, vv = 0;
+      for (const c of last20) {
+        const typ = (Number(c.high) + Number(c.low) + Number(c.close)) / 3;
+        const v = Math.max(Number(c.volume) || 0, 0);
+        pv += typ * v; vv += v;
+      }
+      return vv > 0 ? pv / vv : null;
+    })();
+    const lastCompletedClose = Number(last.close);
+
+    const partialFailureReason: string | null = (() => {
+      if (partial && !partialSynthesized) return null;
+      if (!partial) {
+        const a = partialAttempts?.[0];
+        const r = (a?.reason ?? "").toLowerCase();
+        if (r.includes("timeout")) return "fetch_timeout";
+        if (r.includes("invalid") || r.includes("parse")) return "invalid_payload";
+        if (partialAttempts && partialAttempts.length > 0) return "fetch_error";
+        return "not_attempted";
+      }
+      return "invalid_payload";
+    })();
+
+    let partialDerived: {
+      completeness: number | null;
+      direction: "green" | "red" | "flat" | null;
+      closePositionPct: number | null;
+      rangeVsAtr: number | null;
+      vwapEvent: "reclaim" | "loss" | "none";
+      feedMismatch: boolean;
+      bodyStrength: number | null;
+      upperWickPct: number | null;
+      lowerWickPct: number | null;
+    } = {
+      completeness: null,
+      direction: null,
+      closePositionPct: null,
+      rangeVsAtr: null,
+      vwapEvent: "none",
+      feedMismatch: false,
+      bodyStrength: null,
+      upperWickPct: null,
+      lowerWickPct: null,
+    };
+    if (partial) {
+      const range = Math.max(partial.high - partial.low, 1e-9);
+      const denom = Math.max(range, 0.05 * (atr14 || range));
+      const completeness = Math.min(1, partial.minutes_elapsed / 15);
+      const flatEps = 0.02 * (atr14 || Math.abs(partial.close - partial.open) || 1);
+      const direction =
+        Math.abs(partial.close - partial.open) < flatEps
+          ? "flat"
+          : partial.close > partial.open ? "green" : "red";
+      const closePositionPct = (partial.close - partial.low) / denom;
+      const rangeVsAtr = atr14 > 0 ? range / atr14 : null;
+      const bodyStrength = Math.abs(partial.close - partial.open) / Math.max(range, 1e-9);
+      const upperWickPct = (partial.high - Math.max(partial.open, partial.close)) / Math.max(range, 1e-9);
+      const lowerWickPct = (Math.min(partial.open, partial.close) - partial.low) / Math.max(range, 1e-9);
+      let vwapEvent: "reclaim" | "loss" | "none" = "none";
+      if (vwap20 != null) {
+        if (lastCompletedClose < vwap20 && partial.close > vwap20) vwapEvent = "reclaim";
+        else if (lastCompletedClose > vwap20 && partial.close < vwap20) vwapEvent = "loss";
+      }
+      const openDrift = lastCompletedClose > 0 ? Math.abs(partial.open - lastCompletedClose) / lastCompletedClose : 0;
+      partialDerived = {
+        completeness,
+        direction,
+        closePositionPct,
+        rangeVsAtr,
+        vwapEvent,
+        feedMismatch: openDrift > 0.003,
+        bodyStrength,
+        upperWickPct,
+        lowerWickPct,
+      };
+    }
+
+    const partialFetchSource: string | null = (() => {
+      const s = (partial?.source ?? "").toString().toLowerCase();
+      if (s.includes("okx")) return "okx";
+      if (s.includes("coinbase")) return "coinbase";
+      if (s.includes("binance")) return "binance";
+      if (partialPath === "okx_live") return "okx";
+      if (partialPath === "coinbase_live") return "coinbase";
+      if (partialPath === "binance_live") return "binance";
+      if (partialPath === "db_unconfirmed") return "db_fallback";
+      return null;
+    })();
+
+    const partialCols = {
+      partial_snapshot_present: !!partial && !partialSynthesized,
+      partial_snapshot_failure_reason: partialFailureReason,
+      partial_completeness: partialDerived.completeness != null ? Number(partialDerived.completeness.toFixed(3)) : null,
+      partial_direction: partialDerived.direction,
+      partial_close_position_pct: partialDerived.closePositionPct != null ? Number(partialDerived.closePositionPct.toFixed(3)) : null,
+      partial_range_vs_atr: partialDerived.rangeVsAtr != null ? Number(partialDerived.rangeVsAtr.toFixed(3)) : null,
+      partial_vwap_event: partialDerived.vwapEvent,
+      partial_fetch_source: partialFetchSource,
+      feed_mismatch: partialDerived.feedMismatch,
+      degraded_mode: !partial || partialSynthesized || partialDerived.feedMismatch,
+      partial_agreement: "missing" as "agree" | "disagree" | "neutral" | "nce" | "missing",
+      partial_module_bull_pts: 0 as number,
+      partial_module_bear_pts: 0 as number,
+      partial_veto_active: false,
+      partial_veto_tier: "none" as "hard" | "soft" | "none",
+      partial_veto_direction: null as null | "blocked_yes" | "blocked_no",
+      partial_hard_override_fired: false,
+      conflict_downgrade_applied: false,
+    };
+
+
+
+
     if (!freshness.inputFeaturesFresh || !advanceCheckPassed) {
       const staleMessage = !advanceCheckPassed
         ? `Forced NO CLEAR EDGE: input candle ${freshness.inputCandleTs} did not advance past previous prediction's input (${prevPredForModel?.input_candle_ts}).`
@@ -314,7 +436,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         advance_check_passed: advanceCheckPassed,
         current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
+        ...partialCols,
+        partial_agreement: "nce" as const,
       };
+
 
       const { data: forced, error: forcedErr } = await supabase
         .from("predictions")
@@ -448,74 +573,32 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     }
     (inputPayload as Record<string, unknown>).orderbook_aggregate = orderbookAggregate;
 
-    // -------- Partial-candle module: derived features + explicit prompt addendum --------
-    // Compute ATR(14) and VWAP(20) locally so the module has the context the
-    // spec expects. Kept simple: TR = high - low (skip prev close variant).
-    const last20 = ordered.slice(-20);
-    const last14 = ordered.slice(-14);
-    const atr14 =
-      last14.length > 0
-        ? last14.reduce((s, c) => s + (Number(c.high) - Number(c.low)), 0) / last14.length
-        : 0;
-    const vwap20 = (() => {
-      if (!last20.length) return null;
-      let pv = 0, vv = 0;
-      for (const c of last20) {
-        const typ = (Number(c.high) + Number(c.low) + Number(c.close)) / 3;
-        const v = Math.max(Number(c.volume) || 0, 0);
-        pv += typ * v; vv += v;
-      }
-      return vv > 0 ? pv / vv : null;
-    })();
-    const lastCompletedClose = Number(last.close);
-
+    // -------- Partial-candle module context for the prompt (uses pre-computed derived values) --------
     let partialModule: Record<string, unknown> = {
       partial_snapshot_present: false,
       degraded_mode: true,
       note: "current_partial_snapshot missing after DB + OKX + Binance + Coinbase + spot ticker attempts",
     };
     if (partial) {
-      const range = Math.max(partial.high - partial.low, 1e-9);
-      const denom = Math.max(range, 0.05 * (atr14 || range));
-      const completeness = Math.min(1, partial.minutes_elapsed / 15);
-      const flatEps = 0.02 * (atr14 || Math.abs(partial.close - partial.open) || 1);
-      const partialDirection =
-        Math.abs(partial.close - partial.open) < flatEps
-          ? "flat"
-          : partial.close > partial.open ? "green" : "red";
-      const partialClosePositionPct = (partial.close - partial.low) / denom;
-      const partialRangeVsAtr = atr14 > 0 ? range / atr14 : null;
-      const partialBodyStrength = Math.abs(partial.close - partial.open) / Math.max(range, 1e-9);
-      const upperWickPct = (partial.high - Math.max(partial.open, partial.close)) / Math.max(range, 1e-9);
-      const lowerWickPct = (Math.min(partial.open, partial.close) - partial.low) / Math.max(range, 1e-9);
-      // VWAP reclaim/loss vs the last completed candle's close relative to vwap20.
-      let partialVwapEvent: "reclaim" | "loss" | "none" = "none";
-      if (vwap20 != null) {
-        if (lastCompletedClose < vwap20 && partial.close > vwap20) partialVwapEvent = "reclaim";
-        else if (lastCompletedClose > vwap20 && partial.close < vwap20) partialVwapEvent = "loss";
-      }
-      // Feed sanity: partial.open shouldn't wildly diverge from last completed close.
-      const openDrift = lastCompletedClose > 0 ? Math.abs(partial.open - lastCompletedClose) / lastCompletedClose : 0;
-      const feedMismatch = openDrift > 0.003;
-
+      const completeness = partialDerived.completeness ?? 0;
       partialModule = {
         partial_snapshot_present: true,
         source_path: partialPath,
         synthesized: partialSynthesized,
         completeness,
         minutes_elapsed: partial.minutes_elapsed,
-        partial_direction: partialDirection,
-        partial_close_position_pct: Number(partialClosePositionPct.toFixed(3)),
-        partial_range_vs_atr: partialRangeVsAtr != null ? Number(partialRangeVsAtr.toFixed(3)) : null,
-        partial_body_strength: Number(partialBodyStrength.toFixed(3)),
-        upper_wick_pct: Number(upperWickPct.toFixed(3)),
-        lower_wick_pct: Number(lowerWickPct.toFixed(3)),
-        partial_vwap_event: partialVwapEvent,
+        partial_direction: partialDerived.direction,
+        partial_close_position_pct: partialDerived.closePositionPct != null ? Number(partialDerived.closePositionPct.toFixed(3)) : null,
+        partial_range_vs_atr: partialDerived.rangeVsAtr != null ? Number(partialDerived.rangeVsAtr.toFixed(3)) : null,
+        partial_body_strength: partialDerived.bodyStrength != null ? Number(partialDerived.bodyStrength.toFixed(3)) : null,
+        upper_wick_pct: partialDerived.upperWickPct != null ? Number(partialDerived.upperWickPct.toFixed(3)) : null,
+        lower_wick_pct: partialDerived.lowerWickPct != null ? Number(partialDerived.lowerWickPct.toFixed(3)) : null,
+        partial_vwap_event: partialDerived.vwapEvent,
         vwap_at_snapshot: vwap20,
         atr_14: atr14,
         last_completed_close: lastCompletedClose,
-        feed_mismatch: feedMismatch,
-        degraded_mode: partialSynthesized || feedMismatch,
+        feed_mismatch: partialDerived.feedMismatch,
+        degraded_mode: partialSynthesized || partialDerived.feedMismatch,
         trust_tier:
           completeness >= 0.8 ? "full_trust" : completeness >= 0.53 ? "partial_trust" : "low_trust",
         completeness_weight_multiplier:
@@ -523,6 +606,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       };
     }
     (inputPayload as Record<string, unknown>).partial_candle_module = partialModule;
+
 
     const partialModuleAddendum = `
 
@@ -579,7 +663,19 @@ Fallback / whipsaw: block weak_bearish_fallback_inversion when partial_direction
 
 If the partial strongly opposes what completed candles suggest, the market is turning against that read right now — stand down or downgrade.
 
-You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick, soft veto → capped at 62"). Absence of that reference means you ignored the freshest input, which is an error.`;
+You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick, soft veto → capped at 62"). Absence of that reference means you ignored the freshest input, which is an error.
+
+MANDATORY OUTPUT TRACKING FIELDS (module v1.1 — include ALL of these top-level keys in your JSON response, in addition to the base fields; never omit them):
+  "partial_agreement": "agree" | "disagree" | "neutral" | "nce" | "missing"   // vs your FINAL post-override call
+  "partial_module_bull_pts": <number>                                          // bullish pts contributed AFTER trust multiplier + cap
+  "partial_module_bear_pts": <number>                                          // bearish pts contributed AFTER trust multiplier + cap
+  "partial_veto_active": <boolean>
+  "partial_veto_tier": "hard" | "soft" | "none"
+  "partial_veto_direction": "blocked_yes" | "blocked_no" | null                // null when no veto fired
+  "partial_hard_override_fired": <boolean>
+  "conflict_downgrade_applied": <boolean>                                       // whether -5 conflict downgrade was applied
+Emit these on EVERY prediction (use 0 / false / "missing" / null when not applicable — never omit).`;
+
 
     aiPayload = {
       model: modelId,
@@ -682,6 +778,40 @@ You MUST reference the partial candle in your notes when partial_snapshot_presen
       parsed.trade_status ? `trade: ${parsed.trade_status}` : null,
     ].filter(Boolean);
 
+    // Compute agreement server-side (cross-check vs model-emitted value).
+    const serverAgreement: "agree" | "disagree" | "neutral" | "nce" | "missing" = (() => {
+      if (rawCall === "NO CLEAR EDGE") return "nce";
+      if (!partialCols.partial_snapshot_present) return "missing";
+      const d = partialCols.partial_direction;
+      if (d === "flat") return "neutral";
+      if ((d === "green" && rawCall === "YES") || (d === "red" && rawCall === "NO")) return "agree";
+      if ((d === "green" && rawCall === "NO") || (d === "red" && rawCall === "YES")) return "disagree";
+      return "missing";
+    })();
+    const parsedRec = parsed as unknown as Record<string, unknown>;
+    const modelAgreementRaw = String(parsedRec.partial_agreement ?? "").toLowerCase();
+    const allowedAgreement = new Set(["agree", "disagree", "neutral", "nce", "missing"]);
+    if (allowedAgreement.has(modelAgreementRaw) && modelAgreementRaw !== serverAgreement) {
+      await supabase.from("api_runs").insert({
+        run_type: "partial-agreement-mismatch",
+        request_payload: { model_agreement: modelAgreementRaw, server_agreement: serverAgreement, partial_direction: partialCols.partial_direction, prediction: rawCall },
+        response_payload: null,
+        success: false,
+        error_message: `Model-reported partial_agreement '${modelAgreementRaw}' != server-computed '${serverAgreement}'`,
+      });
+    }
+
+    const asBool = (v: unknown): boolean => v === true || v === "true" || v === 1;
+    const asNum = (v: unknown): number => {
+      const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+      return Number.isFinite(n) ? n : 0;
+    };
+    const vetoTierRaw = String(parsedRec.partial_veto_tier ?? "none").toLowerCase();
+    const vetoTier: "hard" | "soft" | "none" = vetoTierRaw === "hard" || vetoTierRaw === "soft" ? vetoTierRaw : "none";
+    const vetoDirRaw = String(parsedRec.partial_veto_direction ?? "").toLowerCase();
+    const vetoDirection: "blocked_yes" | "blocked_no" | null =
+      vetoDirRaw === "blocked_yes" || vetoDirRaw === "blocked_no" ? vetoDirRaw : null;
+
     const insertPayload = {
       symbol: "BTC-USDT",
       timeframe: "15m",
@@ -700,6 +830,8 @@ You MUST reference the partial candle in your notes when partial_snapshot_presen
         partial_candle_source_path: partialPath,
         partial_candle_attempts: partialAttempts,
         partial_candle_synthesized: partialSynthesized,
+        model_reported_partial_agreement: modelAgreementRaw || null,
+        server_computed_partial_agreement: serverAgreement,
       },
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
@@ -712,7 +844,17 @@ You MUST reference the partial candle in your notes when partial_snapshot_presen
       advance_check_passed: advanceCheckPassed,
       current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
       current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
+      ...partialCols,
+      partial_agreement: serverAgreement,
+      partial_module_bull_pts: asNum(parsedRec.partial_module_bull_pts),
+      partial_module_bear_pts: asNum(parsedRec.partial_module_bear_pts),
+      partial_veto_active: asBool(parsedRec.partial_veto_active),
+      partial_veto_tier: vetoTier,
+      partial_veto_direction: vetoDirection,
+      partial_hard_override_fired: asBool(parsedRec.partial_hard_override_fired),
+      conflict_downgrade_applied: asBool(parsedRec.conflict_downgrade_applied),
     };
+
 
     const { data: inserted, error: insErr } = await supabase
       .from("predictions")
