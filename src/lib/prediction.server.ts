@@ -278,6 +278,128 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     }
 
 
+    // -------- Partial-candle derived metrics (computed ONCE; used for prompt + persisted columns) --------
+    const last20 = ordered.slice(-20);
+    const last14 = ordered.slice(-14);
+    const atr14 =
+      last14.length > 0
+        ? last14.reduce((s, c) => s + (Number(c.high) - Number(c.low)), 0) / last14.length
+        : 0;
+    const vwap20 = (() => {
+      if (!last20.length) return null;
+      let pv = 0, vv = 0;
+      for (const c of last20) {
+        const typ = (Number(c.high) + Number(c.low) + Number(c.close)) / 3;
+        const v = Math.max(Number(c.volume) || 0, 0);
+        pv += typ * v; vv += v;
+      }
+      return vv > 0 ? pv / vv : null;
+    })();
+    const lastCompletedClose = Number(last.close);
+
+    const partialFailureReason: string | null = (() => {
+      if (partial && !partialSynthesized) return null;
+      if (!partial) {
+        const a = partialAttempts?.[0];
+        const r = (a?.reason ?? "").toLowerCase();
+        if (r.includes("timeout")) return "fetch_timeout";
+        if (r.includes("invalid") || r.includes("parse")) return "invalid_payload";
+        if (partialAttempts && partialAttempts.length > 0) return "fetch_error";
+        return "not_attempted";
+      }
+      return "invalid_payload";
+    })();
+
+    let partialDerived: {
+      completeness: number | null;
+      direction: "green" | "red" | "flat" | null;
+      closePositionPct: number | null;
+      rangeVsAtr: number | null;
+      vwapEvent: "reclaim" | "loss" | "none";
+      feedMismatch: boolean;
+      bodyStrength: number | null;
+      upperWickPct: number | null;
+      lowerWickPct: number | null;
+    } = {
+      completeness: null,
+      direction: null,
+      closePositionPct: null,
+      rangeVsAtr: null,
+      vwapEvent: "none",
+      feedMismatch: false,
+      bodyStrength: null,
+      upperWickPct: null,
+      lowerWickPct: null,
+    };
+    if (partial) {
+      const range = Math.max(partial.high - partial.low, 1e-9);
+      const denom = Math.max(range, 0.05 * (atr14 || range));
+      const completeness = Math.min(1, partial.minutes_elapsed / 15);
+      const flatEps = 0.02 * (atr14 || Math.abs(partial.close - partial.open) || 1);
+      const direction =
+        Math.abs(partial.close - partial.open) < flatEps
+          ? "flat"
+          : partial.close > partial.open ? "green" : "red";
+      const closePositionPct = (partial.close - partial.low) / denom;
+      const rangeVsAtr = atr14 > 0 ? range / atr14 : null;
+      const bodyStrength = Math.abs(partial.close - partial.open) / Math.max(range, 1e-9);
+      const upperWickPct = (partial.high - Math.max(partial.open, partial.close)) / Math.max(range, 1e-9);
+      const lowerWickPct = (Math.min(partial.open, partial.close) - partial.low) / Math.max(range, 1e-9);
+      let vwapEvent: "reclaim" | "loss" | "none" = "none";
+      if (vwap20 != null) {
+        if (lastCompletedClose < vwap20 && partial.close > vwap20) vwapEvent = "reclaim";
+        else if (lastCompletedClose > vwap20 && partial.close < vwap20) vwapEvent = "loss";
+      }
+      const openDrift = lastCompletedClose > 0 ? Math.abs(partial.open - lastCompletedClose) / lastCompletedClose : 0;
+      partialDerived = {
+        completeness,
+        direction,
+        closePositionPct,
+        rangeVsAtr,
+        vwapEvent,
+        feedMismatch: openDrift > 0.003,
+        bodyStrength,
+        upperWickPct,
+        lowerWickPct,
+      };
+    }
+
+    const partialFetchSource: string | null = (() => {
+      const s = (partial?.source ?? "").toString().toLowerCase();
+      if (s.includes("okx")) return "okx";
+      if (s.includes("coinbase")) return "coinbase";
+      if (s.includes("binance")) return "binance";
+      if (partialPath === "okx_live") return "okx";
+      if (partialPath === "coinbase_live") return "coinbase";
+      if (partialPath === "binance_live") return "binance";
+      if (partialPath === "db_unconfirmed") return "db_fallback";
+      return null;
+    })();
+
+    const partialCols = {
+      partial_snapshot_present: !!partial && !partialSynthesized,
+      partial_snapshot_failure_reason: partialFailureReason,
+      partial_completeness: partialDerived.completeness != null ? Number(partialDerived.completeness.toFixed(3)) : null,
+      partial_direction: partialDerived.direction,
+      partial_close_position_pct: partialDerived.closePositionPct != null ? Number(partialDerived.closePositionPct.toFixed(3)) : null,
+      partial_range_vs_atr: partialDerived.rangeVsAtr != null ? Number(partialDerived.rangeVsAtr.toFixed(3)) : null,
+      partial_vwap_event: partialDerived.vwapEvent,
+      partial_fetch_source: partialFetchSource,
+      feed_mismatch: partialDerived.feedMismatch,
+      degraded_mode: !partial || partialSynthesized || partialDerived.feedMismatch,
+      partial_agreement: "missing" as "agree" | "disagree" | "neutral" | "nce" | "missing",
+      partial_module_bull_pts: 0 as number,
+      partial_module_bear_pts: 0 as number,
+      partial_veto_active: false,
+      partial_veto_tier: "none" as "hard" | "soft" | "none",
+      partial_veto_direction: null as null | "blocked_yes" | "blocked_no",
+      partial_hard_override_fired: false,
+      conflict_downgrade_applied: false,
+    };
+
+
+
+
     if (!freshness.inputFeaturesFresh || !advanceCheckPassed) {
       const staleMessage = !advanceCheckPassed
         ? `Forced NO CLEAR EDGE: input candle ${freshness.inputCandleTs} did not advance past previous prediction's input (${prevPredForModel?.input_candle_ts}).`
