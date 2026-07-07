@@ -229,10 +229,13 @@ export type Database = {
           actual_next_candle_low: number | null
           actual_next_candle_open: number | null
           advance_check_passed: boolean | null
+          agreement_gate_applied: boolean
+          agreement_gate_reason: string | null
           api_model_id: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          config_hash: string | null
           conflict_downgrade_applied: boolean
           created_at: string
           current_partial_minutes_elapsed: number | null
@@ -240,6 +243,7 @@ export type Database = {
           degraded_mode: boolean
           feed_mismatch: boolean
           fetch_source: string | null
+          final_trade_status: string | null
           freshness_action: string | null
           full_ai_response: Json | null
           id: string
@@ -284,10 +288,13 @@ export type Database = {
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
           advance_check_passed?: boolean | null
+          agreement_gate_applied?: boolean
+          agreement_gate_reason?: string | null
           api_model_id?: string | null
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          config_hash?: string | null
           conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
@@ -295,6 +302,7 @@ export type Database = {
           degraded_mode?: boolean
           feed_mismatch?: boolean
           fetch_source?: string | null
+          final_trade_status?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -339,10 +347,13 @@ export type Database = {
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
           advance_check_passed?: boolean | null
+          agreement_gate_applied?: boolean
+          agreement_gate_reason?: string | null
           api_model_id?: string | null
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
+          config_hash?: string | null
           conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
@@ -350,6 +361,7 @@ export type Database = {
           degraded_mode?: boolean
           feed_mismatch?: boolean
           fetch_source?: string | null
+          final_trade_status?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -397,11 +409,14 @@ export type Database = {
           actual_next_candle_low: number | null
           actual_next_candle_open: number | null
           advance_check_passed: boolean | null
+          agreement_gate_applied: boolean
+          agreement_gate_reason: string | null
           api_model_id: string | null
           archived_at: string
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          config_hash: string | null
           conflict_downgrade_applied: boolean
           created_at: string
           current_partial_minutes_elapsed: number | null
@@ -409,6 +424,7 @@ export type Database = {
           degraded_mode: boolean
           feed_mismatch: boolean
           fetch_source: string | null
+          final_trade_status: string | null
           freshness_action: string | null
           full_ai_response: Json | null
           id: string
@@ -453,11 +469,14 @@ export type Database = {
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
           advance_check_passed?: boolean | null
+          agreement_gate_applied?: boolean
+          agreement_gate_reason?: string | null
           api_model_id?: string | null
           archived_at?: string
           btc_price_at_prediction: number
           candle_ts: string
           confidence: number
+          config_hash?: string | null
           conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
@@ -465,6 +484,7 @@ export type Database = {
           degraded_mode?: boolean
           feed_mismatch?: boolean
           fetch_source?: string | null
+          final_trade_status?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
@@ -509,11 +529,14 @@ export type Database = {
           actual_next_candle_low?: number | null
           actual_next_candle_open?: number | null
           advance_check_passed?: boolean | null
+          agreement_gate_applied?: boolean
+          agreement_gate_reason?: string | null
           api_model_id?: string | null
           archived_at?: string
           btc_price_at_prediction?: number
           candle_ts?: string
           confidence?: number
+          config_hash?: string | null
           conflict_downgrade_applied?: boolean
           created_at?: string
           current_partial_minutes_elapsed?: number | null
@@ -521,6 +544,7 @@ export type Database = {
           degraded_mode?: boolean
           feed_mismatch?: boolean
           fetch_source?: string | null
+          final_trade_status?: string | null
           freshness_action?: string | null
           full_ai_response?: Json | null
           id?: string
