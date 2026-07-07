@@ -573,74 +573,32 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     }
     (inputPayload as Record<string, unknown>).orderbook_aggregate = orderbookAggregate;
 
-    // -------- Partial-candle module: derived features + explicit prompt addendum --------
-    // Compute ATR(14) and VWAP(20) locally so the module has the context the
-    // spec expects. Kept simple: TR = high - low (skip prev close variant).
-    const last20 = ordered.slice(-20);
-    const last14 = ordered.slice(-14);
-    const atr14 =
-      last14.length > 0
-        ? last14.reduce((s, c) => s + (Number(c.high) - Number(c.low)), 0) / last14.length
-        : 0;
-    const vwap20 = (() => {
-      if (!last20.length) return null;
-      let pv = 0, vv = 0;
-      for (const c of last20) {
-        const typ = (Number(c.high) + Number(c.low) + Number(c.close)) / 3;
-        const v = Math.max(Number(c.volume) || 0, 0);
-        pv += typ * v; vv += v;
-      }
-      return vv > 0 ? pv / vv : null;
-    })();
-    const lastCompletedClose = Number(last.close);
-
+    // -------- Partial-candle module context for the prompt (uses pre-computed derived values) --------
     let partialModule: Record<string, unknown> = {
       partial_snapshot_present: false,
       degraded_mode: true,
       note: "current_partial_snapshot missing after DB + OKX + Binance + Coinbase + spot ticker attempts",
     };
     if (partial) {
-      const range = Math.max(partial.high - partial.low, 1e-9);
-      const denom = Math.max(range, 0.05 * (atr14 || range));
-      const completeness = Math.min(1, partial.minutes_elapsed / 15);
-      const flatEps = 0.02 * (atr14 || Math.abs(partial.close - partial.open) || 1);
-      const partialDirection =
-        Math.abs(partial.close - partial.open) < flatEps
-          ? "flat"
-          : partial.close > partial.open ? "green" : "red";
-      const partialClosePositionPct = (partial.close - partial.low) / denom;
-      const partialRangeVsAtr = atr14 > 0 ? range / atr14 : null;
-      const partialBodyStrength = Math.abs(partial.close - partial.open) / Math.max(range, 1e-9);
-      const upperWickPct = (partial.high - Math.max(partial.open, partial.close)) / Math.max(range, 1e-9);
-      const lowerWickPct = (Math.min(partial.open, partial.close) - partial.low) / Math.max(range, 1e-9);
-      // VWAP reclaim/loss vs the last completed candle's close relative to vwap20.
-      let partialVwapEvent: "reclaim" | "loss" | "none" = "none";
-      if (vwap20 != null) {
-        if (lastCompletedClose < vwap20 && partial.close > vwap20) partialVwapEvent = "reclaim";
-        else if (lastCompletedClose > vwap20 && partial.close < vwap20) partialVwapEvent = "loss";
-      }
-      // Feed sanity: partial.open shouldn't wildly diverge from last completed close.
-      const openDrift = lastCompletedClose > 0 ? Math.abs(partial.open - lastCompletedClose) / lastCompletedClose : 0;
-      const feedMismatch = openDrift > 0.003;
-
+      const completeness = partialDerived.completeness ?? 0;
       partialModule = {
         partial_snapshot_present: true,
         source_path: partialPath,
         synthesized: partialSynthesized,
         completeness,
         minutes_elapsed: partial.minutes_elapsed,
-        partial_direction: partialDirection,
-        partial_close_position_pct: Number(partialClosePositionPct.toFixed(3)),
-        partial_range_vs_atr: partialRangeVsAtr != null ? Number(partialRangeVsAtr.toFixed(3)) : null,
-        partial_body_strength: Number(partialBodyStrength.toFixed(3)),
-        upper_wick_pct: Number(upperWickPct.toFixed(3)),
-        lower_wick_pct: Number(lowerWickPct.toFixed(3)),
-        partial_vwap_event: partialVwapEvent,
+        partial_direction: partialDerived.direction,
+        partial_close_position_pct: partialDerived.closePositionPct != null ? Number(partialDerived.closePositionPct.toFixed(3)) : null,
+        partial_range_vs_atr: partialDerived.rangeVsAtr != null ? Number(partialDerived.rangeVsAtr.toFixed(3)) : null,
+        partial_body_strength: partialDerived.bodyStrength != null ? Number(partialDerived.bodyStrength.toFixed(3)) : null,
+        upper_wick_pct: partialDerived.upperWickPct != null ? Number(partialDerived.upperWickPct.toFixed(3)) : null,
+        lower_wick_pct: partialDerived.lowerWickPct != null ? Number(partialDerived.lowerWickPct.toFixed(3)) : null,
+        partial_vwap_event: partialDerived.vwapEvent,
         vwap_at_snapshot: vwap20,
         atr_14: atr14,
         last_completed_close: lastCompletedClose,
-        feed_mismatch: feedMismatch,
-        degraded_mode: partialSynthesized || feedMismatch,
+        feed_mismatch: partialDerived.feedMismatch,
+        degraded_mode: partialSynthesized || partialDerived.feedMismatch,
         trust_tier:
           completeness >= 0.8 ? "full_trust" : completeness >= 0.53 ? "partial_trust" : "low_trust",
         completeness_weight_multiplier:
@@ -648,6 +606,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       };
     }
     (inputPayload as Record<string, unknown>).partial_candle_module = partialModule;
+
 
     const partialModuleAddendum = `
 
