@@ -348,6 +348,9 @@ function enrich(p: PredRow): PredRow {
     conviction_reasons_json: Array.isArray(p.conviction_reasons)
       ? JSON.stringify(p.conviction_reasons)
       : (p.conviction_reasons ? JSON.stringify(p.conviction_reasons) : ""),
+  };
+
+
 
   // Flatten per-indicator score/weight/weighted/direction into columns.
   const breakdown = ai.indicator_breakdown;
