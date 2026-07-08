@@ -243,7 +243,7 @@ export function computeFeatures(rawCandles: Candle[], ctx: ComputeContext): Feat
   const last_5_close_change = changeN(5);
   const last_8_close_change = changeN(8);
   const flatBand = FLAT_ATR_FRACTION * avg_range_20;
-  const last_8_flat = Math.abs(last.close - cs[n - 9]?.close ?? last.close) <= flatBand;
+  const last_8_flat = n >= 9 ? Math.abs(last.close - cs[n - 9].close) <= flatBand : false;
 
   // Sequences (last 4 candles)
   const tail = cs.slice(-4);
