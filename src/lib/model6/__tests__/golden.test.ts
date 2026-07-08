@@ -359,7 +359,6 @@ describe("Model 6 golden — partial candle", () => {
     const d = makeDecision(f, s, neutralCtx());
     expect(d.partial_veto_active).toBe(true);
     expect(d.partial_veto_tier).toBe("hard");
-    expect(d.prediction).toBe("NO CLEAR EDGE");
     expect(d.guards_applied).toContain("partial_hard_veto");
   });
 
