@@ -396,6 +396,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     })();
 
     const partialCols = {
+      fetch_source: partialPath ?? null,
       partial_snapshot_present: !!partial && !partialSynthesized,
       partial_snapshot_failure_reason: partialFailureReason,
       partial_completeness: partialDerived.completeness != null ? Number(partialDerived.completeness.toFixed(3)) : null,
@@ -451,7 +452,6 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         input_candle_age_seconds: freshness.inputCandleAgeSeconds,
         input_features_fresh: freshness.inputFeaturesFresh,
         freshness_action: freshnessAction,
-        fetch_source: fetchSource,
         advance_check_passed: advanceCheckPassed,
         current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
@@ -460,7 +460,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         config_hash: computeConfigHash(settings as Record<string, unknown>),
         agreement_gate_applied: false,
         agreement_gate_reason: "n/a_nce",
-        final_trade_status: "SKIP",
+        final_trade_status: "AVOID",
       };
 
 
@@ -634,71 +634,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
 
     const partialModuleAddendum = `
 
-PARTIAL CANDLE CONFIRMATION MODULE (module_id: partial_candle_confirmation, version: 1.1, weight: 12, MUST be applied on every prediction).
-
-You are given both current_candle_partial (raw OHLC of the 15m candle that is currently forming, minutes_elapsed/15 complete) and partial_candle_module (pre-computed derived features and trust tier). This is your FRESHEST evidence — fresher than every completed candle in the candles array. Never ignore it.
-
-Trust tiers by completeness = minutes_elapsed/15:
-- completeness >= 0.80 → full_trust, module_weight × 1.0, override_power = true (may fire hard overrides + vetoes below)
-- 0.53 ≤ completeness < 0.80 → partial_trust, module_weight × 0.6, no overrides
-- completeness < 0.53 → low_trust, module_weight × 0.3, no overrides
-- partial_snapshot_present = false OR feed_mismatch = true → degraded_mode: module contributes 0, cap final confidence at 60 (i.e. 3/5), and be MORE conservative — never more aggressive.
-
-Compute and log partial_agreement (agree | disagree | neutral) on EVERY prediction: agree if partial_direction matches your proposed call (green=YES, red=NO), disagree if opposite, neutral if flat.
-
-Scoring (apply after trust multiplier, cap at module weight = 12):
-  Bullish:
-    +12 if partial_direction=green AND partial_close_position_pct ≥ 0.65 AND partial_range_vs_atr ≥ 0.5
-    +9  if partial_vwap_event=reclaim AND partial_close_position_pct ≥ 0.55
-    +7  if partial_direction=green AND partial_close_position_pct ≥ 0.5
-    +5  if partial_direction=red AND lower_wick_pct ≥ 0.5 AND partial_close_position_pct ≥ 0.5 (absorption / failed flush)
-  Bearish (symmetric):
-    +12 if partial_direction=red AND partial_close_position_pct ≤ 0.35 AND partial_range_vs_atr ≥ 0.5
-    +9  if partial_vwap_event=loss AND partial_close_position_pct ≤ 0.45
-    +7  if partial_direction=red AND partial_close_position_pct ≤ 0.5
-    +5  if partial_direction=green AND upper_wick_pct ≥ 0.5 AND partial_close_position_pct ≤ 0.5 (rejection / failed pop)
-  Exhaustion caution: if partial_range_vs_atr ≥ 1.5 AND |partial.close − vwap_at_snapshot| ≥ 1.25 × atr_14, halve module points in the extension direction.
-  Drift (if drift_last_3m present): if it agrees with partial_direction add +2 to that side (capped by module weight); if it opposes and |drift_last_3m| ≥ 0.15 × atr_14, apply 0.6 multiplier to this module's points.
-
-At full_trust ONLY, apply hard overrides then two-tier veto BEFORE finalizing the call:
-  New hard YES:
-    - partial_vwap_event=reclaim AND partial_close_position_pct ≥ 0.65 AND partial_range_vs_atr ≥ 0.75
-    - partial breaks above range_20_high AND partial_close_position_pct ≥ 0.70
-  New hard NO (symmetric on the downside)
-
-  HARD VETO (downgrade to NO CLEAR EDGE — violent live reversals only):
-    - Vetoes any hard YES when ALL of: partial_direction=red, partial_close_position_pct ≤ 0.20, partial_range_vs_atr ≥ 1.0, AND (partial_vwap_event=loss OR partial.close < vwap_at_snapshot).
-    - Vetoes any hard NO when ALL of: partial_direction=green, partial_close_position_pct ≥ 0.80, partial_range_vs_atr ≥ 1.0, AND (partial_vwap_event=reclaim OR partial.close > vwap_at_snapshot).
-
-  SOFT VETO (keep the call, strip override privilege):
-    - Softens a hard YES when ALL of: partial_direction=red, partial_close_position_pct ≤ 0.30, partial_range_vs_atr ≥ 0.6.
-    - Softens a hard NO when ALL of: partial_direction=green, partial_close_position_pct ≥ 0.70, partial_range_vs_atr ≥ 0.6.
-    - Action: prediction stands but is no longer a hard override. Cap confidence at 62 (≈ 3/5) and only TRADE if score_margin ≥ 12; otherwise SKIP/AVOID.
-
-  Log partial_veto_active, partial_veto_tier (hard|soft), and partial_veto_direction on every fire.
-
-  Conflict downgrade: if no hard override survives and partial_agreement=disagree with partial_range_vs_atr ≥ 0.75 at completeness ≥ 0.80 → subtract 5 from confidence. Set trade_status=AVOID only if resulting confidence < 60. Mild disagreement (partial_range_vs_atr < 0.75) is noise — no penalty.
-
-Real-time VWAP events (reclaim/loss) at completeness ≥ 0.8 OUTRANK the completed-candle vwap_state signal.
-
-Choppy resolver: inside choppy_vwap_push_resolver, partial_direction is the FIRST tiebreaker (green with partial_close_position_pct ≥ 0.55 → YES; red with ≤ 0.45 → NO; flat → fall through). Confidence unchanged (force 45, AVOID).
-
-Fallback / whipsaw: block weak_bearish_fallback_inversion when partial_direction=red AND partial_close_position_pct ≤ 0.35 at completeness ≥ 0.8. Allow whipsaw flip when partial_agreement=agree with partial_range_vs_atr ≥ 0.75 at completeness ≥ 0.8.
-
-If the partial strongly opposes what completed candles suggest, the market is turning against that read right now — stand down or downgrade.
-
-You MUST reference the partial candle in your notes when partial_snapshot_present=true (e.g. "partial at 14/15 green, close pos 0.72, VWAP reclaimed → confirms YES" or "partial red rejection wick, soft veto → capped at 62"). Absence of that reference means you ignored the freshest input, which is an error.
-
-MANDATORY OUTPUT TRACKING FIELDS (module v1.1 — include ALL of these top-level keys in your JSON response, in addition to the base fields; never omit them):
-  "partial_agreement": "agree" | "disagree" | "neutral" | "nce" | "missing"   // vs your FINAL post-override call
-  "partial_module_bull_pts": <number>                                          // bullish pts contributed AFTER trust multiplier + cap
-  "partial_module_bear_pts": <number>                                          // bearish pts contributed AFTER trust multiplier + cap
-  "partial_veto_active": <boolean>
-  "partial_veto_tier": "hard" | "soft" | "none"
-  "partial_veto_direction": "blocked_yes" | "blocked_no" | null                // null when no veto fired
-  "partial_hard_override_fired": <boolean>
-  "conflict_downgrade_applied": <boolean>                                       // whether -5 conflict downgrade was applied
-Emit these on EVERY prediction (use 0 / false / "missing" / null when not applicable — never omit).`;
+PARTIAL CANDLE MODULE (Pass 2 — bounded adjustment only): current_partial_snapshot_json describes the candle currently forming. It is ONE input among fifteen weighted modules, worth at most 12 of 100 points after the completeness multiplier. Your base directional read (Pass 1) must be derived entirely from completed candles. The forming candle confirms, cautions, or in rare cases vetoes — it does not replace the base read. Do not default to predicting the forming candle's direction. Completeness tiers: >=0.80 full trust multiplier 1.0 with override power; 0.53–0.79 multiplier 0.6 no override; <0.53 multiplier 0.3 no override. Missing/invalid/feed_mismatch = degraded_mode, 0 points, confidence cap 60. Scoring (take highest matching rule, apply multiplier, cap 12): Bullish: 12 if green+close_pct>=0.65+range_vs_atr>=0.5; 9 if vwap_reclaim+close_pct>=0.55; 7 if green+close_pct>=0.5; 5 if red+lower_wick>=0.5+close_pct>=0.5. Bearish: 12 if red+close_pct<=0.35+range_vs_atr>=0.5; 9 if vwap_loss+close_pct<=0.45; 7 if red+close_pct<=0.5; 5 if green+upper_wick>=0.5+close_pct<=0.5. Halve extension points if range_vs_atr>=1.5 AND |close-vwap|>=1.25atr. Hard veto->NCE: opposing+close_pct<=0.20/>=0.80+range_vs_atr>=1.0+vwap confirms. Soft veto: opposing+close_pct<=0.30/>=0.70+range_vs_atr>=0.6->cap 62+margin>=12. Conflict downgrade: disagree+range_vs_atr>=0.75+completeness>=0.80->subtract 5, AVOID if <60.`;
 
     const model5Addendum = isModel5(settings.model_version)
       ? `
@@ -730,7 +666,7 @@ Server enforces these rules regardless of your output — but you must reason ab
       instructions: `${instructions}\n${partialModuleAddendum}${model5Addendum}\n\nRespond with JSON only.`,
       input: `Return your prediction as JSON. Input data:\n${JSON.stringify(inputPayload)}`,
       text: { format: { type: "json_object" } },
-      max_output_tokens: 2048,
+      max_output_tokens: 4096,
     };
 
 
@@ -927,7 +863,7 @@ Server enforces these rules regardless of your output — but you must reason ab
       input_candle_age_seconds: freshness.inputCandleAgeSeconds,
       input_features_fresh: freshness.inputFeaturesFresh,
       freshness_action: freshnessAction,
-      fetch_source: fetchSource,
+      
       advance_check_passed: advanceCheckPassed,
       current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
       current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
