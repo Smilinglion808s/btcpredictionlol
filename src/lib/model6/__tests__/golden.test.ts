@@ -338,8 +338,22 @@ describe("Model 6 golden — partial candle", () => {
   });
 
   it("16. Partial contradicts bull (tier hard) → NCE with hard veto", () => {
+    // Use vwap_event="none" so partial hard override (which needs reclaim/loss)
+    // doesn't fire and turn the base into NO. Rely on below_vwap to satisfy
+    // vwapConfirmsOpp for the veto path. Strip all hard-override triggers so
+    // the base prediction stays YES from scoring dominance.
+    const opposing: PartialFeat = {
+      present: true, degraded_mode: false, feed_mismatch: false, synthesized: false,
+      completeness: 0.85, minutes_elapsed: 13, direction: "red",
+      close_position_pct: 0.15, range_vs_atr: 1.2,
+      body_pct: 0.7, upper_wick_pct: 0.1, lower_wick_pct: 0.05,
+      vwap_event: "none",
+    };
     const f = strongBullFeatures({
-      partial: opposingPartial, below_vwap: true, above_vwap: false, vwap_reclaim: false,
+      partial: opposing,
+      above_vwap: false, below_vwap: true, vwap_reclaim: false,
+      acceptance_break_up: false, channel_breakout_confirmed: false,
+      failed_breakout_down: false,
     });
     const s = scoreCandle(f);
     const d = makeDecision(f, s, neutralCtx());
