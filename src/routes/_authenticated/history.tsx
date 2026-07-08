@@ -143,6 +143,23 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "agreement_gate_applied", label: "agreement_gate_applied" },
   { key: "agreement_gate_reason", label: "agreement_gate_reason" },
   { key: "final_trade_status", label: "final_trade_status" },
+  // Model 6 deterministic engine columns
+  { key: "engine_version_hash", label: "engine_version_hash" },
+  { key: "units", label: "units" },
+  { key: "conviction_active", label: "conviction_active" },
+  { key: "conviction_direction", label: "conviction_direction" },
+  { key: "conviction_aligned", label: "conviction_aligned" },
+  { key: "conviction_reasons_json", label: "conviction_reasons_json" },
+  { key: "base_bullish_score", label: "base_bullish_score" },
+  { key: "base_bearish_score", label: "base_bearish_score" },
+  { key: "bullish_score", label: "m6_bullish_score" },
+  { key: "bearish_score", label: "m6_bearish_score" },
+  { key: "score_margin", label: "m6_score_margin" },
+  { key: "score_sum_mismatch", label: "score_sum_mismatch" },
+  { key: "changed_by_partial", label: "changed_by_partial" },
+  { key: "change_reason", label: "change_reason" },
+  { key: "original_prediction_before_partial", label: "original_prediction_before_partial" },
+  { key: "module_points_json", label: "module_points_json" },
 ];
 
 
@@ -326,7 +343,14 @@ function enrich(p: PredRow): PredRow {
     ob_orderbook_momentum: ob.orderbook_momentum ?? "",
     ob_confidence_effect: ob.confidence_effect ?? "",
     ob_fetch_error: ob.fetch_error ?? "",
+    // Model 6 JSON-serialized fields
+    module_points_json: p.module_points ? JSON.stringify(p.module_points) : "",
+    conviction_reasons_json: Array.isArray(p.conviction_reasons)
+      ? JSON.stringify(p.conviction_reasons)
+      : (p.conviction_reasons ? JSON.stringify(p.conviction_reasons) : ""),
   };
+
+
 
   // Flatten per-indicator score/weight/weighted/direction into columns.
   const breakdown = ai.indicator_breakdown;
