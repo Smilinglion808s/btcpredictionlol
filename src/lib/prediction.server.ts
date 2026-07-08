@@ -396,7 +396,6 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     })();
 
     const partialCols = {
-      fetch_source: partialPath ?? null,
       partial_snapshot_present: !!partial && !partialSynthesized,
       partial_snapshot_failure_reason: partialFailureReason,
       partial_completeness: partialDerived.completeness != null ? Number(partialDerived.completeness.toFixed(3)) : null,
@@ -404,7 +403,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       partial_close_position_pct: partialDerived.closePositionPct != null ? Number(partialDerived.closePositionPct.toFixed(3)) : null,
       partial_range_vs_atr: partialDerived.rangeVsAtr != null ? Number(partialDerived.rangeVsAtr.toFixed(3)) : null,
       partial_vwap_event: partialDerived.vwapEvent,
-      partial_fetch_source: partialFetchSource,
+      partial_fetch_source: partialPath ?? null,
       feed_mismatch: partialDerived.feedMismatch,
       degraded_mode: !partial || partialSynthesized || partialDerived.feedMismatch,
       partial_agreement: "missing" as "agree" | "disagree" | "neutral" | "nce" | "missing",
@@ -452,6 +451,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
         input_candle_age_seconds: freshness.inputCandleAgeSeconds,
         input_features_fresh: freshness.inputFeaturesFresh,
         freshness_action: freshnessAction,
+        fetch_source: fetchSource,
         advance_check_passed: advanceCheckPassed,
         current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
         current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
@@ -863,7 +863,7 @@ Server enforces these rules regardless of your output — but you must reason ab
       input_candle_age_seconds: freshness.inputCandleAgeSeconds,
       input_features_fresh: freshness.inputFeaturesFresh,
       freshness_action: freshnessAction,
-      
+      fetch_source: fetchSource,
       advance_check_passed: advanceCheckPassed,
       current_partial_minutes_elapsed: partial?.minutes_elapsed ?? null,
       current_partial_snapshot: partial as unknown as Record<string, unknown> | null,
