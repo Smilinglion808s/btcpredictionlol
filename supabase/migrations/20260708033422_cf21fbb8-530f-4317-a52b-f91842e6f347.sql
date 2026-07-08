@@ -1,0 +1,2 @@
+ALTER TABLE public.predictions ADD COLUMN IF NOT EXISTS score_sum_mismatch boolean NOT NULL DEFAULT false;
+ALTER TABLE public.predictions_archive ADD COLUMN IF NOT EXISTS score_sum_mismatch boolean NOT NULL DEFAULT false;

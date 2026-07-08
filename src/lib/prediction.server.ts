@@ -842,7 +842,32 @@ Server enforces these rules regardless of your output — but you must reason ab
     const baseBearishScore = asOptNum(parsedRec.base_bearish_score);
     const bullishScore = asOptNum(parsedRec.bullish_score);
     const bearishScore = asOptNum(parsedRec.bearish_score);
-    const scoreMargin = asOptNum(parsedRec.score_margin);
+    let scoreMargin = asOptNum(parsedRec.score_margin);
+    let bullishScoreFinal = bullishScore;
+    let bearishScoreFinal = bearishScore;
+    let scoreSumMismatch = false;
+
+    // ---- Server-enforce scores from module_points sum ----
+    if (parsedRec.module_points && typeof parsedRec.module_points === "object") {
+      const mp = parsedRec.module_points as Record<string, { bull?: number; bear?: number }>;
+      const serverBull = Object.values(mp).reduce((s, m) => s + (Number(m?.bull) || 0), 0);
+      const serverBear = Object.values(mp).reduce((s, m) => s + (Number(m?.bear) || 0), 0);
+      const serverMargin = Math.abs(serverBull - serverBear);
+
+      const modelBull = bullishScore ?? 0;
+      const modelBear = bearishScore ?? 0;
+      if (Math.abs(serverBull - modelBull) > 1 || Math.abs(serverBear - modelBear) > 1) {
+        scoreSumMismatch = true;
+        console.warn("Score mismatch:", {
+          modelBull, serverBull,
+          modelBear, serverBear,
+        });
+      }
+
+      bullishScoreFinal = serverBull;
+      bearishScoreFinal = serverBear;
+      scoreMargin = serverMargin;
+    }
     const originalPredictionBeforePartial = parsedRec.original_prediction_before_partial != null
       ? String(parsedRec.original_prediction_before_partial)
       : null;
@@ -938,9 +963,10 @@ Server enforces these rules regardless of your output — but you must reason ab
       final_trade_status: finalTradeStatus,
       base_bullish_score: baseBullishScore,
       base_bearish_score: baseBearishScore,
-      bullish_score: bullishScore,
-      bearish_score: bearishScore,
+      bullish_score: bullishScoreFinal,
+      bearish_score: bearishScoreFinal,
       score_margin: scoreMargin,
+      score_sum_mismatch: scoreSumMismatch,
       original_prediction_before_partial: originalPredictionBeforePartial,
       changed_by_partial: changedByPartial,
       change_reason: changeReason,

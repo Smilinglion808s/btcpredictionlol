@@ -282,6 +282,7 @@ export type Database = {
           reasoning_summary: string | null
           resolved_at: string | null
           score_margin: number | null
+          score_sum_mismatch: boolean
           settlement_source: string | null
           settlement_ticker: string | null
           settlement_value: number | null
@@ -350,6 +351,7 @@ export type Database = {
           reasoning_summary?: string | null
           resolved_at?: string | null
           score_margin?: number | null
+          score_sum_mismatch?: boolean
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -418,6 +420,7 @@ export type Database = {
           reasoning_summary?: string | null
           resolved_at?: string | null
           score_margin?: number | null
+          score_sum_mismatch?: boolean
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -490,6 +493,7 @@ export type Database = {
           reasoning_summary: string | null
           resolved_at: string | null
           score_margin: number | null
+          score_sum_mismatch: boolean
           settlement_source: string | null
           settlement_ticker: string | null
           settlement_value: number | null
@@ -559,6 +563,7 @@ export type Database = {
           reasoning_summary?: string | null
           resolved_at?: string | null
           score_margin?: number | null
+          score_sum_mismatch?: boolean
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -628,6 +633,7 @@ export type Database = {
           reasoning_summary?: string | null
           resolved_at?: string | null
           score_margin?: number | null
+          score_sum_mismatch?: boolean
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
