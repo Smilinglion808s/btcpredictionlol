@@ -232,8 +232,14 @@ export type Database = {
           agreement_gate_applied: boolean
           agreement_gate_reason: string | null
           api_model_id: string | null
+          base_bearish_score: number | null
+          base_bullish_score: number | null
+          bearish_score: number | null
           btc_price_at_prediction: number
+          bullish_score: number | null
           candle_ts: string
+          change_reason: string | null
+          changed_by_partial: boolean | null
           confidence: number
           config_hash: string | null
           conflict_downgrade_applied: boolean
@@ -253,8 +259,10 @@ export type Database = {
           input_features_fresh: boolean | null
           market_condition: string | null
           model_version: string
+          module_points: Json | null
           notes: string | null
           orderbook: Json | null
+          original_prediction_before_partial: string | null
           partial_agreement: string
           partial_close_position_pct: number | null
           partial_completeness: number | null
@@ -273,6 +281,7 @@ export type Database = {
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
+          score_margin: number | null
           settlement_source: string | null
           settlement_ticker: string | null
           settlement_value: number | null
@@ -291,8 +300,14 @@ export type Database = {
           agreement_gate_applied?: boolean
           agreement_gate_reason?: string | null
           api_model_id?: string | null
+          base_bearish_score?: number | null
+          base_bullish_score?: number | null
+          bearish_score?: number | null
           btc_price_at_prediction: number
+          bullish_score?: number | null
           candle_ts: string
+          change_reason?: string | null
+          changed_by_partial?: boolean | null
           confidence: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
@@ -312,8 +327,10 @@ export type Database = {
           input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version: string
+          module_points?: Json | null
           notes?: string | null
           orderbook?: Json | null
+          original_prediction_before_partial?: string | null
           partial_agreement?: string
           partial_close_position_pct?: number | null
           partial_completeness?: number | null
@@ -332,6 +349,7 @@ export type Database = {
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          score_margin?: number | null
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -350,8 +368,14 @@ export type Database = {
           agreement_gate_applied?: boolean
           agreement_gate_reason?: string | null
           api_model_id?: string | null
+          base_bearish_score?: number | null
+          base_bullish_score?: number | null
+          bearish_score?: number | null
           btc_price_at_prediction?: number
+          bullish_score?: number | null
           candle_ts?: string
+          change_reason?: string | null
+          changed_by_partial?: boolean | null
           confidence?: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
@@ -371,8 +395,10 @@ export type Database = {
           input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version?: string
+          module_points?: Json | null
           notes?: string | null
           orderbook?: Json | null
+          original_prediction_before_partial?: string | null
           partial_agreement?: string
           partial_close_position_pct?: number | null
           partial_completeness?: number | null
@@ -391,6 +417,7 @@ export type Database = {
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          score_margin?: number | null
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -413,8 +440,14 @@ export type Database = {
           agreement_gate_reason: string | null
           api_model_id: string | null
           archived_at: string
+          base_bearish_score: number | null
+          base_bullish_score: number | null
+          bearish_score: number | null
           btc_price_at_prediction: number
+          bullish_score: number | null
           candle_ts: string
+          change_reason: string | null
+          changed_by_partial: boolean | null
           confidence: number
           config_hash: string | null
           conflict_downgrade_applied: boolean
@@ -434,8 +467,10 @@ export type Database = {
           input_features_fresh: boolean | null
           market_condition: string | null
           model_version: string
+          module_points: Json | null
           notes: string | null
           orderbook: Json | null
+          original_prediction_before_partial: string | null
           partial_agreement: string
           partial_close_position_pct: number | null
           partial_completeness: number | null
@@ -454,6 +489,7 @@ export type Database = {
           prediction: string
           reasoning_summary: string | null
           resolved_at: string | null
+          score_margin: number | null
           settlement_source: string | null
           settlement_ticker: string | null
           settlement_value: number | null
@@ -473,8 +509,14 @@ export type Database = {
           agreement_gate_reason?: string | null
           api_model_id?: string | null
           archived_at?: string
+          base_bearish_score?: number | null
+          base_bullish_score?: number | null
+          bearish_score?: number | null
           btc_price_at_prediction: number
+          bullish_score?: number | null
           candle_ts: string
+          change_reason?: string | null
+          changed_by_partial?: boolean | null
           confidence: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
@@ -494,8 +536,10 @@ export type Database = {
           input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version: string
+          module_points?: Json | null
           notes?: string | null
           orderbook?: Json | null
+          original_prediction_before_partial?: string | null
           partial_agreement?: string
           partial_close_position_pct?: number | null
           partial_completeness?: number | null
@@ -514,6 +558,7 @@ export type Database = {
           prediction: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          score_margin?: number | null
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
@@ -533,8 +578,14 @@ export type Database = {
           agreement_gate_reason?: string | null
           api_model_id?: string | null
           archived_at?: string
+          base_bearish_score?: number | null
+          base_bullish_score?: number | null
+          bearish_score?: number | null
           btc_price_at_prediction?: number
+          bullish_score?: number | null
           candle_ts?: string
+          change_reason?: string | null
+          changed_by_partial?: boolean | null
           confidence?: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
@@ -554,8 +605,10 @@ export type Database = {
           input_features_fresh?: boolean | null
           market_condition?: string | null
           model_version?: string
+          module_points?: Json | null
           notes?: string | null
           orderbook?: Json | null
+          original_prediction_before_partial?: string | null
           partial_agreement?: string
           partial_close_position_pct?: number | null
           partial_completeness?: number | null
@@ -574,6 +627,7 @@ export type Database = {
           prediction?: string
           reasoning_summary?: string | null
           resolved_at?: string | null
+          score_margin?: number | null
           settlement_source?: string | null
           settlement_ticker?: string | null
           settlement_value?: number | null
