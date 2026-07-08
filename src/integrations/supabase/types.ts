@@ -243,10 +243,15 @@ export type Database = {
           confidence: number
           config_hash: string | null
           conflict_downgrade_applied: boolean
+          conviction_active: boolean | null
+          conviction_aligned: boolean | null
+          conviction_direction: string | null
+          conviction_reasons: string[] | null
           created_at: string
           current_partial_minutes_elapsed: number | null
           current_partial_snapshot: Json | null
           degraded_mode: boolean
+          engine_version_hash: string | null
           feed_mismatch: boolean
           fetch_source: string | null
           final_trade_status: string | null
@@ -290,6 +295,7 @@ export type Database = {
           status: string
           symbol: string
           timeframe: string
+          units: number | null
         }
         Insert: {
           actual_direction?: string | null
@@ -312,10 +318,15 @@ export type Database = {
           confidence: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
+          conviction_active?: boolean | null
+          conviction_aligned?: boolean | null
+          conviction_direction?: string | null
+          conviction_reasons?: string[] | null
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
           degraded_mode?: boolean
+          engine_version_hash?: string | null
           feed_mismatch?: boolean
           fetch_source?: string | null
           final_trade_status?: string | null
@@ -359,6 +370,7 @@ export type Database = {
           status?: string
           symbol?: string
           timeframe?: string
+          units?: number | null
         }
         Update: {
           actual_direction?: string | null
@@ -381,10 +393,15 @@ export type Database = {
           confidence?: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
+          conviction_active?: boolean | null
+          conviction_aligned?: boolean | null
+          conviction_direction?: string | null
+          conviction_reasons?: string[] | null
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
           degraded_mode?: boolean
+          engine_version_hash?: string | null
           feed_mismatch?: boolean
           fetch_source?: string | null
           final_trade_status?: string | null
@@ -428,6 +445,7 @@ export type Database = {
           status?: string
           symbol?: string
           timeframe?: string
+          units?: number | null
         }
         Relationships: []
       }
@@ -454,10 +472,15 @@ export type Database = {
           confidence: number
           config_hash: string | null
           conflict_downgrade_applied: boolean
+          conviction_active: boolean | null
+          conviction_aligned: boolean | null
+          conviction_direction: string | null
+          conviction_reasons: string[] | null
           created_at: string
           current_partial_minutes_elapsed: number | null
           current_partial_snapshot: Json | null
           degraded_mode: boolean
+          engine_version_hash: string | null
           feed_mismatch: boolean
           fetch_source: string | null
           final_trade_status: string | null
@@ -501,6 +524,7 @@ export type Database = {
           status: string
           symbol: string
           timeframe: string
+          units: number | null
         }
         Insert: {
           actual_direction?: string | null
@@ -524,10 +548,15 @@ export type Database = {
           confidence: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
+          conviction_active?: boolean | null
+          conviction_aligned?: boolean | null
+          conviction_direction?: string | null
+          conviction_reasons?: string[] | null
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
           degraded_mode?: boolean
+          engine_version_hash?: string | null
           feed_mismatch?: boolean
           fetch_source?: string | null
           final_trade_status?: string | null
@@ -571,6 +600,7 @@ export type Database = {
           status?: string
           symbol?: string
           timeframe?: string
+          units?: number | null
         }
         Update: {
           actual_direction?: string | null
@@ -594,10 +624,15 @@ export type Database = {
           confidence?: number
           config_hash?: string | null
           conflict_downgrade_applied?: boolean
+          conviction_active?: boolean | null
+          conviction_aligned?: boolean | null
+          conviction_direction?: string | null
+          conviction_reasons?: string[] | null
           created_at?: string
           current_partial_minutes_elapsed?: number | null
           current_partial_snapshot?: Json | null
           degraded_mode?: boolean
+          engine_version_hash?: string | null
           feed_mismatch?: boolean
           fetch_source?: string | null
           final_trade_status?: string | null
@@ -641,6 +676,7 @@ export type Database = {
           status?: string
           symbol?: string
           timeframe?: string
+          units?: number | null
         }
         Relationships: []
       }
