@@ -145,7 +145,6 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "final_trade_status", label: "final_trade_status" },
   // Model 6 deterministic engine columns
   { key: "engine_version_hash", label: "engine_version_hash" },
-  { key: "config_hash_m6", label: "config_hash_m6" },
   { key: "units", label: "units" },
   { key: "conviction_active", label: "conviction_active" },
   { key: "conviction_direction", label: "conviction_direction" },
@@ -160,7 +159,6 @@ const BASE_COLUMNS: { key: string; label: string }[] = [
   { key: "changed_by_partial", label: "changed_by_partial" },
   { key: "change_reason", label: "change_reason" },
   { key: "original_prediction_before_partial", label: "original_prediction_before_partial" },
-  { key: "conflict_downgrade_applied_m6", label: "conflict_downgrade_applied_m6" },
   { key: "module_points_json", label: "module_points_json" },
 ];
 
