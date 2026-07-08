@@ -343,7 +343,11 @@ function enrich(p: PredRow): PredRow {
     ob_orderbook_momentum: ob.orderbook_momentum ?? "",
     ob_confidence_effect: ob.confidence_effect ?? "",
     ob_fetch_error: ob.fetch_error ?? "",
-  };
+    // Model 6 JSON-serialized fields
+    module_points_json: p.module_points ? JSON.stringify(p.module_points) : "",
+    conviction_reasons_json: Array.isArray(p.conviction_reasons)
+      ? JSON.stringify(p.conviction_reasons)
+      : (p.conviction_reasons ? JSON.stringify(p.conviction_reasons) : ""),
 
   // Flatten per-indicator score/weight/weighted/direction into columns.
   const breakdown = ai.indicator_breakdown;
