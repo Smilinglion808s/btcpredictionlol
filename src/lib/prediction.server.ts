@@ -832,6 +832,60 @@ Server enforces these rules regardless of your output — but you must reason ab
 
     const configHash = computeConfigHash(settings as Record<string, unknown>);
 
+    // ---- Score-detail extraction (from parsed AI response) ----
+    const asOptNum = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
+    const baseBullishScore = asOptNum(parsedRec.base_bullish_score);
+    const baseBearishScore = asOptNum(parsedRec.base_bearish_score);
+    const bullishScore = asOptNum(parsedRec.bullish_score);
+    const bearishScore = asOptNum(parsedRec.bearish_score);
+    const scoreMargin = asOptNum(parsedRec.score_margin);
+    const originalPredictionBeforePartial = parsedRec.original_prediction_before_partial != null
+      ? String(parsedRec.original_prediction_before_partial)
+      : null;
+    const changedByPartial = parsedRec.changed_by_partial === undefined || parsedRec.changed_by_partial === null
+      ? null
+      : asBool(parsedRec.changed_by_partial);
+    const changeReason = parsedRec.change_reason != null ? String(parsedRec.change_reason) : null;
+    const modulePoints = (parsedRec.module_points && typeof parsedRec.module_points === "object")
+      ? (parsedRec.module_points as Record<string, unknown>)
+      : null;
+
+    // ---- Server-enforced setup_type derived from final score_margin ----
+    const finalMargin = scoreMargin ?? 0;
+    const finalPrediction = rawCall;
+
+    let serverSetupType: string;
+    if (finalPrediction === 'NO CLEAR EDGE') {
+      serverSetupType = 'no_clear_edge';
+    } else if (finalMargin >= 22) {
+      serverSetupType = 'premium_directional';
+    } else if (finalMargin >= 16) {
+      serverSetupType = 'strong_directional';
+    } else if (finalMargin >= 10) {
+      serverSetupType = 'standard_directional';
+    } else if (finalMargin >= 7) {
+      serverSetupType = 'low_confidence_directional';
+    } else {
+      serverSetupType = 'no_clear_edge';
+    }
+
+    // Re-run Model 5 agreement gate against server-computed setup_type
+    // (setup_type is now authoritative; the gate must operate on it, not the model narrative).
+    if (model5Active && rawCall !== "NO CLEAR EDGE" && serverAgreement !== "disagree") {
+      const serverIsStrong = serverSetupType === "strong_directional";
+      const serverIsPremium = serverSetupType === "premium_directional";
+      if ((serverIsStrong || serverIsPremium) && serverAgreement !== "agree") {
+        agreementGateApplied = true;
+        agreementGateReason = serverIsPremium ? "premium_requires_agree" : "strong_requires_agree";
+        finalTradeStatus = "AVOID";
+        notesParts.push(`Model5 gate: AVOID (${agreementGateReason})`);
+      }
+    }
+
     const insertPayload = {
       symbol: "BTC-USDT",
       timeframe: "15m",
@@ -841,7 +895,7 @@ Server enforces these rules regardless of your output — but you must reason ab
       prediction: rawCall,
       confidence: confidence100,
       btc_price_at_prediction: last.close,
-      setup_type: parsed.final_interpretation ?? parsed.setup_type ?? null,
+      setup_type: serverSetupType,
       market_condition: parsed.market_condition ?? null,
       reasoning_summary: notesParts.join(" • ") || null,
       full_ai_response: {
@@ -855,6 +909,8 @@ Server enforces these rules regardless of your output — but you must reason ab
         model_reported_trade_status: modelReportedTradeStatusRaw || null,
         model_reported_agreement_gate_applied: asBool(parsedRec.agreement_gate_applied),
         model_reported_agreement_gate_reason: String(parsedRec.agreement_gate_reason ?? "") || null,
+        model_reported_setup_type: parsed.final_interpretation ?? parsed.setup_type ?? null,
+        server_computed_setup_type: serverSetupType,
       },
       indicators: indicators as unknown as Record<string, unknown>,
       orderbook: orderbookAggregate,
@@ -880,6 +936,15 @@ Server enforces these rules regardless of your output — but you must reason ab
       agreement_gate_applied: agreementGateApplied,
       agreement_gate_reason: agreementGateReason,
       final_trade_status: finalTradeStatus,
+      base_bullish_score: baseBullishScore,
+      base_bearish_score: baseBearishScore,
+      bullish_score: bullishScore,
+      bearish_score: bearishScore,
+      score_margin: scoreMargin,
+      original_prediction_before_partial: originalPredictionBeforePartial,
+      changed_by_partial: changedByPartial,
+      change_reason: changeReason,
+      module_points: modulePoints,
     };
 
 
