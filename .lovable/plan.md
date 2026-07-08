@@ -1,82 +1,111 @@
+## 1. Relabel pre-engine rows (data migration)
 
-Priority order matches your #1 → #6. #1 and #4 are bugs and ship first.
+Run a one-shot UPDATE against `predictions` (and `predictions_archive` for safety) so the `model_version='6.0'` label only ever means "produced by the deterministic engine."
 
-## What I found in the DB just now
+```sql
+UPDATE public.predictions
+SET model_version = '5.1-mislabeled'
+WHERE model_version = '6.0'
+  AND engine_version_hash IS NULL;
 
-Pulled `api_runs` + `predictions` for the last 36h.
+UPDATE public.predictions_archive
+SET model_version = '5.1-mislabeled'
+WHERE model_version = '6.0'
+  AND engine_version_hash IS NULL;
+```
 
-- **Freeze root cause today = OKX HTTP 429.** Every `fetch-okx-candles` run today errors with `OKX HTTP 429: {"msg":"Too Many Requests","code":"50011"}`. The freshness guard we added last turn is working — it forces NO CLEAR EDGE and marks `freshness_action = forced_no_clear_edge_refetch_failed: OKX HTTP 429...`. So the model isn't running on stale data anymore, but it's also barely running at all because the single ingest source is being throttled. Fix = give Path A a fallback so a 429 on OKX doesn't blind the pipeline.
-- **Resolution writer is actually correct in current code.** Latest resolved rows in `predictions` show populated `actual_next_candle_open/high/low/close` and `actual_direction` values of both GREEN **and** RED (18:45 → RED, 17:30 → RED, etc.). The "blank actual_open / 0-1 in actual_close / no RED" pattern you're seeing in CSV is either from an older export or from a second `model_version` whose insert path isn't setting the audit fields (I see two 19:15 rows: one NO CLEAR EDGE with `input_candle_ts` populated, one NO with it null — likely two model versions running in the same cron tick). Ship a verification pass + normalize the second write path.
+After this, the canonical Model 6 filter everywhere in the app becomes:
 
-## Changes
+```
+model_version = '6.0' AND engine_version_hash IS NOT NULL
+```
 
-### 1. Fetch redundancy + hard freeze detection *(bugfix)*
+I'll also add a short comment in `src/lib/model6/engine.ts` noting the invariant so nobody reintroduces a code path that inserts `6.0` rows without an `engine_version_hash`.
 
-`src/lib/okx.server.ts` + `src/lib/prediction.server.ts`
+No UI changes — the mislabeled rows will still appear in History under their new label; they simply stop polluting 6.0 stats queries.
 
-- Add `fetchAndUpsertCandles(supabase)` that tries OKX first, then Coinbase (`https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=900`) normalized to the same `candles` row shape, and writes a `fetch_source` column (`okx` | `coinbase`) on each candle row.
-- On 429 specifically, honor `Retry-After` and skip OKX for that run rather than retrying 3× in-loop (wastes the tick).
-- Log both attempts to `api_runs` with `response_payload.attempts = [{source, status, rows_upserted}]`.
-- In `runAiPredictionServer`, after the freshness age check, also assert **`max(candle_ts) advanced since the previous prediction's `input_candle_ts` for this model_version`**. If it did not advance, force NO CLEAR EDGE with `freshness_action = "no_advance_since_last_prediction"`. This catches the "fetch returned 200 with 0 new rows" case that pure age can't see.
-- Backfill any missing 15m boundaries between the last DB row and now before predicting — walk the returned array, upsert every gap, and log `backfilled_count`.
+## 2. Golden tests for the deterministic engine
 
-### 2. Feed the in-progress candle explicitly *(biggest signal upgrade)*
+Add a Vitest suite covering 25 hand-built scenarios that lock down every branch of the engine. Pure functions only — no DB, no network, no OpenAI (narrator is skipped; we assert on `decisionEngine` + `scoringEngine` + `sizingEngine` outputs directly).
 
-`src/lib/okx.server.ts` + `src/lib/prediction.server.ts`
+**File**: `src/lib/model6/__tests__/golden.test.ts`
 
-- Add `fetchCurrentPartialCandle()`: hit OKX (`bar=15m&limit=1`) or Coinbase 1m aggregated to the current 15m boundary, return `{ open, high, low, close, volume, minutes_elapsed, confirm: false }` for the **currently open** candle.
-- In the prompt payload, add a top-level `current_candle_partial` field (not appended to the `candles` array, so no model confusion about which candle is closed):
-  ```json
-  "current_candle_partial": {
-    "start_ts": "...", "minutes_elapsed": 14, "o":..., "h":..., "l":..., "c":...,
-    "distance_to_vwap_pct": ..., "distance_to_ema9_pct": ...,
-    "reclaiming_level": "...", "losing_level": "..."
-  }
-  ```
-- Update `DEFAULT_INSTRUCTIONS` to describe how to weight it: real-time snapshot of the candle *before* the target, use for momentum/level-reclaim reads, not lookahead.
-- Persist the same object in `predictions.full_ai_response.current_candle_partial` so it's auditable in CSV.
+**Fixture shape**: each scenario is a `{ name, features, recentCtx, expected }` object where `expected` pins:
+- `scores.bull`, `scores.bear`, `scores.margin`, `scores.dominant`
+- Per-module points for any module the scenario is exercising
+- `decision.prediction`, `decision.confidence`, `decision.setup_type`
+- `decision.guards_applied`, `decision.caps_applied`
+- `decision.partial_veto_active`, `decision.partial_hard_override_fired`, `decision.agreement_gate_applied`
+- `sizing.units`, `sizing.conviction_active`, `sizing.conviction_direction`, `sizing.conviction_aligned`
 
-### 3. Betting-feed alignment *(needs your input)*
+**Coverage matrix (25 cases)**:
 
-I don't know which feed your platform settles on — question is asked below. Once known, either:
-- Swap Path A's primary source to that feed, or
-- Add a second parallel ingest (`candles_settlement` table keyed on the settlement feed) used only by `resolvePredictionsServer`, leaving OKX as the feature source.
+Setup / base direction (6)
+1. Clean bullish trend expansion → YES, high confidence, `trend_continuation`
+2. Clean bearish trend expansion → NO, high confidence, `trend_continuation`
+3. VWAP reclaim from below → YES, `vwap_reclaim`
+4. VWAP loss from above → NO, `vwap_loss`
+5. True-mid Fib chop, low margin → NCE, `no_clear_edge`
+6. Compressed ATR, no direction → NCE, `low_confidence`
 
-### 4. Verify + harden the resolution writer *(bugfix)*
+Guards (5)
+7. `last2_losses=2` cooldown guard → confidence capped
+8. `same_direction_loss_streak>=2` → base direction flipped/blocked
+9. `last5_losses>=3` → forced NCE
+10. Prev was fallback + weak margin → NCE
+11. Recent push doesn't trigger cooldown
 
-`src/lib/prediction.server.ts` + `src/routes/_authenticated/history.tsx`
+Caps (3)
+12. Strong-expansion cap on max confidence
+13. Compressed-state cap
+14. Fib mid-zone cap
 
-- Current writer already sets `actual_next_candle_open/high/low/close` and `actual_direction = close>open?GREEN:close<open?RED:DOJI`. Recent rows prove it works. Add:
-  - A safety assertion before the update: reject writes when `resolution.candle.open === 0 || !Number.isFinite(open|close)` — logs to `api_runs.error_message` instead of silently poisoning a row.
-  - Coerce actual_direction on read in the CSV `enrich()` too (already there as fallback) — belt-and-suspenders.
-- Find the second insertion path that produced the 19:15/19:30 rows with null `input_candle_ts` and route it through the same `freshnessFor()` + payload builder. If it's a per-model loop, extract a shared `buildPredictionInsert()` helper so audit fields can't be skipped.
-- One-shot repair migration for any pre-fix rows that still have `actual_next_candle_open IS NULL AND status IN ('win','loss','push')`: refetch OHLC from OKX/Coinbase and backfill.
+Partial-candle module (5)
+15. Partial confirms base → bull/bear points added, no veto
+16. Partial contradicts base, tier-1 → `partial_veto_active=true`, prediction downgraded
+17. Partial hard override fires → `partial_hard_override_fired=true`, direction flipped
+18. Partial degraded_mode → module points zeroed, no veto
+19. Partial not present → module 0/0
 
-### 5. Auditability
+Agreement gate + NCE (3)
+20. Agreement gate blocks marginal call → `agreement_gate_applied=true`, NCE
+21. Margin below NCE floor → NCE, confidence 0
+22. Margin at exact NCE boundary → NCE (inclusive floor)
 
-Add columns to `predictions` and `predictions_archive`: `fetch_source text` (which feed produced the candle used at prediction time), `advance_check_passed boolean`, `current_partial_minutes_elapsed int`. Extend the CSV export in `history.tsx` to include them.
+Sizing / conviction (3)
+23. Base YES + all conviction conditions aligned → `units=2, conviction_active=true, conviction_aligned=true`
+24. Base NO + conviction conditions aligned bullish → `units=1, conviction_active=true, conviction_aligned=false`
+25. No conviction conditions met → `units=1, conviction_active=false`
 
-### 6. Cron split + per-phase timing
+**How fixtures are built**: I'll construct `Features` objects directly (typed literal), not by feeding synthetic candles through `computeFeatures`. This keeps tests focused on scoring/decision/sizing logic — `computeFeatures` gets separate lightweight coverage via 2 sanity tests that feed known candle arrays and check a handful of derived fields (atr_state, above_vwap, fib_zone).
 
-- Log per-phase durations in `scheduled-15m-run` response payload (`fetch_ms`, `resolve_ms`, `predict_ms`, `total_ms`).
-- Split the cron: keep `predict + fetch` at :14/:29/:44/:59, and move `resolve` to its own :01/:16/:31/:46 job so an AI-gateway 20s spike can never delay the predict tick.
+**Snapshot policy**: no `toMatchSnapshot()`. Every expected value is written inline so a diff shows exactly what changed. If the engine intentionally changes behavior, the failing test values are updated in the same PR — that IS the review signal.
 
-## Execution order
+**Runner**: `bunx vitest run src/lib/model6/__tests__/golden.test.ts`. No config changes required; Vitest is already wired.
 
-1. Migration: add audit columns + backfill NULL resolutions (needs your approval).
-2. Ship #1 (fetch redundancy + advance assertion) — unblocks predictions today.
-3. Ship #4 (writer verification + unified insert helper).
-4. Ship #2 (in-progress candle) — the actual edge upgrade.
-5. Ship #5 + #6 (auditability + cron split).
-6. #3 waits on your feed answer.
+## 3. Measurement clock (documentation only)
 
-## One clarifying question before I plan the ingest source
+Add a short comment block at the top of `src/lib/model6/engine.ts` recording the rule so it survives future context loss:
 
-Which feed does the platform settle green/red on? If you don't know, best proxy is: paste one recent borderline candle where you thought it was green and it settled red (or vice versa) and I'll diff feeds. Options:
-- **Coinbase spot** (BTC-USD)
-- **Binance spot** (BTC-USDT)
-- **Kalshi index** (they publish which feed)
-- **CME BRR / CF Benchmarks** (an oracle blend)
-- **Don't know — investigate**
+```
+// Measurement clock: the 7-day evaluation window starts at the timestamp of
+// the first predictions row with engine_version_hash IS NOT NULL under
+// model_version='6.0'. Flat-stake discipline = flat *base* units, with the
+// sizingEngine's 1/2-unit conviction rule applied mechanically. Track net
+// units alongside net wins.
+```
 
-I'll default to "Coinbase spot" for the ingest fallback in step 1 regardless, since Path A needs a second source no matter what.
+No stats-page UI changes in this plan — that's a follow-up once we have ≥7 days of clean engine rows.
+
+## Order of operations
+
+1. Migration to relabel rows (approval-gated).
+2. Add golden test file + 2 feature-engine sanity tests.
+3. Add comment blocks in `engine.ts`.
+4. Run `bunx vitest run` and confirm all 27 tests pass.
+
+## Out of scope
+
+- No UI changes to History/Stats filters (they already read `model_version`; relabeled rows drop out of 6.0 views automatically).
+- No changes to scoring/decision/sizing logic — tests lock down current behavior as the baseline.
+- No changes to the narrator or OpenAI call path.

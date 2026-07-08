@@ -1,4 +1,17 @@
 // Orchestrator: runs Model 6 end-to-end and produces an insertPayload for `predictions`.
+//
+// INVARIANT — do not break: every row this function inserts into `predictions`
+// with model_version='6.0' MUST carry a non-null `engine_version_hash`. That
+// column is the canonical filter for "row produced by the deterministic
+// engine" — analytics, stats queries, and the 7-day measurement window all
+// key off it. Pre-engine LLM rows that were mislabeled 6.0 have been
+// relabeled to '5.1-mislabeled' (see migration 20260708). Never introduce a
+// 6.0 code path that skips setting engine_version_hash.
+//
+// MEASUREMENT CLOCK — the 7-day evaluation window starts at the earliest
+// predictions row with model_version='6.0' AND engine_version_hash IS NOT NULL.
+// Flat-stake discipline = flat *base* units, with the sizingEngine's 1/2-unit
+// conviction rule applied mechanically. Track net units alongside net wins.
 import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeIndicatorBundle, type Candle } from "../indicators";
