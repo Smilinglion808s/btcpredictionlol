@@ -506,6 +506,12 @@ describe("provenance invariant", () => {
 
     const ROOT = join(process.cwd(), "src");
     const ALLOWED = join("lib", "model6", "engine.ts");
+    // Auto-generated files declare `engine_version_hash: string | null` as a
+    // type annotation, not a runtime write. Skip them.
+    const IGNORED = new Set([
+      join("integrations", "supabase", "types.ts").split(sep).join("/"),
+      "routeTree.gen.ts",
+    ]);
 
     // Match assignment/object-key writes only. Read/reference syntax:
     //   row.engine_version_hash        (property access — no match)
