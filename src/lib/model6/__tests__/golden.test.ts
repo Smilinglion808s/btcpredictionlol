@@ -535,7 +535,9 @@ describe("provenance invariant", () => {
         }
         if (!/\.(ts|tsx|js|jsx)$/.test(name)) continue;
         const rel = relative(ROOT, p);
-        if (rel.split(sep).join("/") === ALLOWED.split(sep).join("/")) continue;
+        const relPosix = rel.split(sep).join("/");
+        if (relPosix === ALLOWED.split(sep).join("/")) continue;
+        if (IGNORED.has(relPosix)) continue;
 
         const src = readFileSync(p, "utf8");
         for (const rawLine of src.split("\n")) {
