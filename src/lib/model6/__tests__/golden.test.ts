@@ -486,3 +486,77 @@ describe("Model 6 golden — sizing & conviction", () => {
     expect(sizing.conviction_reasons.length).toBe(0);
   });
 });
+
+// ============================================================================
+// Provenance invariant: `engine_version_hash` may ONLY be written from inside
+// runModel6Prediction (src/lib/model6/engine.ts). Any other src file that
+// assigns it — a migration-driven backfill helper, an export-time enrichment,
+// a resolver rewrite, an admin patch script — silently forges provenance and
+// poisons the 7-day measurement clock. This test scans the source tree and
+// fails CI if it finds a write site outside the engine module.
+//
+// "Write site" = the identifier appears on the left of `:` or `=` (object
+// literal key or direct assignment). Pure reads (`row.engine_version_hash`,
+// `.eq("engine_version_hash", …)`, column list strings, comments) are fine.
+// ============================================================================
+describe("provenance invariant", () => {
+  it("engine_version_hash is only written inside src/lib/model6/engine.ts", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("fs");
+    const { join, relative, sep } = await import("path");
+
+    const ROOT = join(process.cwd(), "src");
+    const ALLOWED = join("lib", "model6", "engine.ts");
+    // Auto-generated files declare `engine_version_hash: string | null` as a
+    // type annotation, not a runtime write. Skip them.
+    const IGNORED = new Set([
+      join("integrations", "supabase", "types.ts").split(sep).join("/"),
+      "routeTree.gen.ts",
+    ]);
+
+    // Match assignment/object-key writes only. Read/reference syntax:
+    //   row.engine_version_hash        (property access — no match)
+    //   .eq("engine_version_hash", …)  (string literal — no match)
+    // Write syntax we DO catch:
+    //   engine_version_hash: value      (object literal key)
+    //   engine_version_hash = value     (direct assignment)
+    //   { engine_version_hash } = …     (destructure-and-rebind, rare)
+    const WRITE_RE = /(?:^|[\s,{(])engine_version_hash\s*[:=]/;
+
+    const offenders: string[] = [];
+
+    function walk(dir: string) {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        const st = statSync(p);
+        if (st.isDirectory()) {
+          if (name === "node_modules" || name === "__tests__") continue;
+          walk(p);
+          continue;
+        }
+        if (!/\.(ts|tsx|js|jsx)$/.test(name)) continue;
+        const rel = relative(ROOT, p);
+        const relPosix = rel.split(sep).join("/");
+        if (relPosix === ALLOWED.split(sep).join("/")) continue;
+        if (IGNORED.has(relPosix)) continue;
+
+        const src = readFileSync(p, "utf8");
+        for (const rawLine of src.split("\n")) {
+          const line = rawLine.replace(/\/\/.*$/, ""); // strip line comments
+          if (WRITE_RE.test(line)) {
+            offenders.push(`${rel}: ${rawLine.trim()}`);
+            break;
+          }
+        }
+      }
+    }
+    walk(ROOT);
+
+    if (offenders.length > 0) {
+      throw new Error(
+        `engine_version_hash written outside src/lib/model6/engine.ts:\n  ` +
+          offenders.join("\n  "),
+      );
+    }
+    expect(offenders).toEqual([]);
+  });
+});
