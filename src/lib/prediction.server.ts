@@ -1184,10 +1184,28 @@ export async function resolvePredictionsServer(
       }
       // Grade Model 7 shadow rows for this prediction. Best-effort.
       try {
-        const dir = hasOhlc ? actualDirection(resolution.candle) : null;
+        let dir: "GREEN" | "RED" | "DOJI" | null = hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null;
+        // Fallback: if the production resolver zeroed OHLC (e.g. OKX/Coinbase
+        // rate-limited and Kalshi decided the outcome), read the confirmed
+        // candle from our own `candles` table so shadow rows still grade.
+        if (!dir) {
+          const { data: c } = await supabase
+            .from("candles")
+            .select("open,close,high,low,confirm")
+            .eq("candle_ts", p.candle_ts)
+            .eq("confirm", true)
+            .maybeSingle();
+          if (c && Number(c.open) > 0 && Number(c.close) > 0) {
+            dir = actualDirection({
+              open: Number(c.open), high: Number(c.high), low: Number(c.low),
+              close: Number(c.close), confirm: true,
+            } as ResolutionCandle) as "GREEN" | "RED" | "DOJI";
+          }
+        }
         const { resolveShadowRowsFor } = await import("./model7/shadow");
         await resolveShadowRowsFor(supabase, p.id, dir);
       } catch { /* never block resolver on shadow */ }
+
     }
 
     if (!watchMs || Date.now() >= deadline || unresolvedClosed === 0) {
