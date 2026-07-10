@@ -78,6 +78,37 @@ describe("Model 7 — frozen scorer & thresholds", () => {
     expect(r3.decision).toBe("NO");
     expect(r3.hard_no_override_fired).toBe("failed_breakout_down");
   });
+
+  it("Variant B vs B2 at p=0.70 with upstream NO CLEAR EDGE: B forces NO, B2 keeps YES", () => {
+    // Spec acceptance check: same fixture, same fit; the ONLY difference is
+    // B2 disables the upstream_no_clear_edge override. Fit uses one feature
+    // scaled so probability_green == 0.70 exactly (base_decision = YES).
+    const one = {
+      model_fit_id: "test", feature_order: ["x"],
+      feature_means: [0], feature_scales: [1], coefficients: [1],
+      intercept: 0, categorical_vocab: {},
+    };
+    const logitFor = (p: number) => Math.log(p / (1 - p));
+    const ctx = { prediction: "NO CLEAR EDGE" };
+
+    // Variant B — override intact.
+    const rB = scoreFeatureMap({ x: logitFor(0.70) }, {}, one, ctx);
+    expect(Math.abs(rB.probability_green - 0.70)).toBeLessThan(1e-9);
+    expect(rB.base_decision).toBe("YES");
+    expect(rB.decision).toBe("NO");
+    expect(rB.hard_no_override_fired).toBe("upstream_no_clear_edge");
+
+    // Variant B2 — override removed.
+    const rB2 = scoreFeatureMap({ x: logitFor(0.70) }, {}, one, ctx, { skipUpstreamNoClearEdge: true });
+    expect(Math.abs(rB2.probability_green - 0.70)).toBeLessThan(1e-9);
+    expect(rB2.base_decision).toBe("YES");
+    expect(rB2.decision).toBe("YES");
+    expect(rB2.hard_no_override_fired).toBe("none");
+    // Override ledger records the rule as evaluated-but-not-applied.
+    const nce = rB2.override_reasons.find((r) => r.rule === "upstream_no_clear_edge");
+    expect(nce?.fired).toBe(false);
+    expect(nce?.applied).toBe(false);
+  });
 });
 
 describe("Model 7 — logistic regression fitter", () => {
