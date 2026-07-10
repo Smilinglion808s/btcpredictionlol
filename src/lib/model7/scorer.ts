@@ -59,25 +59,38 @@ export function scoreFeatureMap(
   // Align + standardize + logit.
   let logit = fit.intercept;
   let nonzero = 0;
+  const zVec = new Array<number>(fit.feature_order.length);
   for (let j = 0; j < fit.feature_order.length; j++) {
     const name = fit.feature_order[j];
     const raw = featureMap[name] ?? 0;
     if (raw !== 0) nonzero++;
     const z = (raw - fit.feature_means[j]) / fit.feature_scales[j];
+    zVec[j] = z;
     logit += fit.coefficients[j] * z;
   }
   const p = sigmoid(logit);
 
   const base: "YES" | "NO" | "SKIP" = p >= YES_T ? "YES" : p <= NO_T ? "NO" : "SKIP";
 
-  // Hard-NO overrides (order-independent; first-matching id reported).
+  // Evaluate every override; report full ledger + first-fired winner.
   const fbd = String(hardNoContext.failed_breakout_down ?? "").toLowerCase();
-  let override = "none";
-  if (!options?.skipUpstreamNoClearEdge && (hardNoContext.prediction ?? "").toString() === "NO CLEAR EDGE") override = "upstream_no_clear_edge";
-  else if ((hardNoContext.market_condition ?? "").toString() === "trending_expansion") override = "trending_expansion";
-  else if (fbd === "true") override = "failed_breakout_down";
-  const decision: "YES" | "NO" | "SKIP" = override !== "none" ? "NO" : base;
+  const nceFired = !options?.skipUpstreamNoClearEdge &&
+    (hardNoContext.prediction ?? "").toString() === "NO CLEAR EDGE";
+  const trendingFired = (hardNoContext.market_condition ?? "").toString() === "trending_expansion";
+  const fbdFired = fbd === "true";
 
+  let override = "none";
+  if (nceFired) override = "upstream_no_clear_edge";
+  else if (trendingFired) override = "trending_expansion";
+  else if (fbdFired) override = "failed_breakout_down";
+
+  const override_reasons: OverrideEvaluation[] = [
+    { rule: "upstream_no_clear_edge", fired: nceFired, applied: override === "upstream_no_clear_edge" },
+    { rule: "trending_expansion", fired: trendingFired, applied: override === "trending_expansion" },
+    { rule: "failed_breakout_down", fired: fbdFired, applied: override === "failed_breakout_down" },
+  ];
+
+  const decision: "YES" | "NO" | "SKIP" = override !== "none" ? "NO" : base;
 
   // Track unknown categoricals (values seen but not in vocab).
   const unknown: Record<string, string[]> = {};
@@ -91,8 +104,10 @@ export function scoreFeatureMap(
   return {
     probability_green: p,
     logit,
+    standardized_vector: zVec,
     base_decision: base,
     hard_no_override_fired: override,
+    override_reasons,
     decision,
     would_trade: decision !== "SKIP",
     feature_vector_nonzero_count: nonzero,
