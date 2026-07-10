@@ -26,9 +26,9 @@ function StatsPage() {
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
   const m7Fn = useServerFn(getModel7ShadowStats);
-  const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 15_000 });
+  const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m7PendingFn = useServerFn(getModel7ShadowPending);
-  const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 15_000 });
+  const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
 
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
@@ -60,6 +60,10 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["stats"] });
         qc.invalidateQueries({ queryKey: ["predictions-list"] });
         qc.invalidateQueries({ queryKey: ["model-versions"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
+        qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
