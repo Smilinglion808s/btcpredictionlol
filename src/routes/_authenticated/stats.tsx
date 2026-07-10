@@ -215,6 +215,10 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B")}>
                 {exporting === "B" ? "…" : "Variant B"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B2")}>
+                {exporting === "B2" ? "…" : "Variant B2"}
+              </Button>
+
             </div>
           </div>
         </CardHeader>
