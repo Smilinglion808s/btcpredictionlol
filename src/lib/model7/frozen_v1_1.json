@@ -1,0 +1,2327 @@
+{
+  "schema_version": "1.1.0",
+  "model_id": "btc15_boundary_hybrid_fixed_058_026_v1_1",
+  "model_name": "BTC 15m Boundary Hybrid — Fixed Threshold Deployment",
+  "generated_at_utc": "2026-07-10T01:14:08.327059+00:00",
+  "purpose": "At the exact opening boundary of a new 15-minute BTC candle, output YES/GREEN, NO/RED, or SKIP without using any data from the target candle.",
+  "important_distinction": {
+    "frozen_weights": "The coefficients in this JSON are one final model fit on all 171 clean labeled rows.",
+    "validation": "The reported 72.46% result came from expanding-window walk-forward retraining. No single frozen coefficient set generated every walk-forward prediction.",
+    "deployment_use": "Use these frozen weights for immediate inference. To replicate the historical validation protocol, periodically retrain with the recipe in retraining_and_validation."
+  },
+  "source_data": {
+    "file_name": "btc15m_6.0_2026-07-08_to_2026-07-10.csv",
+    "sha256": "82b83b13521d5064c0264f0d2ccc47024582ca1992dfe81d30629dea5428e41e",
+    "total_rows": 173,
+    "clean_labeled_rows_used_for_frozen_fit": 171,
+    "class_counts": {
+      "GREEN": 82,
+      "RED": 89
+    },
+    "excluded": [
+      {
+        "count": 1,
+        "reason": "pending target / no realized OHLC"
+      },
+      {
+        "count": 1,
+        "reason": "status labeled but realized OHLC missing"
+      }
+    ],
+    "approximate_span": "43 hours"
+  },
+  "target_definition": {
+    "positive_class": {
+      "label": "GREEN",
+      "value": 1,
+      "condition": "actual_close > actual_open"
+    },
+    "negative_class": {
+      "label": "RED",
+      "value": 0,
+      "condition": "actual_close < actual_open"
+    },
+    "doji_policy": "Do not train or score performance on exact doji outcomes. The supplied clean training rows contained no valid-OHLC dojis.",
+    "probability_output": "P(GREEN) = probability of class 1"
+  },
+  "timing_contract": {
+    "target_timestamp_field": "candle_ts_utc",
+    "target_timestamp_meaning": "Opening timestamp of the 15-minute candle being predicted.",
+    "allowed_information": [
+      "Raw engine values finalized before the target boundary",
+      "Approximately 14-minute snapshot of the immediately preceding candle",
+      "Realized OHLC from candles strictly before the target timestamp",
+      "Timestamp/time-of-day of the target boundary"
+    ],
+    "forbidden_information": [
+      "actual_open, actual_high, actual_low, or actual_close of the target candle",
+      "actual_direction or result/status derived from the target candle",
+      "Any tick, partial candle, order book, volume, or price update occurring after the target boundary"
+    ],
+    "partial_snapshot_semantics": "current_partial_snapshot_json must describe the immediately preceding 15-minute candle near minute 14, not the target candle."
+  },
+  "inference_interface": {
+    "preferred_mode": "stateful_sequence",
+    "stateful_sequence": {
+      "description": "Pass chronological historical rows plus the current unlabeled boundary row. Generate lag features exactly as specified.",
+      "live_row_required_fields": [
+        "candle_ts_utc",
+        "current_partial_snapshot_json",
+        "module_points_json"
+      ],
+      "live_row_model_fields": {
+        "numeric": [
+          "confidence",
+          "input_candle_age_seconds",
+          "current_partial_minutes_elapsed",
+          "btc_price_at_prediction",
+          "ema9",
+          "ema21",
+          "ema50",
+          "volume_expansion",
+          "range20_high",
+          "range20_low",
+          "prev_body_pct",
+          "prev_upper_wick_pct",
+          "prev_lower_wick_pct",
+          "partial_completeness",
+          "partial_close_position_pct",
+          "partial_range_vs_atr",
+          "partial_module_bull_pts",
+          "partial_module_bear_pts",
+          "base_bullish_score",
+          "base_bearish_score",
+          "m6_bullish_score",
+          "m6_bearish_score",
+          "m6_score_margin"
+        ],
+        "categorical": [
+          "prediction",
+          "confidence_bucket",
+          "setup_type",
+          "market_condition",
+          "trend",
+          "failed_breakout_up",
+          "failed_breakout_down",
+          "choppy",
+          "partial_direction",
+          "partial_agreement",
+          "partial_veto_active",
+          "partial_veto_tier",
+          "partial_hard_override_fired",
+          "conflict_downgrade_applied",
+          "degraded_mode",
+          "feed_mismatch",
+          "agreement_gate_applied",
+          "final_trade_status",
+          "conviction_active",
+          "conviction_direction",
+          "conviction_aligned",
+          "changed_by_partial",
+          "original_prediction_before_partial",
+          "directional_fallback_used",
+          "bullish_fallback_lockout_active",
+          "bearish_fallback_lockout_active"
+        ]
+      },
+      "historical_row_required_for_lags": [
+        "candle_ts_utc",
+        "actual_open",
+        "actual_high",
+        "actual_low",
+        "actual_close"
+      ]
+    },
+    "direct_vector_mode": {
+      "description": "Alternatively produce an exact 205-element vector aligned to feature_order, then apply standardization and logistic scoring.",
+      "unspecified_vector_elements": 0.0
+    }
+  },
+  "feature_engineering": {
+    "raw_numeric_columns": [
+      "confidence",
+      "input_candle_age_seconds",
+      "current_partial_minutes_elapsed",
+      "btc_price_at_prediction",
+      "ema9",
+      "ema21",
+      "ema50",
+      "volume_expansion",
+      "range20_high",
+      "range20_low",
+      "prev_body_pct",
+      "prev_upper_wick_pct",
+      "prev_lower_wick_pct",
+      "partial_completeness",
+      "partial_close_position_pct",
+      "partial_range_vs_atr",
+      "partial_module_bull_pts",
+      "partial_module_bear_pts",
+      "base_bullish_score",
+      "base_bearish_score",
+      "m6_bullish_score",
+      "m6_bearish_score",
+      "m6_score_margin"
+    ],
+    "raw_categorical_columns": [
+      "prediction",
+      "confidence_bucket",
+      "setup_type",
+      "market_condition",
+      "trend",
+      "failed_breakout_up",
+      "failed_breakout_down",
+      "choppy",
+      "partial_direction",
+      "partial_agreement",
+      "partial_veto_active",
+      "partial_veto_tier",
+      "partial_hard_override_fired",
+      "conflict_downgrade_applied",
+      "degraded_mode",
+      "feed_mismatch",
+      "agreement_gate_applied",
+      "final_trade_status",
+      "conviction_active",
+      "conviction_direction",
+      "conviction_aligned",
+      "changed_by_partial",
+      "original_prediction_before_partial",
+      "directional_fallback_used",
+      "bullish_fallback_lockout_active",
+      "bearish_fallback_lockout_active"
+    ],
+    "fixed_module_names": [
+      "atr_range_expansion",
+      "bearish_exhaustion_downside_failure",
+      "candle_close_location",
+      "completed_candle_structure",
+      "failed_breakout_rejection_zones",
+      "fib_channel_position",
+      "last_8_candle_momentum",
+      "liquidity_sweep_reclaim",
+      "market_structure_regime_filter",
+      "partial_candle_confirmation",
+      "reclaim_breakdown_behavior",
+      "support_resistance_proximity",
+      "volume",
+      "vwap_state",
+      "wick_rejection_defense"
+    ],
+    "lag_windows": [
+      2,
+      3,
+      4,
+      6,
+      8,
+      12,
+      16
+    ],
+    "history_order": "Newest completed candle first.",
+    "gap_policy": "While walking backward, stop at the first row without valid realized OHLC; do not bridge the gap.",
+    "numeric_missing_policy": {
+      "rule": "For every raw numeric and lag numeric feature: if missing/non-finite, omit the numeric feature and set <feature>__missing = 1.0. If present, set the numeric feature and leave its missing indicator absent/0.",
+      "derived_feature_missing_rule": "Derived EMA/range, partial-snapshot, module, and time features follow the exact rules below; no extra missing indicator is added unless it exists in feature_order."
+    },
+    "categorical_policy": {
+      "normalization": "str(value or \"missing\").strip().lower()",
+      "encoding": "<column>=<normalized_value> with value 1.0",
+      "unknown_category": "It will not exist in feature_order and therefore contributes 0.0. Log and monitor unknown categories."
+    },
+    "prior_completed_candle_features": {
+      "_lag_prev_dir": "green if prior close > prior open else red; missing if no immediately prior valid candle",
+      "_lag_prev_ret": "(close - open) / open * 100",
+      "_lag_prev_body_pct": "abs(close - open) / max(high - low, 1e-9)",
+      "_lag_prev_close_pos": "(close - low) / max(high - low, 1e-9)",
+      "_lag_prev_upper": "(high - max(open, close)) / max(high - low, 1e-9)",
+      "_lag_prev_lower": "(min(open, close) - low) / max(high - low, 1e-9)",
+      "_lag_prev_range_pct": "(high - low) / open * 100"
+    },
+    "rolling_lag_features": {
+      "_lag_green_count_N": "Count of completed candles with close > open among newest N.",
+      "_lag_return_sum_N": "Sum of ((close-open)/open*100) among newest N.",
+      "_lag_range_mean_N": "Mean of ((high-low)/open*100) among newest N.",
+      "_lag_range_ratio_N": "Newest candle range_pct / (mean range_pct of the other N-1 candles + 1e-9).",
+      "_lag_streak_len": "Length of same-direction streak beginning with the newest completed candle.",
+      "_lag_streak_dir": "green or red direction of that newest streak.",
+      "_lag_close_pos_8": "(newest close - min(low newest 8)) / (max(high newest 8) - min(low newest 8) + 1e-9).",
+      "insufficient_history": "Set affected numeric lag feature to missing and encode its __missing indicator; categorical streak direction becomes missing."
+    },
+    "price_and_ema_features": {
+      "guard": "Only compute when btc_price_at_prediction is nonzero and required source value exists.",
+      "dist_ema9": "(price - ema9) / price * 100",
+      "dist_ema21": "(price - ema21) / price * 100",
+      "dist_ema50": "(price - ema50) / price * 100",
+      "dist_range_high": "(price - range20_high) / price * 100",
+      "dist_range_low": "(price - range20_low) / price * 100",
+      "position_range20": "(price - range20_low) / (range20_high - range20_low + 1e-9)",
+      "ema9_21_spread": "(ema9 - ema21) / price * 100",
+      "ema21_50_spread": "(ema21 - ema50) / price * 100"
+    },
+    "partial_snapshot_features": {
+      "source": "Parse current_partial_snapshot_json keys open, high, low, close and optional volume.",
+      "partial_ret_pct": "(close - open) / open * 100",
+      "partial_body_pct": "abs(close - open) / max(high - low, 1e-9)",
+      "partial_close_pos_raw": "(close - low) / max(high - low, 1e-9)",
+      "partial_upper_raw": "(high - max(open, close)) / max(high - low, 1e-9)",
+      "partial_lower_raw": "(min(open, close) - low) / max(high - low, 1e-9)",
+      "partial_range_pct_raw": "(high - low) / open * 100",
+      "partial_volume_raw": "float(volume) when present",
+      "parse_failure": "Omit these derived features, which leaves their aligned vector values at 0 before standardization."
+    },
+    "module_features": {
+      "source": "Parse module_points_json as an object keyed by each fixed_module_name.",
+      "feature_names": "mod_<module>_bull and mod_<module>_bear",
+      "value": "float(points[module][side]); default 0.0 on missing/invalid side value."
+    },
+    "time_features": {
+      "minute_of_day": "UTC hour * 60 + UTC minute from candle_ts_utc",
+      "tod_sin": "sin(2*pi*minute_of_day/1440)",
+      "tod_cos": "cos(2*pi*minute_of_day/1440)"
+    }
+  },
+  "model": {
+    "family": "binary logistic regression",
+    "regularization": "L2",
+    "C": 0.1,
+    "solver": "liblinear",
+    "max_iter": 500,
+    "fit_intercept": true,
+    "random_state": null,
+    "feature_count": 205,
+    "class_order": [
+      0,
+      1
+    ],
+    "intercept": -0.12041059195501816,
+    "feature_order": [
+      "_lag_close_pos_8",
+      "_lag_close_pos_8__missing",
+      "_lag_green_count_12",
+      "_lag_green_count_12__missing",
+      "_lag_green_count_16",
+      "_lag_green_count_16__missing",
+      "_lag_green_count_2",
+      "_lag_green_count_2__missing",
+      "_lag_green_count_3",
+      "_lag_green_count_3__missing",
+      "_lag_green_count_4",
+      "_lag_green_count_4__missing",
+      "_lag_green_count_6",
+      "_lag_green_count_6__missing",
+      "_lag_green_count_8",
+      "_lag_green_count_8__missing",
+      "_lag_prev_body_pct",
+      "_lag_prev_body_pct__missing",
+      "_lag_prev_close_pos",
+      "_lag_prev_close_pos__missing",
+      "_lag_prev_dir=green",
+      "_lag_prev_dir=missing",
+      "_lag_prev_dir=red",
+      "_lag_prev_lower",
+      "_lag_prev_lower__missing",
+      "_lag_prev_range_pct",
+      "_lag_prev_range_pct__missing",
+      "_lag_prev_ret",
+      "_lag_prev_ret__missing",
+      "_lag_prev_upper",
+      "_lag_prev_upper__missing",
+      "_lag_range_mean_12",
+      "_lag_range_mean_12__missing",
+      "_lag_range_mean_16",
+      "_lag_range_mean_16__missing",
+      "_lag_range_mean_2",
+      "_lag_range_mean_2__missing",
+      "_lag_range_mean_3",
+      "_lag_range_mean_3__missing",
+      "_lag_range_mean_4",
+      "_lag_range_mean_4__missing",
+      "_lag_range_mean_6",
+      "_lag_range_mean_6__missing",
+      "_lag_range_mean_8",
+      "_lag_range_mean_8__missing",
+      "_lag_range_ratio_12",
+      "_lag_range_ratio_12__missing",
+      "_lag_range_ratio_16",
+      "_lag_range_ratio_16__missing",
+      "_lag_range_ratio_2",
+      "_lag_range_ratio_2__missing",
+      "_lag_range_ratio_3",
+      "_lag_range_ratio_3__missing",
+      "_lag_range_ratio_4",
+      "_lag_range_ratio_4__missing",
+      "_lag_range_ratio_6",
+      "_lag_range_ratio_6__missing",
+      "_lag_range_ratio_8",
+      "_lag_range_ratio_8__missing",
+      "_lag_return_sum_12",
+      "_lag_return_sum_12__missing",
+      "_lag_return_sum_16",
+      "_lag_return_sum_16__missing",
+      "_lag_return_sum_2",
+      "_lag_return_sum_2__missing",
+      "_lag_return_sum_3",
+      "_lag_return_sum_3__missing",
+      "_lag_return_sum_4",
+      "_lag_return_sum_4__missing",
+      "_lag_return_sum_6",
+      "_lag_return_sum_6__missing",
+      "_lag_return_sum_8",
+      "_lag_return_sum_8__missing",
+      "_lag_streak_dir=green",
+      "_lag_streak_dir=missing",
+      "_lag_streak_dir=red",
+      "_lag_streak_len",
+      "_lag_streak_len__missing",
+      "agreement_gate_applied=false",
+      "agreement_gate_applied=true",
+      "base_bearish_score",
+      "base_bullish_score",
+      "bearish_fallback_lockout_active=missing",
+      "btc_price_at_prediction",
+      "bullish_fallback_lockout_active=missing",
+      "changed_by_partial=false",
+      "choppy=false",
+      "choppy=true",
+      "confidence",
+      "confidence_bucket=40-59",
+      "confidence_bucket=60-69",
+      "conflict_downgrade_applied=false",
+      "conviction_active=false",
+      "conviction_active=true",
+      "conviction_aligned=false",
+      "conviction_aligned=true",
+      "conviction_direction=green",
+      "conviction_direction=red",
+      "current_partial_minutes_elapsed",
+      "degraded_mode=false",
+      "degraded_mode=true",
+      "directional_fallback_used=missing",
+      "dist_ema21",
+      "dist_ema50",
+      "dist_ema9",
+      "dist_range_high",
+      "dist_range_low",
+      "ema21",
+      "ema21_50_spread",
+      "ema50",
+      "ema9",
+      "ema9_21_spread",
+      "failed_breakout_down=false",
+      "failed_breakout_down=true",
+      "failed_breakout_up=false",
+      "failed_breakout_up=true",
+      "feed_mismatch=false",
+      "feed_mismatch=true",
+      "final_trade_status=avoid",
+      "final_trade_status=trade",
+      "input_candle_age_seconds",
+      "m6_bearish_score",
+      "m6_bullish_score",
+      "m6_score_margin",
+      "market_condition=above_vwap",
+      "market_condition=below_vwap",
+      "market_condition=chop_mid",
+      "market_condition=compressed",
+      "market_condition=trending_expansion",
+      "mod_atr_range_expansion_bear",
+      "mod_atr_range_expansion_bull",
+      "mod_bearish_exhaustion_downside_failure_bear",
+      "mod_bearish_exhaustion_downside_failure_bull",
+      "mod_candle_close_location_bear",
+      "mod_candle_close_location_bull",
+      "mod_completed_candle_structure_bear",
+      "mod_completed_candle_structure_bull",
+      "mod_failed_breakout_rejection_zones_bear",
+      "mod_failed_breakout_rejection_zones_bull",
+      "mod_fib_channel_position_bear",
+      "mod_fib_channel_position_bull",
+      "mod_last_8_candle_momentum_bear",
+      "mod_last_8_candle_momentum_bull",
+      "mod_liquidity_sweep_reclaim_bear",
+      "mod_liquidity_sweep_reclaim_bull",
+      "mod_market_structure_regime_filter_bear",
+      "mod_market_structure_regime_filter_bull",
+      "mod_partial_candle_confirmation_bear",
+      "mod_partial_candle_confirmation_bull",
+      "mod_reclaim_breakdown_behavior_bear",
+      "mod_reclaim_breakdown_behavior_bull",
+      "mod_support_resistance_proximity_bear",
+      "mod_support_resistance_proximity_bull",
+      "mod_volume_bear",
+      "mod_volume_bull",
+      "mod_vwap_state_bear",
+      "mod_vwap_state_bull",
+      "mod_wick_rejection_defense_bear",
+      "mod_wick_rejection_defense_bull",
+      "original_prediction_before_partial=no",
+      "original_prediction_before_partial=no clear edge",
+      "original_prediction_before_partial=yes",
+      "partial_agreement=agree",
+      "partial_agreement=disagree",
+      "partial_agreement=missing",
+      "partial_agreement=nce",
+      "partial_agreement=neutral",
+      "partial_body_pct",
+      "partial_close_pos_raw",
+      "partial_close_position_pct",
+      "partial_completeness",
+      "partial_direction=flat",
+      "partial_direction=green",
+      "partial_direction=red",
+      "partial_hard_override_fired=false",
+      "partial_lower_raw",
+      "partial_module_bear_pts",
+      "partial_module_bull_pts",
+      "partial_range_pct_raw",
+      "partial_range_vs_atr",
+      "partial_ret_pct",
+      "partial_upper_raw",
+      "partial_veto_active=false",
+      "partial_veto_tier=none",
+      "partial_volume_raw",
+      "position_range20",
+      "prediction=no",
+      "prediction=no clear edge",
+      "prediction=yes",
+      "prev_body_pct",
+      "prev_lower_wick_pct",
+      "prev_upper_wick_pct",
+      "range20_high",
+      "range20_low",
+      "setup_type=low_confidence",
+      "setup_type=no_clear_edge",
+      "setup_type=premium",
+      "setup_type=standard",
+      "setup_type=strong",
+      "tod_cos",
+      "tod_sin",
+      "trend=down",
+      "trend=mixed",
+      "trend=up",
+      "volume_expansion"
+    ],
+    "feature_means": [
+      0.4850781217857623,
+      0.0935672514619883,
+      5.064327485380117,
+      0.14035087719298245,
+      6.380116959064328,
+      0.1871345029239766,
+      0.9532163742690059,
+      0.023391812865497075,
+      1.4210526315789473,
+      0.03508771929824561,
+      1.871345029239766,
+      0.04678362573099415,
+      2.754385964912281,
+      0.07017543859649122,
+      3.584795321637427,
+      0.0935672514619883,
+      0.41720435478046325,
+      0.011695906432748537,
+      0.5367322823898535,
+      0.011695906432748537,
+      0.47953216374269003,
+      0.011695906432748537,
+      0.5087719298245614,
+      0.3184155027777938,
+      0.011695906432748537,
+      0.3068218898826541,
+      0.011695906432748537,
+      0.004057720079625385,
+      0.011695906432748537,
+      0.25268423600899426,
+      0.011695906432748537,
+      0.26767350252158284,
+      0.14035087719298245,
+      0.25319662642185004,
+      0.1871345029239766,
+      0.30299244769172984,
+      0.023391812865497075,
+      0.2997737890881303,
+      0.03508771929824561,
+      0.2961319849984766,
+      0.04678362573099415,
+      0.2893842033760976,
+      0.07017543859649122,
+      0.2818094554096767,
+      0.0935672514619883,
+      0.8665774889482205,
+      0.14035087719298245,
+      0.7780681250140578,
+      0.1871345029239766,
+      1.097077221001093,
+      0.023391812865497075,
+      1.0268888447813627,
+      0.03508771929824561,
+      1.0026871178254029,
+      0.04678362573099415,
+      0.9548755994819978,
+      0.07017543859649122,
+      0.9198310316681222,
+      0.0935672514619883,
+      0.06369547879093661,
+      0.14035087719298245,
+      0.10628429571844208,
+      0.1871345029239766,
+      0.009630387353860079,
+      0.023391812865497075,
+      0.016588564749131233,
+      0.03508771929824561,
+      0.021407239520832358,
+      0.04678362573099415,
+      0.03475443193249677,
+      0.07017543859649122,
+      0.04815806411223535,
+      0.0935672514619883,
+      0.47953216374269003,
+      0.011695906432748537,
+      0.5087719298245614,
+      1.871345029239766,
+      0.011695906432748537,
+      0.8187134502923976,
+      0.18128654970760233,
+      21.640350877192983,
+      23.93421052631579,
+      1.0,
+      62516.111461988294,
+      1.0,
+      1.0,
+      0.8128654970760234,
+      0.1871345029239766,
+      54.707602339181285,
+      0.7251461988304093,
+      0.27485380116959063,
+      1.0,
+      0.6842105263157895,
+      0.3157894736842105,
+      0.2807017543859649,
+      0.7192982456140351,
+      0.49122807017543857,
+      0.5087719298245614,
+      14.0,
+      0.9005847953216374,
+      0.09941520467836257,
+      1.0,
+      0.009745079085328685,
+      -0.05353092684799548,
+      0.011202126428480053,
+      -0.6595826324804296,
+      0.7345370135946138,
+      62508.97347846296,
+      -0.06327600593332422,
+      62547.32916402308,
+      62508.62412685737,
+      -0.0014570473431513489,
+      0.9181286549707602,
+      0.08187134502923976,
+      0.9415204678362573,
+      0.05847953216374269,
+      0.9005847953216374,
+      0.09941520467836257,
+      0.8245614035087719,
+      0.17543859649122806,
+      881.8070175438596,
+      21.640350877192983,
+      23.93421052631579,
+      24.323099415204677,
+      0.19883040935672514,
+      0.21637426900584794,
+      0.14619883040935672,
+      0.391812865497076,
+      0.04678362573099415,
+      0.7777777777777778,
+      0.6549707602339181,
+      0.0,
+      0.31871345029239767,
+      1.1666666666666667,
+      1.4649122807017543,
+      3.4941520467836256,
+      4.02046783625731,
+      1.0760233918128654,
+      1.3508771929824561,
+      0.47953216374269003,
+      0.5029239766081871,
+      3.6198830409356724,
+      4.023391812865497,
+      0.8596491228070176,
+      0.543859649122807,
+      1.2690058479532165,
+      1.4970760233918128,
+      3.0,
+      3.5716374269005846,
+      0.09941520467836257,
+      0.14035087719298245,
+      1.5760233918128654,
+      1.4824561403508771,
+      0.195906432748538,
+      0.22514619883040934,
+      3.002923976608187,
+      2.690058479532164,
+      1.023391812865497,
+      1.4473684210526316,
+      0.40350877192982454,
+      0.1286549707602339,
+      0.4678362573099415,
+      0.6023391812865497,
+      0.07017543859649122,
+      0.09941520467836257,
+      0.1871345029239766,
+      0.04093567251461988,
+      0.4196416620893036,
+      0.5344695529297766,
+      0.5344619883040936,
+      0.9330000000000014,
+      0.06432748538011696,
+      0.4619883040935672,
+      0.47368421052631576,
+      1.0,
+      0.32272535274438324,
+      3.0,
+      3.571929824561403,
+      0.3052618921032593,
+      0.9898947368421057,
+      0.0024269481998601353,
+      0.25763298516631333,
+      1.0,
+      1.0,
+      122.77245933157893,
+      0.5284142118406637,
+      0.4093567251461988,
+      0.1871345029239766,
+      0.40350877192982454,
+      0.4196432748538011,
+      0.32270175438596493,
+      0.25764327485380123,
+      62927.416783625784,
+      62055.89134502919,
+      0.03508771929824561,
+      0.22807017543859648,
+      0.5146198830409356,
+      0.08771929824561403,
+      0.13450292397660818,
+      -0.07827217208635735,
+      -0.068642852627054,
+      0.3567251461988304,
+      0.2573099415204678,
+      0.38596491228070173,
+      1.0258479532163747
+    ],
+    "feature_scales": [
+      0.3082868852896524,
+      0.29122572159037924,
+      2.4234386637752574,
+      0.3473506995302336,
+      3.3667555986697906,
+      0.39001946200077364,
+      0.7158429823672205,
+      0.15114442085754518,
+      0.8841826784809929,
+      0.18400155231055287,
+      1.0628484035402406,
+      0.21117508871658244,
+      1.3758234334524666,
+      0.25544245225545664,
+      1.691949406561579,
+      0.29122572159037924,
+      0.26271803061953913,
+      0.10751331175935822,
+      0.30795200651359084,
+      0.10751331175935822,
+      0.4995808920274507,
+      0.10751331175935822,
+      0.4999230473254397,
+      0.22411108491006998,
+      0.10751331175935822,
+      0.15601198514018463,
+      0.10751331175935822,
+      0.19176999564620098,
+      0.10751331175935822,
+      0.20442921233694883,
+      0.10751331175935822,
+      0.12732176069048107,
+      0.3473506995302336,
+      0.13288907710670966,
+      0.39001946200077364,
+      0.13043324058041667,
+      0.15114442085754518,
+      0.12471403514530649,
+      0.18400155231055287,
+      0.12217277117956023,
+      0.21117508871658244,
+      0.12168816719721565,
+      0.25544245225545664,
+      0.12262850392926669,
+      0.29122572159037924,
+      0.6345426330975852,
+      0.3473506995302336,
+      0.5671536447104418,
+      0.39001946200077364,
+      0.6326441658872374,
+      0.15114442085754518,
+      0.5995327851635863,
+      0.18400155231055287,
+      0.6068912569324687,
+      0.21117508871658244,
+      0.5777015354553242,
+      0.25544245225545664,
+      0.5906939873939755,
+      0.29122572159037924,
+      0.5804631373504817,
+      0.3473506995302336,
+      0.6235398413635177,
+      0.39001946200077364,
+      0.27359122674688235,
+      0.15114442085754518,
+      0.3293843426793666,
+      0.18400155231055287,
+      0.38870386392411216,
+      0.21117508871658244,
+      0.45896578665381493,
+      0.25544245225545664,
+      0.49911610602574,
+      0.29122572159037924,
+      0.4995808920274507,
+      0.10751331175935822,
+      0.4999230473254397,
+      1.1525958260659999,
+      0.10751331175935822,
+      0.38525541735673907,
+      0.3852554173567389,
+      14.78305723331391,
+      14.23052118331093,
+      1.0,
+      480.1907855268364,
+      1.0,
+      1.0,
+      0.39001946200077336,
+      0.39001946200077336,
+      5.451208416359715,
+      0.4464405774033295,
+      0.4464405774033295,
+      1.0,
+      0.4648295192804139,
+      0.4648295192804139,
+      0.4493420517496732,
+      0.4493420517496732,
+      0.49992304732543974,
+      0.49992304732543974,
+      1.0,
+      0.2992186855079768,
+      0.2992186855079768,
+      1.0,
+      0.3782464654287975,
+      0.6315253472291796,
+      0.23860972397558763,
+      0.4411632921507059,
+      0.46402700003162206,
+      394.533522717507,
+      0.3266360159836666,
+      324.35383600617274,
+      438.49757168073273,
+      0.19009151397840837,
+      0.27416861215745136,
+      0.27416861215745136,
+      0.2346479841840803,
+      0.2346479841840803,
+      0.2992186855079768,
+      0.2992186855079768,
+      0.38034181383646976,
+      0.38034181383646976,
+      0.45002650310107645,
+      14.78305723331391,
+      14.23052118331093,
+      12.783329618085409,
+      0.39912012937430547,
+      0.4117723214569337,
+      0.3533054378244025,
+      0.48815524572419206,
+      0.21117508871658275,
+      2.065528203059653,
+      1.9302808250284522,
+      1.0,
+      0.5767428048259517,
+      1.3839092016323074,
+      1.3855762279764319,
+      3.213180232254637,
+      3.288895335772673,
+      2.3890731960940257,
+      2.602795807234636,
+      1.151348973809337,
+      1.3305860688501534,
+      3.3212873549156967,
+      3.5843278364939115,
+      2.0385632753884275,
+      1.6969547072763134,
+      1.1229288432934228,
+      1.1766453902248586,
+      4.20734528960542,
+      4.243112714266215,
+      0.3652279711083602,
+      0.4368385823855693,
+      1.306778763331778,
+      1.4233790789745013,
+      0.5025498404361133,
+      0.5219277769547208,
+      2.9257363125935725,
+      2.9449859255764337,
+      1.4885654477034986,
+      1.6763339207847372,
+      0.4906011036529671,
+      0.33481766569122023,
+      0.49896442123278417,
+      0.48941464217327935,
+      0.25544245225545664,
+      0.2992186855079768,
+      0.3900194620007731,
+      0.1981412204221915,
+      0.2748153415598105,
+      0.3076395933304025,
+      0.30761482430802695,
+      1.0,
+      0.24533540308073767,
+      0.4985530172151374,
+      0.4993069989739542,
+      1.0,
+      0.23388815812878133,
+      4.20734528960542,
+      4.243057806656763,
+      0.15173846512717237,
+      0.4728490981501625,
+      0.1876961325423884,
+      0.20249432617623248,
+      1.0,
+      1.0,
+      202.54735485275853,
+      0.26272088105169056,
+      0.49171515811878175,
+      0.3900194620007731,
+      0.49060110365296705,
+      0.27480495198605676,
+      0.23387230720800078,
+      0.20247655614442317,
+      422.449354087786,
+      430.92439316757844,
+      0.18400155231055287,
+      0.41958809624917215,
+      0.4997862133151226,
+      0.2828862367824055,
+      0.3411918630599955,
+      0.6946580433909882,
+      0.711766695352001,
+      0.47903268809993865,
+      0.43715161616446196,
+      0.4868223482635654,
+      0.9584318089657348
+    ],
+    "coefficients": [
+      0.1886429384102231,
+      -0.021241374225465102,
+      -0.10790567402837481,
+      0.15074671644479357,
+      0.07171512951056143,
+      -0.11182981006216848,
+      -0.1559152257051328,
+      -0.13177939163093055,
+      0.017218654557441603,
+      0.04318067599543844,
+      -0.018377811045756264,
+      -0.040149726812227116,
+      -0.09713297539533457,
+      -0.09673673825771933,
+      -0.2216658570675727,
+      -0.021241374225465102,
+      0.08446487417070933,
+      -0.02552835295769455,
+      -0.009317985465704528,
+      -0.02552835295769455,
+      -0.05310781987822246,
+      -0.02552835295769455,
+      0.05856159253962311,
+      -0.10263443878838813,
+      -0.02552835295769455,
+      -0.04719641914884841,
+      -0.02552835295769455,
+      0.031959095472760046,
+      -0.02552835295769455,
+      0.017393344898911808,
+      -0.02552835295769455,
+      -0.07748466353214355,
+      0.15074671644479357,
+      0.259229656153256,
+      -0.11182981006216848,
+      -0.0549007845028035,
+      -0.13177939163093055,
+      -0.28520767919205975,
+      0.04318067599543844,
+      -0.09166980228231145,
+      -0.040149726812227116,
+      -0.11529868199466235,
+      -0.09673673825771933,
+      -0.03438324987059491,
+      -0.021241374225465102,
+      -0.23153613425116978,
+      0.15074671644479357,
+      -0.10440125538304132,
+      -0.11182981006216848,
+      -0.11790445077969551,
+      -0.13177939163093055,
+      0.04189071079505581,
+      0.04318067599543844,
+      0.011280972684769781,
+      -0.040149726812227116,
+      -0.025139378023523597,
+      -0.09673673825771933,
+      -0.05955997790324416,
+      -0.021241374225465102,
+      0.09670670140689258,
+      0.15074671644479357,
+      -0.13402491073345388,
+      -0.11182981006216848,
+      0.05437903322054885,
+      -0.13177939163093055,
+      0.18382504176800382,
+      0.04318067599543844,
+      0.07916895943954985,
+      -0.040149726812227116,
+      -0.23009871929590855,
+      -0.09673673825771933,
+      -0.09185954948397439,
+      -0.021241374225465102,
+      -0.05310781987822246,
+      -0.02552835295769455,
+      0.05856159253962311,
+      0.11651815069361987,
+      -0.02552835295769455,
+      -0.13447660993328872,
+      0.13447660993328878,
+      -0.042505728632559914,
+      0.14401138626666876,
+      0.0,
+      -0.05512427745506992,
+      0.0,
+      0.0,
+      0.07164196135521021,
+      -0.07164196135521021,
+      0.21411226807517003,
+      -0.2103753768575389,
+      0.21037537685753893,
+      0.0,
+      -0.05467955710294277,
+      0.05467955710294277,
+      -0.07993182655510461,
+      0.07993182655510461,
+      -0.10485856257479258,
+      0.10485856257479258,
+      0.0,
+      0.0035662086539678074,
+      -0.00356620865396779,
+      0.0,
+      -0.056728842583164976,
+      0.024801373722978172,
+      -0.022629104397443905,
+      -0.04546614059923581,
+      -0.0968334958078811,
+      -0.03176756533519825,
+      0.11364386819171199,
+      -0.10968267065563815,
+      -0.05190585255564855,
+      -0.08447489056604597,
+      0.20434436465793776,
+      -0.20434436465793776,
+      -0.19164804703786817,
+      0.19164804703786817,
+      0.0035662086539678074,
+      -0.00356620865396779,
+      0.012875496322043406,
+      -0.012875496322043406,
+      -0.06188393173515705,
+      -0.042505728632559914,
+      0.14401138626666876,
+      0.1765941436771706,
+      -0.0986361429591869,
+      0.04417935723135433,
+      0.24142032694242346,
+      -0.02208683210833173,
+      -0.25257466696439934,
+      -0.10881150170675556,
+      -0.14376945348338843,
+      0.0,
+      0.08297080112118223,
+      0.14616081821734508,
+      0.013776557209624358,
+      -0.0892783080562075,
+      0.24569310411556572,
+      -0.013433723777455504,
+      -0.10433742346379789,
+      0.13502292528603782,
+      0.11242494929606811,
+      0.03802622192266219,
+      0.05415134689691304,
+      -0.16946367905210713,
+      0.03830039648139471,
+      0.2818715555050915,
+      0.35282618475407784,
+      -0.028749444439849385,
+      0.06074022525754376,
+      -0.1081486077205862,
+      -0.09429631792892013,
+      -0.05533350016654419,
+      0.23038863280986316,
+      0.030953162645295438,
+      -0.05334423967906495,
+      -0.12209070725352458,
+      0.02291434177167016,
+      0.023296962505779086,
+      0.18820978363595245,
+      -0.0227413681771124,
+      -0.02224141096130319,
+      0.037284737817675224,
+      0.0568580529613445,
+      -0.10759194582356364,
+      -0.00356620865396779,
+      0.005821985777677058,
+      -0.007808696506663276,
+      -0.03596199179474347,
+      0.0834220874040702,
+      0.0823257377019014,
+      1.6041913391664764e-16,
+      -0.08227376796909132,
+      -0.04730970303906541,
+      0.0876636284115646,
+      0.0,
+      0.03284699734266891,
+      -0.028749444439849385,
+      0.060687268347503716,
+      0.009924164295195178,
+      -0.016078175828673068,
+      0.03811066626171107,
+      0.010866395080081134,
+      0.0,
+      0.0,
+      -0.12706230965306736,
+      -0.22716699055077788,
+      0.0687683793924886,
+      0.005821985777677058,
+      -0.0735529171024061,
+      -0.03575932836064186,
+      0.03187525543131592,
+      0.01173648130267081,
+      -0.03293181482453206,
+      0.004632633906926168,
+      -0.0323272881691869,
+      -0.06907332973634074,
+      0.006650005413359818,
+      0.02949947274443844,
+      0.06817877210303065,
+      0.12371478849204243,
+      0.057964955052489844,
+      -0.1676554808768445,
+      0.058210946529008364,
+      0.11270116608492171,
+      0.05214720191131136
+    ],
+    "weights_by_feature": {
+      "_lag_close_pos_8": {
+        "mean": 0.4850781217857623,
+        "scale": 0.3082868852896524,
+        "coefficient": 0.1886429384102231
+      },
+      "_lag_close_pos_8__missing": {
+        "mean": 0.0935672514619883,
+        "scale": 0.29122572159037924,
+        "coefficient": -0.021241374225465102
+      },
+      "_lag_green_count_12": {
+        "mean": 5.064327485380117,
+        "scale": 2.4234386637752574,
+        "coefficient": -0.10790567402837481
+      },
+      "_lag_green_count_12__missing": {
+        "mean": 0.14035087719298245,
+        "scale": 0.3473506995302336,
+        "coefficient": 0.15074671644479357
+      },
+      "_lag_green_count_16": {
+        "mean": 6.380116959064328,
+        "scale": 3.3667555986697906,
+        "coefficient": 0.07171512951056143
+      },
+      "_lag_green_count_16__missing": {
+        "mean": 0.1871345029239766,
+        "scale": 0.39001946200077364,
+        "coefficient": -0.11182981006216848
+      },
+      "_lag_green_count_2": {
+        "mean": 0.9532163742690059,
+        "scale": 0.7158429823672205,
+        "coefficient": -0.1559152257051328
+      },
+      "_lag_green_count_2__missing": {
+        "mean": 0.023391812865497075,
+        "scale": 0.15114442085754518,
+        "coefficient": -0.13177939163093055
+      },
+      "_lag_green_count_3": {
+        "mean": 1.4210526315789473,
+        "scale": 0.8841826784809929,
+        "coefficient": 0.017218654557441603
+      },
+      "_lag_green_count_3__missing": {
+        "mean": 0.03508771929824561,
+        "scale": 0.18400155231055287,
+        "coefficient": 0.04318067599543844
+      },
+      "_lag_green_count_4": {
+        "mean": 1.871345029239766,
+        "scale": 1.0628484035402406,
+        "coefficient": -0.018377811045756264
+      },
+      "_lag_green_count_4__missing": {
+        "mean": 0.04678362573099415,
+        "scale": 0.21117508871658244,
+        "coefficient": -0.040149726812227116
+      },
+      "_lag_green_count_6": {
+        "mean": 2.754385964912281,
+        "scale": 1.3758234334524666,
+        "coefficient": -0.09713297539533457
+      },
+      "_lag_green_count_6__missing": {
+        "mean": 0.07017543859649122,
+        "scale": 0.25544245225545664,
+        "coefficient": -0.09673673825771933
+      },
+      "_lag_green_count_8": {
+        "mean": 3.584795321637427,
+        "scale": 1.691949406561579,
+        "coefficient": -0.2216658570675727
+      },
+      "_lag_green_count_8__missing": {
+        "mean": 0.0935672514619883,
+        "scale": 0.29122572159037924,
+        "coefficient": -0.021241374225465102
+      },
+      "_lag_prev_body_pct": {
+        "mean": 0.41720435478046325,
+        "scale": 0.26271803061953913,
+        "coefficient": 0.08446487417070933
+      },
+      "_lag_prev_body_pct__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_close_pos": {
+        "mean": 0.5367322823898535,
+        "scale": 0.30795200651359084,
+        "coefficient": -0.009317985465704528
+      },
+      "_lag_prev_close_pos__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_dir=green": {
+        "mean": 0.47953216374269003,
+        "scale": 0.4995808920274507,
+        "coefficient": -0.05310781987822246
+      },
+      "_lag_prev_dir=missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_dir=red": {
+        "mean": 0.5087719298245614,
+        "scale": 0.4999230473254397,
+        "coefficient": 0.05856159253962311
+      },
+      "_lag_prev_lower": {
+        "mean": 0.3184155027777938,
+        "scale": 0.22411108491006998,
+        "coefficient": -0.10263443878838813
+      },
+      "_lag_prev_lower__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_range_pct": {
+        "mean": 0.3068218898826541,
+        "scale": 0.15601198514018463,
+        "coefficient": -0.04719641914884841
+      },
+      "_lag_prev_range_pct__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_ret": {
+        "mean": 0.004057720079625385,
+        "scale": 0.19176999564620098,
+        "coefficient": 0.031959095472760046
+      },
+      "_lag_prev_ret__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_prev_upper": {
+        "mean": 0.25268423600899426,
+        "scale": 0.20442921233694883,
+        "coefficient": 0.017393344898911808
+      },
+      "_lag_prev_upper__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_range_mean_12": {
+        "mean": 0.26767350252158284,
+        "scale": 0.12732176069048107,
+        "coefficient": -0.07748466353214355
+      },
+      "_lag_range_mean_12__missing": {
+        "mean": 0.14035087719298245,
+        "scale": 0.3473506995302336,
+        "coefficient": 0.15074671644479357
+      },
+      "_lag_range_mean_16": {
+        "mean": 0.25319662642185004,
+        "scale": 0.13288907710670966,
+        "coefficient": 0.259229656153256
+      },
+      "_lag_range_mean_16__missing": {
+        "mean": 0.1871345029239766,
+        "scale": 0.39001946200077364,
+        "coefficient": -0.11182981006216848
+      },
+      "_lag_range_mean_2": {
+        "mean": 0.30299244769172984,
+        "scale": 0.13043324058041667,
+        "coefficient": -0.0549007845028035
+      },
+      "_lag_range_mean_2__missing": {
+        "mean": 0.023391812865497075,
+        "scale": 0.15114442085754518,
+        "coefficient": -0.13177939163093055
+      },
+      "_lag_range_mean_3": {
+        "mean": 0.2997737890881303,
+        "scale": 0.12471403514530649,
+        "coefficient": -0.28520767919205975
+      },
+      "_lag_range_mean_3__missing": {
+        "mean": 0.03508771929824561,
+        "scale": 0.18400155231055287,
+        "coefficient": 0.04318067599543844
+      },
+      "_lag_range_mean_4": {
+        "mean": 0.2961319849984766,
+        "scale": 0.12217277117956023,
+        "coefficient": -0.09166980228231145
+      },
+      "_lag_range_mean_4__missing": {
+        "mean": 0.04678362573099415,
+        "scale": 0.21117508871658244,
+        "coefficient": -0.040149726812227116
+      },
+      "_lag_range_mean_6": {
+        "mean": 0.2893842033760976,
+        "scale": 0.12168816719721565,
+        "coefficient": -0.11529868199466235
+      },
+      "_lag_range_mean_6__missing": {
+        "mean": 0.07017543859649122,
+        "scale": 0.25544245225545664,
+        "coefficient": -0.09673673825771933
+      },
+      "_lag_range_mean_8": {
+        "mean": 0.2818094554096767,
+        "scale": 0.12262850392926669,
+        "coefficient": -0.03438324987059491
+      },
+      "_lag_range_mean_8__missing": {
+        "mean": 0.0935672514619883,
+        "scale": 0.29122572159037924,
+        "coefficient": -0.021241374225465102
+      },
+      "_lag_range_ratio_12": {
+        "mean": 0.8665774889482205,
+        "scale": 0.6345426330975852,
+        "coefficient": -0.23153613425116978
+      },
+      "_lag_range_ratio_12__missing": {
+        "mean": 0.14035087719298245,
+        "scale": 0.3473506995302336,
+        "coefficient": 0.15074671644479357
+      },
+      "_lag_range_ratio_16": {
+        "mean": 0.7780681250140578,
+        "scale": 0.5671536447104418,
+        "coefficient": -0.10440125538304132
+      },
+      "_lag_range_ratio_16__missing": {
+        "mean": 0.1871345029239766,
+        "scale": 0.39001946200077364,
+        "coefficient": -0.11182981006216848
+      },
+      "_lag_range_ratio_2": {
+        "mean": 1.097077221001093,
+        "scale": 0.6326441658872374,
+        "coefficient": -0.11790445077969551
+      },
+      "_lag_range_ratio_2__missing": {
+        "mean": 0.023391812865497075,
+        "scale": 0.15114442085754518,
+        "coefficient": -0.13177939163093055
+      },
+      "_lag_range_ratio_3": {
+        "mean": 1.0268888447813627,
+        "scale": 0.5995327851635863,
+        "coefficient": 0.04189071079505581
+      },
+      "_lag_range_ratio_3__missing": {
+        "mean": 0.03508771929824561,
+        "scale": 0.18400155231055287,
+        "coefficient": 0.04318067599543844
+      },
+      "_lag_range_ratio_4": {
+        "mean": 1.0026871178254029,
+        "scale": 0.6068912569324687,
+        "coefficient": 0.011280972684769781
+      },
+      "_lag_range_ratio_4__missing": {
+        "mean": 0.04678362573099415,
+        "scale": 0.21117508871658244,
+        "coefficient": -0.040149726812227116
+      },
+      "_lag_range_ratio_6": {
+        "mean": 0.9548755994819978,
+        "scale": 0.5777015354553242,
+        "coefficient": -0.025139378023523597
+      },
+      "_lag_range_ratio_6__missing": {
+        "mean": 0.07017543859649122,
+        "scale": 0.25544245225545664,
+        "coefficient": -0.09673673825771933
+      },
+      "_lag_range_ratio_8": {
+        "mean": 0.9198310316681222,
+        "scale": 0.5906939873939755,
+        "coefficient": -0.05955997790324416
+      },
+      "_lag_range_ratio_8__missing": {
+        "mean": 0.0935672514619883,
+        "scale": 0.29122572159037924,
+        "coefficient": -0.021241374225465102
+      },
+      "_lag_return_sum_12": {
+        "mean": 0.06369547879093661,
+        "scale": 0.5804631373504817,
+        "coefficient": 0.09670670140689258
+      },
+      "_lag_return_sum_12__missing": {
+        "mean": 0.14035087719298245,
+        "scale": 0.3473506995302336,
+        "coefficient": 0.15074671644479357
+      },
+      "_lag_return_sum_16": {
+        "mean": 0.10628429571844208,
+        "scale": 0.6235398413635177,
+        "coefficient": -0.13402491073345388
+      },
+      "_lag_return_sum_16__missing": {
+        "mean": 0.1871345029239766,
+        "scale": 0.39001946200077364,
+        "coefficient": -0.11182981006216848
+      },
+      "_lag_return_sum_2": {
+        "mean": 0.009630387353860079,
+        "scale": 0.27359122674688235,
+        "coefficient": 0.05437903322054885
+      },
+      "_lag_return_sum_2__missing": {
+        "mean": 0.023391812865497075,
+        "scale": 0.15114442085754518,
+        "coefficient": -0.13177939163093055
+      },
+      "_lag_return_sum_3": {
+        "mean": 0.016588564749131233,
+        "scale": 0.3293843426793666,
+        "coefficient": 0.18382504176800382
+      },
+      "_lag_return_sum_3__missing": {
+        "mean": 0.03508771929824561,
+        "scale": 0.18400155231055287,
+        "coefficient": 0.04318067599543844
+      },
+      "_lag_return_sum_4": {
+        "mean": 0.021407239520832358,
+        "scale": 0.38870386392411216,
+        "coefficient": 0.07916895943954985
+      },
+      "_lag_return_sum_4__missing": {
+        "mean": 0.04678362573099415,
+        "scale": 0.21117508871658244,
+        "coefficient": -0.040149726812227116
+      },
+      "_lag_return_sum_6": {
+        "mean": 0.03475443193249677,
+        "scale": 0.45896578665381493,
+        "coefficient": -0.23009871929590855
+      },
+      "_lag_return_sum_6__missing": {
+        "mean": 0.07017543859649122,
+        "scale": 0.25544245225545664,
+        "coefficient": -0.09673673825771933
+      },
+      "_lag_return_sum_8": {
+        "mean": 0.04815806411223535,
+        "scale": 0.49911610602574,
+        "coefficient": -0.09185954948397439
+      },
+      "_lag_return_sum_8__missing": {
+        "mean": 0.0935672514619883,
+        "scale": 0.29122572159037924,
+        "coefficient": -0.021241374225465102
+      },
+      "_lag_streak_dir=green": {
+        "mean": 0.47953216374269003,
+        "scale": 0.4995808920274507,
+        "coefficient": -0.05310781987822246
+      },
+      "_lag_streak_dir=missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "_lag_streak_dir=red": {
+        "mean": 0.5087719298245614,
+        "scale": 0.4999230473254397,
+        "coefficient": 0.05856159253962311
+      },
+      "_lag_streak_len": {
+        "mean": 1.871345029239766,
+        "scale": 1.1525958260659999,
+        "coefficient": 0.11651815069361987
+      },
+      "_lag_streak_len__missing": {
+        "mean": 0.011695906432748537,
+        "scale": 0.10751331175935822,
+        "coefficient": -0.02552835295769455
+      },
+      "agreement_gate_applied=false": {
+        "mean": 0.8187134502923976,
+        "scale": 0.38525541735673907,
+        "coefficient": -0.13447660993328872
+      },
+      "agreement_gate_applied=true": {
+        "mean": 0.18128654970760233,
+        "scale": 0.3852554173567389,
+        "coefficient": 0.13447660993328878
+      },
+      "base_bearish_score": {
+        "mean": 21.640350877192983,
+        "scale": 14.78305723331391,
+        "coefficient": -0.042505728632559914
+      },
+      "base_bullish_score": {
+        "mean": 23.93421052631579,
+        "scale": 14.23052118331093,
+        "coefficient": 0.14401138626666876
+      },
+      "bearish_fallback_lockout_active=missing": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "btc_price_at_prediction": {
+        "mean": 62516.111461988294,
+        "scale": 480.1907855268364,
+        "coefficient": -0.05512427745506992
+      },
+      "bullish_fallback_lockout_active=missing": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "changed_by_partial=false": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "choppy=false": {
+        "mean": 0.8128654970760234,
+        "scale": 0.39001946200077336,
+        "coefficient": 0.07164196135521021
+      },
+      "choppy=true": {
+        "mean": 0.1871345029239766,
+        "scale": 0.39001946200077336,
+        "coefficient": -0.07164196135521021
+      },
+      "confidence": {
+        "mean": 54.707602339181285,
+        "scale": 5.451208416359715,
+        "coefficient": 0.21411226807517003
+      },
+      "confidence_bucket=40-59": {
+        "mean": 0.7251461988304093,
+        "scale": 0.4464405774033295,
+        "coefficient": -0.2103753768575389
+      },
+      "confidence_bucket=60-69": {
+        "mean": 0.27485380116959063,
+        "scale": 0.4464405774033295,
+        "coefficient": 0.21037537685753893
+      },
+      "conflict_downgrade_applied=false": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "conviction_active=false": {
+        "mean": 0.6842105263157895,
+        "scale": 0.4648295192804139,
+        "coefficient": -0.05467955710294277
+      },
+      "conviction_active=true": {
+        "mean": 0.3157894736842105,
+        "scale": 0.4648295192804139,
+        "coefficient": 0.05467955710294277
+      },
+      "conviction_aligned=false": {
+        "mean": 0.2807017543859649,
+        "scale": 0.4493420517496732,
+        "coefficient": -0.07993182655510461
+      },
+      "conviction_aligned=true": {
+        "mean": 0.7192982456140351,
+        "scale": 0.4493420517496732,
+        "coefficient": 0.07993182655510461
+      },
+      "conviction_direction=green": {
+        "mean": 0.49122807017543857,
+        "scale": 0.49992304732543974,
+        "coefficient": -0.10485856257479258
+      },
+      "conviction_direction=red": {
+        "mean": 0.5087719298245614,
+        "scale": 0.49992304732543974,
+        "coefficient": 0.10485856257479258
+      },
+      "current_partial_minutes_elapsed": {
+        "mean": 14.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "degraded_mode=false": {
+        "mean": 0.9005847953216374,
+        "scale": 0.2992186855079768,
+        "coefficient": 0.0035662086539678074
+      },
+      "degraded_mode=true": {
+        "mean": 0.09941520467836257,
+        "scale": 0.2992186855079768,
+        "coefficient": -0.00356620865396779
+      },
+      "directional_fallback_used=missing": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "dist_ema21": {
+        "mean": 0.009745079085328685,
+        "scale": 0.3782464654287975,
+        "coefficient": -0.056728842583164976
+      },
+      "dist_ema50": {
+        "mean": -0.05353092684799548,
+        "scale": 0.6315253472291796,
+        "coefficient": 0.024801373722978172
+      },
+      "dist_ema9": {
+        "mean": 0.011202126428480053,
+        "scale": 0.23860972397558763,
+        "coefficient": -0.022629104397443905
+      },
+      "dist_range_high": {
+        "mean": -0.6595826324804296,
+        "scale": 0.4411632921507059,
+        "coefficient": -0.04546614059923581
+      },
+      "dist_range_low": {
+        "mean": 0.7345370135946138,
+        "scale": 0.46402700003162206,
+        "coefficient": -0.0968334958078811
+      },
+      "ema21": {
+        "mean": 62508.97347846296,
+        "scale": 394.533522717507,
+        "coefficient": -0.03176756533519825
+      },
+      "ema21_50_spread": {
+        "mean": -0.06327600593332422,
+        "scale": 0.3266360159836666,
+        "coefficient": 0.11364386819171199
+      },
+      "ema50": {
+        "mean": 62547.32916402308,
+        "scale": 324.35383600617274,
+        "coefficient": -0.10968267065563815
+      },
+      "ema9": {
+        "mean": 62508.62412685737,
+        "scale": 438.49757168073273,
+        "coefficient": -0.05190585255564855
+      },
+      "ema9_21_spread": {
+        "mean": -0.0014570473431513489,
+        "scale": 0.19009151397840837,
+        "coefficient": -0.08447489056604597
+      },
+      "failed_breakout_down=false": {
+        "mean": 0.9181286549707602,
+        "scale": 0.27416861215745136,
+        "coefficient": 0.20434436465793776
+      },
+      "failed_breakout_down=true": {
+        "mean": 0.08187134502923976,
+        "scale": 0.27416861215745136,
+        "coefficient": -0.20434436465793776
+      },
+      "failed_breakout_up=false": {
+        "mean": 0.9415204678362573,
+        "scale": 0.2346479841840803,
+        "coefficient": -0.19164804703786817
+      },
+      "failed_breakout_up=true": {
+        "mean": 0.05847953216374269,
+        "scale": 0.2346479841840803,
+        "coefficient": 0.19164804703786817
+      },
+      "feed_mismatch=false": {
+        "mean": 0.9005847953216374,
+        "scale": 0.2992186855079768,
+        "coefficient": 0.0035662086539678074
+      },
+      "feed_mismatch=true": {
+        "mean": 0.09941520467836257,
+        "scale": 0.2992186855079768,
+        "coefficient": -0.00356620865396779
+      },
+      "final_trade_status=avoid": {
+        "mean": 0.8245614035087719,
+        "scale": 0.38034181383646976,
+        "coefficient": 0.012875496322043406
+      },
+      "final_trade_status=trade": {
+        "mean": 0.17543859649122806,
+        "scale": 0.38034181383646976,
+        "coefficient": -0.012875496322043406
+      },
+      "input_candle_age_seconds": {
+        "mean": 881.8070175438596,
+        "scale": 0.45002650310107645,
+        "coefficient": -0.06188393173515705
+      },
+      "m6_bearish_score": {
+        "mean": 21.640350877192983,
+        "scale": 14.78305723331391,
+        "coefficient": -0.042505728632559914
+      },
+      "m6_bullish_score": {
+        "mean": 23.93421052631579,
+        "scale": 14.23052118331093,
+        "coefficient": 0.14401138626666876
+      },
+      "m6_score_margin": {
+        "mean": 24.323099415204677,
+        "scale": 12.783329618085409,
+        "coefficient": 0.1765941436771706
+      },
+      "market_condition=above_vwap": {
+        "mean": 0.19883040935672514,
+        "scale": 0.39912012937430547,
+        "coefficient": -0.0986361429591869
+      },
+      "market_condition=below_vwap": {
+        "mean": 0.21637426900584794,
+        "scale": 0.4117723214569337,
+        "coefficient": 0.04417935723135433
+      },
+      "market_condition=chop_mid": {
+        "mean": 0.14619883040935672,
+        "scale": 0.3533054378244025,
+        "coefficient": 0.24142032694242346
+      },
+      "market_condition=compressed": {
+        "mean": 0.391812865497076,
+        "scale": 0.48815524572419206,
+        "coefficient": -0.02208683210833173
+      },
+      "market_condition=trending_expansion": {
+        "mean": 0.04678362573099415,
+        "scale": 0.21117508871658275,
+        "coefficient": -0.25257466696439934
+      },
+      "mod_atr_range_expansion_bear": {
+        "mean": 0.7777777777777778,
+        "scale": 2.065528203059653,
+        "coefficient": -0.10881150170675556
+      },
+      "mod_atr_range_expansion_bull": {
+        "mean": 0.6549707602339181,
+        "scale": 1.9302808250284522,
+        "coefficient": -0.14376945348338843
+      },
+      "mod_bearish_exhaustion_downside_failure_bear": {
+        "mean": 0.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "mod_bearish_exhaustion_downside_failure_bull": {
+        "mean": 0.31871345029239767,
+        "scale": 0.5767428048259517,
+        "coefficient": 0.08297080112118223
+      },
+      "mod_candle_close_location_bear": {
+        "mean": 1.1666666666666667,
+        "scale": 1.3839092016323074,
+        "coefficient": 0.14616081821734508
+      },
+      "mod_candle_close_location_bull": {
+        "mean": 1.4649122807017543,
+        "scale": 1.3855762279764319,
+        "coefficient": 0.013776557209624358
+      },
+      "mod_completed_candle_structure_bear": {
+        "mean": 3.4941520467836256,
+        "scale": 3.213180232254637,
+        "coefficient": -0.0892783080562075
+      },
+      "mod_completed_candle_structure_bull": {
+        "mean": 4.02046783625731,
+        "scale": 3.288895335772673,
+        "coefficient": 0.24569310411556572
+      },
+      "mod_failed_breakout_rejection_zones_bear": {
+        "mean": 1.0760233918128654,
+        "scale": 2.3890731960940257,
+        "coefficient": -0.013433723777455504
+      },
+      "mod_failed_breakout_rejection_zones_bull": {
+        "mean": 1.3508771929824561,
+        "scale": 2.602795807234636,
+        "coefficient": -0.10433742346379789
+      },
+      "mod_fib_channel_position_bear": {
+        "mean": 0.47953216374269003,
+        "scale": 1.151348973809337,
+        "coefficient": 0.13502292528603782
+      },
+      "mod_fib_channel_position_bull": {
+        "mean": 0.5029239766081871,
+        "scale": 1.3305860688501534,
+        "coefficient": 0.11242494929606811
+      },
+      "mod_last_8_candle_momentum_bear": {
+        "mean": 3.6198830409356724,
+        "scale": 3.3212873549156967,
+        "coefficient": 0.03802622192266219
+      },
+      "mod_last_8_candle_momentum_bull": {
+        "mean": 4.023391812865497,
+        "scale": 3.5843278364939115,
+        "coefficient": 0.05415134689691304
+      },
+      "mod_liquidity_sweep_reclaim_bear": {
+        "mean": 0.8596491228070176,
+        "scale": 2.0385632753884275,
+        "coefficient": -0.16946367905210713
+      },
+      "mod_liquidity_sweep_reclaim_bull": {
+        "mean": 0.543859649122807,
+        "scale": 1.6969547072763134,
+        "coefficient": 0.03830039648139471
+      },
+      "mod_market_structure_regime_filter_bear": {
+        "mean": 1.2690058479532165,
+        "scale": 1.1229288432934228,
+        "coefficient": 0.2818715555050915
+      },
+      "mod_market_structure_regime_filter_bull": {
+        "mean": 1.4970760233918128,
+        "scale": 1.1766453902248586,
+        "coefficient": 0.35282618475407784
+      },
+      "mod_partial_candle_confirmation_bear": {
+        "mean": 3.0,
+        "scale": 4.20734528960542,
+        "coefficient": -0.028749444439849385
+      },
+      "mod_partial_candle_confirmation_bull": {
+        "mean": 3.5716374269005846,
+        "scale": 4.243112714266215,
+        "coefficient": 0.06074022525754376
+      },
+      "mod_reclaim_breakdown_behavior_bear": {
+        "mean": 0.09941520467836257,
+        "scale": 0.3652279711083602,
+        "coefficient": -0.1081486077205862
+      },
+      "mod_reclaim_breakdown_behavior_bull": {
+        "mean": 0.14035087719298245,
+        "scale": 0.4368385823855693,
+        "coefficient": -0.09429631792892013
+      },
+      "mod_support_resistance_proximity_bear": {
+        "mean": 1.5760233918128654,
+        "scale": 1.306778763331778,
+        "coefficient": -0.05533350016654419
+      },
+      "mod_support_resistance_proximity_bull": {
+        "mean": 1.4824561403508771,
+        "scale": 1.4233790789745013,
+        "coefficient": 0.23038863280986316
+      },
+      "mod_volume_bear": {
+        "mean": 0.195906432748538,
+        "scale": 0.5025498404361133,
+        "coefficient": 0.030953162645295438
+      },
+      "mod_volume_bull": {
+        "mean": 0.22514619883040934,
+        "scale": 0.5219277769547208,
+        "coefficient": -0.05334423967906495
+      },
+      "mod_vwap_state_bear": {
+        "mean": 3.002923976608187,
+        "scale": 2.9257363125935725,
+        "coefficient": -0.12209070725352458
+      },
+      "mod_vwap_state_bull": {
+        "mean": 2.690058479532164,
+        "scale": 2.9449859255764337,
+        "coefficient": 0.02291434177167016
+      },
+      "mod_wick_rejection_defense_bear": {
+        "mean": 1.023391812865497,
+        "scale": 1.4885654477034986,
+        "coefficient": 0.023296962505779086
+      },
+      "mod_wick_rejection_defense_bull": {
+        "mean": 1.4473684210526316,
+        "scale": 1.6763339207847372,
+        "coefficient": 0.18820978363595245
+      },
+      "original_prediction_before_partial=no": {
+        "mean": 0.40350877192982454,
+        "scale": 0.4906011036529671,
+        "coefficient": -0.0227413681771124
+      },
+      "original_prediction_before_partial=no clear edge": {
+        "mean": 0.1286549707602339,
+        "scale": 0.33481766569122023,
+        "coefficient": -0.02224141096130319
+      },
+      "original_prediction_before_partial=yes": {
+        "mean": 0.4678362573099415,
+        "scale": 0.49896442123278417,
+        "coefficient": 0.037284737817675224
+      },
+      "partial_agreement=agree": {
+        "mean": 0.6023391812865497,
+        "scale": 0.48941464217327935,
+        "coefficient": 0.0568580529613445
+      },
+      "partial_agreement=disagree": {
+        "mean": 0.07017543859649122,
+        "scale": 0.25544245225545664,
+        "coefficient": -0.10759194582356364
+      },
+      "partial_agreement=missing": {
+        "mean": 0.09941520467836257,
+        "scale": 0.2992186855079768,
+        "coefficient": -0.00356620865396779
+      },
+      "partial_agreement=nce": {
+        "mean": 0.1871345029239766,
+        "scale": 0.3900194620007731,
+        "coefficient": 0.005821985777677058
+      },
+      "partial_agreement=neutral": {
+        "mean": 0.04093567251461988,
+        "scale": 0.1981412204221915,
+        "coefficient": -0.007808696506663276
+      },
+      "partial_body_pct": {
+        "mean": 0.4196416620893036,
+        "scale": 0.2748153415598105,
+        "coefficient": -0.03596199179474347
+      },
+      "partial_close_pos_raw": {
+        "mean": 0.5344695529297766,
+        "scale": 0.3076395933304025,
+        "coefficient": 0.0834220874040702
+      },
+      "partial_close_position_pct": {
+        "mean": 0.5344619883040936,
+        "scale": 0.30761482430802695,
+        "coefficient": 0.0823257377019014
+      },
+      "partial_completeness": {
+        "mean": 0.9330000000000014,
+        "scale": 1.0,
+        "coefficient": 1.6041913391664764e-16
+      },
+      "partial_direction=flat": {
+        "mean": 0.06432748538011696,
+        "scale": 0.24533540308073767,
+        "coefficient": -0.08227376796909132
+      },
+      "partial_direction=green": {
+        "mean": 0.4619883040935672,
+        "scale": 0.4985530172151374,
+        "coefficient": -0.04730970303906541
+      },
+      "partial_direction=red": {
+        "mean": 0.47368421052631576,
+        "scale": 0.4993069989739542,
+        "coefficient": 0.0876636284115646
+      },
+      "partial_hard_override_fired=false": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "partial_lower_raw": {
+        "mean": 0.32272535274438324,
+        "scale": 0.23388815812878133,
+        "coefficient": 0.03284699734266891
+      },
+      "partial_module_bear_pts": {
+        "mean": 3.0,
+        "scale": 4.20734528960542,
+        "coefficient": -0.028749444439849385
+      },
+      "partial_module_bull_pts": {
+        "mean": 3.571929824561403,
+        "scale": 4.243057806656763,
+        "coefficient": 0.060687268347503716
+      },
+      "partial_range_pct_raw": {
+        "mean": 0.3052618921032593,
+        "scale": 0.15173846512717237,
+        "coefficient": 0.009924164295195178
+      },
+      "partial_range_vs_atr": {
+        "mean": 0.9898947368421057,
+        "scale": 0.4728490981501625,
+        "coefficient": -0.016078175828673068
+      },
+      "partial_ret_pct": {
+        "mean": 0.0024269481998601353,
+        "scale": 0.1876961325423884,
+        "coefficient": 0.03811066626171107
+      },
+      "partial_upper_raw": {
+        "mean": 0.25763298516631333,
+        "scale": 0.20249432617623248,
+        "coefficient": 0.010866395080081134
+      },
+      "partial_veto_active=false": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "partial_veto_tier=none": {
+        "mean": 1.0,
+        "scale": 1.0,
+        "coefficient": 0.0
+      },
+      "partial_volume_raw": {
+        "mean": 122.77245933157893,
+        "scale": 202.54735485275853,
+        "coefficient": -0.12706230965306736
+      },
+      "position_range20": {
+        "mean": 0.5284142118406637,
+        "scale": 0.26272088105169056,
+        "coefficient": -0.22716699055077788
+      },
+      "prediction=no": {
+        "mean": 0.4093567251461988,
+        "scale": 0.49171515811878175,
+        "coefficient": 0.0687683793924886
+      },
+      "prediction=no clear edge": {
+        "mean": 0.1871345029239766,
+        "scale": 0.3900194620007731,
+        "coefficient": 0.005821985777677058
+      },
+      "prediction=yes": {
+        "mean": 0.40350877192982454,
+        "scale": 0.49060110365296705,
+        "coefficient": -0.0735529171024061
+      },
+      "prev_body_pct": {
+        "mean": 0.4196432748538011,
+        "scale": 0.27480495198605676,
+        "coefficient": -0.03575932836064186
+      },
+      "prev_lower_wick_pct": {
+        "mean": 0.32270175438596493,
+        "scale": 0.23387230720800078,
+        "coefficient": 0.03187525543131592
+      },
+      "prev_upper_wick_pct": {
+        "mean": 0.25764327485380123,
+        "scale": 0.20247655614442317,
+        "coefficient": 0.01173648130267081
+      },
+      "range20_high": {
+        "mean": 62927.416783625784,
+        "scale": 422.449354087786,
+        "coefficient": -0.03293181482453206
+      },
+      "range20_low": {
+        "mean": 62055.89134502919,
+        "scale": 430.92439316757844,
+        "coefficient": 0.004632633906926168
+      },
+      "setup_type=low_confidence": {
+        "mean": 0.03508771929824561,
+        "scale": 0.18400155231055287,
+        "coefficient": -0.0323272881691869
+      },
+      "setup_type=no_clear_edge": {
+        "mean": 0.22807017543859648,
+        "scale": 0.41958809624917215,
+        "coefficient": -0.06907332973634074
+      },
+      "setup_type=premium": {
+        "mean": 0.5146198830409356,
+        "scale": 0.4997862133151226,
+        "coefficient": 0.006650005413359818
+      },
+      "setup_type=standard": {
+        "mean": 0.08771929824561403,
+        "scale": 0.2828862367824055,
+        "coefficient": 0.02949947274443844
+      },
+      "setup_type=strong": {
+        "mean": 0.13450292397660818,
+        "scale": 0.3411918630599955,
+        "coefficient": 0.06817877210303065
+      },
+      "tod_cos": {
+        "mean": -0.07827217208635735,
+        "scale": 0.6946580433909882,
+        "coefficient": 0.12371478849204243
+      },
+      "tod_sin": {
+        "mean": -0.068642852627054,
+        "scale": 0.711766695352001,
+        "coefficient": 0.057964955052489844
+      },
+      "trend=down": {
+        "mean": 0.3567251461988304,
+        "scale": 0.47903268809993865,
+        "coefficient": -0.1676554808768445
+      },
+      "trend=mixed": {
+        "mean": 0.2573099415204678,
+        "scale": 0.43715161616446196,
+        "coefficient": 0.058210946529008364
+      },
+      "trend=up": {
+        "mean": 0.38596491228070173,
+        "scale": 0.4868223482635654,
+        "coefficient": 0.11270116608492171
+      },
+      "volume_expansion": {
+        "mean": 1.0258479532163747,
+        "scale": 0.9584318089657348,
+        "coefficient": 0.05214720191131136
+      }
+    },
+    "exact_scoring_formula": {
+      "aligned_raw_vector": "x[j] = feature_map.get(feature_order[j], 0.0)",
+      "standardized_vector": "z[j] = (x[j] - feature_means[j]) / feature_scales[j]",
+      "logit": "intercept + SUM(coefficients[j] * z[j])",
+      "probability_green": "1 / (1 + exp(-logit))"
+    }
+  },
+  "decision_policy": {
+    "version": "fixed_thresholds",
+    "yes_threshold": 0.58,
+    "no_threshold": 0.26,
+    "base_decision": [
+      {
+        "if": "probability_green >= 0.58",
+        "output": "YES"
+      },
+      {
+        "else_if": "probability_green <= 0.26",
+        "output": "NO"
+      },
+      {
+        "else": "SKIP"
+      }
+    ],
+    "hard_no_overrides": {
+      "application_order": "Apply after the probability-based base decision. Any matching rule forces final_decision=NO, including when base decision is YES or SKIP.",
+      "match_mode": "OR",
+      "rules": [
+        {
+          "id": "upstream_no_clear_edge",
+          "field": "prediction",
+          "operator": "exact_string_equals",
+          "value": "NO CLEAR EDGE"
+        },
+        {
+          "id": "trending_expansion",
+          "field": "market_condition",
+          "operator": "exact_string_equals",
+          "value": "trending_expansion"
+        },
+        {
+          "id": "failed_breakout_down",
+          "field": "failed_breakout_down",
+          "operator": "lowercase_string_equals",
+          "value": "true"
+        }
+      ]
+    },
+    "final_output_values": [
+      "YES",
+      "NO",
+      "SKIP"
+    ],
+    "direction_mapping": {
+      "YES": "GREEN",
+      "NO": "RED",
+      "SKIP": null
+    }
+  },
+  "reference_pseudocode": [
+    "rows = sort_ascending_by(candle_ts_utc)",
+    "annotate each row with valid_target = nonblank(actual_open) AND nonblank(actual_close)",
+    "for live row: derive lag features from strictly earlier valid completed candles; stop at first invalid row",
+    "feature_map = build raw numeric, categorical, derived price/EMA, prior-candle, rolling-lag, partial-snapshot, module, and time features",
+    "for j in 0..204: x[j] = feature_map.get(feature_order[j], 0.0)",
+    "for j in 0..204: z[j] = (x[j] - feature_means[j]) / feature_scales[j]",
+    "logit = intercept + sum(coefficients[j] * z[j])",
+    "p_green = sigmoid(logit)",
+    "base = YES if p_green >= 0.58 else NO if p_green <= 0.26 else SKIP",
+    "if prediction == \"NO CLEAR EDGE\" OR market_condition == \"trending_expansion\" OR lowercase(failed_breakout_down) == \"true\": final = NO else final = base",
+    "return p_green, base, override flags/reasons, final"
+  ],
+  "retraining_and_validation": {
+    "recommended_live_retraining_recipe": {
+      "minimum_clean_labeled_rows": 72,
+      "retrain_cadence": "Every 12 newly resolved valid candles, or on a slower controlled release cadence.",
+      "training_set": "All clean labeled rows strictly before the first candle that will use the new model.",
+      "feature_pipeline": "Rebuild DictVectorizer vocabulary, StandardScaler, and LogisticRegression from the training set using the exact settings in this JSON.",
+      "thresholds": "Keep locked at YES=0.58 and NO=0.26 unless a separately versioned validation approves a change.",
+      "deployment_safety": "Never select thresholds or weights using outcomes from candles that the candidate model is supposed to predict."
+    },
+    "fixed_threshold_walk_forward": {
+      "initial_training_rows": 72,
+      "outer_block_size": 12,
+      "threshold_inner_cv": false,
+      "thresholds": {
+        "YES": 0.58,
+        "NO": 0.26
+      },
+      "opportunities": 99,
+      "trades": 69,
+      "skips": 30,
+      "wins": 50,
+      "losses": 19,
+      "win_rate": 0.7246376811594203,
+      "net_wins": 31,
+      "first_51_opportunities": {
+        "trades": 37,
+        "wins": 27,
+        "losses": 10,
+        "win_rate": 0.7297297297297297,
+        "net_wins": 17
+      },
+      "last_48_opportunities": {
+        "trades": 32,
+        "wins": 23,
+        "losses": 9,
+        "win_rate": 0.71875,
+        "net_wins": 14
+      }
+    },
+    "fixed_threshold_ablation_without_hard_no_overrides": {
+      "opportunities": 99,
+      "trades": 61,
+      "skips": 38,
+      "wins": 40,
+      "losses": 21,
+      "win_rate": 0.6557377049180327,
+      "net_wins": 19
+    },
+    "adaptive_threshold_historical_comparison_only": {
+      "warning": "Do not describe this as the fixed-threshold model.",
+      "opportunities": 99,
+      "trades": 78,
+      "skips": 21,
+      "wins": 56,
+      "losses": 22,
+      "win_rate": 0.717948717948718,
+      "net_wins": 34,
+      "threshold_selection": "Threshold pair was reselected using only earlier inner-validation data before each outer block; outer block outcomes were not visible."
+    },
+    "limitations": [
+      "Only 171 clean labeled candles and approximately 43 hours of market history.",
+      "The 72.46% figure is selective accuracy on 69 trades, not accuracy on all 99 opportunities.",
+      "No fees, spread, payout price, slippage, latency, or market capacity were modeled.",
+      "Several raw input fields come from the upstream signal engine; backend values must preserve their original semantics.",
+      "Unknown categorical values contribute zero because they are absent from the frozen vectorizer vocabulary.",
+      "Performance can decay under different volatility, exchange, or market-regime conditions."
+    ]
+  },
+  "observability": {
+    "log_per_prediction": [
+      "model_id",
+      "candle_ts_utc",
+      "probability_green",
+      "base_decision",
+      "override_applied",
+      "override_reasons",
+      "final_decision",
+      "missing_raw_numeric_fields",
+      "unknown_categorical_features",
+      "history_candles_available",
+      "history_gap_encountered"
+    ],
+    "post_resolution_log": [
+      "actual_open",
+      "actual_close",
+      "actual_direction",
+      "win_loss_skip",
+      "net_win"
+    ],
+    "recommended_alerts": [
+      "Input schema or semantic drift",
+      "Unknown categorical rate increases",
+      "Missing numeric rate increases",
+      "Rolling 50-trade win rate below baseline",
+      "Override firing rate materially changes",
+      "Probability distribution shifts"
+    ]
+  },
+  "integrity": {
+    "reference_python_model_sha256": "2053512742947e68b84e6181b82974c7e0da5c0d6f5b0b0373dfaaa9803a4f62",
+    "reference_locked_audit_sha256": "55d8948d7791ef9b57ac084c7f64c9053ec1dd52b1510d26bc25c152352d8efc",
+    "note": "Hash the canonical JSON bytes in your backend release process if you need an immutable deployment fingerprint."
+  }
+}
