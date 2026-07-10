@@ -14,11 +14,19 @@ export interface ModelFit {
   categorical_vocab: Record<string, string[]>;
 }
 
+export interface OverrideEvaluation {
+  rule: string;
+  fired: boolean;
+  applied: boolean; // true only for the rule that produced the final NO
+}
+
 export interface ScoreResult {
   probability_green: number;
   logit: number;
+  standardized_vector: number[];
   base_decision: "YES" | "NO" | "SKIP";
   hard_no_override_fired: string; // rule id or "none"
+  override_reasons: OverrideEvaluation[];
   decision: "YES" | "NO" | "SKIP";
   would_trade: boolean;
   feature_vector_nonzero_count: number;
