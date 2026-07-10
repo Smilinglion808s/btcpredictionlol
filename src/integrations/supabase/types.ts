@@ -306,6 +306,7 @@ export type Database = {
           feature_means: Json
           feature_order: Json
           feature_scales: Json
+          first_scored_candle_ts: string | null
           fit_meta: Json | null
           id: string
           intercept: number
@@ -324,6 +325,7 @@ export type Database = {
           feature_means: Json
           feature_order: Json
           feature_scales: Json
+          first_scored_candle_ts?: string | null
           fit_meta?: Json | null
           id?: string
           intercept: number
@@ -342,6 +344,7 @@ export type Database = {
           feature_means?: Json
           feature_order?: Json
           feature_scales?: Json
+          first_scored_candle_ts?: string | null
           fit_meta?: Json | null
           id?: string
           intercept?: number
