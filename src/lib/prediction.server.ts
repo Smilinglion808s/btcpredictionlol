@@ -1199,7 +1199,7 @@ export async function resolvePredictionsServer(
             dir = actualDirection({
               open: Number(c.open), high: Number(c.high), low: Number(c.low),
               close: Number(c.close), confirm: true,
-            } as ResolutionCandle);
+            } as ResolutionCandle) as "GREEN" | "RED" | "DOJI";
           }
         }
         const { resolveShadowRowsFor } = await import("./model7/shadow");
