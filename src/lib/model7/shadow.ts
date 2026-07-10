@@ -376,7 +376,7 @@ async function runVariant(
  */
 export async function runShadowForPrediction(
   supabase: SupabaseClient,
-  predictionRow: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
+  predictionRow: PredictionRow & { id: string; candle_ts: string; created_at?: string | null; model_version?: string | null },
 ): Promise<void> {
   try {
     const plan = computeTimingPlan(predictionRow.candle_ts);
