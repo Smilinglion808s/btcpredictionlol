@@ -39,12 +39,14 @@ async function insertShadowRow(
 
 async function runVariant(
   supabase: SupabaseClient,
-  variant: "A" | "B",
+  variant: "A" | "B" | "B2",
   fit: ModelFit | null,
   row: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
   history: Candle[],
   reasonIfNoFit?: string,
+  scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
 ) {
+
   const baseRow: Record<string, unknown> = {
     prediction_id: row.id,
     candle_ts: row.candle_ts,
