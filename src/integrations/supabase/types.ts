@@ -247,6 +247,8 @@ export type Database = {
           offending_features_json: Json | null
           override_reasons_json: Json | null
           prediction_id: string
+          prediction_row_created_at: string | null
+          prediction_row_lead_ms: number | null
           previous_candle_ts: string | null
           probability_green: number | null
           production_model_version: string | null
@@ -288,6 +290,8 @@ export type Database = {
           offending_features_json?: Json | null
           override_reasons_json?: Json | null
           prediction_id: string
+          prediction_row_created_at?: string | null
+          prediction_row_lead_ms?: number | null
           previous_candle_ts?: string | null
           probability_green?: number | null
           production_model_version?: string | null
@@ -329,6 +333,8 @@ export type Database = {
           offending_features_json?: Json | null
           override_reasons_json?: Json | null
           prediction_id?: string
+          prediction_row_created_at?: string | null
+          prediction_row_lead_ms?: number | null
           previous_candle_ts?: string | null
           probability_green?: number | null
           production_model_version?: string | null

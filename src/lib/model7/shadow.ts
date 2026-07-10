@@ -97,6 +97,23 @@ export interface LeakageReport {
   history_gap_encountered: boolean;
 }
 
+// Runtime integrity check for the previous candle's OHLC. Cheap invariants
+// that a malformed / partial / stale row cannot satisfy:
+//   - all four values finite and > 0
+//   - high >= max(open, close)
+//   - low  <= min(open, close)
+//   - high >= low
+export function checkCandleIntegrity(c: Candle): { ok: boolean; reason?: string } {
+  const { open, high, low, close } = c;
+  for (const [n, v] of [["open", open], ["high", high], ["low", low], ["close", close]] as const) {
+    if (!Number.isFinite(v) || (v as number) <= 0) return { ok: false, reason: `${n}_invalid` };
+  }
+  if (high < Math.max(open, close)) return { ok: false, reason: "high_lt_max_open_close" };
+  if (low > Math.min(open, close)) return { ok: false, reason: "low_gt_min_open_close" };
+  if (high < low) return { ok: false, reason: "high_lt_low" };
+  return { ok: true };
+}
+
 export function inspectHistoryLeakage(
   plan: TimingPlan,
   history: Candle[],
@@ -104,6 +121,7 @@ export function inspectHistoryLeakage(
   const offending: Array<{ feature: string; ts: string }> = [];
   let latestCandle: number | null = null;
   let previousPresent = false;
+  let previousCandle: Candle | null = null;
   let gap = false;
 
   for (const c of history) {
@@ -116,10 +134,9 @@ export function inspectHistoryLeakage(
       offending.push({ feature: `history_candle_open_ts:${c.candle_ts}`, ts: c.candle_ts });
       continue;
     }
-    if (ms === plan.previous_candle_ms) previousPresent = true;
+    if (ms === plan.previous_candle_ms) { previousPresent = true; previousCandle = c; }
     if (latestCandle === null || ms > latestCandle) latestCandle = ms;
   }
-  // History depth walk (desc): adjacent should differ by TF_MS.
   for (let i = 0; i < history.length - 1; i++) {
     const a = new Date(history[i].candle_ts).getTime();
     const b = new Date(history[i + 1].candle_ts).getTime();
@@ -134,12 +151,21 @@ export function inspectHistoryLeakage(
       history_gap_encountered: gap,
     };
   }
-  if (!previousPresent) {
+  if (!previousPresent || !previousCandle) {
     return {
       passed: false, reason: "PREVIOUS_CANDLE_NOT_FINALIZED",
       offending_features: [{ feature: "previous_candle_missing", ts: new Date(plan.previous_candle_ms).toISOString() }],
       latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
       previous_candle_present: false, history_gap_encountered: gap,
+    };
+  }
+  const integrity = checkCandleIntegrity(previousCandle);
+  if (!integrity.ok) {
+    return {
+      passed: false, reason: "PREVIOUS_CANDLE_NOT_FINALIZED",
+      offending_features: [{ feature: `previous_candle_ohlc:${integrity.reason}`, ts: previousCandle.candle_ts }],
+      latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
+      previous_candle_present: true, history_gap_encountered: gap,
     };
   }
   return {
@@ -189,13 +215,22 @@ async function runVariant(
   supabase: SupabaseClient,
   variant: "A" | "B" | "B2",
   fit: ModelFit | null,
-  row: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
+  row: PredictionRow & { id: string; candle_ts: string; created_at?: string | null; model_version?: string | null },
   history: Candle[],
   plan: TimingPlan,
   leakage: LeakageReport,
   reasonIfNoFit?: string,
   scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
 ) {
+  // Guard: prediction row must have been created strictly before target boundary.
+  // Otherwise its indicator/module snapshot could contain post-boundary data.
+  const createdAtIso = row.created_at ?? null;
+  const createdAtMs = createdAtIso ? new Date(createdAtIso).getTime() : NaN;
+  const predictionRowLeadMs = Number.isFinite(createdAtMs)
+    ? plan.target_boundary_ms - createdAtMs : null;
+  const predictionRowPostBoundary = Number.isFinite(createdAtMs)
+    ? createdAtMs >= plan.target_boundary_ms : true; // unknown → fail closed
+
   const baseRow: Record<string, unknown> = {
     prediction_id: row.id,
     candle_ts: row.candle_ts,
@@ -213,7 +248,10 @@ async function runVariant(
     latest_source_event_ts: leakage.latest_source_event_ms
       ? new Date(leakage.latest_source_event_ms).toISOString() : null,
     missing_raw_numeric_fields_json: missingRawNumericFields(row),
+    prediction_row_created_at: createdAtIso,
+    prediction_row_lead_ms: predictionRowLeadMs,
   };
+
 
   if (!fit) {
     await insertShadowRow(supabase, {
@@ -223,6 +261,21 @@ async function runVariant(
       timing_status: "SOURCE_TIMESTAMP_UNKNOWN",
       leakage_check_passed: false,
       leakage_block_reason: reasonIfNoFit ?? "no_fit",
+    });
+    return;
+  }
+  if (predictionRowPostBoundary) {
+    await insertShadowRow(supabase, {
+      ...baseRow, status: "skipped",
+      model_fit_id: fit.model_fit_id,
+      shadow_error: "PREDICTION_ROW_POST_BOUNDARY",
+      timing_status: "PREDICTION_ROW_POST_BOUNDARY",
+      leakage_check_passed: false,
+      leakage_block_reason: "PREDICTION_ROW_POST_BOUNDARY",
+      offending_features_json: [{
+        feature: "prediction_row_created_at",
+        ts: createdAtIso ?? "unknown",
+      }],
     });
     return;
   }
@@ -323,7 +376,7 @@ async function runVariant(
  */
 export async function runShadowForPrediction(
   supabase: SupabaseClient,
-  predictionRow: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
+  predictionRow: PredictionRow & { id: string; candle_ts: string; created_at?: string | null; model_version?: string | null },
 ): Promise<void> {
   try {
     const plan = computeTimingPlan(predictionRow.candle_ts);
