@@ -197,12 +197,25 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            Model 7 Shadow
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              tracking-only · not trading
-            </span>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              Model 7 Shadow
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+                tracking-only · not trading
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
+                {exporting === "all" ? "Exporting…" : "CSV (All)"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
+                {exporting === "A" ? "…" : "Variant A"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B")}>
+                {exporting === "B" ? "…" : "Variant B"}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
