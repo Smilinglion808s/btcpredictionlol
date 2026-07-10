@@ -1,0 +1,1 @@
+ALTER TABLE public.model7_shadow REPLICA IDENTITY FULL; ALTER PUBLICATION supabase_realtime ADD TABLE public.model7_shadow;
