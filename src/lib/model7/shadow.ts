@@ -215,13 +215,22 @@ async function runVariant(
   supabase: SupabaseClient,
   variant: "A" | "B" | "B2",
   fit: ModelFit | null,
-  row: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
+  row: PredictionRow & { id: string; candle_ts: string; created_at?: string | null; model_version?: string | null },
   history: Candle[],
   plan: TimingPlan,
   leakage: LeakageReport,
   reasonIfNoFit?: string,
   scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
 ) {
+  // Guard: prediction row must have been created strictly before target boundary.
+  // Otherwise its indicator/module snapshot could contain post-boundary data.
+  const createdAtIso = row.created_at ?? null;
+  const createdAtMs = createdAtIso ? new Date(createdAtIso).getTime() : NaN;
+  const predictionRowLeadMs = Number.isFinite(createdAtMs)
+    ? plan.target_boundary_ms - createdAtMs : null;
+  const predictionRowPostBoundary = Number.isFinite(createdAtMs)
+    ? createdAtMs >= plan.target_boundary_ms : true; // unknown → fail closed
+
   const baseRow: Record<string, unknown> = {
     prediction_id: row.id,
     candle_ts: row.candle_ts,
@@ -239,7 +248,10 @@ async function runVariant(
     latest_source_event_ts: leakage.latest_source_event_ms
       ? new Date(leakage.latest_source_event_ms).toISOString() : null,
     missing_raw_numeric_fields_json: missingRawNumericFields(row),
+    prediction_row_created_at: createdAtIso,
+    prediction_row_lead_ms: predictionRowLeadMs,
   };
+
 
   if (!fit) {
     await insertShadowRow(supabase, {
