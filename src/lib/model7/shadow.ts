@@ -5,11 +5,70 @@
 // logged to model7_shadow.shadow_error / api_runs.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import { buildFeatureMap, type Candle, type PredictionRow } from "./featurize";
 import { scoreFeatureMap, type ModelFit } from "./scorer";
 import { loadFrozenModel, loadLatestVariantBFit } from "./fitStore";
 
 const HISTORY_DEPTH_CANDLES = 24;
+// Target: score AT or immediately AFTER the target-candle boundary.
+// Shadow has no betting deadline; it should read the freshest data.
+const BOUNDARY_TARGET_DELAY_MS = 1500;
+// Never wait more than this from "now" to the boundary — bounds worker time.
+const MAX_BOUNDARY_WAIT_MS = 25_000;
+
+// Fields we treat as "raw numeric inputs" for the missing-fields ledger.
+const RAW_NUMERIC_FIELDS = [
+  "confidence", "input_candle_age_seconds", "current_partial_minutes_elapsed",
+  "btc_price_at_prediction",
+  "partial_completeness", "partial_close_position_pct", "partial_range_vs_atr",
+  "partial_module_bull_pts", "partial_module_bear_pts",
+] as const;
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+function fitArtifactHash(fit: ModelFit): string {
+  // Canonical: coefficients + intercept + scaler + feature_order.
+  return sha256Hex(JSON.stringify({
+    fo: fit.feature_order,
+    mu: fit.feature_means,
+    sc: fit.feature_scales,
+    co: fit.coefficients,
+    b: fit.intercept,
+  }));
+}
+
+function detectHistoryGap(history: Candle[]): boolean {
+  if (history.length < 2) return history.length < HISTORY_DEPTH_CANDLES;
+  // History is desc by candle_ts. Adjacent rows should be 15m apart.
+  for (let i = 0; i < history.length - 1; i++) {
+    const a = new Date(history[i].candle_ts).getTime();
+    const b = new Date(history[i + 1].candle_ts).getTime();
+    if (a - b !== 15 * 60 * 1000) return true;
+  }
+  return false;
+}
+
+function missingRawNumericFields(row: PredictionRow): string[] {
+  const missing: string[] = [];
+  for (const k of RAW_NUMERIC_FIELDS) {
+    const v = (row as unknown as Record<string, unknown>)[k];
+    if (v === null || v === undefined) missing.push(k);
+  }
+  return missing;
+}
+
+async function waitUntilBoundary(candleTsIso: string): Promise<void> {
+  const boundaryMs = new Date(candleTsIso).getTime();
+  const targetMs = boundaryMs + BOUNDARY_TARGET_DELAY_MS;
+  const delay = targetMs - Date.now();
+  if (delay <= 0) return;
+  const capped = Math.min(delay, MAX_BOUNDARY_WAIT_MS);
+  await new Promise((r) => setTimeout(r, capped));
+}
+
 
 async function loadHistoricalCandles(
   supabase: SupabaseClient,
@@ -70,6 +129,12 @@ async function runVariant(
       failed_breakout_down: row.failed_breakout_down ?? (row.indicators as Record<string, unknown> | null | undefined)?.failedBreakoutDown,
     }, scoreOptions);
 
+    const scoredAt = new Date();
+    const boundaryMs = new Date(row.candle_ts).getTime();
+    const boundaryDeltaMs = scoredAt.getTime() - boundaryMs;
+    const artifactHash = fitArtifactHash(fit);
+    const featureVectorHash = sha256Hex(JSON.stringify(res.standardized_vector));
+
     await insertShadowRow(supabase, {
       ...baseRow,
       probability_green: res.probability_green,
@@ -81,6 +146,16 @@ async function runVariant(
       model_fit_id: fit.model_fit_id,
       feature_vector_nonzero_count: res.feature_vector_nonzero_count,
       unknown_categories: res.unknown_categories,
+      // Item 1/2 additions:
+      scored_at: scoredAt.toISOString(),
+      snapshot_ts: row.candle_ts,
+      boundary_delta_ms: boundaryDeltaMs,
+      model_artifact_sha256: artifactHash,
+      feature_vector_sha256: featureVectorHash,
+      override_reasons_json: res.override_reasons,
+      history_candles_available: history.length,
+      history_gap_encountered: detectHistoryGap(history),
+      missing_raw_numeric_fields_json: missingRawNumericFields(row),
     });
     // Leak-check stamp: record the earliest candle this fit was ever used to
     // score. The nightly audit asserts training_window_end < first_scored_candle_ts.
@@ -118,6 +193,10 @@ export async function runShadowForPrediction(
   predictionRow: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
 ): Promise<void> {
   try {
+    // Item 1 — wait until AT or immediately AFTER the target-candle boundary
+    // so the input snapshot includes the freshest data (the just-closed candle).
+    // Shadow has no betting deadline; production already fired its bet.
+    await waitUntilBoundary(predictionRow.candle_ts);
     const history = await loadHistoricalCandles(supabase, predictionRow.candle_ts);
 
     // Variant A — frozen v1.1.
