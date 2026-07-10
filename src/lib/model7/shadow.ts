@@ -97,6 +97,23 @@ export interface LeakageReport {
   history_gap_encountered: boolean;
 }
 
+// Runtime integrity check for the previous candle's OHLC. Cheap invariants
+// that a malformed / partial / stale row cannot satisfy:
+//   - all four values finite and > 0
+//   - high >= max(open, close)
+//   - low  <= min(open, close)
+//   - high >= low
+export function checkCandleIntegrity(c: Candle): { ok: boolean; reason?: string } {
+  const { open, high, low, close } = c;
+  for (const [n, v] of [["open", open], ["high", high], ["low", low], ["close", close]] as const) {
+    if (!Number.isFinite(v) || (v as number) <= 0) return { ok: false, reason: `${n}_invalid` };
+  }
+  if (high < Math.max(open, close)) return { ok: false, reason: "high_lt_max_open_close" };
+  if (low > Math.min(open, close)) return { ok: false, reason: "low_gt_min_open_close" };
+  if (high < low) return { ok: false, reason: "high_lt_low" };
+  return { ok: true };
+}
+
 export function inspectHistoryLeakage(
   plan: TimingPlan,
   history: Candle[],
@@ -104,6 +121,7 @@ export function inspectHistoryLeakage(
   const offending: Array<{ feature: string; ts: string }> = [];
   let latestCandle: number | null = null;
   let previousPresent = false;
+  let previousCandle: Candle | null = null;
   let gap = false;
 
   for (const c of history) {
@@ -116,10 +134,9 @@ export function inspectHistoryLeakage(
       offending.push({ feature: `history_candle_open_ts:${c.candle_ts}`, ts: c.candle_ts });
       continue;
     }
-    if (ms === plan.previous_candle_ms) previousPresent = true;
+    if (ms === plan.previous_candle_ms) { previousPresent = true; previousCandle = c; }
     if (latestCandle === null || ms > latestCandle) latestCandle = ms;
   }
-  // History depth walk (desc): adjacent should differ by TF_MS.
   for (let i = 0; i < history.length - 1; i++) {
     const a = new Date(history[i].candle_ts).getTime();
     const b = new Date(history[i + 1].candle_ts).getTime();
@@ -134,12 +151,21 @@ export function inspectHistoryLeakage(
       history_gap_encountered: gap,
     };
   }
-  if (!previousPresent) {
+  if (!previousPresent || !previousCandle) {
     return {
       passed: false, reason: "PREVIOUS_CANDLE_NOT_FINALIZED",
       offending_features: [{ feature: "previous_candle_missing", ts: new Date(plan.previous_candle_ms).toISOString() }],
       latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
       previous_candle_present: false, history_gap_encountered: gap,
+    };
+  }
+  const integrity = checkCandleIntegrity(previousCandle);
+  if (!integrity.ok) {
+    return {
+      passed: false, reason: "PREVIOUS_CANDLE_NOT_FINALIZED",
+      offending_features: [{ feature: `previous_candle_ohlc:${integrity.reason}`, ts: previousCandle.candle_ts }],
+      latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
+      previous_candle_present: true, history_gap_encountered: gap,
     };
   }
   return {
