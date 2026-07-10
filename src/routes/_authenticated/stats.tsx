@@ -31,9 +31,9 @@ function StatsPage() {
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
-  const [exporting, setExporting] = useState<null | "all" | "A" | "B">(null);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
 
-  async function downloadM7Csv(scope: "all" | "A" | "B") {
+  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2") {
     try {
       setExporting(scope);
       const rows = await exportM7Fn();
@@ -49,6 +49,7 @@ function StatsPage() {
       const d = new Date();
       const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
       const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
+
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
