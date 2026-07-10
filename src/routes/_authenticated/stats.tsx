@@ -30,6 +30,34 @@ function StatsPage() {
   const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportM7Fn = useServerFn(exportModel7Shadow);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B">(null);
+
+  async function downloadM7Csv(scope: "all" | "A" | "B") {
+    try {
+      setExporting(scope);
+      const rows = await exportM7Fn();
+      const filtered = scope === "all" ? rows : rows.filter((r: any) => r.variant === scope);
+      if (filtered.length === 0) { alert("No shadow rows to export."); return; }
+      const headers = Object.keys(filtered[0]);
+      const esc = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = typeof v === "string" ? v : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [headers.join(","), ...filtered.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+      const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
