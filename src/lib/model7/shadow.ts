@@ -79,6 +79,24 @@ async function runVariant(
       feature_vector_nonzero_count: res.feature_vector_nonzero_count,
       unknown_categories: res.unknown_categories,
     });
+    // Leak-check stamp: record the earliest candle this fit was ever used to
+    // score. The nightly audit asserts training_window_end < first_scored_candle_ts.
+    if (variant === "B") {
+      try {
+        const { data: fitRow } = await supabase
+          .from("model7_training_fits")
+          .select("first_scored_candle_ts")
+          .eq("model_fit_id", fit.model_fit_id)
+          .maybeSingle();
+        const existing = fitRow?.first_scored_candle_ts as string | null | undefined;
+        if (!existing || new Date(row.candle_ts).getTime() < new Date(existing).getTime()) {
+          await supabase
+            .from("model7_training_fits")
+            .update({ first_scored_candle_ts: row.candle_ts } as never)
+            .eq("model_fit_id", fit.model_fit_id);
+        }
+      } catch { /* never block shadow */ }
+    }
   } catch (e) {
     await insertShadowRow(supabase, {
       ...baseRow, status: "error",

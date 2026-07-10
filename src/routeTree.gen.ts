@@ -20,6 +20,7 @@ import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/t
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
+import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -80,6 +81,12 @@ const ApiPublicHooksScheduled15mRunRoute =
     path: '/api/public/hooks/scheduled-15m-run',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksModel7NightlyAuditRoute =
+  ApiPublicHooksModel7NightlyAuditRouteImport.update({
+    id: '/api/public/hooks/model7-nightly-audit',
+    path: '/api/public/hooks/model7-nightly-audit',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailyArchiveRoute =
   ApiPublicHooksDailyArchiveRouteImport.update({
     id: '/api/public/hooks/daily-archive',
@@ -95,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -108,6 +116,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -123,6 +132,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/settings/model'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/'
     | '/settings/model'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -165,6 +177,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/settings/model'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -174,6 +187,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
+  ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
@@ -259,6 +273,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/model7-nightly-audit': {
+      id: '/api/public/hooks/model7-nightly-audit'
+      path: '/api/public/hooks/model7-nightly-audit'
+      fullPath: '/api/public/hooks/model7-nightly-audit'
+      preLoaderRoute: typeof ApiPublicHooksModel7NightlyAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-archive': {
       id: '/api/public/hooks/daily-archive'
       path: '/api/public/hooks/daily-archive'
@@ -293,6 +314,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
+  ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
