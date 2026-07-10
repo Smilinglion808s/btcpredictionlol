@@ -211,18 +211,19 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     .from("model7_shadow")
     .select("variant, candle_ts, probability_green, decision, would_trade, status")
     .order("candle_ts", { ascending: false })
-    .limit(10);
+    .limit(15);
   if (error) throw error;
   const rows = (data ?? []) as Array<{
     variant: string; candle_ts: string; probability_green: number | null;
     decision: string | null; would_trade: boolean | null; status: string;
   }>;
-  if (rows.length === 0) return { candle_ts: null, A: null, B: null };
+  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null };
   const latestTs = rows[0].candle_ts;
   const forLatest = rows.filter((r) => r.candle_ts === latestTs);
-  const pick = (v: "A" | "B") => forLatest.find((r) => r.variant === v) ?? null;
-  return { candle_ts: latestTs, A: pick("A"), B: pick("B") };
+  const pick = (v: "A" | "B" | "B2") => forLatest.find((r) => r.variant === v) ?? null;
+  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2") };
 });
+
 
 
 const overrideSchema = z.object({
