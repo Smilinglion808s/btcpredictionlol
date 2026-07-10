@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending } from "@/lib/predictions.functions";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
