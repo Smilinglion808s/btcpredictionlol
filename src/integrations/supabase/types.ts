@@ -225,19 +225,28 @@ export type Database = {
         Row: {
           actual_direction: string | null
           base_decision: string | null
+          boundary_delta_ms: number | null
           candle_ts: string
           created_at: string
           decision: string | null
           feature_vector_nonzero_count: number | null
+          feature_vector_sha256: string | null
           hard_no_override_fired: string | null
+          history_candles_available: number | null
+          history_gap_encountered: boolean | null
           id: string
           logit: number | null
+          missing_raw_numeric_fields_json: Json | null
+          model_artifact_sha256: string | null
           model_fit_id: string | null
+          override_reasons_json: Json | null
           prediction_id: string
           probability_green: number | null
           production_model_version: string | null
           resolved_at: string | null
+          scored_at: string | null
           shadow_error: string | null
+          snapshot_ts: string | null
           status: string
           unknown_categories: Json | null
           updated_at: string
@@ -247,19 +256,28 @@ export type Database = {
         Insert: {
           actual_direction?: string | null
           base_decision?: string | null
+          boundary_delta_ms?: number | null
           candle_ts: string
           created_at?: string
           decision?: string | null
           feature_vector_nonzero_count?: number | null
+          feature_vector_sha256?: string | null
           hard_no_override_fired?: string | null
+          history_candles_available?: number | null
+          history_gap_encountered?: boolean | null
           id?: string
           logit?: number | null
+          missing_raw_numeric_fields_json?: Json | null
+          model_artifact_sha256?: string | null
           model_fit_id?: string | null
+          override_reasons_json?: Json | null
           prediction_id: string
           probability_green?: number | null
           production_model_version?: string | null
           resolved_at?: string | null
+          scored_at?: string | null
           shadow_error?: string | null
+          snapshot_ts?: string | null
           status?: string
           unknown_categories?: Json | null
           updated_at?: string
@@ -269,19 +287,28 @@ export type Database = {
         Update: {
           actual_direction?: string | null
           base_decision?: string | null
+          boundary_delta_ms?: number | null
           candle_ts?: string
           created_at?: string
           decision?: string | null
           feature_vector_nonzero_count?: number | null
+          feature_vector_sha256?: string | null
           hard_no_override_fired?: string | null
+          history_candles_available?: number | null
+          history_gap_encountered?: boolean | null
           id?: string
           logit?: number | null
+          missing_raw_numeric_fields_json?: Json | null
+          model_artifact_sha256?: string | null
           model_fit_id?: string | null
+          override_reasons_json?: Json | null
           prediction_id?: string
           probability_green?: number | null
           production_model_version?: string | null
           resolved_at?: string | null
+          scored_at?: string | null
           shadow_error?: string | null
+          snapshot_ts?: string | null
           status?: string
           unknown_categories?: Json | null
           updated_at?: string
@@ -300,6 +327,7 @@ export type Database = {
       }
       model7_training_fits: {
         Row: {
+          artifact_sha256: string | null
           categorical_vocab: Json
           coefficients: Json
           created_at: string
@@ -311,6 +339,7 @@ export type Database = {
           id: string
           intercept: number
           model_fit_id: string
+          training_cutoff_ts: string | null
           training_model_version: string
           training_row_count: number
           training_window_end: string | null
@@ -319,6 +348,7 @@ export type Database = {
           variant: string
         }
         Insert: {
+          artifact_sha256?: string | null
           categorical_vocab: Json
           coefficients: Json
           created_at?: string
@@ -330,6 +360,7 @@ export type Database = {
           id?: string
           intercept: number
           model_fit_id: string
+          training_cutoff_ts?: string | null
           training_model_version: string
           training_row_count: number
           training_window_end?: string | null
@@ -338,6 +369,7 @@ export type Database = {
           variant: string
         }
         Update: {
+          artifact_sha256?: string | null
           categorical_vocab?: Json
           coefficients?: Json
           created_at?: string
@@ -349,6 +381,7 @@ export type Database = {
           id?: string
           intercept?: number
           model_fit_id?: string
+          training_cutoff_ts?: string | null
           training_model_version?: string
           training_row_count?: number
           training_window_end?: string | null
