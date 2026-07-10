@@ -13,6 +13,8 @@ import { describe, expect, it } from "vitest";
 import { loadFrozenModel } from "../fitStore";
 import { scoreFeatureMap } from "../scorer";
 import { fitLogisticRegression } from "../logistic";
+import { buildFeatureMap } from "../featurize";
+import { runShadowForPrediction } from "../shadow";
 
 describe("Model 7 — frozen scorer & thresholds", () => {
   const fit = loadFrozenModel();
