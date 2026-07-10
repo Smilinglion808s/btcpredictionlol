@@ -140,6 +140,16 @@ export async function runShadowForPrediction(
       supabase, "B", variantB, predictionRow, history,
       variantB ? undefined : "warming_up",
     );
+
+    // Variant B2 — identical to B (same fit / recipe) with the
+    // upstream_no_clear_edge hard-NO override REMOVED. Retired override
+    // registry: shadow_update_1 item 4.
+    await runVariant(
+      supabase, "B2", variantB, predictionRow, history,
+      variantB ? undefined : "warming_up",
+      { skipUpstreamNoClearEdge: true },
+    );
+
   } catch (e) {
     // Absolute last-resort logging so the model7 shadow never breaks the tick.
     try {
