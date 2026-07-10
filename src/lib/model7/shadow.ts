@@ -129,6 +129,12 @@ async function runVariant(
       failed_breakout_down: row.failed_breakout_down ?? (row.indicators as Record<string, unknown> | null | undefined)?.failedBreakoutDown,
     }, scoreOptions);
 
+    const scoredAt = new Date();
+    const boundaryMs = new Date(row.candle_ts).getTime();
+    const boundaryDeltaMs = scoredAt.getTime() - boundaryMs;
+    const artifactHash = fitArtifactHash(fit);
+    const featureVectorHash = sha256Hex(JSON.stringify(res.standardized_vector));
+
     await insertShadowRow(supabase, {
       ...baseRow,
       probability_green: res.probability_green,
@@ -140,6 +146,16 @@ async function runVariant(
       model_fit_id: fit.model_fit_id,
       feature_vector_nonzero_count: res.feature_vector_nonzero_count,
       unknown_categories: res.unknown_categories,
+      // Item 1/2 additions:
+      scored_at: scoredAt.toISOString(),
+      snapshot_ts: row.candle_ts,
+      boundary_delta_ms: boundaryDeltaMs,
+      model_artifact_sha256: artifactHash,
+      feature_vector_sha256: featureVectorHash,
+      override_reasons_json: res.override_reasons,
+      history_candles_available: history.length,
+      history_gap_encountered: detectHistoryGap(history),
+      missing_raw_numeric_fields_json: missingRawNumericFields(row),
     });
     // Leak-check stamp: record the earliest candle this fit was ever used to
     // score. The nightly audit asserts training_window_end < first_scored_candle_ts.
