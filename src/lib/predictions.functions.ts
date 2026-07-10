@@ -126,30 +126,44 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   const rows = data ?? [];
 
   const blank = () => ({ total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 });
-  const out: Record<"A" | "B" | "combined", ReturnType<typeof blank>> = {
-    A: blank(), B: blank(), combined: blank(),
-  };
+  const out: Record<"A" | "B", ReturnType<typeof blank>> = { A: blank(), B: blank() };
 
   for (const r of rows as Array<{ variant: string; status: string; would_trade: boolean | null }>) {
-    if (!r.would_trade) continue; // only rows the model would actually trade
-    const buckets: Array<"A" | "B" | "combined"> = [];
-    if (r.variant === "A" || r.variant === "B") buckets.push(r.variant, "combined");
-    else buckets.push("combined");
-    for (const k of buckets) {
-      const b = out[k];
-      b.total += 1;
-      if (r.status === "win") b.wins += 1;
-      else if (r.status === "loss") b.losses += 1;
-      else if (r.status === "push") b.pushes += 1;
-      else if (r.status === "pending") b.pending += 1;
-    }
+    if (!r.would_trade) continue;
+    if (r.variant !== "A" && r.variant !== "B") continue;
+    const b = out[r.variant];
+    b.total += 1;
+    if (r.status === "win") b.wins += 1;
+    else if (r.status === "loss") b.losses += 1;
+    else if (r.status === "push") b.pushes += 1;
+    else if (r.status === "pending") b.pending += 1;
   }
-  for (const k of ["A", "B", "combined"] as const) {
+  for (const k of ["A", "B"] as const) {
     const b = out[k];
     const decided = b.wins + b.losses;
     b.win_rate = decided === 0 ? 0 : Math.round((b.wins / decided) * 10000) / 100;
   }
   return out;
+});
+
+/** Shadow predictions on the current pending candle. */
+export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_shadow")
+    .select("variant, candle_ts, probability_green, decision, would_trade, status")
+    .order("candle_ts", { ascending: false })
+    .limit(10);
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    variant: string; candle_ts: string; probability_green: number | null;
+    decision: string | null; would_trade: boolean | null; status: string;
+  }>;
+  if (rows.length === 0) return { candle_ts: null, A: null, B: null };
+  const latestTs = rows[0].candle_ts;
+  const forLatest = rows.filter((r) => r.candle_ts === latestTs);
+  const pick = (v: "A" | "B") => forLatest.find((r) => r.variant === v) ?? null;
+  return { candle_ts: latestTs, A: pick("A"), B: pick("B") };
 });
 
 
