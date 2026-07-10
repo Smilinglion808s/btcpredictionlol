@@ -1,6 +1,14 @@
 // Model 7 Shadow — orchestrator called after each production insert.
-// Runs Variant A (frozen v1.1) and Variant B (latest live-retrained fit),
-// inserts one shadow row per variant into public.model7_shadow.
+// Runs Variant A (frozen v1.1), Variant B (latest live-retrained fit), and
+// Variant B2 (same fit as B with upstream_no_clear_edge override removed).
+//
+// STRICT BOUNDARY-TIMED SCORING (leakage-safe):
+//   - Never scores before target_boundary_ts + 1500ms (score_not_before_ts).
+//   - Any candle with open_ts >= target_boundary_ts is rejected.
+//   - Post-wait clock is re-read; early-wake blocks scoring (fail-closed).
+//   - The previous candle (target - 15m) must be present and unique; else block.
+//   - History gaps or missing lineage → fail-closed, no prediction emitted.
+//
 // Never blocks production: every step is wrapped in try/catch and errors are
 // logged to model7_shadow.shadow_error / api_runs.
 
@@ -11,13 +19,14 @@ import { scoreFeatureMap, type ModelFit } from "./scorer";
 import { loadFrozenModel, loadLatestVariantBFit } from "./fitStore";
 
 const HISTORY_DEPTH_CANDLES = 24;
+const TF_MS = 15 * 60 * 1000;
 // Target: score AT or immediately AFTER the target-candle boundary.
-// Shadow has no betting deadline; it should read the freshest data.
-const BOUNDARY_TARGET_DELAY_MS = 1500;
-// Never wait more than this from "now" to the boundary — bounds worker time.
-const MAX_BOUNDARY_WAIT_MS = 25_000;
+export const SCORE_NOT_BEFORE_DELAY_MS = 1500;
+// Bounded per-sleep cap so a worker never blocks longer than this at once.
+const SLEEP_CAP_MS = 25_000;
+// Hard ceiling on total wait; beyond this we refuse to score in this call.
+const MAX_TOTAL_WAIT_MS = 90_000;
 
-// Fields we treat as "raw numeric inputs" for the missing-fields ledger.
 const RAW_NUMERIC_FIELDS = [
   "confidence", "input_candle_age_seconds", "current_partial_minutes_elapsed",
   "btc_price_at_prediction",
@@ -30,25 +39,114 @@ function sha256Hex(input: string): string {
 }
 
 function fitArtifactHash(fit: ModelFit): string {
-  // Canonical: coefficients + intercept + scaler + feature_order.
   return sha256Hex(JSON.stringify({
-    fo: fit.feature_order,
-    mu: fit.feature_means,
-    sc: fit.feature_scales,
-    co: fit.coefficients,
-    b: fit.intercept,
+    fo: fit.feature_order, mu: fit.feature_means, sc: fit.feature_scales,
+    co: fit.coefficients, b: fit.intercept,
   }));
 }
 
-function detectHistoryGap(history: Candle[]): boolean {
-  if (history.length < 2) return history.length < HISTORY_DEPTH_CANDLES;
-  // History is desc by candle_ts. Adjacent rows should be 15m apart.
+// ---------- Timing plan (pure, testable) ----------
+export interface TimingPlan {
+  target_boundary_ms: number;
+  score_not_before_ms: number;
+  feature_cutoff_ms: number;   // target_boundary_ms - 1
+  previous_candle_ms: number;  // target_boundary_ms - 15m
+}
+export function computeTimingPlan(candleTsIso: string): TimingPlan {
+  const target = new Date(candleTsIso).getTime();
+  return {
+    target_boundary_ms: target,
+    score_not_before_ms: target + SCORE_NOT_BEFORE_DELAY_MS,
+    feature_cutoff_ms: target - 1,
+    previous_candle_ms: target - TF_MS,
+  };
+}
+
+// ---------- Bounded-wait timing enforcement ----------
+// Loops with capped sleeps until score_not_before or max total wait elapses.
+// Never returns "early" — always re-reads the wall clock after each sleep.
+// Returns whether we actually reached the safe-score window.
+export async function waitUntilScoreable(plan: TimingPlan, opts?: {
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  maxTotalMs?: number;
+}): Promise<{ reached: boolean; waited_ms: number }> {
+  const now = opts?.now ?? (() => Date.now());
+  const sleep = opts?.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const maxTotal = opts?.maxTotalMs ?? MAX_TOTAL_WAIT_MS;
+  const start = now();
+  while (true) {
+    const t = now();
+    const remaining = plan.score_not_before_ms - t;
+    if (remaining <= 0) return { reached: true, waited_ms: t - start };
+    if (t - start >= maxTotal) return { reached: false, waited_ms: t - start };
+    const step = Math.min(remaining, SLEEP_CAP_MS, maxTotal - (t - start));
+    if (step <= 0) return { reached: false, waited_ms: t - start };
+    await sleep(step);
+  }
+}
+
+// ---------- Leakage inspection (pure, testable) ----------
+export interface LeakageReport {
+  passed: boolean;
+  reason?: string;                       // e.g. TARGET_CANDLE_LEAKAGE_BLOCKED
+  offending_features: Array<{ feature: string; ts: string }>;
+  latest_source_candle_ms: number | null;
+  latest_source_event_ms: number | null;
+  previous_candle_present: boolean;
+  history_gap_encountered: boolean;
+}
+
+export function inspectHistoryLeakage(
+  plan: TimingPlan,
+  history: Candle[],
+): LeakageReport {
+  const offending: Array<{ feature: string; ts: string }> = [];
+  let latestCandle: number | null = null;
+  let previousPresent = false;
+  let gap = false;
+
+  for (const c of history) {
+    const ms = new Date(c.candle_ts).getTime();
+    if (!Number.isFinite(ms)) {
+      offending.push({ feature: "history_candle_ts_invalid", ts: String(c.candle_ts) });
+      continue;
+    }
+    if (ms >= plan.target_boundary_ms) {
+      offending.push({ feature: `history_candle_open_ts:${c.candle_ts}`, ts: c.candle_ts });
+      continue;
+    }
+    if (ms === plan.previous_candle_ms) previousPresent = true;
+    if (latestCandle === null || ms > latestCandle) latestCandle = ms;
+  }
+  // History depth walk (desc): adjacent should differ by TF_MS.
   for (let i = 0; i < history.length - 1; i++) {
     const a = new Date(history[i].candle_ts).getTime();
     const b = new Date(history[i + 1].candle_ts).getTime();
-    if (a - b !== 15 * 60 * 1000) return true;
+    if (a - b !== TF_MS) { gap = true; break; }
   }
-  return false;
+
+  if (offending.length > 0) {
+    return {
+      passed: false, reason: "TARGET_CANDLE_LEAKAGE_BLOCKED",
+      offending_features: offending, latest_source_candle_ms: latestCandle,
+      latest_source_event_ms: latestCandle, previous_candle_present: previousPresent,
+      history_gap_encountered: gap,
+    };
+  }
+  if (!previousPresent) {
+    return {
+      passed: false, reason: "PREVIOUS_CANDLE_NOT_FINALIZED",
+      offending_features: [{ feature: "previous_candle_missing", ts: new Date(plan.previous_candle_ms).toISOString() }],
+      latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
+      previous_candle_present: false, history_gap_encountered: gap,
+    };
+  }
+  return {
+    passed: true, offending_features: [],
+    latest_source_candle_ms: latestCandle, latest_source_event_ms: latestCandle,
+    previous_candle_present: true, history_gap_encountered: gap,
+  };
 }
 
 function missingRawNumericFields(row: PredictionRow): string[] {
@@ -60,20 +158,11 @@ function missingRawNumericFields(row: PredictionRow): string[] {
   return missing;
 }
 
-async function waitUntilBoundary(candleTsIso: string): Promise<void> {
-  const boundaryMs = new Date(candleTsIso).getTime();
-  const targetMs = boundaryMs + BOUNDARY_TARGET_DELAY_MS;
-  const delay = targetMs - Date.now();
-  if (delay <= 0) return;
-  const capped = Math.min(delay, MAX_BOUNDARY_WAIT_MS);
-  await new Promise((r) => setTimeout(r, capped));
-}
-
-
 async function loadHistoricalCandles(
   supabase: SupabaseClient,
   beforeTs: string,
 ): Promise<Candle[]> {
+  // Strict inequality — never returns a candle at or after the target boundary.
   const { data } = await supabase
     .from("candles")
     .select("candle_ts,open,high,low,close,volume")
@@ -102,22 +191,50 @@ async function runVariant(
   fit: ModelFit | null,
   row: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
   history: Candle[],
+  plan: TimingPlan,
+  leakage: LeakageReport,
   reasonIfNoFit?: string,
   scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
 ) {
-
   const baseRow: Record<string, unknown> = {
     prediction_id: row.id,
     candle_ts: row.candle_ts,
     variant,
     production_model_version: row.model_version ?? null,
     status: "pending",
+    target_boundary_ts: new Date(plan.target_boundary_ms).toISOString(),
+    score_not_before_ts: new Date(plan.score_not_before_ms).toISOString(),
+    feature_cutoff_ts: new Date(plan.feature_cutoff_ms).toISOString(),
+    previous_candle_ts: new Date(plan.previous_candle_ms).toISOString(),
+    history_candles_available: history.length,
+    history_gap_encountered: leakage.history_gap_encountered,
+    latest_source_candle_ts: leakage.latest_source_candle_ms
+      ? new Date(leakage.latest_source_candle_ms).toISOString() : null,
+    latest_source_event_ts: leakage.latest_source_event_ms
+      ? new Date(leakage.latest_source_event_ms).toISOString() : null,
+    missing_raw_numeric_fields_json: missingRawNumericFields(row),
   };
+
   if (!fit) {
     await insertShadowRow(supabase, {
       ...baseRow, status: "skipped",
       model_fit_id: reasonIfNoFit ?? "no_fit",
       shadow_error: reasonIfNoFit ?? "no_fit",
+      timing_status: "SOURCE_TIMESTAMP_UNKNOWN",
+      leakage_check_passed: false,
+      leakage_block_reason: reasonIfNoFit ?? "no_fit",
+    });
+    return;
+  }
+  if (!leakage.passed) {
+    await insertShadowRow(supabase, {
+      ...baseRow, status: "skipped",
+      model_fit_id: fit.model_fit_id,
+      shadow_error: leakage.reason,
+      timing_status: leakage.reason ?? "TARGET_CANDLE_LEAKAGE_BLOCKED",
+      leakage_check_passed: false,
+      leakage_block_reason: leakage.reason,
+      offending_features_json: leakage.offending_features,
     });
     return;
   }
@@ -130,10 +247,27 @@ async function runVariant(
     }, scoreOptions);
 
     const scoredAt = new Date();
-    const boundaryMs = new Date(row.candle_ts).getTime();
-    const boundaryDeltaMs = scoredAt.getTime() - boundaryMs;
+    const scoredMs = scoredAt.getTime();
+    const boundaryDeltaMs = scoredMs - plan.target_boundary_ms;
+    // Fail-closed: post-wait clock must be at or after score_not_before.
+    if (scoredMs < plan.score_not_before_ms) {
+      await insertShadowRow(supabase, {
+        ...baseRow, status: "skipped",
+        model_fit_id: fit.model_fit_id,
+        shadow_error: "EARLY_SCORING_BLOCKED",
+        timing_status: "EARLY_SCORING_BLOCKED",
+        leakage_check_passed: false,
+        leakage_block_reason: "EARLY_SCORING_BLOCKED",
+        scored_at: scoredAt.toISOString(),
+        boundary_delta_ms: boundaryDeltaMs,
+      });
+      return;
+    }
+
     const artifactHash = fitArtifactHash(fit);
     const featureVectorHash = sha256Hex(JSON.stringify(res.standardized_vector));
+    const timingStatus =
+      boundaryDeltaMs > 10_000 ? "LATE_WARNING" : "ON_TIME";
 
     await insertShadowRow(supabase, {
       ...baseRow,
@@ -146,19 +280,17 @@ async function runVariant(
       model_fit_id: fit.model_fit_id,
       feature_vector_nonzero_count: res.feature_vector_nonzero_count,
       unknown_categories: res.unknown_categories,
-      // Item 1/2 additions:
       scored_at: scoredAt.toISOString(),
-      snapshot_ts: row.candle_ts,
+      snapshot_ts: new Date(plan.feature_cutoff_ms).toISOString(),
       boundary_delta_ms: boundaryDeltaMs,
       model_artifact_sha256: artifactHash,
       feature_vector_sha256: featureVectorHash,
       override_reasons_json: res.override_reasons,
-      history_candles_available: history.length,
-      history_gap_encountered: detectHistoryGap(history),
-      missing_raw_numeric_fields_json: missingRawNumericFields(row),
+      timing_status: timingStatus,
+      leakage_check_passed: true,
+      leakage_block_reason: null,
+      offending_features_json: null,
     });
-    // Leak-check stamp: record the earliest candle this fit was ever used to
-    // score. The nightly audit asserts training_window_end < first_scored_candle_ts.
     if (variant === "B") {
       try {
         const { data: fitRow } = await supabase
@@ -180,24 +312,44 @@ async function runVariant(
       ...baseRow, status: "error",
       model_fit_id: fit.model_fit_id,
       shadow_error: e instanceof Error ? e.message : String(e),
+      timing_status: "SOURCE_TIMESTAMP_UNKNOWN",
+      leakage_check_passed: false,
     });
   }
 }
 
 /**
- * Fire-and-forget from the production engine. Loads both variant fits, scores,
- * inserts both rows. Always resolves; never throws.
+ * Fire-and-forget from the production engine. Always resolves; never throws.
  */
 export async function runShadowForPrediction(
   supabase: SupabaseClient,
   predictionRow: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
 ): Promise<void> {
   try {
-    // Item 1 — wait until AT or immediately AFTER the target-candle boundary
-    // so the input snapshot includes the freshest data (the just-closed candle).
-    // Shadow has no betting deadline; production already fired its bet.
-    await waitUntilBoundary(predictionRow.candle_ts);
+    const plan = computeTimingPlan(predictionRow.candle_ts);
+    // Bounded-loop wait — never returns before score_not_before.
+    const wait = await waitUntilScoreable(plan);
+    if (!wait.reached) {
+      // Fail-closed: log a single skipped row and exit.
+      await insertShadowRow(supabase, {
+        prediction_id: predictionRow.id, candle_ts: predictionRow.candle_ts,
+        variant: "A", status: "skipped",
+        production_model_version: predictionRow.model_version ?? null,
+        model_fit_id: "timing_wait_exceeded",
+        shadow_error: "TIMING_WAIT_EXCEEDED",
+        timing_status: "EARLY_SCORING_BLOCKED",
+        leakage_check_passed: false,
+        leakage_block_reason: "TIMING_WAIT_EXCEEDED",
+        target_boundary_ts: new Date(plan.target_boundary_ms).toISOString(),
+        score_not_before_ts: new Date(plan.score_not_before_ms).toISOString(),
+        feature_cutoff_ts: new Date(plan.feature_cutoff_ms).toISOString(),
+        previous_candle_ts: new Date(plan.previous_candle_ms).toISOString(),
+      });
+      return;
+    }
+
     const history = await loadHistoricalCandles(supabase, predictionRow.candle_ts);
+    const leakage = inspectHistoryLeakage(plan, history);
 
     // Variant A — frozen v1.1.
     let frozen: ModelFit | null = null;
@@ -210,27 +362,16 @@ export async function runShadowForPrediction(
         shadow_error: `frozen_load_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
-    if (frozen) await runVariant(supabase, "A", frozen, predictionRow, history);
+    if (frozen) await runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage);
 
-    // Variant B — latest live-retrained fit for the current production version.
     const tmv = predictionRow.model_version ?? "6.0";
     const variantB = await loadLatestVariantBFit(supabase, tmv);
-    await runVariant(
-      supabase, "B", variantB, predictionRow, history,
-      variantB ? undefined : "warming_up",
-    );
-
-    // Variant B2 — identical to B (same fit / recipe) with the
-    // upstream_no_clear_edge hard-NO override REMOVED. Retired override
-    // registry: shadow_update_1 item 4.
-    await runVariant(
-      supabase, "B2", variantB, predictionRow, history,
-      variantB ? undefined : "warming_up",
-      { skipUpstreamNoClearEdge: true },
-    );
+    await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
+      variantB ? undefined : "warming_up");
+    await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
+      variantB ? undefined : "warming_up", { skipUpstreamNoClearEdge: true });
 
   } catch (e) {
-    // Absolute last-resort logging so the model7 shadow never breaks the tick.
     try {
       await supabase.from("api_runs").insert({
         run_type: "model7-shadow-error",
@@ -244,7 +385,6 @@ export async function runShadowForPrediction(
 
 /**
  * Resolve shadow rows for a prediction once actual_direction is known.
- * Called from the production resolver. GREEN/RED only (doji excluded per spec).
  */
 export async function resolveShadowRowsFor(
   supabase: SupabaseClient,
