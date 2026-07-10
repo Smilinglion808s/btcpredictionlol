@@ -193,6 +193,10 @@ export async function runShadowForPrediction(
   predictionRow: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
 ): Promise<void> {
   try {
+    // Item 1 — wait until AT or immediately AFTER the target-candle boundary
+    // so the input snapshot includes the freshest data (the just-closed candle).
+    // Shadow has no betting deadline; production already fired its bet.
+    await waitUntilBoundary(predictionRow.candle_ts);
     const history = await loadHistoricalCandles(supabase, predictionRow.candle_ts);
 
     // Variant A — frozen v1.1.
