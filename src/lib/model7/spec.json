@@ -1,0 +1,85 @@
+{
+  "model_id": "btc15m_model_7_shadow",
+  "model_name": "BTC 15m Model 7 — Boundary Hybrid (SHADOW)",
+  "version": "7.0-shadow",
+  "based_on": "btc15_boundary_hybrid_fixed_058_026_v1_1 (sha256 85591dbe...)",
+  "status": "SHADOW ONLY — stakes nothing, gates nothing, alters nothing in the live 6.x decision path",
+
+  "purpose": "Run the Boundary Hybrid logistic model live on every candle alongside the production 6.x engine, logging its predictions and would-be trades with zero stakes, to accumulate genuine out-of-sample evidence. Promotion to live money is governed ONLY by the pre-registered bar below.",
+
+  "architecture": {
+    "placement": "Inside the same 15m prediction cycle, AFTER the production 6.x row is finalized and inserted. Shadow inference failure must never block, delay, or alter the production prediction (same isolation policy as the narrator).",
+    "isolation": [
+      "Shadow writes to its own columns (or a model7_shadow table keyed by candle_ts) — never to the production decision fields.",
+      "No shared mutable state with the 6.x engine.",
+      "Max runtime budget 5s; on timeout/error, log shadow_error and skip this candle."
+    ],
+    "two_variants_run_in_parallel": {
+      "variant_A_frozen": {
+        "description": "The exact v1.1 frozen coefficients/means/scales/intercept from the JSON, unmodified, thresholds YES 0.58 / NO 0.26, hard-NO overrides as specified. This tests whether the 43-hour model generalizes at all.",
+        "never_retrained": true
+      },
+      "variant_B_live": {
+        "description": "Same pipeline and hyperparameters (L2 logistic, C=0.1, liblinear, DictVectorizer + StandardScaler) but retrained live per the JSON's own recipe, on the CLEANED feature set below, using only rows produced by the current production model version.",
+        "retraining": "Expanding window; retrain after every 12 newly resolved valid candles; minimum 72 clean labeled rows before first fit (until then, variant B logs 'warming_up'). Training set = all clean labeled rows strictly before the first candle the new fit will score. Thresholds stay locked at 0.58/0.26 — no reselection.",
+        "feature_set_change_CLEANED": {
+          "dropped_raw_level_features": ["btc_price_at_prediction", "ema9", "ema21", "ema50", "range20_high", "range20_low"],
+          "reason": "Absolute price/EMA/range levels are near-timestamps over short windows — they let the model memorize the week's chart instead of candle dynamics. The normalized equivalents already in the feature set (dist_ema9/21/50, dist_range_high/low, position_range20, ema9_21_spread, ema21_50_spread) carry the same information in stationary form and are KEPT.",
+          "everything_else": "Identical to the v1.1 spec: lag features, partial features, module features, categorical encodings, missing-value policy, time features."
+        },
+        "model_6_1_dependency_rule": "Variant B trains only on rows whose model_version matches the current production version. When 6.1 (or any later engine) deploys, variant B resets its training window to rows from that version onward and re-enters warming_up. This prevents training on one model's output distribution and scoring on another's. Log training_model_version with every fit."
+      }
+    }
+  },
+
+  "per_candle_shadow_output_columns": {
+    "for_each_variant (prefix m7a_ / m7b_)": [
+      "probability_green numeric",
+      "decision text (YES|NO|SKIP)",
+      "hard_no_override_fired text (rule id or 'none')",
+      "would_trade boolean (decision != SKIP)",
+      "model_fit_id text (variant A: 'frozen_v1_1'; variant B: hash of training window)",
+      "feature_vector_nonzero_count int (sanity: sudden drops indicate pipeline breakage)",
+      "unknown_categories_json (categoricals seen but not in vocabulary — alert if growing)",
+      "shadow_error text nullable"
+    ],
+    "resolution": "On candle close, resolve shadow wins/losses exactly like production (GREEN/RED vs decision; doji excluded), stored per variant."
+  },
+
+  "pre_registered_promotion_bar": {
+    "statement": "Written before the shadow run begins; not negotiable afterward.",
+    "promotion_to_live_stakes_requires_ALL": [
+      "n >= 200 resolved shadow TRADES for the candidate variant, all on candles strictly after the variant's last training row (variant A: all candles qualify; variant B: standard walk-forward semantics of its recipe).",
+      "win rate >= 58% over those trades (at n=200, the 95% CI lower bound at 58% observed is ~51% — this is deliberately the MINIMUM bar, not the target).",
+      "No single 48h window inside the shadow period below 45% (regime-fragility check).",
+      "Trade rate between 40% and 85% of opportunities (a collapse to near-0% or 100% means thresholds don't transfer).",
+      "unknown_categories and feature_nonzero_count stable across the period (pipeline integrity)."
+    ],
+    "failure_handling": "If a variant finishes 7+ days below the bar, it goes to the retired registry with its numbers, same as DU. Partial results are not grounds for early promotion; strong early results are not grounds for shortening the window.",
+    "expected_honest_outcome_range": "If the 43h result was mostly regime memorization, variant A lands near 50-53% and variant B (cleaned, live-retrained) is the interesting one. If variant A holds >=58% out-of-sample, that is a genuinely major result."
+  },
+
+  "nightly_shadow_validation": [
+    "Shadow coverage: shadow rows must exist for >= 95% of production rows (else inference is silently failing).",
+    "Variant A vs B agreement rate and both win rates, updated daily with running CIs.",
+    "Probability calibration snapshot: mean probability_green vs realized green rate, in 3 buckets (<0.26, 0.26-0.58, >0.58).",
+    "Hard-NO override fire rate per rule (alert if any rule fires >25% of candles — overfit rule detector).",
+    "Alert if variant B retrain fails or training rows < expected."
+  ],
+
+  "golden_tests_add": [
+    "Frozen variant reproduces the JSON's exact_scoring_formula on a fixture row (vector -> standardize -> logit -> probability, tolerance 1e-9).",
+    "Threshold boundaries: p=0.58 -> YES; p=0.5799 -> SKIP; p=0.26 -> SKIP; p=0.2599 -> NO.",
+    "Each hard-NO override forces NO from a YES base decision.",
+    "Missing partial snapshot follows the JSON's missing policy (features omitted, __missing indicators set).",
+    "Cleaned feature set: btc_price_at_prediction present in input row contributes 0 to variant B's vector.",
+    "Shadow error does not block production insert (fault-injection test).",
+    "Variant B refuses to fit with < 72 clean rows."
+  ],
+
+  "explicit_non_goals": [
+    "No shadow result influences the 6.x trade gate, sizing, or any live decision during the shadow period.",
+    "No threshold tuning, feature additions, or override edits mid-run — any change resets that variant's clock and increments its version.",
+    "No pooling of shadow trades across variant versions or across production model versions."
+  ]
+}

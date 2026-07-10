@@ -324,6 +324,23 @@ export async function runModel6Prediction(supabase: SupabaseClient) {
       });
     }
 
+    // ------------------------------------------------------------------
+    // Model 7 SHADOW — never blocks production. Runs both variants and
+    // inserts into public.model7_shadow. All errors are swallowed and
+    // logged in-shadow / to api_runs.
+    // ------------------------------------------------------------------
+    try {
+      const { runShadowForPrediction } = await import("../model7/shadow");
+      await runShadowForPrediction(supabase, inserted as never);
+    } catch (shErr) {
+      await supabase.from("api_runs").insert({
+        run_type: "model7-shadow-error",
+        response_payload: { error: shErr instanceof Error ? shErr.message : String(shErr), prediction_id: inserted.id },
+        success: false,
+        error_message: shErr instanceof Error ? shErr.message : String(shErr),
+      });
+    }
+
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
       request_payload: {

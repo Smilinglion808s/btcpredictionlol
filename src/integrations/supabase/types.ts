@@ -221,6 +221,140 @@ export type Database = {
         }
         Relationships: []
       }
+      model7_shadow: {
+        Row: {
+          actual_direction: string | null
+          base_decision: string | null
+          candle_ts: string
+          created_at: string
+          decision: string | null
+          feature_vector_nonzero_count: number | null
+          hard_no_override_fired: string | null
+          id: string
+          logit: number | null
+          model_fit_id: string | null
+          prediction_id: string
+          probability_green: number | null
+          production_model_version: string | null
+          resolved_at: string | null
+          shadow_error: string | null
+          status: string
+          unknown_categories: Json | null
+          updated_at: string
+          variant: string
+          would_trade: boolean | null
+        }
+        Insert: {
+          actual_direction?: string | null
+          base_decision?: string | null
+          candle_ts: string
+          created_at?: string
+          decision?: string | null
+          feature_vector_nonzero_count?: number | null
+          hard_no_override_fired?: string | null
+          id?: string
+          logit?: number | null
+          model_fit_id?: string | null
+          prediction_id: string
+          probability_green?: number | null
+          production_model_version?: string | null
+          resolved_at?: string | null
+          shadow_error?: string | null
+          status?: string
+          unknown_categories?: Json | null
+          updated_at?: string
+          variant: string
+          would_trade?: boolean | null
+        }
+        Update: {
+          actual_direction?: string | null
+          base_decision?: string | null
+          candle_ts?: string
+          created_at?: string
+          decision?: string | null
+          feature_vector_nonzero_count?: number | null
+          hard_no_override_fired?: string | null
+          id?: string
+          logit?: number | null
+          model_fit_id?: string | null
+          prediction_id?: string
+          probability_green?: number | null
+          production_model_version?: string | null
+          resolved_at?: string | null
+          shadow_error?: string | null
+          status?: string
+          unknown_categories?: Json | null
+          updated_at?: string
+          variant?: string
+          would_trade?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model7_shadow_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model7_training_fits: {
+        Row: {
+          categorical_vocab: Json
+          coefficients: Json
+          created_at: string
+          feature_means: Json
+          feature_order: Json
+          feature_scales: Json
+          fit_meta: Json | null
+          id: string
+          intercept: number
+          model_fit_id: string
+          training_model_version: string
+          training_row_count: number
+          training_window_end: string | null
+          training_window_start: string | null
+          updated_at: string
+          variant: string
+        }
+        Insert: {
+          categorical_vocab: Json
+          coefficients: Json
+          created_at?: string
+          feature_means: Json
+          feature_order: Json
+          feature_scales: Json
+          fit_meta?: Json | null
+          id?: string
+          intercept: number
+          model_fit_id: string
+          training_model_version: string
+          training_row_count: number
+          training_window_end?: string | null
+          training_window_start?: string | null
+          updated_at?: string
+          variant: string
+        }
+        Update: {
+          categorical_vocab?: Json
+          coefficients?: Json
+          created_at?: string
+          feature_means?: Json
+          feature_order?: Json
+          feature_scales?: Json
+          fit_meta?: Json | null
+          id?: string
+          intercept?: number
+          model_fit_id?: string
+          training_model_version?: string
+          training_row_count?: number
+          training_window_end?: string | null
+          training_window_start?: string | null
+          updated_at?: string
+          variant?: string
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           actual_direction: string | null

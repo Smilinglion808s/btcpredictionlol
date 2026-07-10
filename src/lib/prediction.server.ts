@@ -1182,6 +1182,12 @@ export async function resolvePredictionsServer(
       } catch {
         // ignore — do not block resolution loop
       }
+      // Grade Model 7 shadow rows for this prediction. Best-effort.
+      try {
+        const dir = hasOhlc ? actualDirection(resolution.candle) : null;
+        const { resolveShadowRowsFor } = await import("./model7/shadow");
+        await resolveShadowRowsFor(supabase, p.id, dir);
+      } catch { /* never block resolver on shadow */ }
     }
 
     if (!watchMs || Date.now() >= deadline || unresolvedClosed === 0) {
@@ -1253,6 +1259,31 @@ export async function resolvePredictionsServer(
     response_payload: { resolved, checked, resolver: "kalshi_primary_okx_coinbase_fallback", attempts, reconciled, reconciledDetails },
     success: true,
   });
+
+  // Trigger Model 7 Variant B retrain if enough new resolved rows have landed.
+  if (resolved > 0) {
+    try {
+      const { data: activeSettings } = await supabase
+        .from("model_settings").select("model_version").eq("is_active", true).maybeSingle();
+      const tmv = (activeSettings?.model_version as string | undefined) ?? "6.0";
+      const { maybeRetrainVariantB } = await import("./model7/trainer");
+      const fit = await maybeRetrainVariantB(supabase, tmv);
+      if (fit) {
+        await supabase.from("api_runs").insert({
+          run_type: "model7-variant-b-retrain",
+          response_payload: fit as unknown as Record<string, unknown>,
+          success: fit.fitted,
+        });
+      }
+    } catch (e) {
+      await supabase.from("api_runs").insert({
+        run_type: "model7-variant-b-retrain",
+        response_payload: { error: e instanceof Error ? e.message : String(e) },
+        success: false,
+        error_message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   return { resolved, pending: pendingCount, attempts, reconciled };
 }
