@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats } from "@/lib/predictions.functions";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,8 @@ function StatsPage() {
 
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
+  const m7Fn = useServerFn(getModel7ShadowStats);
+  const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 15_000 });
 
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
@@ -158,6 +160,45 @@ function StatsPage() {
         <Kpi label="Avg Conf Losses" value={`${num("avg_confidence_losses")}%`} tone="bear" />
       </div>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Model 7 Shadow
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              tracking-only · not trading
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {(["A", "B", "combined"] as const).map((k) => {
+              const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+              const label = k === "A" ? "Variant A (frozen v1.1)" : k === "B" ? "Variant B (live-retrained)" : "Combined";
+              return (
+                <div key={k} className="rounded-md border border-border bg-card/50 p-4">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{label}</div>
+                  <div className="flex items-baseline justify-between mb-3">
+                    <span className="text-xs text-muted-foreground">Win Rate</span>
+                    <span className="font-mono text-2xl font-bold text-bull">{b.win_rate}%</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <M7Stat label="Trades" value={b.total} />
+                    <M7Stat label="Wins" value={b.wins} tone="bull" />
+                    <M7Stat label="Losses" value={b.losses} tone="bear" />
+                    <M7Stat label="Pushes" value={b.pushes} />
+                  </div>
+                  {b.pending > 0 && (
+                    <div className="mt-3 text-[10px] text-muted-foreground text-right font-mono">
+                      {b.pending} pending
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
@@ -213,6 +254,16 @@ function StatsPage() {
 }
 
 interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
+
+function M7Stat({ label, value, tone }: { label: string; value: number; tone?: "bull" | "bear" }) {
+  const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "";
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`font-mono text-lg font-semibold ${cls}`}>{value}</div>
+    </div>
+  );
+}
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "bull" | "bear" | "warn" }) {
   const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "warn" ? "text-warn" : "";
