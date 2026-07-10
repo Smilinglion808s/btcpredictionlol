@@ -1181,6 +1181,7 @@ export async function resolvePredictionsServer(
         }
       } catch {
         // ignore — do not block resolution loop
+      }
       // Grade Model 7 shadow rows for this prediction. Best-effort.
       try {
         const dir = hasOhlc ? actualDirection(resolution.candle) : null;
