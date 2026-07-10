@@ -54,7 +54,7 @@ function detectHistoryGap(history: Candle[]): boolean {
 function missingRawNumericFields(row: PredictionRow): string[] {
   const missing: string[] = [];
   for (const k of RAW_NUMERIC_FIELDS) {
-    const v = (row as Record<string, unknown>)[k];
+    const v = (row as unknown as Record<string, unknown>)[k];
     if (v === null || v === undefined) missing.push(k);
   }
   return missing;
