@@ -126,25 +126,26 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   const rows = data ?? [];
 
   const blank = () => ({ total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 });
-  const out: Record<"A" | "B", ReturnType<typeof blank>> = { A: blank(), B: blank() };
+  const out: Record<"A" | "B" | "B2", ReturnType<typeof blank>> = { A: blank(), B: blank(), B2: blank() };
 
   for (const r of rows as Array<{ variant: string; status: string; would_trade: boolean | null }>) {
     if (!r.would_trade) continue;
-    if (r.variant !== "A" && r.variant !== "B") continue;
-    const b = out[r.variant];
+    if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2") continue;
+    const b = out[r.variant as "A" | "B" | "B2"];
     b.total += 1;
     if (r.status === "win") b.wins += 1;
     else if (r.status === "loss") b.losses += 1;
     else if (r.status === "push") b.pushes += 1;
     else if (r.status === "pending") b.pending += 1;
   }
-  for (const k of ["A", "B"] as const) {
+  for (const k of ["A", "B", "B2"] as const) {
     const b = out[k];
     const decided = b.wins + b.losses;
     b.win_rate = decided === 0 ? 0 : Math.round((b.wins / decided) * 10000) / 100;
   }
   return out;
 });
+
 
 /** Export all Model 7 shadow rows joined with production prediction context. */
 export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(async () => {
