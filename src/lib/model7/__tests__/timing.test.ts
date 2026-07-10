@@ -5,6 +5,8 @@ import {
   computeTimingPlan,
   inspectHistoryLeakage,
   waitUntilScoreable,
+  checkCandleIntegrity,
+  runShadowForPrediction,
   SCORE_NOT_BEFORE_DELAY_MS,
 } from "../shadow";
 import type { Candle } from "../featurize";
