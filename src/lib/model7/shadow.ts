@@ -68,7 +68,8 @@ async function runVariant(
       prediction: row.prediction,
       market_condition: row.market_condition,
       failed_breakout_down: row.failed_breakout_down ?? (row.indicators as Record<string, unknown> | null | undefined)?.failedBreakoutDown,
-    });
+    }, scoreOptions);
+
     await insertShadowRow(supabase, {
       ...baseRow,
       probability_green: res.probability_green,
