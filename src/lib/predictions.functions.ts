@@ -146,6 +146,63 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   return out;
 });
 
+/** Export all Model 7 shadow rows joined with production prediction context. */
+export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data: shadow, error } = await sb
+    .from("model7_shadow")
+    .select("*")
+    .order("candle_ts", { ascending: false })
+    .limit(20000);
+  if (error) throw error;
+  const rows = shadow ?? [];
+  const predIds = Array.from(new Set(rows.map((r: any) => r.prediction_id).filter(Boolean)));
+  const predMap = new Map<string, any>();
+  const chunk = 500;
+  for (let i = 0; i < predIds.length; i += chunk) {
+    const slice = predIds.slice(i, i + chunk);
+    const [live, arch] = await Promise.all([
+      sb.from("predictions").select("id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_close, agreement_gate_applied, final_trade_status, model_version").in("id", slice),
+      sb.from("predictions_archive").select("id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_close, agreement_gate_applied, final_trade_status, model_version").in("id", slice),
+    ]);
+    for (const p of [...(live.data ?? []), ...(arch.data ?? [])]) {
+      if (!predMap.has(p.id)) predMap.set(p.id, p);
+    }
+  }
+  return rows.map((r: any) => {
+    const p = predMap.get(r.prediction_id) ?? {};
+    return {
+      candle_ts: r.candle_ts,
+      variant: r.variant,
+      status: r.status,
+      decision: r.decision,
+      base_decision: r.base_decision,
+      would_trade: r.would_trade,
+      probability_green: r.probability_green,
+      logit: r.logit,
+      hard_no_override_fired: r.hard_no_override_fired,
+      model_fit_id: r.model_fit_id,
+      feature_vector_nonzero_count: r.feature_vector_nonzero_count,
+      unknown_categories: r.unknown_categories ? JSON.stringify(r.unknown_categories) : "",
+      actual_direction: r.actual_direction,
+      resolved_at: r.resolved_at,
+      shadow_error: r.shadow_error,
+      created_at: r.created_at,
+      prediction_id: r.prediction_id,
+      production_model_version: r.production_model_version ?? p.model_version ?? null,
+      prod_prediction: p.prediction ?? null,
+      prod_confidence: p.confidence ?? null,
+      prod_setup_type: p.setup_type ?? null,
+      prod_status: p.status ?? null,
+      prod_market_condition: p.market_condition ?? null,
+      prod_agreement_gate_applied: p.agreement_gate_applied ?? null,
+      prod_final_trade_status: p.final_trade_status ?? null,
+      btc_price_at_prediction: p.btc_price_at_prediction ?? null,
+      close_price: p.actual_next_candle_close ?? null,
+    };
+  });
+});
+
 /** Shadow predictions on the current pending candle. */
 export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();

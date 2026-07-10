@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow } from "@/lib/predictions.functions";
+import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +30,34 @@ function StatsPage() {
   const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportM7Fn = useServerFn(exportModel7Shadow);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B">(null);
+
+  async function downloadM7Csv(scope: "all" | "A" | "B") {
+    try {
+      setExporting(scope);
+      const rows = await exportM7Fn();
+      const filtered = scope === "all" ? rows : rows.filter((r: any) => r.variant === scope);
+      if (filtered.length === 0) { alert("No shadow rows to export."); return; }
+      const headers = Object.keys(filtered[0]);
+      const esc = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = typeof v === "string" ? v : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [headers.join(","), ...filtered.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+      const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
@@ -168,12 +197,25 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            Model 7 Shadow
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              tracking-only · not trading
-            </span>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              Model 7 Shadow
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+                tracking-only · not trading
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
+                {exporting === "all" ? "Exporting…" : "CSV (All)"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
+                {exporting === "A" ? "…" : "Variant A"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B")}>
+                {exporting === "B" ? "…" : "Variant B"}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
