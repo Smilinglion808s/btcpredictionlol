@@ -264,6 +264,21 @@ async function runVariant(
     });
     return;
   }
+  if (predictionRowPostBoundary) {
+    await insertShadowRow(supabase, {
+      ...baseRow, status: "skipped",
+      model_fit_id: fit.model_fit_id,
+      shadow_error: "PREDICTION_ROW_POST_BOUNDARY",
+      timing_status: "PREDICTION_ROW_POST_BOUNDARY",
+      leakage_check_passed: false,
+      leakage_block_reason: "PREDICTION_ROW_POST_BOUNDARY",
+      offending_features_json: [{
+        feature: "prediction_row_created_at",
+        ts: createdAtIso ?? "unknown",
+      }],
+    });
+    return;
+  }
   if (!leakage.passed) {
     await insertShadowRow(supabase, {
       ...baseRow, status: "skipped",
