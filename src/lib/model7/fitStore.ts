@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ModelFit } from "./scorer";
 import { FROZEN_MODEL_FIT_ID } from "./config";
 // Bundled at build time — small enough (~2300 lines of JSON).
-import frozen from "./frozen_v1_1.json" assert { type: "json" };
+import frozen from "./frozen_v1_1.json" with { type: "json" };
 
 let cachedFrozen: ModelFit | null = null;
 
