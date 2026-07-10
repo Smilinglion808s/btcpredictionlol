@@ -1184,7 +1184,7 @@ export async function resolvePredictionsServer(
       }
       // Grade Model 7 shadow rows for this prediction. Best-effort.
       try {
-        let dir = hasOhlc ? actualDirection(resolution.candle) : null;
+        let dir: "GREEN" | "RED" | "DOJI" | null = hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null;
         // Fallback: if the production resolver zeroed OHLC (e.g. OKX/Coinbase
         // rate-limited and Kalshi decided the outcome), read the confirmed
         // candle from our own `candles` table so shadow rows still grade.
