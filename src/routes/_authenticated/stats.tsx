@@ -223,11 +223,16 @@ function StatsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {(["A", "B"] as const).map((k) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {(["A", "B", "B2"] as const).map((k) => {
               const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
-              const label = k === "A" ? "Variant A (frozen v1.1)" : "Variant B (live-retrained)";
+              const label = k === "A"
+                ? "Variant A (frozen v1.1)"
+                : k === "B"
+                ? "Variant B (live-retrained)"
+                : "Variant B2 (B minus NCE override)";
               const pending = m7PendingQ.data?.[k] ?? null;
+
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
               const decision = pending?.decision ?? null;
