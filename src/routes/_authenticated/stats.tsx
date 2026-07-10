@@ -31,9 +31,9 @@ function StatsPage() {
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
-  const [exporting, setExporting] = useState<null | "all" | "A" | "B">(null);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
 
-  async function downloadM7Csv(scope: "all" | "A" | "B") {
+  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2") {
     try {
       setExporting(scope);
       const rows = await exportM7Fn();
@@ -49,6 +49,7 @@ function StatsPage() {
       const d = new Date();
       const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
       const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
+
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -214,15 +215,24 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B")}>
                 {exporting === "B" ? "…" : "Variant B"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B2")}>
+                {exporting === "B2" ? "…" : "Variant B2"}
+              </Button>
+
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {(["A", "B"] as const).map((k) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {(["A", "B", "B2"] as const).map((k) => {
               const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
-              const label = k === "A" ? "Variant A (frozen v1.1)" : "Variant B (live-retrained)";
+              const label = k === "A"
+                ? "Variant A (frozen v1.1)"
+                : k === "B"
+                ? "Variant B (live-retrained)"
+                : "Variant B2 (B minus NCE override)";
               const pending = m7PendingQ.data?.[k] ?? null;
+
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
               const decision = pending?.decision ?? null;

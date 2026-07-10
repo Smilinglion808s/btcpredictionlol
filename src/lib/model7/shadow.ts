@@ -39,12 +39,14 @@ async function insertShadowRow(
 
 async function runVariant(
   supabase: SupabaseClient,
-  variant: "A" | "B",
+  variant: "A" | "B" | "B2",
   fit: ModelFit | null,
   row: PredictionRow & { id: string; candle_ts: string; model_version?: string | null },
   history: Candle[],
   reasonIfNoFit?: string,
+  scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
 ) {
+
   const baseRow: Record<string, unknown> = {
     prediction_id: row.id,
     candle_ts: row.candle_ts,
@@ -66,7 +68,8 @@ async function runVariant(
       prediction: row.prediction,
       market_condition: row.market_condition,
       failed_breakout_down: row.failed_breakout_down ?? (row.indicators as Record<string, unknown> | null | undefined)?.failedBreakoutDown,
-    });
+    }, scoreOptions);
+
     await insertShadowRow(supabase, {
       ...baseRow,
       probability_green: res.probability_green,
@@ -137,6 +140,16 @@ export async function runShadowForPrediction(
       supabase, "B", variantB, predictionRow, history,
       variantB ? undefined : "warming_up",
     );
+
+    // Variant B2 — identical to B (same fit / recipe) with the
+    // upstream_no_clear_edge hard-NO override REMOVED. Retired override
+    // registry: shadow_update_1 item 4.
+    await runVariant(
+      supabase, "B2", variantB, predictionRow, history,
+      variantB ? undefined : "warming_up",
+      { skipUpstreamNoClearEdge: true },
+    );
+
   } catch (e) {
     // Absolute last-resort logging so the model7 shadow never breaks the tick.
     try {

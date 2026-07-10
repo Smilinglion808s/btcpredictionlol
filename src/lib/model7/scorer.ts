@@ -46,6 +46,7 @@ export function scoreFeatureMap(
     market_condition?: string | null;
     failed_breakout_down?: unknown;
   },
+  options?: { skipUpstreamNoClearEdge?: boolean },
 ): ScoreResult {
   // Align + standardize + logit.
   let logit = fit.intercept;
@@ -64,10 +65,11 @@ export function scoreFeatureMap(
   // Hard-NO overrides (order-independent; first-matching id reported).
   const fbd = String(hardNoContext.failed_breakout_down ?? "").toLowerCase();
   let override = "none";
-  if ((hardNoContext.prediction ?? "").toString() === "NO CLEAR EDGE") override = "upstream_no_clear_edge";
+  if (!options?.skipUpstreamNoClearEdge && (hardNoContext.prediction ?? "").toString() === "NO CLEAR EDGE") override = "upstream_no_clear_edge";
   else if ((hardNoContext.market_condition ?? "").toString() === "trending_expansion") override = "trending_expansion";
   else if (fbd === "true") override = "failed_breakout_down";
   const decision: "YES" | "NO" | "SKIP" = override !== "none" ? "NO" : base;
+
 
   // Track unknown categoricals (values seen but not in vocab).
   const unknown: Record<string, string[]> = {};
