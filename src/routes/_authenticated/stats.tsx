@@ -255,6 +255,16 @@ function StatsPage() {
 
 interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
 
+function M7Stat({ label, value, tone }: { label: string; value: number; tone?: "bull" | "bear" }) {
+  const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "";
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`font-mono text-lg font-semibold ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "bull" | "bear" | "warn" }) {
   const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "warn" ? "text-warn" : "";
   return (
