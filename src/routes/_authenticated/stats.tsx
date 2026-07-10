@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending } from "@/lib/predictions.functions";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,8 @@ function StatsPage() {
   const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
   const m7Fn = useServerFn(getModel7ShadowStats);
   const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 15_000 });
+  const m7PendingFn = useServerFn(getModel7ShadowPending);
+  const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 15_000 });
 
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
@@ -170,10 +172,17 @@ function StatsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {(["A", "B", "combined"] as const).map((k) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(["A", "B"] as const).map((k) => {
               const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
-              const label = k === "A" ? "Variant A (frozen v1.1)" : k === "B" ? "Variant B (live-retrained)" : "Combined";
+              const label = k === "A" ? "Variant A (frozen v1.1)" : "Variant B (live-retrained)";
+              const pending = m7PendingQ.data?.[k] ?? null;
+              const prob = pending?.probability_green;
+              const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
+              const decision = pending?.decision ?? null;
+              const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
+                : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
+                : "text-muted-foreground border-border";
               return (
                 <div key={k} className="rounded-md border border-border bg-card/50 p-4">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{label}</div>
@@ -187,8 +196,28 @@ function StatsPage() {
                     <M7Stat label="Losses" value={b.losses} tone="bear" />
                     <M7Stat label="Pushes" value={b.pushes} />
                   </div>
+                  <div className="mt-3 pt-3 border-t border-border/60">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Current pending candle
+                    </div>
+                    {pending && decision ? (
+                      <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                          {decision}
+                          {pending.would_trade === false && (
+                            <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
+                          )}
+                        </span>
+                        <span className="text-muted-foreground">
+                          P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
+                    )}
+                  </div>
                   {b.pending > 0 && (
-                    <div className="mt-3 text-[10px] text-muted-foreground text-right font-mono">
+                    <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
                       {b.pending} pending
                     </div>
                   )}
