@@ -229,25 +229,35 @@ export type Database = {
           candle_ts: string
           created_at: string
           decision: string | null
+          feature_cutoff_ts: string | null
           feature_vector_nonzero_count: number | null
           feature_vector_sha256: string | null
           hard_no_override_fired: string | null
           history_candles_available: number | null
           history_gap_encountered: boolean | null
           id: string
+          latest_source_candle_ts: string | null
+          latest_source_event_ts: string | null
+          leakage_block_reason: string | null
+          leakage_check_passed: boolean | null
           logit: number | null
           missing_raw_numeric_fields_json: Json | null
           model_artifact_sha256: string | null
           model_fit_id: string | null
+          offending_features_json: Json | null
           override_reasons_json: Json | null
           prediction_id: string
+          previous_candle_ts: string | null
           probability_green: number | null
           production_model_version: string | null
           resolved_at: string | null
+          score_not_before_ts: string | null
           scored_at: string | null
           shadow_error: string | null
           snapshot_ts: string | null
           status: string
+          target_boundary_ts: string | null
+          timing_status: string | null
           unknown_categories: Json | null
           updated_at: string
           variant: string
@@ -260,25 +270,35 @@ export type Database = {
           candle_ts: string
           created_at?: string
           decision?: string | null
+          feature_cutoff_ts?: string | null
           feature_vector_nonzero_count?: number | null
           feature_vector_sha256?: string | null
           hard_no_override_fired?: string | null
           history_candles_available?: number | null
           history_gap_encountered?: boolean | null
           id?: string
+          latest_source_candle_ts?: string | null
+          latest_source_event_ts?: string | null
+          leakage_block_reason?: string | null
+          leakage_check_passed?: boolean | null
           logit?: number | null
           missing_raw_numeric_fields_json?: Json | null
           model_artifact_sha256?: string | null
           model_fit_id?: string | null
+          offending_features_json?: Json | null
           override_reasons_json?: Json | null
           prediction_id: string
+          previous_candle_ts?: string | null
           probability_green?: number | null
           production_model_version?: string | null
           resolved_at?: string | null
+          score_not_before_ts?: string | null
           scored_at?: string | null
           shadow_error?: string | null
           snapshot_ts?: string | null
           status?: string
+          target_boundary_ts?: string | null
+          timing_status?: string | null
           unknown_categories?: Json | null
           updated_at?: string
           variant: string
@@ -291,25 +311,35 @@ export type Database = {
           candle_ts?: string
           created_at?: string
           decision?: string | null
+          feature_cutoff_ts?: string | null
           feature_vector_nonzero_count?: number | null
           feature_vector_sha256?: string | null
           hard_no_override_fired?: string | null
           history_candles_available?: number | null
           history_gap_encountered?: boolean | null
           id?: string
+          latest_source_candle_ts?: string | null
+          latest_source_event_ts?: string | null
+          leakage_block_reason?: string | null
+          leakage_check_passed?: boolean | null
           logit?: number | null
           missing_raw_numeric_fields_json?: Json | null
           model_artifact_sha256?: string | null
           model_fit_id?: string | null
+          offending_features_json?: Json | null
           override_reasons_json?: Json | null
           prediction_id?: string
+          previous_candle_ts?: string | null
           probability_green?: number | null
           production_model_version?: string | null
           resolved_at?: string | null
+          score_not_before_ts?: string | null
           scored_at?: string | null
           shadow_error?: string | null
           snapshot_ts?: string | null
           status?: string
+          target_boundary_ts?: string | null
+          timing_status?: string | null
           unknown_categories?: Json | null
           updated_at?: string
           variant?: string
