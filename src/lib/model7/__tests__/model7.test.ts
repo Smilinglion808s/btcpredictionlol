@@ -103,3 +103,73 @@ describe("Model 7 — logistic regression fitter", () => {
     expect(sig(w[0] * -3 + w[1] * -3 + b)).toBeLessThan(0.2);
   });
 });
+
+describe("Model 7 — missing partial snapshot policy", () => {
+  it("emits __missing indicators for every partial_* numeric when snapshot is absent", () => {
+    const row = {
+      candle_ts: "2026-07-10T00:00:00Z",
+      prediction: "GREEN",
+      confidence: 65,
+      // Every partial_* field null → mirrors the 'missing partial snapshot' path.
+      partial_completeness: null,
+      partial_close_position_pct: null,
+      partial_range_vs_atr: null,
+      partial_module_bull_pts: null,
+      partial_module_bear_pts: null,
+      current_partial_snapshot: null,
+      indicators: {},
+    };
+    const { feature_map, categoricals } = buildFeatureMap(row, []);
+    for (const k of [
+      "partial_completeness", "partial_close_position_pct", "partial_range_vs_atr",
+      "partial_module_bull_pts", "partial_module_bear_pts",
+    ]) {
+      expect(feature_map[`${k}__missing`]).toBe(1.0);
+      expect(feature_map[k]).toBeUndefined();
+    }
+    // Categorical partial_* fields resolve to "missing" per normCat().
+    expect(categoricals.partial_direction).toBe("missing");
+    expect(categoricals.partial_agreement).toBe("missing");
+    expect(feature_map["partial_direction=missing"]).toBe(1.0);
+  });
+});
+
+describe("Model 7 — fault isolation from production", () => {
+  it("runShadowForPrediction resolves (does not throw) when Supabase.insert throws", async () => {
+    // Fault-injected client: every mutation path rejects. If the shadow
+    // runner leaked the error, this promise would reject and the production
+    // insert code path (which awaits it non-blockingly) would surface it.
+    const thrower = () => { throw new Error("injected supabase failure"); };
+    const stub = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              lt: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }),
+              order: () => ({ limit: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
+            }),
+          }),
+        }),
+        insert: thrower, // <-- forces every insertShadowRow / api_runs write to throw
+      }),
+    } as never;
+
+    const predictionRow = {
+      id: "pred-fault-1",
+      candle_ts: "2026-07-10T00:15:00Z",
+      prediction: "GREEN",
+      confidence: 70,
+      model_version: "6.0",
+      indicators: {},
+    };
+
+    // The contract: this MUST resolve. If shadow ever throws, production is at risk.
+    let threw = false;
+    try {
+      await runShadowForPrediction(stub, predictionRow as never);
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+  });
+});
