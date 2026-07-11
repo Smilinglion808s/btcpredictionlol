@@ -161,7 +161,9 @@ export function buildResolvedWebhookPayload(
   const nowIso = new Date().toISOString();
   return {
     model: B2_MODEL_ID,
+    model_version: "b2 6.0",
     decision_policy_version: B2_DECISION_POLICY_VERSION,
+    setup_type: prediction.setup_type ?? null,
     dedupe_key: `BTC-USDT-15m-${startsAt}`,
     prediction_id: prediction.id ?? null,
     shadow_id: b2Shadow?.id ?? null,
