@@ -207,8 +207,13 @@ async function loadHistoricalCandles(
 async function insertShadowRow(
   supabase: SupabaseClient,
   base: Record<string, unknown>,
-) {
-  await supabase.from("model7_shadow").insert(base as never);
+): Promise<{ id: string } | null> {
+  const { data } = await supabase
+    .from("model7_shadow")
+    .insert(base as never)
+    .select("id")
+    .maybeSingle();
+  return (data as { id: string } | null) ?? null;
 }
 
 async function runVariant(
