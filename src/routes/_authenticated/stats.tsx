@@ -305,49 +305,44 @@ function StatsPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Recent History</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Recent History
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              Variant B2
+            </span>
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs text-muted-foreground border-b border-border">
                 <tr>
-                  <th className="text-left px-3 py-2">When</th>
+                  <th className="text-left px-3 py-2">Candle</th>
                   <th className="text-left px-3 py-2">Pred</th>
                   <th className="text-left px-3 py-2">Conf</th>
-                  <th className="text-left px-3 py-2">Setup</th>
+                  <th className="text-left px-3 py-2">Close</th>
                   <th className="text-left px-3 py-2">Outcome</th>
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {(listQ.data ?? []).slice(0, 25).map((p) => {
-                  const reasoning = (p.reasoning_summary ?? p.notes ?? "").toString().trim();
-                  const firstPoint = reasoning
-                    ? reasoning.split(/\s•\s|(?<=[.!?])\s+/)[0]?.trim()
-                    : "";
-                  return (
-                    <tr key={p.id} className="border-b border-border/50 align-top">
-                      <td className="px-3 py-2 whitespace-nowrap">{new Date(p.created_at).toLocaleString()}</td>
-                      <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
-                      <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
-                      <td className="px-3 py-2 text-xs max-w-[420px]">
-                        <div className="font-semibold">{p.setup_type ?? "—"}</div>
-                        {firstPoint ? (
-                          <div className="text-muted-foreground mt-1 whitespace-normal leading-snug">
-                            → {firstPoint}
-                          </div>
-                        ) : (
-                          <div className="text-muted-foreground/60 mt-1 italic">no reasoning recorded</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
-                    </tr>
-                  );
-                })}
+                {(listQ.data ?? []).slice(0, 25).map((p) => (
+                  <tr key={p.id} className="border-b border-border/50 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
+                    <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
+                    <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {p.actual_next_candle_close != null ? `$${Number(p.actual_next_candle_close).toLocaleString()}` : "—"}
+                    </td>
+                    <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }
