@@ -327,7 +327,7 @@ async function runVariant(
     const timingStatus =
       boundaryDeltaMs > 10_000 ? "LATE_WARNING" : "ON_TIME";
 
-    await insertShadowRow(supabase, {
+    const shadowRow = {
       ...baseRow,
       probability_green: res.probability_green,
       logit: res.logit,
@@ -348,7 +348,9 @@ async function runVariant(
       leakage_check_passed: true,
       leakage_block_reason: null,
       offending_features_json: null,
-    });
+    };
+    const inserted = await insertShadowRow(supabase, shadowRow);
+
     if (variant === "B") {
       try {
         const { data: fitRow } = await supabase
@@ -364,6 +366,36 @@ async function runVariant(
             .eq("model_fit_id", fit.model_fit_id);
         }
       } catch { /* never block shadow */ }
+    }
+
+    // ---- B2 is the sole outbound webhook source. Emit iff eligible. ----
+    if (variant === "B2") {
+      const eligible =
+        res.decision != null &&
+        res.probability_green != null &&
+        (timingStatus === "ON_TIME" || timingStatus === "LATE_WARNING");
+      if (eligible) {
+        try {
+          const { deliverWebhook, buildB2WebhookPayload } = await import("../webhooks.server");
+          const payload = buildB2WebhookPayload({
+            shadow: { ...shadowRow, id: inserted?.id ?? null },
+            prediction: row as unknown as Record<string, unknown>,
+          });
+          await deliverWebhook(supabase, "prediction.created", payload);
+        } catch (whErr) {
+          try {
+            await supabase.from("api_runs").insert({
+              run_type: "webhook-created-error",
+              response_payload: {
+                error: whErr instanceof Error ? whErr.message : String(whErr),
+                prediction_id: row.id, variant: "B2",
+              },
+              success: false,
+              error_message: whErr instanceof Error ? whErr.message : String(whErr),
+            });
+          } catch { /* ignore */ }
+        }
+      }
     }
   } catch (e) {
     await insertShadowRow(supabase, {
