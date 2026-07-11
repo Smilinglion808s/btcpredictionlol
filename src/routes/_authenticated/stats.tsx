@@ -97,6 +97,7 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
+        qc.invalidateQueries({ queryKey: ["b2-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
