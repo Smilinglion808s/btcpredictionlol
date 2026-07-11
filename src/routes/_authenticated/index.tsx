@@ -128,7 +128,7 @@ function Dashboard() {
 
           <Card className="py-2">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades</CardTitle>
+              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades · Variant B2</CardTitle>
             </CardHeader>
             <CardContent className="py-0">
               {last5.length === 0 ? (
