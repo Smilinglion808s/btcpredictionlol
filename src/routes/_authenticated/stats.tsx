@@ -223,14 +223,24 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2"] as const).map((k) => {
-              const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+            {(["A", "B", "M6"] as const).map((k) => {
+              const isM6 = k === "M6";
+              const b = isM6
+                ? {
+                    total: num("total"),
+                    wins: num("wins"),
+                    losses: num("losses"),
+                    pushes: num("pushes"),
+                    pending: num("pending"),
+                    win_rate: num("overall_win_rate"),
+                  }
+                : m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const label = k === "A"
                 ? "Variant A (frozen v1.1)"
                 : k === "B"
                 ? "Variant B (live-retrained)"
-                : "Variant B2 (B minus NCE override)";
-              const pending = m7PendingQ.data?.[k] ?? null;
+                : "Model 6";
+              const pending = !isM6 ? m7PendingQ.data?.[k] ?? null : null;
 
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
@@ -251,26 +261,28 @@ function StatsPage() {
                     <M7Stat label="Losses" value={b.losses} tone="bear" />
                     <M7Stat label="Pushes" value={b.pushes} />
                   </div>
-                  <div className="mt-3 pt-3 border-t border-border/60">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Current pending candle
-                    </div>
-                    {pending && decision ? (
-                      <div className="flex items-center justify-between gap-2 font-mono text-xs">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                          {decision}
-                          {pending.would_trade === false && (
-                            <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
-                          )}
-                        </span>
-                        <span className="text-muted-foreground">
-                          P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
-                        </span>
+                  {!isM6 && (
+                    <div className="mt-3 pt-3 border-t border-border/60">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                        Current pending candle
                       </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
-                    )}
-                  </div>
+                      {pending && decision ? (
+                        <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                            {decision}
+                            {pending.would_trade === false && (
+                              <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
+                            )}
+                          </span>
+                          <span className="text-muted-foreground">
+                            P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
+                      )}
+                    </div>
+                  )}
                   {b.pending > 0 && (
                     <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
                       {b.pending} pending
