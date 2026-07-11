@@ -153,9 +153,9 @@ export function buildResolvedWebhookPayload(
   b2Result: "win" | "loss" | "push" | null,
 ) {
   const candleTs = prediction.candle_ts as string;
-  const closeMs = new Date(candleTs).getTime();
-  const startsAt = new Date(closeMs - TF_MS_15M).toISOString();
-  const endsAt = candleTs;
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
   const nowIso = new Date().toISOString();
   return {
     model: B2_MODEL_ID,
