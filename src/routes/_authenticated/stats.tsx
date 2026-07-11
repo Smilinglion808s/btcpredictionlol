@@ -77,10 +77,13 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
+  const b2RecentFn = useServerFn(listVariantB2Recent);
   const listQ = useQuery({
-    queryKey: ["predictions-list", versionFilter ?? "all"],
-    queryFn: () => listFn({ data: { modelVersion: versionFilter } }),
-    refetchInterval: 15_000,
+    queryKey: ["b2-recent"],
+    queryFn: () => b2RecentFn(),
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
 
   useEffect(() => {
