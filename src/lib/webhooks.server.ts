@@ -168,7 +168,7 @@ export function buildResolvedWebhookPayload(
     candle_starts_at_mt: formatMountainTime(startsAt),
     candle_ends_at: endsAt,
     candle_ends_at_mt: formatMountainTime(endsAt),
-    target_candle_close_at: candleTs,
+    target_candle_close_at: endsAt,
 
     b2_decision: b2Shadow?.decision ?? null,
     b2_would_trade: b2Shadow ? Boolean(b2Shadow.would_trade) : null,
