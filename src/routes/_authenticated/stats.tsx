@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantB2Recent } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -77,10 +77,13 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
+  const b2RecentFn = useServerFn(listVariantB2Recent);
   const listQ = useQuery({
-    queryKey: ["predictions-list", versionFilter ?? "all"],
-    queryFn: () => listFn({ data: { modelVersion: versionFilter } }),
-    refetchInterval: 15_000,
+    queryKey: ["b2-recent"],
+    queryFn: () => b2RecentFn(),
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
 
   useEffect(() => {
@@ -94,6 +97,7 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
+        qc.invalidateQueries({ queryKey: ["b2-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -302,49 +306,44 @@ function StatsPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Recent History</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Recent History
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              Variant B2
+            </span>
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs text-muted-foreground border-b border-border">
                 <tr>
-                  <th className="text-left px-3 py-2">When</th>
+                  <th className="text-left px-3 py-2">Candle</th>
                   <th className="text-left px-3 py-2">Pred</th>
                   <th className="text-left px-3 py-2">Conf</th>
-                  <th className="text-left px-3 py-2">Setup</th>
+                  <th className="text-left px-3 py-2">Close</th>
                   <th className="text-left px-3 py-2">Outcome</th>
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {(listQ.data ?? []).slice(0, 25).map((p) => {
-                  const reasoning = (p.reasoning_summary ?? p.notes ?? "").toString().trim();
-                  const firstPoint = reasoning
-                    ? reasoning.split(/\s•\s|(?<=[.!?])\s+/)[0]?.trim()
-                    : "";
-                  return (
-                    <tr key={p.id} className="border-b border-border/50 align-top">
-                      <td className="px-3 py-2 whitespace-nowrap">{new Date(p.created_at).toLocaleString()}</td>
-                      <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
-                      <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
-                      <td className="px-3 py-2 text-xs max-w-[420px]">
-                        <div className="font-semibold">{p.setup_type ?? "—"}</div>
-                        {firstPoint ? (
-                          <div className="text-muted-foreground mt-1 whitespace-normal leading-snug">
-                            → {firstPoint}
-                          </div>
-                        ) : (
-                          <div className="text-muted-foreground/60 mt-1 italic">no reasoning recorded</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
-                    </tr>
-                  );
-                })}
+                {(listQ.data ?? []).slice(0, 25).map((p) => (
+                  <tr key={p.id} className="border-b border-border/50 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
+                    <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
+                    <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {p.actual_next_candle_close != null ? `$${Number(p.actual_next_candle_close).toLocaleString()}` : "—"}
+                    </td>
+                    <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }
