@@ -114,7 +114,7 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = /^5/.test(modelVersion) ? "M5" : /^4/.test(modelVersion) ? "M4" : /^3/.test(modelVersion) ? "M3" : "M";
+  const badge = "B2";
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
