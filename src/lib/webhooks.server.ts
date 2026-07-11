@@ -107,9 +107,11 @@ export function buildB2WebhookPayload({ shadow, prediction }: B2WebhookInputs) {
 
   return {
     model: B2_MODEL_ID,
+    model_version: "b2 6.0",
     model_artifact_sha256: shadow.model_artifact_sha256 ?? null,
     decision_policy_version: B2_DECISION_POLICY_VERSION,
     model_fit_id: shadow.model_fit_id ?? null,
+    setup_type: prediction.setup_type ?? null,
 
     prediction: predictionLabel,
     confidence,
@@ -159,7 +161,9 @@ export function buildResolvedWebhookPayload(
   const nowIso = new Date().toISOString();
   return {
     model: B2_MODEL_ID,
+    model_version: "b2 6.0",
     decision_policy_version: B2_DECISION_POLICY_VERSION,
+    setup_type: prediction.setup_type ?? null,
     dedupe_key: `BTC-USDT-15m-${startsAt}`,
     prediction_id: prediction.id ?? null,
     shadow_id: b2Shadow?.id ?? null,
