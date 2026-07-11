@@ -1168,7 +1168,7 @@ export async function resolvePredictionsServer(
       if (checked.length < 30) {
         checked.push({ id: p.id, candle_ts: p.candle_ts, source: resolution.source, resolved: true, ticker: resolution.ticker });
       }
-      // Fire prediction.resolved webhook (best-effort)
+      // Fire prediction.resolved webhook (best-effort) — neutral B2-paired shape.
       try {
         const { data: full } = await supabase
           .from("predictions")
@@ -1176,8 +1176,27 @@ export async function resolvePredictionsServer(
           .eq("id", p.id)
           .maybeSingle();
         if (full) {
-          const { deliverWebhook, buildPredictionPayload } = await import("./webhooks.server");
-          await deliverWebhook(supabase, "prediction.resolved", buildPredictionPayload(full));
+          const { data: b2 } = await supabase
+            .from("model7_shadow")
+            .select("id,decision,would_trade,probability_green")
+            .eq("prediction_id", p.id)
+            .eq("variant", "B2")
+            .maybeSingle();
+          const dirForPayload: "GREEN" | "RED" | "DOJI" | null =
+            hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null;
+          let b2Result: "win" | "loss" | "push" | null = null;
+          if (b2 && dirForPayload) {
+            if (dirForPayload === "DOJI") b2Result = "push";
+            else if (b2.decision === "YES") b2Result = dirForPayload === "GREEN" ? "win" : "loss";
+            else if (b2.decision === "NO") b2Result = dirForPayload === "RED" ? "win" : "loss";
+            else b2Result = null; // SKIP / unknown → no bet was placed
+          }
+          const { deliverWebhook, buildResolvedWebhookPayload } = await import("./webhooks.server");
+          await deliverWebhook(
+            supabase,
+            "prediction.resolved",
+            buildResolvedWebhookPayload(full, b2 as Record<string, any> | null, dirForPayload, b2Result),
+          );
         }
       } catch {
         // ignore — do not block resolution loop
