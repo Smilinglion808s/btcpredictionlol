@@ -34,21 +34,28 @@ function formatMountainTime(iso: string): string {
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}${offset}`;
 }
 
+const TF_MS_15M = 15 * 60 * 1000;
+
+// Legacy payload — served by /api/public/predictions/{latest,upcoming} and
+// prediction.resolved. `candle_ts` in the DB is the target-candle CLOSE
+// (nextCloseMs), so starts_at = candle_ts − 15m and ends_at = candle_ts.
 export function buildPredictionPayload(row: Record<string, any>) {
-  const TF_MS = 15 * 60 * 1000;
   const candleTs = row.candle_ts as string;
-  const endsAt = new Date(new Date(candleTs).getTime() + TF_MS).toISOString();
+  const closeMs = new Date(candleTs).getTime();
+  const startsAt = new Date(closeMs - TF_MS_15M).toISOString();
+  const endsAt = candleTs;
   const confNum = Number(row.confidence ?? 0);
   const nowIso = new Date().toISOString();
   return {
     model_version: row.model_version ?? null,
     api_model_id: row.api_model_id ?? null,
-    candle_starts_at: candleTs,
-    candle_starts_at_mt: formatMountainTime(candleTs),
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
     candle_ts: candleTs,
     candle_ts_mt: formatMountainTime(candleTs),
     candle_ends_at: endsAt,
     candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: candleTs,
     sent_at: nowIso,
     sent_at_mt: formatMountainTime(nowIso),
     timezone: "America/Denver",
@@ -63,6 +70,103 @@ export function buildPredictionPayload(row: Record<string, any>) {
     actual_next_candle_close: row.actual_next_candle_close != null ? Number(row.actual_next_candle_close) : null,
     created_at: row.created_at ?? null,
     resolved_at: row.resolved_at ?? null,
+  };
+}
+
+export const B2_DECISION_POLICY_VERSION = "model7-b2-no-nce-v1";
+export const B2_MODEL_ID = "model7_variant_b2";
+
+export interface B2WebhookInputs {
+  shadow: Record<string, any>;     // model7_shadow row (variant='B2')
+  prediction: Record<string, any>; // predictions row (Model 6 snapshot)
+}
+
+// Neutral prediction.created payload emitted from Variant B2 only.
+// Contains B2's decision + market context; no Model 6 decision fields.
+export function buildB2WebhookPayload({ shadow, prediction }: B2WebhookInputs) {
+  const candleTs = prediction.candle_ts as string;
+  const closeMs = new Date(candleTs).getTime();
+  const startsAt = new Date(closeMs - TF_MS_15M).toISOString();
+  const endsAt = candleTs;
+  const nowIso = new Date().toISOString();
+  const decision: string | null = shadow.decision ?? null;
+  const wouldTrade: boolean = Boolean(shadow.would_trade);
+  return {
+    model: B2_MODEL_ID,
+    model_artifact_sha256: shadow.model_artifact_sha256 ?? null,
+    decision_policy_version: B2_DECISION_POLICY_VERSION,
+    model_fit_id: shadow.model_fit_id ?? null,
+
+    decision,
+    trade: wouldTrade,
+    probability_green: shadow.probability_green != null ? Number(shadow.probability_green) : null,
+    base_decision: shadow.base_decision ?? null,
+    override_reasons: shadow.override_reasons_json ?? [],
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: candleTs,
+
+    dedupe_key: `BTC-USDT-15m-${startsAt}`,
+    prediction_id: prediction.id ?? null,
+    shadow_id: shadow.id ?? null,
+
+    btc_price_at_prediction: prediction.btc_price_at_prediction != null
+      ? Number(prediction.btc_price_at_prediction) : null,
+    market_condition: prediction.market_condition ?? null,
+
+    timing_status: shadow.timing_status ?? null,
+    boundary_delta_ms: shadow.boundary_delta_ms ?? null,
+    scored_at: shadow.scored_at ?? null,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
+
+// Neutral prediction.resolved payload — pairs the resolved candle outcome
+// with B2's decision for that candle so the bot has a matched pair.
+export function buildResolvedWebhookPayload(
+  prediction: Record<string, any>,
+  b2Shadow: Record<string, any> | null,
+  actualDirection: "GREEN" | "RED" | "DOJI" | null,
+  b2Result: "win" | "loss" | "push" | null,
+) {
+  const candleTs = prediction.candle_ts as string;
+  const closeMs = new Date(candleTs).getTime();
+  const startsAt = new Date(closeMs - TF_MS_15M).toISOString();
+  const endsAt = candleTs;
+  const nowIso = new Date().toISOString();
+  return {
+    model: B2_MODEL_ID,
+    decision_policy_version: B2_DECISION_POLICY_VERSION,
+    dedupe_key: `BTC-USDT-15m-${startsAt}`,
+    prediction_id: prediction.id ?? null,
+    shadow_id: b2Shadow?.id ?? null,
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: candleTs,
+
+    b2_decision: b2Shadow?.decision ?? null,
+    b2_would_trade: b2Shadow ? Boolean(b2Shadow.would_trade) : null,
+    b2_probability_green: b2Shadow?.probability_green != null
+      ? Number(b2Shadow.probability_green) : null,
+
+    actual_direction: actualDirection,
+    b2_result: b2Result,
+    actual_next_candle_close: prediction.actual_next_candle_close != null
+      ? Number(prediction.actual_next_candle_close) : null,
+
+    resolved_at: prediction.resolved_at ?? null,
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
   };
 }
 

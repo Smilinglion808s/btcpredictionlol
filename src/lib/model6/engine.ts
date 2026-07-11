@@ -313,16 +313,11 @@ export async function runModel6Prediction(supabase: SupabaseClient) {
       .from("predictions").insert(insertPayload as never).select().single();
     if (insErr) throw insErr;
 
-    try {
-      const { deliverWebhook, buildPredictionPayload } = await import("../webhooks.server");
-      await deliverWebhook(supabase, "prediction.created", buildPredictionPayload(inserted));
-    } catch (whErr) {
-      await supabase.from("api_runs").insert({
-        run_type: "webhook-created-error",
-        response_payload: { error: whErr instanceof Error ? whErr.message : String(whErr), prediction_id: inserted.id },
-        success: false, error_message: whErr instanceof Error ? whErr.message : String(whErr),
-      });
-    }
+    // NOTE: Model 6 no longer emits `prediction.created`. Variant B2 owns the
+    // outbound webhook to the autobetter — see `src/lib/model7/shadow.ts`.
+    // Model 6 still runs (feature snapshot + stats + shadow input); it just
+    // stops calling out. Do not re-add a deliverWebhook call here.
+
 
     // ------------------------------------------------------------------
     // Model 7 SHADOW — never blocks production. Runs both variants and
