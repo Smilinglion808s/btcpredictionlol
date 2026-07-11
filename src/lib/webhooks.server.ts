@@ -82,24 +82,41 @@ export interface B2WebhookInputs {
 }
 
 // Neutral prediction.created payload emitted from Variant B2 only.
-// Contains B2's decision + market context; no Model 6 decision fields.
+// `candle_ts` in the DB is the target-candle START (open time); ends_at = candle_ts + 15m.
 export function buildB2WebhookPayload({ shadow, prediction }: B2WebhookInputs) {
   const candleTs = prediction.candle_ts as string;
-  const closeMs = new Date(candleTs).getTime();
-  const startsAt = new Date(closeMs - TF_MS_15M).toISOString();
-  const endsAt = candleTs;
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
   const nowIso = new Date().toISOString();
   const decision: string | null = shadow.decision ?? null;
   const wouldTrade: boolean = Boolean(shadow.would_trade);
+  const pGreen = shadow.probability_green != null ? Number(shadow.probability_green) : null;
+
+  let predictionLabel: "YES" | "NO" | "NO CLEAR EDGE";
+  if (!wouldTrade) predictionLabel = "NO CLEAR EDGE";
+  else if (decision === "YES") predictionLabel = "YES";
+  else if (decision === "NO") predictionLabel = "NO";
+  else predictionLabel = "NO CLEAR EDGE";
+
+  let confidence: number;
+  if (pGreen == null) confidence = 0;
+  else if (predictionLabel === "YES") confidence = Math.round(pGreen * 100);
+  else if (predictionLabel === "NO") confidence = Math.round((1 - pGreen) * 100);
+  else confidence = Math.round(Math.max(pGreen, 1 - pGreen) * 100);
+
   return {
     model: B2_MODEL_ID,
     model_artifact_sha256: shadow.model_artifact_sha256 ?? null,
     decision_policy_version: B2_DECISION_POLICY_VERSION,
     model_fit_id: shadow.model_fit_id ?? null,
 
+    prediction: predictionLabel,
+    confidence,
+
     decision,
     trade: wouldTrade,
-    probability_green: shadow.probability_green != null ? Number(shadow.probability_green) : null,
+    probability_green: pGreen,
     base_decision: shadow.base_decision ?? null,
     override_reasons: shadow.override_reasons_json ?? [],
 
@@ -107,7 +124,7 @@ export function buildB2WebhookPayload({ shadow, prediction }: B2WebhookInputs) {
     candle_starts_at_mt: formatMountainTime(startsAt),
     candle_ends_at: endsAt,
     candle_ends_at_mt: formatMountainTime(endsAt),
-    target_candle_close_at: candleTs,
+    target_candle_close_at: endsAt,
 
     dedupe_key: `BTC-USDT-15m-${startsAt}`,
     prediction_id: prediction.id ?? null,
