@@ -158,16 +158,16 @@ function StatsPage() {
             </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</div>
-                <div className="font-mono text-2xl font-bold text-bull">{wr}%</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Win Rate</div>
+                <div className="font-mono text-2xl font-bold text-bull">{b2Hero.win_rate}%</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Resolved</div>
-                <div className="font-mono text-2xl font-bold">{resolved}</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Resolved</div>
+                <div className="font-mono text-2xl font-bold">{b2Resolved}</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Runs</div>
-                <div className="font-mono text-2xl font-bold">{totalRuns}</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Trades</div>
+                <div className="font-mono text-2xl font-bold">{b2Hero.total}</div>
               </div>
             </div>
           </div>
