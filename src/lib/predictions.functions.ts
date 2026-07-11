@@ -120,28 +120,80 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_shadow")
-    .select("variant, status, would_trade")
+    .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
     .limit(50000);
   if (error) throw error;
-  const rows = data ?? [];
+  const rows = (data ?? []) as Array<{
+    variant: string;
+    status: string;
+    would_trade: boolean | null;
+    decision: string | null;
+    probability_green: number | null;
+    candle_ts: string | null;
+    resolved_at: string | null;
+  }>;
 
-  const blank = () => ({ total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 });
+  const blank = () => ({
+    total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
+    last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0,
+    yes_total: 0, yes_wins: 0, yes_win_rate: 0,
+    no_total: 0, no_wins: 0, no_win_rate: 0,
+    avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0,
+  });
   const out: Record<"A" | "B" | "B2", ReturnType<typeof blank>> = { A: blank(), B: blank(), B2: blank() };
+  const perVariantResolved: Record<"A" | "B" | "B2", Array<{ ts: string; status: string }>> = { A: [], B: [], B2: [] };
 
-  for (const r of rows as Array<{ variant: string; status: string; would_trade: boolean | null }>) {
+  const confPct = (p: number | null, decision: string | null) => {
+    if (typeof p !== "number") return null;
+    if (decision === "YES") return p * 100;
+    if (decision === "NO") return (1 - p) * 100;
+    return Math.max(p, 1 - p) * 100;
+  };
+
+  for (const r of rows) {
     if (!r.would_trade) continue;
     if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2") continue;
-    const b = out[r.variant as "A" | "B" | "B2"];
+    const v = r.variant as "A" | "B" | "B2";
+    const b = out[v];
     b.total += 1;
     if (r.status === "win") b.wins += 1;
     else if (r.status === "loss") b.losses += 1;
     else if (r.status === "push") b.pushes += 1;
     else if (r.status === "pending") b.pending += 1;
+
+    const c = confPct(r.probability_green, r.decision);
+    if (r.status === "win" || r.status === "loss") {
+      if (c !== null) {
+        b.avg_confidence += c;
+        if (r.status === "win") b.avg_confidence_wins += c;
+        else b.avg_confidence_losses += c;
+      }
+      if (r.decision === "YES") { b.yes_total += 1; if (r.status === "win") b.yes_wins += 1; }
+      else if (r.decision === "NO") { b.no_total += 1; if (r.status === "win") b.no_wins += 1; }
+      perVariantResolved[v].push({ ts: r.resolved_at ?? r.candle_ts ?? "", status: r.status });
+    }
   }
+
+  const wr = (w: number, l: number) => (w + l === 0 ? 0 : Math.round((w / (w + l)) * 10000) / 100);
+  const avg = (sum: number, n: number) => (n === 0 ? 0 : Math.round((sum / n) * 100) / 100);
+
   for (const k of ["A", "B", "B2"] as const) {
     const b = out[k];
     const decided = b.wins + b.losses;
-    b.win_rate = decided === 0 ? 0 : Math.round((b.wins / decided) * 10000) / 100;
+    b.win_rate = wr(b.wins, b.losses);
+    b.yes_win_rate = wr(b.yes_wins, b.yes_total - b.yes_wins);
+    b.no_win_rate = wr(b.no_wins, b.no_total - b.no_wins);
+    b.avg_confidence = avg(b.avg_confidence, decided);
+    b.avg_confidence_wins = avg(b.avg_confidence_wins, b.wins);
+    b.avg_confidence_losses = avg(b.avg_confidence_losses, b.losses);
+
+    const sorted = perVariantResolved[k].sort((a, z) => (z.ts > a.ts ? 1 : -1));
+    for (const n of [10, 25, 50] as const) {
+      const slice = sorted.slice(0, n);
+      const w = slice.filter((x) => x.status === "win").length;
+      const l = slice.filter((x) => x.status === "loss").length;
+      (b as any)[`last_${n}_win_rate`] = wr(w, l);
+    }
   }
   return out;
 });
