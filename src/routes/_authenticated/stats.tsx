@@ -175,24 +175,24 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      <h2 className="text-xl font-semibold">Performance Stats</h2>
+      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant B2 (autobet)</span></h2>
 
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
-        <Kpi label="Overall WR" value={`${num("overall_win_rate")}%`} tone="bull" />
-        <Kpi label="Last 10 WR" value={`${num("last_10_win_rate")}%`} />
-        <Kpi label="Last 25 WR" value={`${num("last_25_win_rate")}%`} />
-        <Kpi label="Last 50 WR" value={`${num("last_50_win_rate")}%`} />
-        <Kpi label="Total" value={`${num("total")}`} />
-        <Kpi label="Pending" value={`${num("pending")}`} tone="warn" />
-        <Kpi label="Wins" value={`${num("wins")}`} tone="bull" />
-        <Kpi label="Losses" value={`${num("losses")}`} tone="bear" />
-        <Kpi label="Pushes" value={`${num("pushes")}`} />
-        <Kpi label="YES WR" value={`${num("yes_win_rate")}%`} />
-        <Kpi label="NO WR" value={`${num("no_win_rate")}%`} />
-        <Kpi label="Avg Conf" value={`${num("avg_confidence")}%`} />
-        <Kpi label="Avg Conf Wins" value={`${num("avg_confidence_wins")}%`} tone="bull" />
-        <Kpi label="Avg Conf Losses" value={`${num("avg_confidence_losses")}%`} tone="bear" />
+        <Kpi label="Overall WR" value={`${b2Hero.win_rate}%`} tone="bull" />
+        <Kpi label="Last 10 WR" value={`${b2Hero.last_10_win_rate ?? 0}%`} />
+        <Kpi label="Last 25 WR" value={`${b2Hero.last_25_win_rate ?? 0}%`} />
+        <Kpi label="Last 50 WR" value={`${b2Hero.last_50_win_rate ?? 0}%`} />
+        <Kpi label="Total" value={`${b2Hero.total}`} />
+        <Kpi label="Pending" value={`${b2Hero.pending}`} tone="warn" />
+        <Kpi label="Wins" value={`${b2Hero.wins}`} tone="bull" />
+        <Kpi label="Losses" value={`${b2Hero.losses}`} tone="bear" />
+        <Kpi label="Pushes" value={`${b2Hero.pushes}`} />
+        <Kpi label="YES WR" value={`${b2Hero.yes_win_rate ?? 0}%`} />
+        <Kpi label="NO WR" value={`${b2Hero.no_win_rate ?? 0}%`} />
+        <Kpi label="Avg Conf" value={`${b2Hero.avg_confidence ?? 0}%`} />
+        <Kpi label="Avg Conf Wins" value={`${b2Hero.avg_confidence_wins ?? 0}%`} tone="bull" />
+        <Kpi label="Avg Conf Losses" value={`${b2Hero.avg_confidence_losses ?? 0}%`} tone="bear" />
       </div>
 
       <Card>
