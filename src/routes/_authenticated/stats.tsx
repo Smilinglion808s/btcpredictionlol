@@ -103,9 +103,8 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const totalRuns = num("total");
-  const resolved = num("wins") + num("losses") + num("pushes");
-  const wr = num("overall_win_rate");
+  const b2Hero = m7Q.data?.B2 ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+  const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
   const versions = versionsQ.data ?? [];
@@ -115,7 +114,7 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = /^5/.test(modelVersion) ? "M5" : /^4/.test(modelVersion) ? "M4" : /^3/.test(modelVersion) ? "M3" : "M";
+  const badge = "B2";
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
@@ -132,14 +131,14 @@ function StatsPage() {
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
               <div className="font-mono text-lg font-semibold flex items-center gap-2">
-                BTCUSDT 15m
+                Variant B2 · BTCUSDT 15m
                 <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
                   <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                active: {modelVersion} · showing: {scopeLabel}
+                autobet: Variant B2 · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
               </div>
             </div>
           </div>
@@ -159,16 +158,16 @@ function StatsPage() {
             </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</div>
-                <div className="font-mono text-2xl font-bold text-bull">{wr}%</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Win Rate</div>
+                <div className="font-mono text-2xl font-bold text-bull">{b2Hero.win_rate}%</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Resolved</div>
-                <div className="font-mono text-2xl font-bold">{resolved}</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Resolved</div>
+                <div className="font-mono text-2xl font-bold">{b2Resolved}</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Runs</div>
-                <div className="font-mono text-2xl font-bold">{totalRuns}</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B2 Trades</div>
+                <div className="font-mono text-2xl font-bold">{b2Hero.total}</div>
               </div>
             </div>
           </div>
@@ -224,14 +223,24 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2"] as const).map((k) => {
-              const b = m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+            {(["A", "B", "M6"] as const).map((k) => {
+              const isM6 = k === "M6";
+              const b = isM6
+                ? {
+                    total: num("total"),
+                    wins: num("wins"),
+                    losses: num("losses"),
+                    pushes: num("pushes"),
+                    pending: num("pending"),
+                    win_rate: num("overall_win_rate"),
+                  }
+                : m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const label = k === "A"
                 ? "Variant A (frozen v1.1)"
                 : k === "B"
                 ? "Variant B (live-retrained)"
-                : "Variant B2 (B minus NCE override)";
-              const pending = m7PendingQ.data?.[k] ?? null;
+                : "Model 6";
+              const pending = !isM6 ? m7PendingQ.data?.[k] ?? null : null;
 
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
@@ -252,26 +261,28 @@ function StatsPage() {
                     <M7Stat label="Losses" value={b.losses} tone="bear" />
                     <M7Stat label="Pushes" value={b.pushes} />
                   </div>
-                  <div className="mt-3 pt-3 border-t border-border/60">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Current pending candle
-                    </div>
-                    {pending && decision ? (
-                      <div className="flex items-center justify-between gap-2 font-mono text-xs">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                          {decision}
-                          {pending.would_trade === false && (
-                            <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
-                          )}
-                        </span>
-                        <span className="text-muted-foreground">
-                          P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
-                        </span>
+                  {!isM6 && (
+                    <div className="mt-3 pt-3 border-t border-border/60">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                        Current pending candle
                       </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
-                    )}
-                  </div>
+                      {pending && decision ? (
+                        <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                            {decision}
+                            {pending.would_trade === false && (
+                              <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
+                            )}
+                          </span>
+                          <span className="text-muted-foreground">
+                            P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
+                      )}
+                    </div>
+                  )}
                   {b.pending > 0 && (
                     <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
                       {b.pending} pending
