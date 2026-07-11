@@ -103,9 +103,8 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const totalRuns = num("total");
-  const resolved = num("wins") + num("losses") + num("pushes");
-  const wr = num("overall_win_rate");
+  const b2Hero = m7Q.data?.B2 ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+  const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
   const versions = versionsQ.data ?? [];
