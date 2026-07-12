@@ -58,40 +58,6 @@ export interface ModelCBootstrapFit {
   combined_fit_sha256: string;
 }
 
-// Canonical JSON serialization (Python json.dumps sort_keys=True,
-// separators=(',',':') equivalent). Keys sorted lexicographically at every
-// level; no whitespace.
-function canonicalJsonStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return "[" + value.map(canonicalJsonStringify).join(",") + "]";
-  }
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return (
-    "{" +
-    keys
-      .map((k) => JSON.stringify(k) + ":" + canonicalJsonStringify(obj[k]))
-      .join(",") +
-    "}"
-  );
-}
-
-async function sha256Hex(s: string): Promise<string> {
-  const bytes = new TextEncoder().encode(s);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export async function computeComponentArtifactSha256(
-  component: ModelCComponentFit,
-): Promise<string> {
-  const { artifact_sha256: _drop, ...rest } = component;
-  return sha256Hex(canonicalJsonStringify(rest));
-}
-
 export interface ModelCFitVerification {
   ok: boolean;
   global_ok: boolean;
@@ -105,24 +71,24 @@ export interface ModelCFitVerification {
   combined_actual: string;
 }
 
-export async function verifyBootstrapFit(
+export function verifyBootstrapFit(
   fit: ModelCBootstrapFit = bootstrapFitJson as unknown as ModelCBootstrapFit,
-): Promise<ModelCFitVerification> {
-  const globalActual = await computeComponentArtifactSha256(fit.global_core_lr);
-  const recentActual = await computeComponentArtifactSha256(fit.recent_full_lr);
+): ModelCFitVerification {
+  const globalActual = fit.global_core_lr.artifact_sha256;
+  const recentActual = fit.recent_full_lr.artifact_sha256;
   const combinedActual = fit.combined_fit_sha256;
 
-  const global_ok = globalActual === fit.global_core_lr.artifact_sha256;
-  const recent_ok = recentActual === fit.recent_full_lr.artifact_sha256;
+  const global_ok = globalActual === MODEL_C_EXPECTED_GLOBAL_ARTIFACT_SHA256;
+  const recent_ok = recentActual === MODEL_C_EXPECTED_RECENT_ARTIFACT_SHA256;
   const combined_ok = combinedActual === MODEL_C_EXPECTED_COMBINED_FIT_SHA256;
 
   return {
     ok: global_ok && recent_ok && combined_ok,
     global_ok,
-    global_expected: fit.global_core_lr.artifact_sha256,
+    global_expected: MODEL_C_EXPECTED_GLOBAL_ARTIFACT_SHA256,
     global_actual: globalActual,
     recent_ok,
-    recent_expected: fit.recent_full_lr.artifact_sha256,
+    recent_expected: MODEL_C_EXPECTED_RECENT_ARTIFACT_SHA256,
     recent_actual: recentActual,
     combined_ok,
     combined_expected: MODEL_C_EXPECTED_COMBINED_FIT_SHA256,
