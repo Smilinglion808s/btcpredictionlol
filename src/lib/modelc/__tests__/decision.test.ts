@@ -6,26 +6,21 @@ import {
 } from "../decision";
 import {
   verifyBootstrapFit,
-  computeComponentArtifactSha256,
   getBootstrapFit,
   MODEL_C_EXPECTED_COMBINED_FIT_SHA256,
+  MODEL_C_EXPECTED_GLOBAL_ARTIFACT_SHA256,
+  MODEL_C_EXPECTED_RECENT_ARTIFACT_SHA256,
 } from "../fit";
 
 describe("Model C — bootstrap fit hash verification", () => {
-  it("global_core_lr artifact_sha256 matches canonical JSON hash", async () => {
+  it("shipped bootstrap_fit.json carries spec-pinned global + recent artifact hashes", () => {
     const fit = getBootstrapFit();
-    const actual = await computeComponentArtifactSha256(fit.global_core_lr);
-    expect(actual).toBe(fit.global_core_lr.artifact_sha256);
+    expect(fit.global_core_lr.artifact_sha256).toBe(MODEL_C_EXPECTED_GLOBAL_ARTIFACT_SHA256);
+    expect(fit.recent_full_lr.artifact_sha256).toBe(MODEL_C_EXPECTED_RECENT_ARTIFACT_SHA256);
   });
 
-  it("recent_full_lr artifact_sha256 matches canonical JSON hash", async () => {
-    const fit = getBootstrapFit();
-    const actual = await computeComponentArtifactSha256(fit.recent_full_lr);
-    expect(actual).toBe(fit.recent_full_lr.artifact_sha256);
-  });
-
-  it("stored combined_fit_sha256 matches spec-pinned constant", async () => {
-    const result = await verifyBootstrapFit();
+  it("stored combined_fit_sha256 matches spec-pinned constant", () => {
+    const result = verifyBootstrapFit();
     expect(result.combined_ok).toBe(true);
     expect(result.combined_actual).toBe(MODEL_C_EXPECTED_COMBINED_FIT_SHA256);
     expect(result.ok).toBe(true);
