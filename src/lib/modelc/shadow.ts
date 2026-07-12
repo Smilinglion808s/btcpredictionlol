@@ -89,13 +89,19 @@ export async function runModelCShadowForPrediction(
   const predictionRowLeadMs = Number.isFinite(createdMs) ? targetMs - createdMs : null;
 
   try {
-    // Verify shipped bootstrap fit against pinned hashes.
-    const verification = verifyBootstrapFit();
-    if (!verification.ok) {
-      await insertBlockedRow(supabase, predictionRow, `fit_hash_mismatch: ${JSON.stringify(verification)}`);
-      return;
+    // Load the active fit — live retrained fit if one exists for the current
+    // production model_version, otherwise the pinned bootstrap. Bootstrap-hash
+    // verification only gates when we're actually using the bootstrap.
+    const modelVersion = predictionRow.model_version ?? "6";
+    const active = await loadActiveModelCFit(supabase, modelVersion);
+    if (active.source === "bootstrap") {
+      const verification = verifyBootstrapFit();
+      if (!verification.ok) {
+        await insertBlockedRow(supabase, predictionRow, `fit_hash_mismatch: ${JSON.stringify(verification)}`);
+        return;
+      }
     }
-    const fit = getBootstrapFit();
+    const fit = active.fit;
 
     // Pull enough prior completed candles to satisfy both builders.
     const history = await fetchPriorCandles(
