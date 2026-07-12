@@ -89,7 +89,7 @@ export async function runModelCShadowForPrediction(
   const predictionRowLeadMs = Number.isFinite(createdMs) ? targetMs - createdMs : null;
 
   try {
-    // Load the active fit — live retrained fit if one exists for the current
+    // Load the active fit — latest READY live fit if one exists for the current
     // production model_version, otherwise the pinned bootstrap. Bootstrap-hash
     // verification only gates when we're actually using the bootstrap.
     const modelVersion = predictionRow.model_version ?? "6";
@@ -101,7 +101,22 @@ export async function runModelCShadowForPrediction(
         return;
       }
     }
+    // Fit activation boundary: a live fit MUST NOT score a target candle
+    // whose boundary is at/before its training cutoff. Enforce
+    // target_boundary_ts >= first_eligible_target_ts.
+    if (active.source === "live" && active.first_eligible_target_ts) {
+      const firstEligibleMs = new Date(active.first_eligible_target_ts).getTime();
+      if (targetMs < firstEligibleMs) {
+        await insertBlockedRow(
+          supabase,
+          predictionRow,
+          `fit_not_eligible_for_target:${active.fit_id}:first_eligible=${active.first_eligible_target_ts}`,
+        );
+        return;
+      }
+    }
     const fit = active.fit;
+
 
     // Pull enough prior completed candles to satisfy both builders.
     const history = await fetchPriorCandles(
