@@ -307,6 +307,78 @@ function StatsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Model C Shadow
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              dual-horizon · tracking-only · not trading
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const mc = mcQ.data ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+            const pending = mcPendingQ.data as {
+              candle_ts?: string | null;
+              ensemble_probability_green?: number | null;
+              global_probability_green?: number | null;
+              recent_probability_green?: number | null;
+              final_decision?: string | null;
+              trade?: boolean | null;
+            } | null;
+            const decision = pending?.final_decision ?? null;
+            const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
+              : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
+              : "text-muted-foreground border-border";
+            const pEns = typeof pending?.ensemble_probability_green === "number" ? (pending.ensemble_probability_green * 100).toFixed(1) : null;
+            const pGlobal = typeof pending?.global_probability_green === "number" ? (pending.global_probability_green * 100).toFixed(1) : null;
+            const pRecent = typeof pending?.recent_probability_green === "number" ? (pending.recent_probability_green * 100).toFixed(1) : null;
+            return (
+              <div className="rounded-md border border-border bg-card/50 p-4">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">Dual-Horizon Ensemble (bootstrap fit)</div>
+                <div className="flex items-baseline justify-between mb-3">
+                  <span className="text-xs text-muted-foreground">Win Rate</span>
+                  <span className="font-mono text-2xl font-bold text-bull">{mc.win_rate}%</span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 text-center">
+                  <M7Stat label="Trades" value={mc.total} />
+                  <M7Stat label="Wins" value={mc.wins} tone="bull" />
+                  <M7Stat label="Losses" value={mc.losses} tone="bear" />
+                  <M7Stat label="Pushes" value={mc.pushes} />
+                  <M7Stat label="Pending" value={mc.pending} tone="warn" />
+                </div>
+                <div className="mt-3 pt-3 border-t border-border/60">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Current pending candle
+                  </div>
+                  {pending && decision ? (
+                    <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                        {decision}
+                        {pending.trade === false && (
+                          <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
+                        )}
+                      </span>
+                      <span className="text-muted-foreground">
+                        P(ens): <span className="text-foreground">{pEns ?? "—"}%</span>
+                        <span className="mx-1.5 text-muted-foreground/60">·</span>
+                        G: <span className="text-foreground">{pGlobal ?? "—"}%</span>
+                        <span className="mx-1.5 text-muted-foreground/60">·</span>
+                        R: <span className="text-foreground">{pRecent ?? "—"}%</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
