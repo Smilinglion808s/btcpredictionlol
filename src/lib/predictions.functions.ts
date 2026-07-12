@@ -332,6 +332,9 @@ export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
+});
+
+
 
 
 // ---------------------------------------------------------------------------
