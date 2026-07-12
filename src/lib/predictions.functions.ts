@@ -344,9 +344,11 @@ export const exportModelCShadow = createServerFn({ method: "GET" }).handler(asyn
     .limit(20000);
   if (error) throw error;
   return (data ?? []).map((r: any) => {
-    const out: Record<string, unknown> = {};
+    const out: Record<string, string | number | boolean | null> = {};
     for (const [k, v] of Object.entries(r)) {
-      out[k] = v && typeof v === "object" ? JSON.stringify(v) : v;
+      if (v === null || v === undefined) out[k] = null;
+      else if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+      else out[k] = JSON.stringify(v);
     }
     return out;
   });
