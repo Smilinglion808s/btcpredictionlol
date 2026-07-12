@@ -206,13 +206,15 @@ export async function resolveModelCShadowRowsFor(
     const nowIso = new Date().toISOString();
     for (const r of rows as Array<{ id: string; final_decision: string | null; trade: boolean | null }>) {
       let won: boolean | null = null;
+      let status = "skip";
       if (r.trade && r.final_decision) {
         won = (r.final_decision === "YES" && actualDirection === "GREEN") ||
           (r.final_decision === "NO" && actualDirection === "RED");
+        status = won ? "win" : "loss";
       }
       await supabase
         .from("model_c_shadow")
-        .update({ actual_direction: actualDirection, won, resolved_at: nowIso } as never)
+        .update({ actual_direction: actualDirection, won, resolved_at: nowIso, status } as never)
         .eq("id", r.id);
     }
   } catch {
