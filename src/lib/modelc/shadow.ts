@@ -225,6 +225,24 @@ export async function resolveModelCShadowRowsFor(
         .update({ actual_direction: actualDirection, won, resolved_at: nowIso, status } as never)
         .eq("id", r.id);
     }
+
+    // Retrain trigger — fires only when delta since last live fit crosses the
+    // cadence threshold. Fail-closed inside `maybeRetrainModelC`, never blocks.
+    try {
+      const { maybeRetrainModelC } = await import("./trainer");
+      // Read active production model version so retraining tracks whatever the
+      // resolved predictions were emitted under.
+      const { data: settings } = await supabase
+        .from("model_settings")
+        .select("model_version")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const modelVersion = (settings as { model_version?: string } | null)?.model_version ?? "6";
+      await maybeRetrainModelC(supabase, modelVersion);
+    } catch {
+      /* never block resolver on retraining */
+    }
   } catch {
     /* never block resolver */
   }
