@@ -165,7 +165,9 @@ export async function runModelCShadowForPrediction(
       global_feature_vector_sha256: featureVectorHash(fit.global_core_lr, globalFeatures),
       recent_feature_vector_sha256: featureVectorHash(fit.recent_full_lr, recentFeatures),
       status: "scored",
-      fit_id: `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
+      fit_id: active.source === "live"
+        ? active.fit_id
+        : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
       shadow_error: null,
     } as never);
