@@ -30,6 +30,10 @@ function StatsPage() {
   const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const mcFn = useServerFn(getModelCShadowStats);
+  const mcQ = useQuery({ queryKey: ["modelc-shadow-stats"], queryFn: () => mcFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const mcPendingFn = useServerFn(getModelCShadowPending);
+  const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
 
