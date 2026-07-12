@@ -263,9 +263,11 @@ export type Database = {
         Row: {
           combined_fit_sha256: string | null
           created_at: string
+          first_eligible_target_ts: string | null
           first_scored_candle_ts: string | null
           fit_id: string
           fit_meta: Json | null
+          fit_source: string | null
           global_artifact_sha256: string | null
           global_component_fit: Json | null
           global_training_row_count: number | null
@@ -275,20 +277,24 @@ export type Database = {
           in_sample_global_prob_std: number | null
           in_sample_recent_prob_mean: number | null
           in_sample_recent_prob_std: number | null
+          promoted_at: string | null
           recent_artifact_sha256: string | null
           recent_component_fit: Json | null
           recent_training_row_count: number | null
           recent_training_window_end_ts: string | null
           recent_training_window_start_ts: string | null
+          status: string
           training_cutoff_ts: string
           training_model_version: string
         }
         Insert: {
           combined_fit_sha256?: string | null
           created_at?: string
+          first_eligible_target_ts?: string | null
           first_scored_candle_ts?: string | null
           fit_id: string
           fit_meta?: Json | null
+          fit_source?: string | null
           global_artifact_sha256?: string | null
           global_component_fit?: Json | null
           global_training_row_count?: number | null
@@ -298,20 +304,24 @@ export type Database = {
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
+          promoted_at?: string | null
           recent_artifact_sha256?: string | null
           recent_component_fit?: Json | null
           recent_training_row_count?: number | null
           recent_training_window_end_ts?: string | null
           recent_training_window_start_ts?: string | null
+          status?: string
           training_cutoff_ts: string
           training_model_version?: string
         }
         Update: {
           combined_fit_sha256?: string | null
           created_at?: string
+          first_eligible_target_ts?: string | null
           first_scored_candle_ts?: string | null
           fit_id?: string
           fit_meta?: Json | null
+          fit_source?: string | null
           global_artifact_sha256?: string | null
           global_component_fit?: Json | null
           global_training_row_count?: number | null
@@ -321,11 +331,13 @@ export type Database = {
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
+          promoted_at?: string | null
           recent_artifact_sha256?: string | null
           recent_component_fit?: Json | null
           recent_training_row_count?: number | null
           recent_training_window_end_ts?: string | null
           recent_training_window_start_ts?: string | null
+          status?: string
           training_cutoff_ts?: string
           training_model_version?: string
         }

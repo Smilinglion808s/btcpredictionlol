@@ -105,13 +105,21 @@ export function getBootstrapFit(): ModelCBootstrapFit {
 export interface ActiveModelCFit {
   fit: ModelCBootstrapFit;
   source: "bootstrap" | "live";
+  fit_source: "live" | "bootstrap_initial" | "bootstrap_emergency";
   fit_id: string;
+  first_eligible_target_ts: string | null;
 }
 
 /**
- * Returns the latest live fit for `trainingModelVersion` if one exists AND
- * carries both component blobs; otherwise falls back to the pinned bootstrap.
- * Fail-closed: any Supabase error is swallowed and bootstrap is returned.
+ * Returns the latest READY live fit for `trainingModelVersion` if one exists
+ * AND carries both component blobs; otherwise falls back to the pinned
+ * bootstrap.
+ *
+ * Fail-loud fallback:
+ *  - No live fit has ever been READY  → `bootstrap_initial` (expected).
+ *  - A live fit previously existed but the DB read failed / row is
+ *    unreadable → `bootstrap_emergency`: an api_runs alert is written so the
+ *    system does not silently revert to an old model.
  */
 export async function loadActiveModelCFit(
   // Loose type so this file stays free of a hard @supabase/supabase-js dep at
@@ -119,12 +127,13 @@ export async function loadActiveModelCFit(
   supabase: { from: (t: string) => unknown },
   trainingModelVersion: string,
 ): Promise<ActiveModelCFit> {
+  const bootstrap = getBootstrapFit();
   try {
     const q = (
       supabase.from("model_c_training_fits") as unknown as {
         select: (s: string) => {
           eq: (c: string, v: string) => {
-            not: (c: string, op: string, v: unknown) => {
+            eq: (c: string, v: string) => {
               order: (c: string, o: { ascending: boolean }) => {
                 limit: (n: number) => {
                   maybeSingle: () => Promise<{
@@ -141,6 +150,7 @@ export async function loadActiveModelCFit(
                           recent_training_row_count: number | null;
                           global_training_window_start_ts: string | null;
                           recent_training_window_start_ts: string | null;
+                          first_eligible_target_ts: string | null;
                         }
                       | null;
                     error: { message: string } | null;
@@ -153,15 +163,56 @@ export async function loadActiveModelCFit(
       }
     )
       .select(
-        "fit_id, global_component_fit, recent_component_fit, global_artifact_sha256, recent_artifact_sha256, combined_fit_sha256, training_cutoff_ts, global_training_row_count, recent_training_row_count, global_training_window_start_ts, recent_training_window_start_ts",
+        "fit_id, global_component_fit, recent_component_fit, global_artifact_sha256, recent_artifact_sha256, combined_fit_sha256, training_cutoff_ts, global_training_row_count, recent_training_row_count, global_training_window_start_ts, recent_training_window_start_ts, first_eligible_target_ts",
       )
       .eq("training_model_version", trainingModelVersion)
-      .not("global_component_fit", "is", null)
-      .order("created_at", { ascending: false })
+      .eq("status", "ready")
+      .order("promoted_at", { ascending: false })
       .limit(1);
-    const { data } = await q.maybeSingle();
+    const { data, error } = await q.maybeSingle();
+    if (error) throw new Error(error.message);
     if (!data || !data.global_component_fit || !data.recent_component_fit) {
-      return { fit: getBootstrapFit(), source: "bootstrap", fit_id: "bootstrap" };
+      // No live fit has ever been READY. Check whether ANY historical live
+      // fit existed — if so, the disappearance is an emergency.
+      let hadHistoricalLive = false;
+      try {
+        const anyQ = (
+          supabase.from("model_c_training_fits") as unknown as {
+            select: (s: string) => {
+              eq: (c: string, v: string) => {
+                limit: (n: number) => {
+                  maybeSingle: () => Promise<{ data: { fit_id: string } | null }>;
+                };
+              };
+            };
+          }
+        ).select("fit_id").eq("training_model_version", trainingModelVersion).limit(1);
+        const { data: anyRow } = await anyQ.maybeSingle();
+        hadHistoricalLive = !!anyRow;
+      } catch { /* treat as unknown */ }
+      const fit_source: "bootstrap_initial" | "bootstrap_emergency" = hadHistoricalLive
+        ? "bootstrap_emergency"
+        : "bootstrap_initial";
+      if (fit_source === "bootstrap_emergency") {
+        try {
+          await (supabase.from("api_runs") as unknown as {
+            insert: (v: unknown) => Promise<unknown>;
+          }).insert({
+            run_type: "model_c_fit_load_emergency",
+            request_payload: { training_model_version: trainingModelVersion },
+            response_payload: { reason: "no_ready_fit_but_history_present" },
+            success: false,
+            error_message: "Falling back to bootstrap despite prior live fits.",
+          });
+        } catch { /* never throw */ }
+      }
+      return {
+        fit: bootstrap,
+        source: "bootstrap",
+        fit_source,
+        fit_id: `bootstrap:${bootstrap.combined_fit_sha256.slice(0, 12)}`,
+        first_eligible_target_ts: null,
+      };
     }
     const live: ModelCBootstrapFit = {
       purpose: "Live retrained fit from resolved production predictions.",
@@ -179,8 +230,33 @@ export async function loadActiveModelCFit(
       recent_full_lr: data.recent_component_fit,
       combined_fit_sha256: data.combined_fit_sha256 ?? "",
     };
-    return { fit: live, source: "live", fit_id: data.fit_id };
-  } catch {
-    return { fit: getBootstrapFit(), source: "bootstrap", fit_id: "bootstrap" };
+    return {
+      fit: live,
+      source: "live",
+      fit_source: "live",
+      fit_id: data.fit_id,
+      first_eligible_target_ts: data.first_eligible_target_ts,
+    };
+  } catch (e) {
+    // DB/artifact-loading failure. Emit a loud alert and fall back.
+    try {
+      await (supabase.from("api_runs") as unknown as {
+        insert: (v: unknown) => Promise<unknown>;
+      }).insert({
+        run_type: "model_c_fit_load_emergency",
+        request_payload: { training_model_version: trainingModelVersion },
+        response_payload: { error: e instanceof Error ? e.message : String(e) },
+        success: false,
+        error_message: e instanceof Error ? e.message : String(e),
+      });
+    } catch { /* never throw */ }
+    return {
+      fit: bootstrap,
+      source: "bootstrap",
+      fit_source: "bootstrap_emergency",
+      fit_id: `bootstrap:${bootstrap.combined_fit_sha256.slice(0, 12)}`,
+      first_eligible_target_ts: null,
+    };
   }
 }
+
