@@ -103,6 +103,10 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
         qc.invalidateQueries({ queryKey: ["b2-recent"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "model_c_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["modelc-shadow-stats"] });
+        qc.invalidateQueries({ queryKey: ["modelc-shadow-pending"] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
