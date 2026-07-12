@@ -382,36 +382,68 @@ export async function maybeRetrainModelC(
   trainingModelVersion: string,
 ): Promise<ModelCTrainerResult | null> {
   try {
+    // Only READY fits count as "the active fit". Pending/failed rows are ignored.
     const { data: last } = await supabase
       .from("model_c_training_fits")
-      .select("global_training_row_count, created_at")
+      .select("global_training_row_count, training_cutoff_ts, promoted_at")
       .eq("training_model_version", trainingModelVersion)
-      .not("global_component_fit", "is", null)
-      .order("created_at", { ascending: false })
+      .eq("status", "ready")
+      .order("promoted_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const { count } = await supabase
-      .from("predictions")
-      .select("*", { count: "exact", head: true })
-      .eq("model_version", trainingModelVersion)
-      .in("actual_direction", ["GREEN", "RED"]);
-    const cleanNow = count ?? 0;
-    const lastN = last?.global_training_row_count ?? 0;
-    const delta = cleanNow - lastN;
+
+    // Count distinct, chronologically-newer, cleanly-labeled candles since the
+    // active cutoff. Excludes DOJI, pending, malformed, and any duplicate
+    // resolutions for the same candle_ts.
+    let cleanNow: number;
+    let delta: number;
+    if (last?.training_cutoff_ts) {
+      const { data: newRows } = await supabase
+        .from("predictions")
+        .select("candle_ts")
+        .eq("model_version", trainingModelVersion)
+        .in("actual_direction", ["GREEN", "RED"])
+        .gt("candle_ts", last.training_cutoff_ts);
+      const distinct = new Set<string>();
+      for (const r of (newRows ?? []) as Array<{ candle_ts: string }>) {
+        if (r.candle_ts) distinct.add(r.candle_ts);
+      }
+      delta = distinct.size;
+      cleanNow = (last.global_training_row_count ?? 0) + delta;
+    } else {
+      const { data: allRows } = await supabase
+        .from("predictions")
+        .select("candle_ts")
+        .eq("model_version", trainingModelVersion)
+        .in("actual_direction", ["GREEN", "RED"]);
+      const distinct = new Set<string>();
+      for (const r of (allRows ?? []) as Array<{ candle_ts: string }>) {
+        if (r.candle_ts) distinct.add(r.candle_ts);
+      }
+      cleanNow = distinct.size;
+      delta = cleanNow;
+    }
+
     const needsFirstFit = !last && cleanNow >= MODEL_C_MIN_CLEAN_ROWS;
-    const needsRefit = last && delta >= MODEL_C_RETRAIN_EVERY_N_RESOLVED;
+    const needsRefit = !!last && delta >= MODEL_C_RETRAIN_EVERY_N_RESOLVED;
     if (!needsFirstFit && !needsRefit) return null;
 
     const result = await trainModelC(supabase, trainingModelVersion);
     await supabase.from("api_runs").insert({
       run_type: "model_c_retrain",
-      request_payload: { training_model_version: trainingModelVersion, clean_now: cleanNow, delta_since_last: delta },
+      request_payload: {
+        training_model_version: trainingModelVersion,
+        clean_now: cleanNow,
+        delta_since_active_cutoff: delta,
+        active_cutoff_ts: last?.training_cutoff_ts ?? null,
+      },
       response_payload: result as unknown as Record<string, unknown>,
       success: result.fitted,
       error_message: result.fitted ? null : (result.reason ?? "not_fitted"),
     });
     return result;
   } catch (e) {
+
     try {
       await supabase.from("api_runs").insert({
         run_type: "model_c_retrain_error",
