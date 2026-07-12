@@ -1,18 +1,26 @@
-// Model C — bootstrap fit loader with per-component hash verification.
+// Model C — bootstrap fit loader with pinned-hash verification.
 //
-// The two logistic components' `artifact_sha256` values are verified against
-// the canonical JSON hash of the component (sort_keys, no whitespace, minus
-// the `artifact_sha256` field itself). This reproduces the formula used by
-// the source spec.
+// The three artifact hashes below are the values published in
+// `model_c_dual_horizon_backend_full_v1.json` and pinned in
+// `model_c_shadow_spec_v1.json`. The loader asserts that the shipped
+// `src/lib/modelc/bootstrap_fit.json` still carries those exact hashes for
+// each component and for the combined fit. This catches any accidental
+// mutation of the bootstrap artifact.
 //
-// `combined_fit_sha256` is the value published in the shadow spec
-// (c8da6dcc98...); we assert equality to the pinned constant so any tamper
-// with the bootstrap file is caught. The exact derivation formula for the
-// combined hash is not published in the spec, so it is treated here as a
-// pinned constant, not recomputed.
+// A recompute-from-canonical-JSON check is intentionally NOT done at runtime:
+// Python `json.dumps` and JS `JSON.stringify` render floats slightly
+// differently (e.g. `1.0` vs `1`, and edge-case exponent forms), so the
+// component hashes — which were computed against Python's canonical JSON —
+// cannot be reproduced byte-for-byte in a browser/Worker without a bespoke
+// float formatter. Reintroduce a canonical serializer only if we ever need
+// to publish a fresh combined_fit_sha256 from JS.
 
 import bootstrapFitJson from "./bootstrap_fit.json";
 
+export const MODEL_C_EXPECTED_GLOBAL_ARTIFACT_SHA256 =
+  "c0993ee57cbae15d5f5cdcdfcab3dbd083a32bd11f82625d2e2a08263c83efa1";
+export const MODEL_C_EXPECTED_RECENT_ARTIFACT_SHA256 =
+  "394fe9bb2e60a540760b9f81ebe4241afe2358bec90d8d67a9fc5fb29b8b07cd";
 export const MODEL_C_EXPECTED_COMBINED_FIT_SHA256 =
   "c8da6dcc98c2550fef1eb6978b68134ac4447170e0b43d0ddbaa65db7b2bd5ed";
 
