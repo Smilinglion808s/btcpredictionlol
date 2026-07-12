@@ -336,6 +336,20 @@ export async function runModel6Prediction(supabase: SupabaseClient) {
       });
     }
 
+    // Model C SHADOW skeleton — separate table, isolated try/catch. Never
+    // blocks production or Model 7 shadow. See src/lib/modelc/shadow.ts.
+    try {
+      const { runModelCShadowForPrediction } = await import("../modelc/shadow");
+      await runModelCShadowForPrediction(supabase, inserted as never);
+    } catch (mcErr) {
+      await supabase.from("api_runs").insert({
+        run_type: "model_c_shadow_error",
+        response_payload: { error: mcErr instanceof Error ? mcErr.message : String(mcErr), prediction_id: inserted.id },
+        success: false,
+        error_message: mcErr instanceof Error ? mcErr.message : String(mcErr),
+      });
+    }
+
     await supabase.from("api_runs").insert({
       run_type: "run-ai-prediction",
       request_payload: {

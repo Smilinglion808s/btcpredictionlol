@@ -137,6 +137,176 @@ export type Database = {
         }
         Relationships: []
       }
+      model_c_shadow: {
+        Row: {
+          actual_direction: string | null
+          base_decision: string | null
+          boundary_delta_ms: number | null
+          candle_ts: string
+          created_at: string
+          ensemble_probability_green: number | null
+          feature_cutoff_ts: string | null
+          final_decision: string | null
+          fit_id: string | null
+          global_artifact_sha256: string | null
+          global_feature_vector_sha256: string | null
+          global_probability_green: number | null
+          id: string
+          in_sample_global_prob_mean: number | null
+          in_sample_global_prob_std: number | null
+          in_sample_recent_prob_mean: number | null
+          in_sample_recent_prob_std: number | null
+          latest_source_candle_ts: string | null
+          leakage_check_passed: boolean | null
+          override_reasons_json: Json | null
+          prediction_id: string | null
+          prediction_row_created_at: string | null
+          prediction_row_lead_ms: number | null
+          production_model_version: string | null
+          recent_artifact_sha256: string | null
+          recent_feature_vector_sha256: string | null
+          recent_probability_green: number | null
+          resolved_at: string | null
+          scored_at: string | null
+          shadow_error: string | null
+          status: string
+          target_boundary_ts: string | null
+          timing_status: string | null
+          trade: boolean | null
+          won: boolean | null
+        }
+        Insert: {
+          actual_direction?: string | null
+          base_decision?: string | null
+          boundary_delta_ms?: number | null
+          candle_ts: string
+          created_at?: string
+          ensemble_probability_green?: number | null
+          feature_cutoff_ts?: string | null
+          final_decision?: string | null
+          fit_id?: string | null
+          global_artifact_sha256?: string | null
+          global_feature_vector_sha256?: string | null
+          global_probability_green?: number | null
+          id?: string
+          in_sample_global_prob_mean?: number | null
+          in_sample_global_prob_std?: number | null
+          in_sample_recent_prob_mean?: number | null
+          in_sample_recent_prob_std?: number | null
+          latest_source_candle_ts?: string | null
+          leakage_check_passed?: boolean | null
+          override_reasons_json?: Json | null
+          prediction_id?: string | null
+          prediction_row_created_at?: string | null
+          prediction_row_lead_ms?: number | null
+          production_model_version?: string | null
+          recent_artifact_sha256?: string | null
+          recent_feature_vector_sha256?: string | null
+          recent_probability_green?: number | null
+          resolved_at?: string | null
+          scored_at?: string | null
+          shadow_error?: string | null
+          status?: string
+          target_boundary_ts?: string | null
+          timing_status?: string | null
+          trade?: boolean | null
+          won?: boolean | null
+        }
+        Update: {
+          actual_direction?: string | null
+          base_decision?: string | null
+          boundary_delta_ms?: number | null
+          candle_ts?: string
+          created_at?: string
+          ensemble_probability_green?: number | null
+          feature_cutoff_ts?: string | null
+          final_decision?: string | null
+          fit_id?: string | null
+          global_artifact_sha256?: string | null
+          global_feature_vector_sha256?: string | null
+          global_probability_green?: number | null
+          id?: string
+          in_sample_global_prob_mean?: number | null
+          in_sample_global_prob_std?: number | null
+          in_sample_recent_prob_mean?: number | null
+          in_sample_recent_prob_std?: number | null
+          latest_source_candle_ts?: string | null
+          leakage_check_passed?: boolean | null
+          override_reasons_json?: Json | null
+          prediction_id?: string | null
+          prediction_row_created_at?: string | null
+          prediction_row_lead_ms?: number | null
+          production_model_version?: string | null
+          recent_artifact_sha256?: string | null
+          recent_feature_vector_sha256?: string | null
+          recent_probability_green?: number | null
+          resolved_at?: string | null
+          scored_at?: string | null
+          shadow_error?: string | null
+          status?: string
+          target_boundary_ts?: string | null
+          timing_status?: string | null
+          trade?: boolean | null
+          won?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_c_shadow_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model_c_training_fits: {
+        Row: {
+          combined_fit_sha256: string | null
+          created_at: string
+          first_scored_candle_ts: string | null
+          fit_id: string
+          global_artifact_sha256: string | null
+          global_training_row_count: number | null
+          in_sample_global_prob_mean: number | null
+          in_sample_global_prob_std: number | null
+          in_sample_recent_prob_mean: number | null
+          in_sample_recent_prob_std: number | null
+          recent_artifact_sha256: string | null
+          recent_training_row_count: number | null
+          training_cutoff_ts: string
+        }
+        Insert: {
+          combined_fit_sha256?: string | null
+          created_at?: string
+          first_scored_candle_ts?: string | null
+          fit_id: string
+          global_artifact_sha256?: string | null
+          global_training_row_count?: number | null
+          in_sample_global_prob_mean?: number | null
+          in_sample_global_prob_std?: number | null
+          in_sample_recent_prob_mean?: number | null
+          in_sample_recent_prob_std?: number | null
+          recent_artifact_sha256?: string | null
+          recent_training_row_count?: number | null
+          training_cutoff_ts: string
+        }
+        Update: {
+          combined_fit_sha256?: string | null
+          created_at?: string
+          first_scored_candle_ts?: string | null
+          fit_id?: string
+          global_artifact_sha256?: string | null
+          global_training_row_count?: number | null
+          in_sample_global_prob_mean?: number | null
+          in_sample_global_prob_std?: number | null
+          in_sample_recent_prob_mean?: number | null
+          in_sample_recent_prob_std?: number | null
+          recent_artifact_sha256?: string | null
+          recent_training_row_count?: number | null
+          training_cutoff_ts?: string
+        }
+        Relationships: []
+      }
       model_settings: {
         Row: {
           api_model_id: string | null
