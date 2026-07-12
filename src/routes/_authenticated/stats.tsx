@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantB2Recent, getModelCShadowStats, getModelCShadowPending } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantB2Recent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -35,7 +35,33 @@ function StatsPage() {
   const mcPendingFn = useServerFn(getModelCShadowPending);
   const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
+  const exportMCFn = useServerFn(exportModelCShadow);
   const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
+  const [exportingMC, setExportingMC] = useState(false);
+
+  async function downloadMCCsv() {
+    try {
+      setExportingMC(true);
+      const rows = await exportMCFn();
+      if (rows.length === 0) { alert("No Model C shadow rows to export."); return; }
+      const headers = Object.keys(rows[0]);
+      const esc = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = typeof v === "string" ? v : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [headers.join(","), ...rows.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `modelc-shadow-${stamp}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingMC(false);
+    }
+  }
 
   async function downloadM7Csv(scope: "all" | "A" | "B" | "B2") {
     try {
@@ -309,12 +335,17 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            Model C Shadow
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              dual-horizon · tracking-only · not trading
-            </span>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              Model C Shadow
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+                dual-horizon · tracking-only · not trading
+              </span>
+            </CardTitle>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingMC} onClick={downloadMCCsv}>
+              {exportingMC ? "Exporting…" : "CSV (Model C)"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {(() => {
