@@ -20,7 +20,7 @@ import {
   type CandleRow,
   type PredictionRowForFeatures,
 } from "./featurize";
-import { getBootstrapFit, verifyBootstrapFit } from "./fit";
+import { loadActiveModelCFit, verifyBootstrapFit } from "./fit";
 import { decideModelC } from "./decision";
 import { featureVectorHash, scoreComponent } from "./score";
 
