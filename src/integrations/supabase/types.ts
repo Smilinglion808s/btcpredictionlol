@@ -265,45 +265,69 @@ export type Database = {
           created_at: string
           first_scored_candle_ts: string | null
           fit_id: string
+          fit_meta: Json | null
           global_artifact_sha256: string | null
+          global_component_fit: Json | null
           global_training_row_count: number | null
+          global_training_window_end_ts: string | null
+          global_training_window_start_ts: string | null
           in_sample_global_prob_mean: number | null
           in_sample_global_prob_std: number | null
           in_sample_recent_prob_mean: number | null
           in_sample_recent_prob_std: number | null
           recent_artifact_sha256: string | null
+          recent_component_fit: Json | null
           recent_training_row_count: number | null
+          recent_training_window_end_ts: string | null
+          recent_training_window_start_ts: string | null
           training_cutoff_ts: string
+          training_model_version: string
         }
         Insert: {
           combined_fit_sha256?: string | null
           created_at?: string
           first_scored_candle_ts?: string | null
           fit_id: string
+          fit_meta?: Json | null
           global_artifact_sha256?: string | null
+          global_component_fit?: Json | null
           global_training_row_count?: number | null
+          global_training_window_end_ts?: string | null
+          global_training_window_start_ts?: string | null
           in_sample_global_prob_mean?: number | null
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
           recent_artifact_sha256?: string | null
+          recent_component_fit?: Json | null
           recent_training_row_count?: number | null
+          recent_training_window_end_ts?: string | null
+          recent_training_window_start_ts?: string | null
           training_cutoff_ts: string
+          training_model_version?: string
         }
         Update: {
           combined_fit_sha256?: string | null
           created_at?: string
           first_scored_candle_ts?: string | null
           fit_id?: string
+          fit_meta?: Json | null
           global_artifact_sha256?: string | null
+          global_component_fit?: Json | null
           global_training_row_count?: number | null
+          global_training_window_end_ts?: string | null
+          global_training_window_start_ts?: string | null
           in_sample_global_prob_mean?: number | null
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
           recent_artifact_sha256?: string | null
+          recent_component_fit?: Json | null
           recent_training_row_count?: number | null
+          recent_training_window_end_ts?: string | null
+          recent_training_window_start_ts?: string | null
           training_cutoff_ts?: string
+          training_model_version?: string
         }
         Relationships: []
       }

@@ -20,7 +20,7 @@ import {
   type CandleRow,
   type PredictionRowForFeatures,
 } from "./featurize";
-import { getBootstrapFit, verifyBootstrapFit } from "./fit";
+import { loadActiveModelCFit, verifyBootstrapFit } from "./fit";
 import { decideModelC } from "./decision";
 import { featureVectorHash, scoreComponent } from "./score";
 
@@ -89,13 +89,19 @@ export async function runModelCShadowForPrediction(
   const predictionRowLeadMs = Number.isFinite(createdMs) ? targetMs - createdMs : null;
 
   try {
-    // Verify shipped bootstrap fit against pinned hashes.
-    const verification = verifyBootstrapFit();
-    if (!verification.ok) {
-      await insertBlockedRow(supabase, predictionRow, `fit_hash_mismatch: ${JSON.stringify(verification)}`);
-      return;
+    // Load the active fit — live retrained fit if one exists for the current
+    // production model_version, otherwise the pinned bootstrap. Bootstrap-hash
+    // verification only gates when we're actually using the bootstrap.
+    const modelVersion = predictionRow.model_version ?? "6";
+    const active = await loadActiveModelCFit(supabase, modelVersion);
+    if (active.source === "bootstrap") {
+      const verification = verifyBootstrapFit();
+      if (!verification.ok) {
+        await insertBlockedRow(supabase, predictionRow, `fit_hash_mismatch: ${JSON.stringify(verification)}`);
+        return;
+      }
     }
-    const fit = getBootstrapFit();
+    const fit = active.fit;
 
     // Pull enough prior completed candles to satisfy both builders.
     const history = await fetchPriorCandles(
@@ -159,7 +165,9 @@ export async function runModelCShadowForPrediction(
       global_feature_vector_sha256: featureVectorHash(fit.global_core_lr, globalFeatures),
       recent_feature_vector_sha256: featureVectorHash(fit.recent_full_lr, recentFeatures),
       status: "scored",
-      fit_id: `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
+      fit_id: active.source === "live"
+        ? active.fit_id
+        : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
       shadow_error: null,
     } as never);
@@ -216,6 +224,24 @@ export async function resolveModelCShadowRowsFor(
         .from("model_c_shadow")
         .update({ actual_direction: actualDirection, won, resolved_at: nowIso, status } as never)
         .eq("id", r.id);
+    }
+
+    // Retrain trigger — fires only when delta since last live fit crosses the
+    // cadence threshold. Fail-closed inside `maybeRetrainModelC`, never blocks.
+    try {
+      const { maybeRetrainModelC } = await import("./trainer");
+      // Read active production model version so retraining tracks whatever the
+      // resolved predictions were emitted under.
+      const { data: settings } = await supabase
+        .from("model_settings")
+        .select("model_version")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const modelVersion = (settings as { model_version?: string } | null)?.model_version ?? "6";
+      await maybeRetrainModelC(supabase, modelVersion);
+    } catch {
+      /* never block resolver on retraining */
     }
   } catch {
     /* never block resolver */

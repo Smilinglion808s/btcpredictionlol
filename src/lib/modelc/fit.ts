@@ -99,3 +99,88 @@ export function verifyBootstrapFit(
 export function getBootstrapFit(): ModelCBootstrapFit {
   return bootstrapFitJson as unknown as ModelCBootstrapFit;
 }
+
+// -------- live-fit loader --------
+
+export interface ActiveModelCFit {
+  fit: ModelCBootstrapFit;
+  source: "bootstrap" | "live";
+  fit_id: string;
+}
+
+/**
+ * Returns the latest live fit for `trainingModelVersion` if one exists AND
+ * carries both component blobs; otherwise falls back to the pinned bootstrap.
+ * Fail-closed: any Supabase error is swallowed and bootstrap is returned.
+ */
+export async function loadActiveModelCFit(
+  // Loose type so this file stays free of a hard @supabase/supabase-js dep at
+  // module load time — callers already have a typed client.
+  supabase: { from: (t: string) => unknown },
+  trainingModelVersion: string,
+): Promise<ActiveModelCFit> {
+  try {
+    const q = (
+      supabase.from("model_c_training_fits") as unknown as {
+        select: (s: string) => {
+          eq: (c: string, v: string) => {
+            not: (c: string, op: string, v: unknown) => {
+              order: (c: string, o: { ascending: boolean }) => {
+                limit: (n: number) => {
+                  maybeSingle: () => Promise<{
+                    data:
+                      | {
+                          fit_id: string;
+                          global_component_fit: ModelCComponentFit | null;
+                          recent_component_fit: ModelCComponentFit | null;
+                          global_artifact_sha256: string | null;
+                          recent_artifact_sha256: string | null;
+                          combined_fit_sha256: string | null;
+                          training_cutoff_ts: string;
+                          global_training_row_count: number | null;
+                          recent_training_row_count: number | null;
+                          global_training_window_start_ts: string | null;
+                          recent_training_window_start_ts: string | null;
+                        }
+                      | null;
+                    error: { message: string } | null;
+                  }>;
+                };
+              };
+            };
+          };
+        };
+      }
+    )
+      .select(
+        "fit_id, global_component_fit, recent_component_fit, global_artifact_sha256, recent_artifact_sha256, combined_fit_sha256, training_cutoff_ts, global_training_row_count, recent_training_row_count, global_training_window_start_ts, recent_training_window_start_ts",
+      )
+      .eq("training_model_version", trainingModelVersion)
+      .not("global_component_fit", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const { data } = await q.maybeSingle();
+    if (!data || !data.global_component_fit || !data.recent_component_fit) {
+      return { fit: getBootstrapFit(), source: "bootstrap", fit_id: "bootstrap" };
+    }
+    const live: ModelCBootstrapFit = {
+      purpose: "Live retrained fit from resolved production predictions.",
+      source_csv_sha256: "live",
+      training_data: {
+        clean_labeled_rows: data.global_training_row_count ?? 0,
+        global_training_rows: data.global_training_row_count ?? 0,
+        recent_training_rows: data.recent_training_row_count ?? 0,
+        global_training_start_ts: data.global_training_window_start_ts ?? data.training_cutoff_ts,
+        recent_training_start_ts: data.recent_training_window_start_ts ?? data.training_cutoff_ts,
+        training_cutoff_last_labeled_candle_ts: data.training_cutoff_ts,
+        note: "Live-fit; hash pins do NOT apply. Scored against feature_order/coefficients directly.",
+      },
+      global_core_lr: data.global_component_fit,
+      recent_full_lr: data.recent_component_fit,
+      combined_fit_sha256: data.combined_fit_sha256 ?? "",
+    };
+    return { fit: live, source: "live", fit_id: data.fit_id };
+  } catch {
+    return { fit: getBootstrapFit(), source: "bootstrap", fit_id: "bootstrap" };
+  }
+}
