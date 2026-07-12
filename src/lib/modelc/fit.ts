@@ -123,5 +123,5 @@ export async function verifyBootstrapFit(
 }
 
 export function getBootstrapFit(): ModelCBootstrapFit {
-  return bootstrapFitJson as ModelCBootstrapFit;
+  return bootstrapFitJson as unknown as ModelCBootstrapFit;
 }
