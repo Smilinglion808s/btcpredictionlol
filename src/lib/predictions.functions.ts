@@ -334,6 +334,24 @@ export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(
   return data ?? null;
 });
 
+/** Export all Model C shadow rows for CSV download. */
+export const exportModelCShadow = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model_c_shadow")
+    .select("*")
+    .order("candle_ts", { ascending: false })
+    .limit(20000);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r)) {
+      out[k] = v && typeof v === "object" ? JSON.stringify(v) : v;
+    }
+    return out;
+  });
+});
+
 
 
 
