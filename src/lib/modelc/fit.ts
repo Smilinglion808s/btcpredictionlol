@@ -28,12 +28,7 @@ export interface ModelCComponentFit {
     scale: number[];
     var: number[];
   };
-  classifier: Record<string, unknown> & {
-    type: string;
-    positive_class: string;
-    coef?: number[];
-    intercept?: number;
-  };
+  classifier: Record<string, unknown>;
   manual_scoring: Record<string, unknown>;
   artifact_sha256: string;
 }
