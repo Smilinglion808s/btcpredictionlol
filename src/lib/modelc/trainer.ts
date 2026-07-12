@@ -177,10 +177,36 @@ export async function trainModelC(
     .not("actual_next_candle_close", "is", null)
     .order("candle_ts", { ascending: true });
   if (error) throw error;
-  const clean = (rowsData ?? []) as unknown as CleanPredRow[];
+  const cleanRaw = (rowsData ?? []) as unknown as CleanPredRow[];
+
+  // Dedup by candle_ts (keep the first resolved row per candle). Guards against
+  // reconciliation double-writes and preserves chronological ordering.
+  const seen = new Set<string>();
+  const clean: CleanPredRow[] = [];
+  for (const r of cleanRaw) {
+    if (!r.candle_ts) continue;
+    if (r.actual_direction !== "GREEN" && r.actual_direction !== "RED") continue;
+    if (seen.has(r.candle_ts)) continue;
+    seen.add(r.candle_ts);
+    clean.push(r);
+  }
 
   if (clean.length < MODEL_C_MIN_CLEAN_ROWS) {
     return { fitted: false, reason: `warming_up (${clean.length}/${MODEL_C_MIN_CLEAN_ROWS})` };
+  }
+
+  // Compute deterministic cutoff before any expensive work so we can
+  // short-circuit if a READY fit already exists for this cutoff.
+  const training_cutoff_ts = clean[clean.length - 1].candle_ts;
+  const { data: existingReady } = await supabase
+    .from("model_c_training_fits")
+    .select("fit_id")
+    .eq("training_model_version", trainingModelVersion)
+    .eq("training_cutoff_ts", training_cutoff_ts)
+    .eq("status", "ready")
+    .maybeSingle();
+  if (existingReady) {
+    return { fitted: false, reason: `already_ready_for_cutoff:${training_cutoff_ts}` };
   }
 
   // 2. Preload enough candle history to cover every training row's lookback.
@@ -226,12 +252,18 @@ export async function trainModelC(
     candleTsList.push(row.candle_ts);
   }
 
-  // 4. Split for Recent Full — last MODEL_C_RECENT_WINDOW clean rows only.
-  const recentStartIdx = Math.max(0, clean.length - MODEL_C_RECENT_WINDOW);
+  // 4. Split for Recent Full — last MODEL_C_RECENT_WINDOW ELIGIBLE clean rows
+  //    ordered by candle timestamp. `clean` is already chronological + deduped.
+  const recentSize = Math.min(MODEL_C_RECENT_WINDOW, clean.length);
+  const recentStartIdx = clean.length - recentSize;
   const recentMaps = recentAllMaps.slice(recentStartIdx);
   const recentLabels = labels.slice(recentStartIdx);
   const recentStartTs = candleTsList[recentStartIdx];
   const recentEndTs = candleTsList[candleTsList.length - 1];
+  // Integrity invariant per spec §6: recent max must not exceed training cutoff.
+  if (new Date(recentEndTs).getTime() > new Date(training_cutoff_ts).getTime()) {
+    return { fitted: false, reason: "recent_window_exceeds_cutoff" };
+  }
 
   // Guard: both components need at least one YES and one NO class.
   const classCount = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
@@ -258,8 +290,14 @@ export async function trainModelC(
   });
   const combined_fit_sha256 = sha256Hex(hashInput);
   const fit_id = "live_" + combined_fit_sha256.slice(0, 16);
-  const training_cutoff_ts = candleTsList[candleTsList.length - 1];
 
+  // First candle strictly AFTER the training cutoff = cutoff + 1 timeframe.
+  const cutoffMs = new Date(training_cutoff_ts).getTime();
+  const first_eligible_target_ts = new Date(cutoffMs + 15 * 60 * 1000).toISOString();
+
+  // === Atomic publication ===
+  // Step 1: write the fit with status='pending'. Component blobs, hashes,
+  // and window bounds are all present, but loadActiveModelCFit ignores it.
   const { error: insErr } = await supabase.from("model_c_training_fits").insert({
     fit_id,
     training_model_version: trainingModelVersion,
@@ -279,14 +317,40 @@ export async function trainModelC(
     in_sample_global_prob_std: Number(global.in_sample_prob_std.toFixed(4)),
     in_sample_recent_prob_mean: Number(recent.in_sample_prob_mean.toFixed(4)),
     in_sample_recent_prob_std: Number(recent.in_sample_prob_std.toFixed(4)),
+    first_eligible_target_ts,
+    fit_source: "live",
+    status: "pending",
     fit_meta: {
       C: MODEL_C_C, max_iter: MODEL_C_MAX_ITER, tol: MODEL_C_TOL,
       recent_window: MODEL_C_RECENT_WINDOW,
+      recent_rows: recentLabels.length,
+      recent_min_ts: recentStartTs,
+      recent_max_ts: recentEndTs,
       global_converged: (global.fit.classifier as { converged?: boolean }).converged ?? null,
       recent_converged: (recent.fit.classifier as { converged?: boolean }).converged ?? null,
     },
   } as never);
   if (insErr) throw insErr;
+
+  // Step 2: promote to ready. The unique index on
+  //   (training_model_version, training_cutoff_ts) WHERE status='ready'
+  // ensures only ONE fit ever wins the race for a given cutoff.
+  const { error: promoteErr } = await supabase
+    .from("model_c_training_fits")
+    .update({
+      status: "ready",
+      promoted_at: new Date().toISOString(),
+    } as never)
+    .eq("fit_id", fit_id)
+    .eq("status", "pending");
+  if (promoteErr) {
+    // Someone else won the race — mark ours failed, they own the cutoff.
+    await supabase
+      .from("model_c_training_fits")
+      .update({ status: "failed" } as never)
+      .eq("fit_id", fit_id);
+    return { fitted: false, reason: `promotion_lost:${promoteErr.message}` };
+  }
 
   return {
     fitted: true,
@@ -300,6 +364,7 @@ export async function trainModelC(
     combined_fit_sha256,
   };
 }
+
 
 // -------- retrain trigger --------
 
