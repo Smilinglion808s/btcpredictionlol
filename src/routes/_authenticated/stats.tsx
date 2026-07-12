@@ -335,12 +335,17 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            Model C Shadow
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              dual-horizon · tracking-only · not trading
-            </span>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              Model C Shadow
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+                dual-horizon · tracking-only · not trading
+              </span>
+            </CardTitle>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingMC} onClick={downloadMCCsv}>
+              {exportingMC ? "Exporting…" : "CSV (Model C)"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {(() => {
