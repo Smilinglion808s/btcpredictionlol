@@ -98,7 +98,7 @@ export interface ModelCFitVerification {
 }
 
 export async function verifyBootstrapFit(
-  fit: ModelCBootstrapFit = bootstrapFitJson as ModelCBootstrapFit,
+  fit: ModelCBootstrapFit = bootstrapFitJson as unknown as ModelCBootstrapFit,
 ): Promise<ModelCFitVerification> {
   const globalActual = await computeComponentArtifactSha256(fit.global_core_lr);
   const recentActual = await computeComponentArtifactSha256(fit.recent_full_lr);
