@@ -346,7 +346,7 @@ function StatsPage() {
                   <M7Stat label="Wins" value={mc.wins} tone="bull" />
                   <M7Stat label="Losses" value={mc.losses} tone="bear" />
                   <M7Stat label="Pushes" value={mc.pushes} />
-                  <M7Stat label="Pending" value={mc.pending} tone="warn" />
+                  <M7Stat label="Pending" value={mc.pending} />
                 </div>
                 <div className="mt-3 pt-3 border-t border-border/60">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
