@@ -118,12 +118,23 @@ export const listModelVersions = createServerFn({ method: "GET" }).handler(async
 /** Aggregate stats for the Model 7 shadow variants (A frozen, B live-retrained). */
 export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model7_shadow")
-    .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
-    .limit(50000);
-  if (error) throw error;
-  const rows = (data ?? []) as Array<{
+  const PAGE = 1000;
+  const rows: Array<any> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model7_shadow")
+      .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
+      .eq("would_trade", true)
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 100000) break; // safety
+  }
+
+  const typedRows = rows as Array<{
     variant: string;
     status: string;
     would_trade: boolean | null;
@@ -132,6 +143,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     candle_ts: string | null;
     resolved_at: string | null;
   }>;
+
 
   const blank = () => ({
     total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
@@ -151,7 +163,8 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     return Math.max(p, 1 - p) * 100;
   };
 
-  for (const r of rows) {
+  for (const r of typedRows) {
+
     if (!r.would_trade) continue;
     if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2" && r.variant !== "B4_2") continue;
     const v = r.variant as VKey;
