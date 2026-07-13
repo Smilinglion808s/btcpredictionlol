@@ -311,12 +311,8 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
 /** Aggregate stats for the Model C shadows. */
 export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model_c_shadow")
-    .select("variant, status, trade, final_decision, ensemble_probability_green, candle_ts, resolved_at")
-    .limit(50000);
-  if (error) throw error;
-  const rows = (data ?? []) as Array<{
+  const PAGE = 1000;
+  const rows: Array<{
     variant: string | null;
     status: string;
     trade: boolean | null;
@@ -324,7 +320,20 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
     ensemble_probability_green: number | null;
     candle_ts: string | null;
     resolved_at: string | null;
-  }>;
+  }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model_c_shadow")
+      .select("variant, status, trade, final_decision, ensemble_probability_green, candle_ts, resolved_at")
+      .in("variant", ["dual_horizon", "global_only"])
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as typeof rows;
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 100000) break;
+  }
   const blank = () => ({
     total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
     yes_total: 0, yes_wins: 0, no_total: 0, no_wins: 0,
@@ -354,45 +363,44 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
   return out;
 });
 
-/** Latest Model C shadow rows for the current pending candle. */
+/** Latest Model C shadow rows for the current pending candle (per variant). */
 export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model_c_shadow")
-    .select("variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status")
-    .order("candle_ts", { ascending: false })
-    .limit(20);
-  if (error) throw error;
-  const rows = (data ?? []) as Array<{
-    variant: string | null;
-    candle_ts: string;
-    ensemble_probability_green: number | null;
-    global_probability_green: number | null;
-    recent_probability_green: number | null;
-    final_decision: string | null;
-    trade: boolean | null;
-    status: string;
-  }>;
-  if (rows.length === 0) return { candle_ts: null, dual_horizon: null, global_only: null };
-  const latestTs = rows[0].candle_ts;
-  const forLatest = rows.filter((r) => r.candle_ts === latestTs);
+  const cols = "variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status";
+  const [dh, go] = await Promise.all([
+    sb.from("model_c_shadow").select(cols).eq("variant", "dual_horizon").order("candle_ts", { ascending: false }).limit(1),
+    sb.from("model_c_shadow").select(cols).eq("variant", "global_only").order("candle_ts", { ascending: false }).limit(1),
+  ]);
+  if (dh.error) throw dh.error;
+  if (go.error) throw go.error;
+  const dhRow = (dh.data?.[0] ?? null) as any;
+  const goRow = (go.data?.[0] ?? null) as any;
+  const latestTs = [dhRow?.candle_ts, goRow?.candle_ts].filter(Boolean).sort().pop() ?? null;
   return {
     candle_ts: latestTs,
-    dual_horizon: forLatest.find((r) => (r.variant ?? "dual_horizon") === "dual_horizon") ?? null,
-    global_only: forLatest.find((r) => r.variant === "global_only") ?? null,
+    dual_horizon: dhRow,
+    global_only: goRow,
   };
 });
 
 /** Export all Model C shadow rows for CSV download. */
 export const exportModelCShadow = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model_c_shadow")
-    .select("*")
-    .order("candle_ts", { ascending: false })
-    .limit(20000);
-  if (error) throw error;
-  return (data ?? []).map((r: any) => {
+  const PAGE = 1000;
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model_c_shadow")
+      .select("*")
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 200000) break;
+  }
+  return rows.map((r: any) => {
     const out: Record<string, string | number | boolean | null> = {};
     for (const [k, v] of Object.entries(r)) {
       if (v === null || v === undefined) out[k] = null;
@@ -402,6 +410,7 @@ export const exportModelCShadow = createServerFn({ method: "GET" }).handler(asyn
     return out;
   });
 });
+
 
 
 
