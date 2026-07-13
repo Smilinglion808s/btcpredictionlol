@@ -17,6 +17,9 @@ import { createHash } from "crypto";
 import { buildFeatureMap, type Candle, type PredictionRow } from "./featurize";
 import { scoreFeatureMap, type ModelFit } from "./scorer";
 import { loadFrozenModel, loadLatestVariantBFit } from "./fitStore";
+import {
+  computeB4_2Decision, applyB4_2Resolution, B4_2_POLICY_VERSION,
+} from "./b4_2";
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
@@ -461,6 +464,74 @@ export async function runShadowForPrediction(
     await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up", { skipUpstreamNoClearEdge: true });
 
+    // ---- Variant B4.2 — Daily Edge Guard layered on top of B2. ----
+    try {
+      const { data: b2Row } = await supabase
+        .from("model7_shadow")
+        .select("*")
+        .eq("prediction_id", predictionRow.id).eq("variant", "B2")
+        .order("scored_at", { ascending: false, nullsFirst: false })
+        .limit(1).maybeSingle();
+      if (b2Row) {
+        const b2 = b2Row as Record<string, unknown>;
+        const guard = await computeB4_2Decision(supabase, {
+          b2_decision: (b2.decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          b2_base_decision: (b2.base_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          probability_green: (b2.probability_green as number | null) ?? null,
+          candle_ts: predictionRow.candle_ts,
+        });
+        // Inherit all timing/leakage/audit columns from B2, override decision fields.
+        const inherit = [
+          "target_boundary_ts","score_not_before_ts","feature_cutoff_ts","previous_candle_ts",
+          "history_candles_available","history_gap_encountered","latest_source_candle_ts",
+          "latest_source_event_ts","missing_raw_numeric_fields_json","prediction_row_created_at",
+          "prediction_row_lead_ms","probability_green","logit","hard_no_override_fired",
+          "model_fit_id","feature_vector_nonzero_count","unknown_categories","scored_at",
+          "snapshot_ts","boundary_delta_ms","model_artifact_sha256","feature_vector_sha256",
+          "override_reasons_json","timing_status","leakage_check_passed","leakage_block_reason",
+          "offending_features_json","production_model_version",
+        ] as const;
+        const inherited: Record<string, unknown> = {};
+        for (const k of inherit) inherited[k] = (b2 as Record<string, unknown>)[k] ?? null;
+
+        const b2Status = String(b2.status ?? "pending");
+        const rowStatus = b2Status === "skipped" || b2Status === "error"
+          ? b2Status : "pending";
+
+        await insertShadowRow(supabase, {
+          ...inherited,
+          prediction_id: predictionRow.id,
+          candle_ts: predictionRow.candle_ts,
+          variant: "B4_2",
+          status: rowStatus,
+          base_decision: (b2.decision as string | null) ?? null,
+          decision: guard.decision,
+          would_trade: guard.decision !== "SKIP",
+          shadow_error: b2Status === "error" ? (b2.shadow_error as string | null) : null,
+          b4_2_guard_fired: guard.guard_fired,
+          b4_2_guard_reason: guard.guard_reason,
+          b4_2_edge_score_before: guard.edge_score_before,
+          b4_2_cooldown_before: guard.cooldown_before,
+          b4_2_date_mt: guard.date_mt,
+          b4_2_policy_version: guard.policy_version,
+          b4_2_last_two_no_results_json: guard.last_two_no_results,
+        });
+      }
+    } catch (b4err) {
+      try {
+        await supabase.from("api_runs").insert({
+          run_type: "model7-b4_2-error",
+          response_payload: {
+            error: b4err instanceof Error ? b4err.message : String(b4err),
+            prediction_id: predictionRow.id,
+          },
+          success: false,
+          error_message: b4err instanceof Error ? b4err.message : String(b4err),
+        });
+      } catch { /* ignore */ }
+    }
+
+
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -484,16 +555,57 @@ export async function resolveShadowRowsFor(
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
   const { data: rows } = await supabase
     .from("model7_shadow")
-    .select("id, variant, decision, would_trade")
+    .select("id, variant, decision, would_trade, candle_ts, b4_2_counterfactual_b2_result")
     .eq("prediction_id", predictionId)
     .eq("status", "pending");
+  let b2Decision: "YES" | "NO" | "SKIP" | null = null;
+  let b2Result: "WIN" | "LOSS" | null = null;
+  let b2CandleTs: string | null = null;
   for (const r of rows ?? []) {
     let status: "win" | "loss" | "skipped" = "skipped";
     if (r.decision === "SKIP") status = "skipped";
     else if (r.decision === "YES") status = actualDirection === "GREEN" ? "win" : "loss";
     else if (r.decision === "NO") status = actualDirection === "RED" ? "win" : "loss";
-    await supabase.from("model7_shadow").update({
+
+    // Compute B2 counterfactual (what B2 WOULD score, regardless of its actual decision).
+    // For B4.2 rows this is what really matters, but we capture on both.
+    const cf = r.decision === "YES"
+      ? (actualDirection === "GREEN" ? "WIN" : "LOSS")
+      : r.decision === "NO"
+        ? (actualDirection === "RED" ? "WIN" : "LOSS")
+        : null;
+
+    const update: Record<string, unknown> = {
       status, actual_direction: actualDirection, resolved_at: new Date().toISOString(),
-    } as never).eq("id", r.id);
+    };
+    if (r.variant === "B4_2") {
+      update.b4_2_counterfactual_b2_result = null; // filled below via b2 lookup
+      update.b4_2_b2_would_have_won = null;
+    }
+    await supabase.from("model7_shadow").update(update as never).eq("id", r.id);
+
+    if (r.variant === "B2") {
+      b2Decision = (r.decision as "YES" | "NO" | "SKIP" | null) ?? null;
+      b2Result = cf;
+      b2CandleTs = (r as { candle_ts: string | null }).candle_ts ?? null;
+    }
+  }
+
+  // Backfill B4.2's counterfactual columns and apply state mutation.
+  if (b2Decision && (b2Decision === "YES" || b2Decision === "NO") && b2Result) {
+    try {
+      await supabase.from("model7_shadow").update({
+        b4_2_counterfactual_b2_result: b2Result,
+        b4_2_b2_would_have_won: b2Result === "WIN",
+      } as never).eq("prediction_id", predictionId).eq("variant", "B4_2");
+    } catch { /* ignore */ }
+    try {
+      await applyB4_2Resolution(supabase, {
+        resolution_id: `${predictionId}:${B4_2_POLICY_VERSION}`,
+        candle_ts: b2CandleTs ?? new Date().toISOString(),
+        b2_final_decision: b2Decision,
+        b2_result: b2Result,
+      });
+    } catch { /* never block resolver */ }
   }
 }

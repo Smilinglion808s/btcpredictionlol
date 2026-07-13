@@ -36,7 +36,7 @@ function StatsPage() {
   const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
-  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2" | "B4_2">(null);
   const [exportingMC, setExportingMC] = useState(false);
 
   async function downloadMCCsv() {
@@ -63,7 +63,7 @@ function StatsPage() {
     }
   }
 
-  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2") {
+  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2" | "B4_2") {
     try {
       setExporting(scope);
       const rows = await exportM7Fn();
@@ -255,13 +255,16 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B2")}>
                 {exporting === "B2" ? "…" : "Variant B2"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B4_2")}>
+                {exporting === "B4_2" ? "…" : "Variant B4.2"}
+              </Button>
 
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "M6"] as const).map((k) => {
+            {(["A", "B", "B4_2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -272,13 +275,15 @@ function StatsPage() {
                     pending: num("pending"),
                     win_rate: num("overall_win_rate"),
                   }
-                : m7Q.data?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+                : (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const label = k === "A"
                 ? "Variant A (frozen v1.1)"
                 : k === "B"
                 ? "Variant B (live-retrained)"
+                : k === "B4_2"
+                ? "Variant B4.2 (Daily Edge Guard)"
                 : "Model 6";
-              const pending = !isM6 ? m7PendingQ.data?.[k] ?? null : null;
+              const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;

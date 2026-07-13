@@ -140,8 +140,9 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     no_total: 0, no_wins: 0, no_win_rate: 0,
     avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0,
   });
-  const out: Record<"A" | "B" | "B2", ReturnType<typeof blank>> = { A: blank(), B: blank(), B2: blank() };
-  const perVariantResolved: Record<"A" | "B" | "B2", Array<{ ts: string; status: string }>> = { A: [], B: [], B2: [] };
+  type VKey = "A" | "B" | "B2" | "B4_2";
+  const out: Record<VKey, ReturnType<typeof blank>> = { A: blank(), B: blank(), B2: blank(), B4_2: blank() };
+  const perVariantResolved: Record<VKey, Array<{ ts: string; status: string }>> = { A: [], B: [], B2: [], B4_2: [] };
 
   const confPct = (p: number | null, decision: string | null) => {
     if (typeof p !== "number") return null;
@@ -152,8 +153,8 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
 
   for (const r of rows) {
     if (!r.would_trade) continue;
-    if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2") continue;
-    const v = r.variant as "A" | "B" | "B2";
+    if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2" && r.variant !== "B4_2") continue;
+    const v = r.variant as VKey;
     const b = out[v];
     b.total += 1;
     if (r.status === "win") b.wins += 1;
@@ -177,7 +178,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   const wr = (w: number, l: number) => (w + l === 0 ? 0 : Math.round((w / (w + l)) * 10000) / 100);
   const avg = (sum: number, n: number) => (n === 0 ? 0 : Math.round((sum / n) * 100) / 100);
 
-  for (const k of ["A", "B", "B2"] as const) {
+  for (const k of ["A", "B", "B2", "B4_2"] as const) {
     const b = out[k];
     const decided = b.wins + b.losses;
     b.win_rate = wr(b.wins, b.losses);
@@ -259,6 +260,16 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
       prod_final_trade_status: p.final_trade_status ?? null,
       btc_price_at_prediction: p.btc_price_at_prediction ?? null,
       close_price: p.actual_next_candle_close ?? null,
+      b4_2_guard_fired: r.b4_2_guard_fired ?? null,
+      b4_2_guard_reason: r.b4_2_guard_reason ?? null,
+      b4_2_edge_score_before: r.b4_2_edge_score_before ?? null,
+      b4_2_cooldown_before: r.b4_2_cooldown_before ?? null,
+      b4_2_date_mt: r.b4_2_date_mt ?? null,
+      b4_2_policy_version: r.b4_2_policy_version ?? null,
+      b4_2_last_two_no_results_json: r.b4_2_last_two_no_results_json
+        ? JSON.stringify(r.b4_2_last_two_no_results_json) : "",
+      b4_2_counterfactual_b2_result: r.b4_2_counterfactual_b2_result ?? null,
+      b4_2_b2_would_have_won: r.b4_2_b2_would_have_won ?? null,
     };
   });
 });
@@ -270,17 +281,17 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     .from("model7_shadow")
     .select("variant, candle_ts, probability_green, decision, would_trade, status")
     .order("candle_ts", { ascending: false })
-    .limit(15);
+    .limit(20);
   if (error) throw error;
   const rows = (data ?? []) as Array<{
     variant: string; candle_ts: string; probability_green: number | null;
     decision: string | null; would_trade: boolean | null; status: string;
   }>;
-  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null };
+  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null, B4_2: null };
   const latestTs = rows[0].candle_ts;
   const forLatest = rows.filter((r) => r.candle_ts === latestTs);
-  const pick = (v: "A" | "B" | "B2") => forLatest.find((r) => r.variant === v) ?? null;
-  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2") };
+  const pick = (v: "A" | "B" | "B2" | "B4_2") => forLatest.find((r) => r.variant === v) ?? null;
+  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2") };
 });
 
 
