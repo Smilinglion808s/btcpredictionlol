@@ -427,9 +427,147 @@ export type Database = {
         }
         Relationships: []
       }
+      model7_b4_2_no_history: {
+        Row: {
+          b2_final_decision: string
+          candle_ts: string
+          created_at: string
+          date_mt: string
+          id: string
+          policy_version: string
+          resolution_id: string
+          resolved_at: string
+          result: string
+          symbol: string
+          timeframe: string
+        }
+        Insert: {
+          b2_final_decision: string
+          candle_ts: string
+          created_at?: string
+          date_mt: string
+          id?: string
+          policy_version?: string
+          resolution_id: string
+          resolved_at: string
+          result: string
+          symbol?: string
+          timeframe?: string
+        }
+        Update: {
+          b2_final_decision?: string
+          candle_ts?: string
+          created_at?: string
+          date_mt?: string
+          id?: string
+          policy_version?: string
+          resolution_id?: string
+          resolved_at?: string
+          result?: string
+          symbol?: string
+          timeframe?: string
+        }
+        Relationships: []
+      }
+      model7_b4_2_resolutions: {
+        Row: {
+          applied_at: string
+          b2_final_decision: string
+          b4_2_final_decision: string
+          b4_2_skipped: boolean
+          candle_ts: string
+          cooldown_after: number | null
+          cooldown_before: number | null
+          counterfactual_b2_result: string | null
+          date_mt: string
+          edge_score_after: number | null
+          edge_score_before: number | null
+          id: string
+          policy_version: string
+          resolution_id: string
+        }
+        Insert: {
+          applied_at?: string
+          b2_final_decision: string
+          b4_2_final_decision: string
+          b4_2_skipped: boolean
+          candle_ts: string
+          cooldown_after?: number | null
+          cooldown_before?: number | null
+          counterfactual_b2_result?: string | null
+          date_mt: string
+          edge_score_after?: number | null
+          edge_score_before?: number | null
+          id?: string
+          policy_version?: string
+          resolution_id: string
+        }
+        Update: {
+          applied_at?: string
+          b2_final_decision?: string
+          b4_2_final_decision?: string
+          b4_2_skipped?: boolean
+          candle_ts?: string
+          cooldown_after?: number | null
+          cooldown_before?: number | null
+          counterfactual_b2_result?: string | null
+          date_mt?: string
+          edge_score_after?: number | null
+          edge_score_before?: number | null
+          id?: string
+          policy_version?: string
+          resolution_id?: string
+        }
+        Relationships: []
+      }
+      model7_b4_2_state: {
+        Row: {
+          cooldown_remaining: number
+          date_mt: string
+          edge_score: number
+          id: string
+          last_processed_resolution_id: string | null
+          policy_version: string
+          symbol: string
+          timeframe: string
+          updated_at: string
+        }
+        Insert: {
+          cooldown_remaining?: number
+          date_mt: string
+          edge_score?: number
+          id?: string
+          last_processed_resolution_id?: string | null
+          policy_version?: string
+          symbol?: string
+          timeframe?: string
+          updated_at?: string
+        }
+        Update: {
+          cooldown_remaining?: number
+          date_mt?: string
+          edge_score?: number
+          id?: string
+          last_processed_resolution_id?: string | null
+          policy_version?: string
+          symbol?: string
+          timeframe?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       model7_shadow: {
         Row: {
           actual_direction: string | null
+          b4_2_b2_would_have_won: boolean | null
+          b4_2_cooldown_before: number | null
+          b4_2_counterfactual_b2_result: string | null
+          b4_2_date_mt: string | null
+          b4_2_edge_score_before: number | null
+          b4_2_guard_fired: boolean | null
+          b4_2_guard_reason: string | null
+          b4_2_last_two_no_results_json: Json | null
+          b4_2_policy_version: string | null
           base_decision: string | null
           boundary_delta_ms: number | null
           candle_ts: string
@@ -473,6 +611,15 @@ export type Database = {
         }
         Insert: {
           actual_direction?: string | null
+          b4_2_b2_would_have_won?: boolean | null
+          b4_2_cooldown_before?: number | null
+          b4_2_counterfactual_b2_result?: string | null
+          b4_2_date_mt?: string | null
+          b4_2_edge_score_before?: number | null
+          b4_2_guard_fired?: boolean | null
+          b4_2_guard_reason?: string | null
+          b4_2_last_two_no_results_json?: Json | null
+          b4_2_policy_version?: string | null
           base_decision?: string | null
           boundary_delta_ms?: number | null
           candle_ts: string
@@ -516,6 +663,15 @@ export type Database = {
         }
         Update: {
           actual_direction?: string | null
+          b4_2_b2_would_have_won?: boolean | null
+          b4_2_cooldown_before?: number | null
+          b4_2_counterfactual_b2_result?: string | null
+          b4_2_date_mt?: string | null
+          b4_2_edge_score_before?: number | null
+          b4_2_guard_fired?: boolean | null
+          b4_2_guard_reason?: string | null
+          b4_2_last_two_no_results_json?: Json | null
+          b4_2_policy_version?: string | null
           base_decision?: string | null
           boundary_delta_ms?: number | null
           candle_ts?: string
@@ -1174,6 +1330,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_b4_2_resolution: {
+        Args: {
+          p_b2_final_decision: string
+          p_b2_result: string
+          p_candle_ts: string
+          p_date_mt: string
+          p_resolution_id: string
+          p_resolved_at: string
+        }
+        Returns: Json
+      }
       prediction_stats: { Args: never; Returns: Json }
       prediction_stats_filtered: {
         Args: { model_version_filter?: string }
