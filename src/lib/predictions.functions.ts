@@ -163,7 +163,8 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     return Math.max(p, 1 - p) * 100;
   };
 
-  for (const r of rows) {
+  for (const r of typedRows) {
+
     if (!r.would_trade) continue;
     if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2" && r.variant !== "B4_2") continue;
     const v = r.variant as VKey;
