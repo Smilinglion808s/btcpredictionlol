@@ -295,15 +295,16 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
 });
 
 
-/** Aggregate stats for the Model C dual-horizon shadow (single variant). */
+/** Aggregate stats for the Model C shadows. */
 export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const { data, error } = await sb
     .from("model_c_shadow")
-    .select("status, trade, final_decision, ensemble_probability_green, candle_ts, resolved_at")
+    .select("variant, status, trade, final_decision, ensemble_probability_green, candle_ts, resolved_at")
     .limit(50000);
   if (error) throw error;
   const rows = (data ?? []) as Array<{
+    variant: string | null;
     status: string;
     trade: boolean | null;
     final_decision: string | null;
@@ -311,38 +312,62 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
     candle_ts: string | null;
     resolved_at: string | null;
   }>;
-  const out = {
+  const blank = () => ({
     total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
     yes_total: 0, yes_wins: 0, no_total: 0, no_wins: 0,
+  });
+  const out = {
+    dual_horizon: blank(),
+    global_only: blank(),
   };
   for (const r of rows) {
+    const variant = r.variant === "global_only" ? "global_only" : "dual_horizon";
+    const b = out[variant];
     if (!r.trade) continue;
-    out.total += 1;
-    if (r.status === "win") out.wins += 1;
-    else if (r.status === "loss") out.losses += 1;
-    else if (r.status === "push") out.pushes += 1;
-    else if (r.status === "warming_up" || r.status === "scored") out.pending += 1;
+    b.total += 1;
+    if (r.status === "win") b.wins += 1;
+    else if (r.status === "loss") b.losses += 1;
+    else if (r.status === "push") b.pushes += 1;
+    else if (r.status === "warming_up" || r.status === "scored") b.pending += 1;
     if (r.status === "win" || r.status === "loss") {
-      if (r.final_decision === "YES") { out.yes_total += 1; if (r.status === "win") out.yes_wins += 1; }
-      else if (r.final_decision === "NO") { out.no_total += 1; if (r.status === "win") out.no_wins += 1; }
+      if (r.final_decision === "YES") { b.yes_total += 1; if (r.status === "win") b.yes_wins += 1; }
+      else if (r.final_decision === "NO") { b.no_total += 1; if (r.status === "win") b.no_wins += 1; }
     }
   }
-  const decided = out.wins + out.losses;
-  out.win_rate = decided === 0 ? 0 : Math.round((out.wins / decided) * 10000) / 100;
+  for (const b of Object.values(out)) {
+    const decided = b.wins + b.losses;
+    b.win_rate = decided === 0 ? 0 : Math.round((b.wins / decided) * 10000) / 100;
+  }
   return out;
 });
 
-/** Latest Model C shadow row for the current pending candle. */
+/** Latest Model C shadow rows for the current pending candle. */
 export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const { data, error } = await sb
     .from("model_c_shadow")
-    .select("candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status")
+    .select("variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status")
     .order("candle_ts", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
   if (error) throw error;
-  return data ?? null;
+  const rows = (data ?? []) as Array<{
+    variant: string | null;
+    candle_ts: string;
+    ensemble_probability_green: number | null;
+    global_probability_green: number | null;
+    recent_probability_green: number | null;
+    final_decision: string | null;
+    trade: boolean | null;
+    status: string;
+  }>;
+  if (rows.length === 0) return { candle_ts: null, dual_horizon: null, global_only: null };
+  const latestTs = rows[0].candle_ts;
+  const forLatest = rows.filter((r) => r.candle_ts === latestTs);
+  return {
+    candle_ts: latestTs,
+    dual_horizon: forLatest.find((r) => (r.variant ?? "dual_horizon") === "dual_horizon") ?? null,
+    global_only: forLatest.find((r) => r.variant === "global_only") ?? null,
+  };
 });
 
 /** Export all Model C shadow rows for CSV download. */
