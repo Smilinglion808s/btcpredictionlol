@@ -173,6 +173,7 @@ export type Database = {
           target_boundary_ts: string | null
           timing_status: string | null
           trade: boolean | null
+          variant: string
           won: boolean | null
         }
         Insert: {
@@ -210,6 +211,7 @@ export type Database = {
           target_boundary_ts?: string | null
           timing_status?: string | null
           trade?: boolean | null
+          variant?: string
           won?: boolean | null
         }
         Update: {
@@ -247,6 +249,7 @@ export type Database = {
           target_boundary_ts?: string | null
           timing_status?: string | null
           trade?: boolean | null
+          variant?: string
           won?: boolean | null
         }
         Relationships: [
