@@ -118,11 +118,22 @@ export const listModelVersions = createServerFn({ method: "GET" }).handler(async
 /** Aggregate stats for the Model 7 shadow variants (A frozen, B live-retrained). */
 export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model7_shadow")
-    .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
-    .limit(50000);
-  if (error) throw error;
+  const PAGE = 1000;
+  const rows: Array<any> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model7_shadow")
+      .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
+      .eq("would_trade", true)
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 100000) break; // safety
+  }
+
   const rows = (data ?? []) as Array<{
     variant: string;
     status: string;
