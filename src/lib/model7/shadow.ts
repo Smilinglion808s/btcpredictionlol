@@ -555,16 +555,57 @@ export async function resolveShadowRowsFor(
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
   const { data: rows } = await supabase
     .from("model7_shadow")
-    .select("id, variant, decision, would_trade")
+    .select("id, variant, decision, would_trade, candle_ts, b4_2_counterfactual_b2_result")
     .eq("prediction_id", predictionId)
     .eq("status", "pending");
+  let b2Decision: "YES" | "NO" | "SKIP" | null = null;
+  let b2Result: "WIN" | "LOSS" | null = null;
+  let b2CandleTs: string | null = null;
   for (const r of rows ?? []) {
     let status: "win" | "loss" | "skipped" = "skipped";
     if (r.decision === "SKIP") status = "skipped";
     else if (r.decision === "YES") status = actualDirection === "GREEN" ? "win" : "loss";
     else if (r.decision === "NO") status = actualDirection === "RED" ? "win" : "loss";
-    await supabase.from("model7_shadow").update({
+
+    // Compute B2 counterfactual (what B2 WOULD score, regardless of its actual decision).
+    // For B4.2 rows this is what really matters, but we capture on both.
+    const cf = r.decision === "YES"
+      ? (actualDirection === "GREEN" ? "WIN" : "LOSS")
+      : r.decision === "NO"
+        ? (actualDirection === "RED" ? "WIN" : "LOSS")
+        : null;
+
+    const update: Record<string, unknown> = {
       status, actual_direction: actualDirection, resolved_at: new Date().toISOString(),
-    } as never).eq("id", r.id);
+    };
+    if (r.variant === "B4_2") {
+      update.b4_2_counterfactual_b2_result = null; // filled below via b2 lookup
+      update.b4_2_b2_would_have_won = null;
+    }
+    await supabase.from("model7_shadow").update(update as never).eq("id", r.id);
+
+    if (r.variant === "B2") {
+      b2Decision = (r.decision as "YES" | "NO" | "SKIP" | null) ?? null;
+      b2Result = cf;
+      b2CandleTs = (r as { candle_ts: string | null }).candle_ts ?? null;
+    }
+  }
+
+  // Backfill B4.2's counterfactual columns and apply state mutation.
+  if (b2Decision && (b2Decision === "YES" || b2Decision === "NO") && b2Result) {
+    try {
+      await supabase.from("model7_shadow").update({
+        b4_2_counterfactual_b2_result: b2Result,
+        b4_2_b2_would_have_won: b2Result === "WIN",
+      } as never).eq("prediction_id", predictionId).eq("variant", "B4_2");
+    } catch { /* ignore */ }
+    try {
+      await applyB4_2Resolution(supabase, {
+        resolution_id: `${predictionId}:${B4_2_POLICY_VERSION}`,
+        candle_ts: b2CandleTs ?? new Date().toISOString(),
+        b2_final_decision: b2Decision,
+        b2_result: b2Result,
+      });
+    } catch { /* never block resolver */ }
   }
 }
