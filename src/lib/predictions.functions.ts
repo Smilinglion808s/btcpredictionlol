@@ -260,6 +260,16 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
       prod_final_trade_status: p.final_trade_status ?? null,
       btc_price_at_prediction: p.btc_price_at_prediction ?? null,
       close_price: p.actual_next_candle_close ?? null,
+      b4_2_guard_fired: r.b4_2_guard_fired ?? null,
+      b4_2_guard_reason: r.b4_2_guard_reason ?? null,
+      b4_2_edge_score_before: r.b4_2_edge_score_before ?? null,
+      b4_2_cooldown_before: r.b4_2_cooldown_before ?? null,
+      b4_2_date_mt: r.b4_2_date_mt ?? null,
+      b4_2_policy_version: r.b4_2_policy_version ?? null,
+      b4_2_last_two_no_results_json: r.b4_2_last_two_no_results_json
+        ? JSON.stringify(r.b4_2_last_two_no_results_json) : "",
+      b4_2_counterfactual_b2_result: r.b4_2_counterfactual_b2_result ?? null,
+      b4_2_b2_would_have_won: r.b4_2_b2_would_have_won ?? null,
     };
   });
 });
@@ -271,17 +281,17 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     .from("model7_shadow")
     .select("variant, candle_ts, probability_green, decision, would_trade, status")
     .order("candle_ts", { ascending: false })
-    .limit(15);
+    .limit(20);
   if (error) throw error;
   const rows = (data ?? []) as Array<{
     variant: string; candle_ts: string; probability_green: number | null;
     decision: string | null; would_trade: boolean | null; status: string;
   }>;
-  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null };
+  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null, B4_2: null };
   const latestTs = rows[0].candle_ts;
   const forLatest = rows.filter((r) => r.candle_ts === latestTs);
-  const pick = (v: "A" | "B" | "B2") => forLatest.find((r) => r.variant === v) ?? null;
-  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2") };
+  const pick = (v: "A" | "B" | "B2" | "B4_2") => forLatest.find((r) => r.variant === v) ?? null;
+  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2") };
 });
 
 
