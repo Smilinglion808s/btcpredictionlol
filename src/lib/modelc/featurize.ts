@@ -574,8 +574,8 @@ function addDerivedPriceFeatures(
   const ema9 = num(ind.ema9);
   const ema21 = num(ind.ema21);
   const ema50 = num(ind.ema50);
-  const rangeHigh = num(ind.range20_high) ?? num(ind.rangeHigh);
-  const rangeLow = num(ind.range20_low) ?? num(ind.rangeLow);
+  const rangeHigh = num(ind.range20_high) ?? num(ind.range20High) ?? num(ind.rangeHigh);
+  const rangeLow = num(ind.range20_low) ?? num(ind.range20Low) ?? num(ind.rangeLow);
 
   if (variant === "global") {
     if (price && ema9 != null) putNumeric(map, "dist_ema9", ((price - ema9) / price) * 100);
@@ -623,8 +623,8 @@ function addRawSnapshotColumns(
   putNumeric(map, "ema21", num(ind.ema21));
   putNumeric(map, "ema50", num(ind.ema50));
   putNumeric(map, "volume_expansion", num(ind.volume_expansion) ?? num(ind.volumeExpansion));
-  putNumeric(map, "range20_high", num(ind.range20_high) ?? num(ind.rangeHigh));
-  putNumeric(map, "range20_low", num(ind.range20_low) ?? num(ind.rangeLow));
+  putNumeric(map, "range20_high", num(ind.range20_high) ?? num(ind.range20High) ?? num(ind.rangeHigh));
+  putNumeric(map, "range20_low", num(ind.range20_low) ?? num(ind.range20Low) ?? num(ind.rangeLow));
   putNumeric(map, "prev_body_pct", num(ind.prev_body_pct) ?? num(ind.bodyPct));
   putNumeric(map, "prev_upper_wick_pct", num(ind.prev_upper_wick_pct) ?? num(ind.upperWickPct));
   putNumeric(map, "prev_lower_wick_pct", num(ind.prev_lower_wick_pct) ?? num(ind.lowerWickPct));

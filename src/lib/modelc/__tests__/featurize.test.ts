@@ -83,8 +83,8 @@ function fakeRow(): PredictionRowForFeatures {
       ema9: 64150,
       ema21: 64100,
       ema50: 64000,
-      range20_high: 64300,
-      range20_low: 63900,
+      range20High: 64300,
+      range20Low: 63900,
       volume_expansion: 1.4,
       trend: "up",
       choppy: false,
@@ -117,6 +117,10 @@ describe("Model C featurize + score", () => {
     expect(feats["_lag_prev_dir=green"] ?? feats["_lag_prev_dir=red"]).toBe(1);
     expect(feats["_lag_close_pos_8"]).toBeGreaterThanOrEqual(0);
     expect(feats["tod_sin"]).toBeGreaterThanOrEqual(-1);
+    expect(feats["range20_high"]).toBe(64300);
+    expect(feats["range20_low"]).toBe(63900);
+    expect(feats["range20_high__missing"]).toBeUndefined();
+    expect(feats["range20_low__missing"]).toBeUndefined();
   });
 
   it("builds recent_full map with core_ embedding + _x_ features + dir patterns", () => {
@@ -132,6 +136,10 @@ describe("Model C featurize + score", () => {
     expect(feats["conviction_reason=streak4"]).toBe(1);
     expect(feats["conviction_reason_count"]).toBe(2);
     expect(feats["ema_stack_bull"]).toBe(1);
+    expect(feats["range20_high"]).toBe(64300);
+    expect(feats["range20_low"]).toBe(63900);
+    expect(feats["core_range20_high"]).toBe(64300);
+    expect(feats["core_range20_low"]).toBe(63900);
   });
 
   it("scores both components to a valid probability", () => {
