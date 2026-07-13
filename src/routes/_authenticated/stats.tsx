@@ -63,7 +63,7 @@ function StatsPage() {
     }
   }
 
-  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2") {
+  async function downloadM7Csv(scope: "all" | "A" | "B" | "B2" | "B4_2") {
     try {
       setExporting(scope);
       const rows = await exportM7Fn();
