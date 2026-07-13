@@ -134,7 +134,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     if (from > 100000) break; // safety
   }
 
-  const rows = (data ?? []) as Array<{
+  const typedRows = rows as Array<{
     variant: string;
     status: string;
     would_trade: boolean | null;
@@ -143,6 +143,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     candle_ts: string | null;
     resolved_at: string | null;
   }>;
+
 
   const blank = () => ({
     total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
