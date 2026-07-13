@@ -21,6 +21,7 @@ import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/p
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 import { Route as ApiPublicHooksModelcNightlyAuditRouteImport } from './routes/api/public/hooks/modelc-nightly-audit'
+import { Route as ApiPublicHooksModelcForceRetrainRouteImport } from './routes/api/public/hooks/modelc-force-retrain'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 
@@ -88,6 +89,12 @@ const ApiPublicHooksModelcNightlyAuditRoute =
     path: '/api/public/hooks/modelc-nightly-audit',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksModelcForceRetrainRoute =
+  ApiPublicHooksModelcForceRetrainRouteImport.update({
+    id: '/api/public/hooks/modelc-force-retrain',
+    path: '/api/public/hooks/modelc-force-retrain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksModel7NightlyAuditRoute =
   ApiPublicHooksModel7NightlyAuditRouteImport.update({
     id: '/api/public/hooks/model7-nightly-audit',
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
@@ -125,6 +133,7 @@ export interface FileRoutesByTo {
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
@@ -142,6 +151,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/settings/model'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/settings/model'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
@@ -190,6 +202,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/model'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
@@ -201,6 +214,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
+  ApiPublicHooksModelcForceRetrainRoute: typeof ApiPublicHooksModelcForceRetrainRoute
   ApiPublicHooksModelcNightlyAuditRoute: typeof ApiPublicHooksModelcNightlyAuditRoute
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
@@ -294,6 +308,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksModelcNightlyAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/modelc-force-retrain': {
+      id: '/api/public/hooks/modelc-force-retrain'
+      path: '/api/public/hooks/modelc-force-retrain'
+      fullPath: '/api/public/hooks/modelc-force-retrain'
+      preLoaderRoute: typeof ApiPublicHooksModelcForceRetrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/model7-nightly-audit': {
       id: '/api/public/hooks/model7-nightly-audit'
       path: '/api/public/hooks/model7-nightly-audit'
@@ -336,6 +357,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
+  ApiPublicHooksModelcForceRetrainRoute: ApiPublicHooksModelcForceRetrainRoute,
   ApiPublicHooksModelcNightlyAuditRoute: ApiPublicHooksModelcNightlyAuditRoute,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
@@ -345,13 +367,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -108,11 +108,18 @@ export const Route = createFileRoute("/api/public/hooks/modelc-nightly-audit")({
         const tradeRate = opps.length ? +((100 * trades) / opps.length).toFixed(1) : 0;
         const overrideCounts: Record<string, number> = {};
         for (const r of opps) {
+          // override_reasons_json is an array of { id, fired, applied, note? }
+          // objects from decideModelC. Older code treated it as a string
+          // array, which produced "[object Object]" alert identifiers. Count
+          // only entries where the override actually APPLIED (flipped YES→NO).
           const reasons = Array.isArray(r.override_reasons_json)
-            ? (r.override_reasons_json as string[])
+            ? (r.override_reasons_json as Array<{ id?: unknown; applied?: unknown }>)
             : [];
-          for (const reason of reasons) {
-            overrideCounts[reason] = (overrideCounts[reason] ?? 0) + 1;
+          for (const entry of reasons) {
+            if (!entry || typeof entry !== "object") continue;
+            if (entry.applied !== true) continue;
+            const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : "unknown_override";
+            overrideCounts[id] = (overrideCounts[id] ?? 0) + 1;
           }
         }
         const overrideRates: Record<string, number> = {};

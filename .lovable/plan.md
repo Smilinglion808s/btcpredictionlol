@@ -1,44 +1,50 @@
-## Problem
+# Model C Verification & Retraining Repair Plan
 
-Confirmed via DB check: `predictions.candle_ts` (and mirrored `model7_shadow.candle_ts`) actually stores the **start of the target candle we're predicting**, not the close. Example row: `candle_ts = 02:15:00`, `scored_at = 02:15:01` (1.5s after the 02:00→02:15 candle closed), `previous_candle_ts = 02:00:00`.
+Scope: verification-only for scoring; no coefficient/threshold/blend/policy changes. Only code changes are (1) retraining promotion bug fix and (2) nightly audit serialization fix. Everything else is diagnostic reporting.
 
-Current `buildB2WebhookPayload` computes `candle_starts_at = candle_ts − 15m`, which yields `02:00:00` — the start of the just-closed input candle, not the target. Comment in the file ("candle_ts is target close") is stale.
+## 1. Recent probability distribution (≥30 post-fix Dual Horizon rows)
 
-## Changes — `src/lib/webhooks.server.ts`
+- Query `model_c_shadow` where `variant='dual_horizon'` and `created_at >= <fix deploy ts>` ordered by `created_at` desc, cap 100, require ≥30.
+- If <30 exist yet, trigger scoring by waiting for next candles or backfill via `scoreModelCShadow` on the most recent N unscored candles (no policy change, existing pipeline).
+- Compute and report: min, max, mean, stddev, count==0, count==1, count<0.5, count>0.5 on `recent_probability_green`.
 
-### 1. Fix candle window in `buildB2WebhookPayload`
-- `candle_starts_at = candle_ts` (target candle start, e.g. `02:15:00Z`)
-- `candle_ends_at   = candle_ts + 15m` (target candle close, e.g. `02:30:00Z`)
-- `target_candle_close_at = candle_ends_at`
-- `candle_starts_at_mt` / `candle_ends_at_mt` recomputed from the corrected values
-- `dedupe_key` updates automatically since it embeds `candle_starts_at` — now `BTC-USDT-15m-2026-07-11T02:15:00.000Z`
+## 2. Python ↔ backend parity table (Recent component)
 
-### 2. Add three new fields (keep all existing fields untouched)
-Added alongside current `decision` / `probability_green`, mapped from the shadow row:
+- Build a small Python reference script under `scripts/modelc_parity.py` that:
+  - Loads the same active Recent fit (coefficients, scaler mean/std, feature order) from `model_c_training_fits`.
+  - Reads the same raw indicator snapshot used by 5 recent shadow rows (persisted `feature_snapshot_json` on `model_c_shadow`).
+  - Runs the identical featurize → standardize → logit → sigmoid pipeline in NumPy.
+- For 5 rows, report: aligned vector length, max |raw diff|, max |standardized diff|, python_logit, backend_logit, |prob diff|, decision_match.
+- No changes to backend featurize beyond the already-shipped range20 alias fix.
 
-- `prediction: "YES" | "NO" | "NO CLEAR EDGE"`
-  - `would_trade === false` → `"NO CLEAR EDGE"`
-  - else `decision === "YES"` → `"YES"`
-  - else `decision === "NO"` → `"NO"`
-  - fallback (null decision + would_trade) → `"NO CLEAR EDGE"`
-- `confidence: number` (integer 0–100)
-  - YES → `Math.round(probability_green * 100)`
-  - NO → `Math.round((1 - probability_green) * 100)`
-  - NO CLEAR EDGE → `Math.round(Math.max(probability_green, 1 - probability_green) * 100)` (highest-side confidence, still 0–100)
-  - `probability_green == null` → `0`
+## 3. Top 15 feature contributions for the 48.89→9.40 diagnostic row
 
-### 3. Mirror the timestamp fix in `buildResolvedWebhookPayload`
-Same off-by-one applies. Fix `candle_starts_at`, `candle_ends_at`, `target_candle_close_at`, `dedupe_key` so the resolved payload references the same window as the created payload for a given candle. No `prediction`/`confidence` fields added here (only meaningful on `.created`).
+- Recompute (standardized_value × coefficient) per feature for prediction `d6777f59...` using the active Recent fit.
+- Sort by |contribution|, report top 15 with: feature name, raw value, standardized value, coefficient, contribution, running logit.
+- Flag any single feature whose |contribution| > 2.0 or whose standardized value is outside [-4, 4] as a suspect residual issue.
 
-### 4. Update the stale comment
-Rewrite the header comment on `buildB2WebhookPayload` to state: "`candle_ts` in the DB is the target-candle START (open time); ends_at = candle_ts + 15m."
+## 4. Diagnose `maybeRetrainModelC` non-promotion (543 clean rows)
+
+- Inspect `src/lib/modelc/trainer.ts` + call site in `src/lib/modelc/shadow.ts`.
+- Query `api_runs` for `kind ILIKE 'modelc_retrain%'` and `model_c_training_fits` grouped by status.
+- Report: last attempt ts, trigger count (last 24h), trainer error text, fit rows written, promotion status counts (pending/ready/failed), current active `model_version`, loader fallback reason (from `loadActiveModelCFit` lineage log), and the exact code fix.
+- Apply the minimal fix (expected: promotion gate / status transition / unique-index conflict handling). No coefficient or policy edits.
+
+## 5. Prove one new shadow row uses a live fit
+
+- After fix, wait for next scheduled retrain or invoke the trainer path once.
+- Query newest `model_c_shadow` row and report: `active_fit_id`, training cutoff ts, global row count, recent row count, global artifact hash, recent artifact hash, target boundary ts. Confirm `active_fit_id` is not `bootstrap:*`.
+
+## 6. Nightly audit serialization fix
+
+- In the nightly audit alert builder (Model 7 nightly audit hook), override identifiers are being `String(obj)`'d producing `[object Object]`.
+- Change to extract `.rule` (and `.applied` when relevant) from each `override_reasons_json` element, or `JSON.stringify` as fallback. Emit stable string ids.
+- Verify by re-running the audit for the last 24h window and inspecting the produced alert payload.
+
+## Deliverable
+
+A single reply containing: the 8-number distribution, the 5-row parity table, the top-15 contribution table, the retraining diagnosis + applied fix, the live-fit proof row, and confirmation of the audit serialization fix.
 
 ## Out of scope
 
-- `buildPredictionPayload` (legacy `/api/public/predictions/{latest,upcoming}`) has the same off-by-one, but Model 6 no longer emits outbound webhooks per prior work. Not touching it in this pass — flag only. Can fix in a follow-up if the public API consumers matter.
-- No schema changes. No changes to shadow scoring, resolver, or UI.
-
-## Verification
-
-- Re-emit path unchanged; only payload shape differs.
-- Confirm from `webhook_deliveries` after next candle that `candle_starts_at` matches `model7_shadow.candle_ts` exactly, and `prediction`/`confidence` fields are populated.
+Coefficients, thresholds, blend weights, model policy, A/B/B2/B4.2 paths, Model 6, Model C Global-Only diagnostic variant behavior.

@@ -317,18 +317,22 @@ export async function resolveModelCShadowRowsFor(
   try {
     const { data: rows } = await supabase
       .from("model_c_shadow")
-      .select("id, final_decision, trade")
+      .select("id, final_decision, trade, production_model_version")
       .eq("prediction_id", predictionId)
       .is("actual_direction", null);
     if (!rows || rows.length === 0) return;
     const nowIso = new Date().toISOString();
-    for (const r of rows as Array<{ id: string; final_decision: string | null; trade: boolean | null }>) {
+    let resolvedModelVersion: string | null = null;
+    for (const r of rows as Array<{ id: string; final_decision: string | null; trade: boolean | null; production_model_version: string | null }>) {
       let won: boolean | null = null;
       let status = "skip";
       if (r.trade && r.final_decision) {
         won = (r.final_decision === "YES" && actualDirection === "GREEN") ||
           (r.final_decision === "NO" && actualDirection === "RED");
         status = won ? "win" : "loss";
+      }
+      if (!resolvedModelVersion && r.production_model_version) {
+        resolvedModelVersion = r.production_model_version;
       }
       await supabase
         .from("model_c_shadow")
@@ -340,16 +344,21 @@ export async function resolveModelCShadowRowsFor(
     // cadence threshold. Fail-closed inside `maybeRetrainModelC`, never blocks.
     try {
       const { maybeRetrainModelC } = await import("./trainer");
-      // Read active production model version so retraining tracks whatever the
-      // resolved predictions were emitted under.
-      const { data: settings } = await supabase
-        .from("model_settings")
-        .select("model_version")
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const modelVersion = (settings as { model_version?: string } | null)?.model_version ?? "6";
-      await maybeRetrainModelC(supabase, modelVersion);
+      // Derive training model version from the prediction we just resolved
+      // (NOT from `model_settings`, which stores unrelated legacy labels
+      // like "Model 1.9" and made the trainer filter to 0 rows every cycle).
+      let modelVersion = resolvedModelVersion;
+      if (!modelVersion) {
+        const { data: pred } = await supabase
+          .from("predictions")
+          .select("model_version")
+          .eq("id", predictionId)
+          .maybeSingle();
+        modelVersion = (pred as { model_version?: string | null } | null)?.model_version ?? null;
+      }
+      if (modelVersion) {
+        await maybeRetrainModelC(supabase, modelVersion);
+      }
     } catch {
       /* never block resolver on retraining */
     }
