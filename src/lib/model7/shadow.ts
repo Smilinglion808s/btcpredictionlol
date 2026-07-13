@@ -17,6 +17,9 @@ import { createHash } from "crypto";
 import { buildFeatureMap, type Candle, type PredictionRow } from "./featurize";
 import { scoreFeatureMap, type ModelFit } from "./scorer";
 import { loadFrozenModel, loadLatestVariantBFit } from "./fitStore";
+import {
+  computeB4_2Decision, applyB4_2Resolution, B4_2_POLICY_VERSION,
+} from "./b4_2";
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
