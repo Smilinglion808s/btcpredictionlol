@@ -36,7 +36,7 @@ function StatsPage() {
   const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
-  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2">(null);
+  const [exporting, setExporting] = useState<null | "all" | "A" | "B" | "B2" | "B4_2">(null);
   const [exportingMC, setExportingMC] = useState(false);
 
   async function downloadMCCsv() {
