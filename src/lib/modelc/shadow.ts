@@ -57,11 +57,13 @@ async function insertBlockedRow(
   supabase: SupabaseClient,
   row: ModelCPredictionRow,
   reason: string,
+  variant = "dual_horizon",
 ): Promise<void> {
   const targetMs = new Date(row.candle_ts).getTime();
   const createdMs = row.created_at ? new Date(row.created_at).getTime() : NaN;
   await supabase.from("model_c_shadow").insert({
     prediction_id: row.id,
+    variant,
     candle_ts: row.candle_ts,
     target_boundary_ts: new Date(targetMs).toISOString(),
     feature_cutoff_ts: new Date(targetMs - 1).toISOString(),
@@ -74,6 +76,69 @@ async function insertBlockedRow(
     trade: false,
     fit_id: "blocked",
     shadow_error: reason,
+  } as never);
+}
+
+async function insertGlobalOnlyRow(
+  supabase: SupabaseClient,
+  args: {
+    predictionRow: ModelCPredictionRow;
+    fit: Awaited<ReturnType<typeof loadActiveModelCFit>>["fit"];
+    active: Awaited<ReturnType<typeof loadActiveModelCFit>>;
+    globalScore: ReturnType<typeof scoreComponent>;
+    globalFeatures: ReturnType<typeof buildGlobalCoreFeatures>;
+    boundaryIso: string;
+    featureCutoffIso: string;
+    latestSourceCandleTs: string | null;
+    createdIso: string | null;
+    predictionRowLeadMs: number | null;
+  },
+): Promise<void> {
+  const scoredAtMs = Date.now();
+  const targetMs = new Date(args.predictionRow.candle_ts).getTime();
+  const decision = decideModelC({
+    p_global: args.globalScore.probability_green,
+    p_recent: args.globalScore.probability_green,
+    market_condition: args.predictionRow.market_condition ?? null,
+    failed_breakout_down:
+      (args.predictionRow.indicators as Record<string, unknown> | undefined)?.failed_breakout_down as
+        | string
+        | boolean
+        | null
+        | undefined ?? null,
+    upstream_prediction: args.predictionRow.prediction ?? null,
+  });
+
+  await supabase.from("model_c_shadow").insert({
+    prediction_id: args.predictionRow.id,
+    variant: "global_only",
+    candle_ts: args.predictionRow.candle_ts,
+    target_boundary_ts: args.boundaryIso,
+    scored_at: new Date(scoredAtMs).toISOString(),
+    boundary_delta_ms: scoredAtMs - targetMs,
+    prediction_row_created_at: args.createdIso,
+    prediction_row_lead_ms: args.predictionRowLeadMs,
+    feature_cutoff_ts: args.featureCutoffIso,
+    latest_source_candle_ts: args.latestSourceCandleTs,
+    leakage_check_passed: true,
+    timing_status: scoredAtMs >= targetMs ? "scored_after_boundary" : "scored_before_boundary",
+    global_probability_green: args.globalScore.probability_green,
+    recent_probability_green: null,
+    ensemble_probability_green: args.globalScore.probability_green,
+    base_decision: decision.base_decision,
+    override_reasons_json: decision.override_reasons_json,
+    final_decision: decision.final_decision,
+    trade: decision.trade,
+    global_artifact_sha256: args.fit.global_core_lr.artifact_sha256,
+    recent_artifact_sha256: null,
+    global_feature_vector_sha256: featureVectorHash(args.fit.global_core_lr, args.globalFeatures),
+    recent_feature_vector_sha256: null,
+    status: "scored",
+    fit_id: args.active.source === "live"
+      ? args.active.fit_id
+      : `bootstrap:${args.fit.combined_fit_sha256.slice(0, 12)}`,
+    production_model_version: args.predictionRow.model_version ?? null,
+    shadow_error: null,
   } as never);
 }
 
@@ -158,6 +223,7 @@ export async function runModelCShadowForPrediction(
 
     await supabase.from("model_c_shadow").insert({
       prediction_id: predictionRow.id,
+      variant: "dual_horizon",
       candle_ts: predictionRow.candle_ts,
       target_boundary_ts: boundaryIso,
       scored_at: new Date(scoredAtMs).toISOString(),
@@ -186,6 +252,35 @@ export async function runModelCShadowForPrediction(
       production_model_version: predictionRow.model_version ?? null,
       shadow_error: null,
     } as never);
+
+    try {
+      await insertGlobalOnlyRow(supabase, {
+        predictionRow,
+        fit,
+        active,
+        globalScore: pGlobal,
+        globalFeatures,
+        boundaryIso,
+        featureCutoffIso,
+        latestSourceCandleTs,
+        createdIso,
+        predictionRowLeadMs,
+      });
+    } catch (e) {
+      try {
+        await supabase.from("api_runs").insert({
+          run_type: "model_c_global_only_shadow_error",
+          response_payload: {
+            error: e instanceof Error ? e.message : String(e),
+            prediction_id: predictionRow.id,
+          },
+          success: false,
+          error_message: e instanceof Error ? e.message : String(e),
+        });
+      } catch {
+        /* ignore */
+      }
+    }
     void TF_MS;
   } catch (e) {
     try {
