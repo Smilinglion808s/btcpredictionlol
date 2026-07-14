@@ -76,6 +76,20 @@ export function buildPredictionPayload(row: Record<string, any>) {
 export const B2_DECISION_POLICY_VERSION = "model7-b2-no-nce-v1";
 export const B2_MODEL_ID = "model7_variant_b2";
 
+// Variant B4.2 (Daily Edge Guard) — now the sole outbound webhook source.
+export const B4_2_DECISION_POLICY_VERSION = "model7-b4_2-daily-edge-guard-v1";
+export const B4_2_MODEL_ID = "model7_variant_b4_2";
+
+export function buildB4_2WebhookPayload(inputs: B2WebhookInputs) {
+  const base = buildB2WebhookPayload(inputs);
+  return {
+    ...base,
+    model: B4_2_MODEL_ID,
+    model_version: "b4.2 6.0",
+    decision_policy_version: B4_2_DECISION_POLICY_VERSION,
+  };
+}
+
 export interface B2WebhookInputs {
   shadow: Record<string, any>;     // model7_shadow row (variant='B2')
   prediction: Record<string, any>; // predictions row (Model 6 snapshot)
