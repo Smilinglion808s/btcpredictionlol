@@ -740,4 +740,23 @@ export async function resolveShadowRowsFor(
       });
     } catch { /* never block resolver */ }
   }
+
+  // Backfill A2 counterfactual_result on every A2 row (both graded and skipped)
+  // = what Variant A's trade actually did against actual_direction.
+  try {
+    const { data: a2Rows } = await supabase
+      .from("model7_shadow")
+      .select("id, a2_variant_a_final_decision")
+      .eq("prediction_id", predictionId)
+      .in("variant", ["A2_Conflict", "A2_MidBand", "A2_Combined"]);
+    for (const r of a2Rows ?? []) {
+      const aFinal = (r as { a2_variant_a_final_decision: string | null }).a2_variant_a_final_decision;
+      let cf: "WIN" | "LOSS" | null = null;
+      if (aFinal === "YES") cf = actualDirection === "GREEN" ? "WIN" : "LOSS";
+      else if (aFinal === "NO") cf = actualDirection === "RED" ? "WIN" : "LOSS";
+      await supabase.from("model7_shadow")
+        .update({ a2_counterfactual_result: cf } as never)
+        .eq("id", (r as { id: string }).id);
+    }
+  } catch { /* never block resolver */ }
 }
