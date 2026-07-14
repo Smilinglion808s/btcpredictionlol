@@ -314,11 +314,16 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     variant: string; candle_ts: string; probability_green: number | null;
     decision: string | null; would_trade: boolean | null; status: string;
   }>;
-  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null, B4_2: null };
+  if (rows.length === 0) return { candle_ts: null, A: null, B: null, B2: null, B4_2: null, A2_Conflict: null, A2_MidBand: null, A2_Combined: null };
   const latestTs = rows[0].candle_ts;
   const forLatest = rows.filter((r) => r.candle_ts === latestTs);
-  const pick = (v: "A" | "B" | "B2" | "B4_2") => forLatest.find((r) => r.variant === v) ?? null;
-  return { candle_ts: latestTs, A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2") };
+  type V = "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
+  const pick = (v: V) => forLatest.find((r) => r.variant === v) ?? null;
+  return {
+    candle_ts: latestTs,
+    A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2"),
+    A2_Conflict: pick("A2_Conflict"), A2_MidBand: pick("A2_MidBand"), A2_Combined: pick("A2_Combined"),
+  };
 });
 
 
