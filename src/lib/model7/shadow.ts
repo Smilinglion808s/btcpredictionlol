@@ -569,6 +569,114 @@ export async function runShadowForPrediction(
 }
 
 /**
+ * Layer three Variant A2 filter policies on top of Variant A's already-inserted
+ * shadow row. Pure post-decision filter: only converts YES/NO -> SKIP. Never
+ * reverses direction. Always inserts three rows (one per policy) — even on
+ * fail-closed — so tracking is uniform.
+ */
+async function runA2Policies(
+  supabase: SupabaseClient,
+  predictionRow: { id: string; candle_ts: string; model_version?: string | null },
+): Promise<void> {
+  try {
+    const { data: aRow } = await supabase
+      .from("model7_shadow")
+      .select("*")
+      .eq("prediction_id", predictionRow.id).eq("variant", "A")
+      .maybeSingle();
+    if (!aRow) return; // Variant A row absent; skip A2 (fail-closed, no rows).
+
+    const a = aRow as Record<string, unknown>;
+    const baseDecision = (a.base_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+    const finalDecision = (a.decision as "YES" | "NO" | "SKIP" | null) ?? null;
+    const probability = (a.probability_green as number | null) ?? null;
+    const appliedOverride = (a.hard_no_override_fired as string | null) ?? "none";
+    const overrideApplied = appliedOverride !== "none";
+    const aStatus = String(a.status ?? "pending");
+    const inheritKeys = [
+      "target_boundary_ts","score_not_before_ts","feature_cutoff_ts","previous_candle_ts",
+      "history_candles_available","history_gap_encountered","latest_source_candle_ts",
+      "latest_source_event_ts","missing_raw_numeric_fields_json","prediction_row_created_at",
+      "prediction_row_lead_ms","probability_green","logit","hard_no_override_fired",
+      "model_fit_id","feature_vector_nonzero_count","unknown_categories","scored_at",
+      "snapshot_ts","boundary_delta_ms","model_artifact_sha256","feature_vector_sha256",
+      "override_reasons_json","timing_status","leakage_check_passed","leakage_block_reason",
+      "offending_features_json","production_model_version",
+    ] as const;
+    const inherited: Record<string, unknown> = {};
+    for (const k of inheritKeys) inherited[k] = a[k] ?? null;
+
+    const inputs = {
+      base_decision: baseDecision,
+      final_decision: finalDecision,
+      probability_green: probability,
+      applied_override_reason: appliedOverride,
+    };
+    const usable = a2InputsUsable(inputs) && aStatus !== "error";
+    const evals = usable ? evaluateA2(inputs) : null;
+    const bucket = probabilityBucket(probability);
+
+    const auditBase: Record<string, unknown> = {
+      ...inherited,
+      prediction_id: predictionRow.id,
+      candle_ts: predictionRow.candle_ts,
+      a2_probability_bucket: bucket,
+      a2_variant_a_base_decision: baseDecision,
+      a2_variant_a_override_applied: overrideApplied,
+      a2_variant_a_applied_override_reason: appliedOverride,
+      a2_variant_a_final_decision: finalDecision,
+      // Counterfactual = what Variant A's trade actually did. Set at resolve time.
+      a2_counterfactual_result: null,
+    };
+
+    const policies: Array<A2Policy> = ["A2_Conflict", "A2_MidBand", "A2_Combined"];
+    for (const policy of policies) {
+      let out: A2PolicyOutput | null = null;
+      if (evals) {
+        out = policy === "A2_Conflict" ? evals.conflict
+          : policy === "A2_MidBand" ? evals.midband
+          : evals.combined;
+      }
+      // Determine row status:
+      //  - fail-closed / A error / inputs missing -> skipped (no counterfactual grading)
+      //  - policy filtered the trade -> skipped (but counterfactual gets graded later)
+      //  - policy preserved YES/NO -> pending (will be graded like A)
+      let status: string;
+      if (!out || out.decision == null) status = "skipped";
+      else if (out.decision === "SKIP") status = "skipped";
+      else status = aStatus === "skipped" || aStatus === "error" ? aStatus : "pending";
+
+      const row: Record<string, unknown> = {
+        ...auditBase,
+        variant: policy,
+        status,
+        base_decision: finalDecision, // A's final decision is A2's "base"
+        decision: out?.decision ?? null,
+        would_trade: out?.decision != null && out.decision !== "SKIP",
+        shadow_error: usable ? null : "A2_INPUTS_UNUSABLE",
+        a2_filter_fired: out?.filter_fired ?? false,
+        a2_filter_reason: out?.filter_reason ?? "NONE",
+      };
+      try {
+        await supabase.from("model7_shadow").insert(row as never);
+      } catch { /* never block */ }
+    }
+  } catch (e) {
+    try {
+      await supabase.from("api_runs").insert({
+        run_type: "model7-a2-error",
+        response_payload: {
+          error: e instanceof Error ? e.message : String(e),
+          prediction_id: predictionRow.id,
+        },
+        success: false,
+        error_message: e instanceof Error ? e.message : String(e),
+      });
+    } catch { /* ignore */ }
+  }
+}
+
+/**
  * Resolve shadow rows for a prediction once actual_direction is known.
  */
 export async function resolveShadowRowsFor(
@@ -579,7 +687,7 @@ export async function resolveShadowRowsFor(
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
   const { data: rows } = await supabase
     .from("model7_shadow")
-    .select("id, variant, decision, would_trade, candle_ts, b4_2_counterfactual_b2_result")
+    .select("id, variant, decision, would_trade, candle_ts, b4_2_counterfactual_b2_result, a2_variant_a_final_decision")
     .eq("prediction_id", predictionId)
     .eq("status", "pending");
   let b2Decision: "YES" | "NO" | "SKIP" | null = null;
