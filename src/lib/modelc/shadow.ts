@@ -109,10 +109,19 @@ async function insertBlockedRow(
     timing_status: "blocked",
     leakage_check_passed: false,
     trade: false,
+    predicted_direction: null,
+    skip_reason: reason,
+    override_applied: false,
+    override_reason: null,
+    blend_weight_global: MODEL_C_BLEND_WEIGHT_GLOBAL,
+    blend_weight_recent: MODEL_C_BLEND_WEIGHT_RECENT,
+    ensemble_threshold: MODEL_C_ENSEMBLE_THRESHOLD,
+    prospective_test_id: MODEL_C_PROSPECTIVE_TEST_ID,
     fit_id: "blocked",
     shadow_error: reason,
   } as never);
 }
+
 
 async function insertGlobalOnlyRow(
   supabase: SupabaseClient,
