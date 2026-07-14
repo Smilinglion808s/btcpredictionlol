@@ -449,7 +449,7 @@ function StatsPage() {
           <CardTitle className="text-base flex items-center gap-2">
             Recent History
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              Variant B2
+              Variant B4.2
             </span>
           </CardTitle>
         </CardHeader>
