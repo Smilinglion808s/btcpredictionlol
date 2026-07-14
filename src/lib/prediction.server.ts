@@ -1135,6 +1135,13 @@ export async function resolvePredictionsServer(
       else status = "push";
 
       const hasOhlc = resolution.candle.open > 0;
+      // Kalshi (KXBTC15M / CF Benchmarks BRTI) is authoritative for direction
+      // when finalized; OHLC is descriptive only. On near-flat candles OKX/Coinbase
+      // close-vs-open can disagree with Kalshi's BRTI settlement.
+      const kalshiDir: "GREEN" | "RED" | null =
+        kalshi ? (kalshi.result === "YES" ? "GREEN" : "RED") : null;
+      const finalDirection: "GREEN" | "RED" | "DOJI" | null =
+        kalshiDir ?? (hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null);
       const { error: updateError } = await supabase
         .from("predictions")
         .update({
@@ -1143,12 +1150,13 @@ export async function resolvePredictionsServer(
           actual_next_candle_high: hasOhlc ? resolution.candle.high : null,
           actual_next_candle_low: hasOhlc ? resolution.candle.low : null,
           actual_next_candle_close: hasOhlc ? resolution.candle.close : null,
-          actual_direction: hasOhlc ? actualDirection(resolution.candle) : null,
+          actual_direction: finalDirection,
           settlement_source: resolution.source,
           settlement_ticker: resolution.ticker ?? null,
           settlement_value: resolution.settlement_value ?? null,
           resolved_at: new Date().toISOString(),
         })
+
         .eq("id", p.id)
         .eq("status", "pending");
       if (updateError) {
