@@ -541,9 +541,11 @@ export async function runShadowForPrediction(
     }
 
     // Deferred shadow variants — run after B4.2 has already emitted so they
-    // never delay the outbound webhook. Parallelized for speed.
+    // never delay the outbound webhook. Parallelized for speed. Variant A2
+    // policies are layered on top of A (must await A first).
     await Promise.all([
-      frozen ? runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage) : Promise.resolve(),
+      (frozen ? runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage) : Promise.resolve())
+        .then(() => runA2Policies(supabase, predictionRow)),
       runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
         variantB ? undefined : "warming_up"),
     ]);
