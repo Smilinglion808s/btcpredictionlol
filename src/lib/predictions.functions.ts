@@ -495,6 +495,46 @@ export const listVariantB2Recent = createServerFn({ method: "GET" }).handler(asy
   return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
 });
 
+/** Latest B4.2 shadow row shaped for the home page's current/upcoming cards. */
+export const getVariantB4_2Latest = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_shadow")
+    .select("id, candle_ts, decision, probability_green, status, resolved_at, created_at, prediction_id")
+    .eq("variant", "B4_2")
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeB2Row(data, null);
+});
+
+/** Recent B4.2 shadow rows shaped for the home page's last-5-trades + last-result cards. */
+export const listVariantB4_2Recent = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_shadow")
+    .select("id, candle_ts, decision, probability_green, status, resolved_at, created_at, prediction_id")
+    .eq("variant", "B4_2")
+    .order("candle_ts", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  const ids = Array.from(new Set(rows.map((r: any) => r.prediction_id).filter(Boolean)));
+  const prodMap = new Map<string, any>();
+  if (ids.length) {
+    const [live, arch] = await Promise.all([
+      sb.from("predictions").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+      sb.from("predictions_archive").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+    ]);
+    for (const p of [...(live.data ?? []), ...(arch.data ?? [])]) {
+      if (!prodMap.has(p.id)) prodMap.set(p.id, p);
+    }
+  }
+  return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
+});
+
 
 
 
