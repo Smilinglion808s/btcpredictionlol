@@ -285,6 +285,22 @@ export async function runModelCShadowForPrediction(
     const scoredAtMs = Date.now();
     const boundaryDeltaMs = scoredAtMs - targetMs;
 
+    const skipReason = validateEnsemble(
+      pGlobal.probability_green,
+      pRecent.probability_green,
+      decision.p_ensemble,
+    );
+    const expectedEnsemble =
+      MODEL_C_BLEND_WEIGHT_GLOBAL * pGlobal.probability_green +
+      MODEL_C_BLEND_WEIGHT_RECENT * pRecent.probability_green;
+    const ensembleDelta = decision.p_ensemble - expectedEnsemble;
+    const finalDecision = skipReason ? null : decision.final_decision;
+    const trade = skipReason ? false : true;
+    const status = skipReason ? "blocked" : "scored";
+    const overrideApplied = decision.override_reasons_json.some((o) => o.applied);
+    const overrideReason =
+      decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
+
     await supabase.from("model_c_shadow").insert({
       prediction_id: predictionRow.id,
       variant: "dual_horizon",
@@ -301,20 +317,29 @@ export async function runModelCShadowForPrediction(
       global_probability_green: pGlobal.probability_green,
       recent_probability_green: pRecent.probability_green,
       ensemble_probability_green: decision.p_ensemble,
+      blend_weight_global: MODEL_C_BLEND_WEIGHT_GLOBAL,
+      blend_weight_recent: MODEL_C_BLEND_WEIGHT_RECENT,
+      ensemble_threshold: MODEL_C_ENSEMBLE_THRESHOLD,
+      ensemble_delta: ensembleDelta,
       base_decision: decision.base_decision,
       override_reasons_json: decision.override_reasons_json,
-      final_decision: decision.final_decision,
-      trade: decision.trade,
+      override_applied: overrideApplied,
+      override_reason: overrideReason,
+      final_decision: finalDecision,
+      predicted_direction: predictedDirectionFor(finalDecision as "YES" | "NO" | null),
+      trade,
+      skip_reason: skipReason,
+      prospective_test_id: MODEL_C_PROSPECTIVE_TEST_ID,
       global_artifact_sha256: fit.global_core_lr.artifact_sha256,
       recent_artifact_sha256: fit.recent_full_lr.artifact_sha256,
       global_feature_vector_sha256: featureVectorHash(fit.global_core_lr, globalFeatures),
       recent_feature_vector_sha256: featureVectorHash(fit.recent_full_lr, recentFeatures),
-      status: "scored",
+      status,
       fit_id: active.source === "live"
         ? active.fit_id
         : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
-      shadow_error: null,
+      shadow_error: skipReason,
     } as never);
 
     try {
