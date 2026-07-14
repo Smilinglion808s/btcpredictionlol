@@ -492,7 +492,7 @@ export async function runShadowForPrediction(
         const insertedB4 = await insertShadowRow(supabase, b4Row);
 
         // ---- B4.2 is the sole outbound webhook source. Emit iff eligible. ----
-        const b4TimingStatus = String(b4Row.timing_status ?? "");
+        const b4TimingStatus = String((inherited.timing_status as string | null) ?? "");
         const eligible =
           guard.decision != null &&
           (b2.probability_green as number | null) != null &&
