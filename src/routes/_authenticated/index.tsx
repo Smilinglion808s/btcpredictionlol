@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
-import { getVariantB2Latest, listVariantB2Recent } from "@/lib/predictions.functions";
+import { getVariantB4_2Latest, listVariantB4_2Recent } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,15 +21,15 @@ function Dashboard() {
   const qc = useQueryClient();
 
   const candlesFn = useServerFn(listCandles);
-  const latestFn = useServerFn(getVariantB2Latest);
+  const latestFn = useServerFn(getVariantB4_2Latest);
   const settingsFn = useServerFn(getActiveSettings);
 
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
-  const latestQ = useQuery({ queryKey: ["b2-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
+  const latestQ = useQuery({ queryKey: ["b42-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
-  const listFn = useServerFn(listVariantB2Recent);
-  const listQ = useQuery({ queryKey: ["b2-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
+  const listFn = useServerFn(listVariantB4_2Recent);
+  const listQ = useQuery({ queryKey: ["b42-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
   const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
@@ -54,8 +54,8 @@ function Dashboard() {
         qc.invalidateQueries({ queryKey: ["candles"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["b2-latest"] });
-        qc.invalidateQueries({ queryKey: ["b2-recent"] });
+        qc.invalidateQueries({ queryKey: ["b42-latest"] });
+        qc.invalidateQueries({ queryKey: ["b42-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -128,7 +128,7 @@ function Dashboard() {
 
           <Card className="py-2">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades · Variant B2</CardTitle>
+              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades · Variant B4.2</CardTitle>
             </CardHeader>
             <CardContent className="py-0">
               {last5.length === 0 ? (
@@ -177,7 +177,7 @@ function Dashboard() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Last Result · Variant B2</CardTitle>
+              <CardTitle className="text-base">Last Result · Variant B4.2</CardTitle>
               <Link to="/stats" className="text-[11px] uppercase tracking-wider text-info hover:underline">View stats →</Link>
             </CardHeader>
             <CardContent>
@@ -306,7 +306,7 @@ function HeaderStrip(props: {
         <Stat label="Time Left in Candle" value={timeLeft} tone="info" />
         <Stat label="Next Prediction" value={nextPrediction} tone="info" />
         <Stat label="Last Updated" value={props.lastCandleTs ? new Date(props.lastCandleTs).toLocaleTimeString() : "—"} />
-        <Stat label="Model" value={`B2 · ${props.modelVersion ?? "—"}`} />
+        <Stat label="Model" value={`B4.2 · ${props.modelVersion ?? "—"}`} />
       </CardContent>
     </Card>
   );
