@@ -1,0 +1,1 @@
+ALTER TABLE public.model7_shadow ADD COLUMN IF NOT EXISTS warm_cache_hit boolean;

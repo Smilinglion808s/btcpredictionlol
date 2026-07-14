@@ -20,6 +20,7 @@ import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/t
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
+import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksModelcNightlyAuditRouteImport } from './routes/api/public/hooks/modelc-nightly-audit'
 import { Route as ApiPublicHooksModelcForceRetrainRouteImport } from './routes/api/public/hooks/modelc-force-retrain'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
@@ -83,6 +84,12 @@ const ApiPublicHooksScheduled15mRunRoute =
     path: '/api/public/hooks/scheduled-15m-run',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksPrewarmB4_2Route =
+  ApiPublicHooksPrewarmB4_2RouteImport.update({
+    id: '/api/public/hooks/prewarm-b4_2',
+    path: '/api/public/hooks/prewarm-b4_2',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksModelcNightlyAuditRoute =
   ApiPublicHooksModelcNightlyAuditRouteImport.update({
     id: '/api/public/hooks/modelc-nightly-audit',
@@ -119,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
+  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -135,6 +143,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
+  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -153,6 +162,7 @@ export interface FileRoutesById {
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/modelc-force-retrain': typeof ApiPublicHooksModelcForceRetrainRoute
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
+  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
+    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
+    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/modelc-force-retrain'
     | '/api/public/hooks/modelc-nightly-audit'
+    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -216,6 +229,7 @@ export interface RootRouteChildren {
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksModelcForceRetrainRoute: typeof ApiPublicHooksModelcForceRetrainRoute
   ApiPublicHooksModelcNightlyAuditRoute: typeof ApiPublicHooksModelcNightlyAuditRoute
+  ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
@@ -301,6 +315,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/prewarm-b4_2': {
+      id: '/api/public/hooks/prewarm-b4_2'
+      path: '/api/public/hooks/prewarm-b4_2'
+      fullPath: '/api/public/hooks/prewarm-b4_2'
+      preLoaderRoute: typeof ApiPublicHooksPrewarmB4_2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/modelc-nightly-audit': {
       id: '/api/public/hooks/modelc-nightly-audit'
       path: '/api/public/hooks/modelc-nightly-audit'
@@ -359,6 +380,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksModelcForceRetrainRoute: ApiPublicHooksModelcForceRetrainRoute,
   ApiPublicHooksModelcNightlyAuditRoute: ApiPublicHooksModelcNightlyAuditRoute,
+  ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
@@ -367,13 +389,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -20,6 +20,7 @@ import { loadFrozenModel, loadLatestVariantBFit } from "./fitStore";
 import {
   computeB4_2Decision, applyB4_2Resolution, B4_2_POLICY_VERSION,
 } from "./b4_2";
+import { consumeWarmed } from "./warmCache";
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
@@ -414,7 +415,11 @@ export async function runShadowForPrediction(
       return;
     }
 
-    const history = await loadHistoricalCandles(supabase, predictionRow.candle_ts);
+    // Consume pre-warmed inputs if the /prewarm-b4_2 hook filled them for this
+    // target boundary. Falls back to live fetches (existing behaviour) on miss.
+    const warmed = consumeWarmed(plan.target_boundary_ms);
+    const warmHit = warmed != null;
+    const history = warmed?.history ?? await loadHistoricalCandles(supabase, predictionRow.candle_ts);
     const leakage = inspectHistoryLeakage(plan, history);
 
     // Variant A — frozen v1.1.
@@ -432,7 +437,7 @@ export async function runShadowForPrediction(
     // Variant A and B still run for shadow tracking but are deferred until after
     // B4.2 finishes so they never delay the outbound signal.
     const tmv = predictionRow.model_version ?? "6.0";
-    const variantB = await loadLatestVariantBFit(supabase, tmv);
+    const variantB = warmed?.variantBFit ?? await loadLatestVariantBFit(supabase, tmv);
     await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up", { skipUpstreamNoClearEdge: true });
 
@@ -488,6 +493,7 @@ export async function runShadowForPrediction(
           b4_2_date_mt: guard.date_mt,
           b4_2_policy_version: guard.policy_version,
           b4_2_last_two_no_results_json: guard.last_two_no_results,
+          warm_cache_hit: warmHit,
         };
         const insertedB4 = await insertShadowRow(supabase, b4Row);
 
