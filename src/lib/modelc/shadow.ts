@@ -31,6 +31,41 @@ const RECENT_HISTORY_ROWS = 40;
 export const MODEL_C_MODEL_ID = "model_c_dual_horizon_v1";
 export const MODEL_C_DECISION_POLICY_VERSION =
   "model-c-v1-global50-recent50-cutoff052-hardno3";
+export const MODEL_C_PROSPECTIVE_TEST_ID = "MODEL_C_100_CANDLE_BINARY_FIX_V1";
+export const MODEL_C_BLEND_WEIGHT_GLOBAL = 0.5;
+export const MODEL_C_BLEND_WEIGHT_RECENT = 0.5;
+export const MODEL_C_ENSEMBLE_THRESHOLD = 0.52;
+export const MODEL_C_ENSEMBLE_EPSILON = 1e-9;
+
+/**
+ * Guard rails around the ensemble math. Returns null when inputs pass,
+ * otherwise a fail-closed skip reason string.
+ */
+export function validateEnsemble(
+  pGlobal: number,
+  pRecent: number,
+  pEnsemble: number,
+): string | null {
+  const inRange = (x: number) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+  if (!inRange(pGlobal) || !inRange(pRecent) || !inRange(pEnsemble)) {
+    return "INVALID_PROBABILITY";
+  }
+  const expected =
+    MODEL_C_BLEND_WEIGHT_GLOBAL * pGlobal + MODEL_C_BLEND_WEIGHT_RECENT * pRecent;
+  if (Math.abs(pEnsemble - expected) > MODEL_C_ENSEMBLE_EPSILON) {
+    return "ENSEMBLE_ARITHMETIC_MISMATCH";
+  }
+  return null;
+}
+
+export function predictedDirectionFor(
+  finalDecision: "YES" | "NO" | null | undefined,
+): "GREEN" | "RED" | null {
+  if (finalDecision === "YES") return "GREEN";
+  if (finalDecision === "NO") return "RED";
+  return null;
+}
+
 
 export interface ModelCPredictionRow extends PredictionRowForFeatures {
   model_version?: string | null;
@@ -74,10 +109,19 @@ async function insertBlockedRow(
     timing_status: "blocked",
     leakage_check_passed: false,
     trade: false,
+    predicted_direction: null,
+    skip_reason: reason,
+    override_applied: false,
+    override_reason: null,
+    blend_weight_global: MODEL_C_BLEND_WEIGHT_GLOBAL,
+    blend_weight_recent: MODEL_C_BLEND_WEIGHT_RECENT,
+    ensemble_threshold: MODEL_C_ENSEMBLE_THRESHOLD,
+    prospective_test_id: MODEL_C_PROSPECTIVE_TEST_ID,
     fit_id: "blocked",
     shadow_error: reason,
   } as never);
 }
+
 
 async function insertGlobalOnlyRow(
   supabase: SupabaseClient,
@@ -96,9 +140,12 @@ async function insertGlobalOnlyRow(
 ): Promise<void> {
   const scoredAtMs = Date.now();
   const targetMs = new Date(args.predictionRow.candle_ts).getTime();
+  const pGlobal = args.globalScore.probability_green;
+  // Global-only uses global as the "ensemble" input. Cutoff & override logic
+  // are shared so results are directly comparable with dual_horizon.
   const decision = decideModelC({
-    p_global: args.globalScore.probability_green,
-    p_recent: args.globalScore.probability_green,
+    p_global: pGlobal,
+    p_recent: pGlobal,
     market_condition: args.predictionRow.market_condition ?? null,
     failed_breakout_down:
       (args.predictionRow.indicators as Record<string, unknown> | undefined)?.failed_breakout_down as
@@ -108,6 +155,14 @@ async function insertGlobalOnlyRow(
         | undefined ?? null,
     upstream_prediction: args.predictionRow.prediction ?? null,
   });
+
+  const skipReason = validateEnsemble(pGlobal, pGlobal, pGlobal);
+  const finalDecision = skipReason ? null : decision.final_decision;
+  const trade = skipReason ? false : true;
+  const status = skipReason ? "blocked" : "scored";
+  const overrideApplied = decision.override_reasons_json.some((o) => o.applied);
+  const overrideReason = decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
+  const ensembleDelta = 0;
 
   await supabase.from("model_c_shadow").insert({
     prediction_id: args.predictionRow.id,
@@ -122,23 +177,32 @@ async function insertGlobalOnlyRow(
     latest_source_candle_ts: args.latestSourceCandleTs,
     leakage_check_passed: true,
     timing_status: scoredAtMs >= targetMs ? "scored_after_boundary" : "scored_before_boundary",
-    global_probability_green: args.globalScore.probability_green,
+    global_probability_green: pGlobal,
     recent_probability_green: null,
-    ensemble_probability_green: args.globalScore.probability_green,
+    ensemble_probability_green: pGlobal,
+    blend_weight_global: 1,
+    blend_weight_recent: 0,
+    ensemble_threshold: MODEL_C_ENSEMBLE_THRESHOLD,
+    ensemble_delta: ensembleDelta,
     base_decision: decision.base_decision,
     override_reasons_json: decision.override_reasons_json,
-    final_decision: decision.final_decision,
-    trade: decision.trade,
+    override_applied: overrideApplied,
+    override_reason: overrideReason,
+    final_decision: finalDecision,
+    predicted_direction: predictedDirectionFor(finalDecision as "YES" | "NO" | null),
+    trade,
+    skip_reason: skipReason,
+    prospective_test_id: MODEL_C_PROSPECTIVE_TEST_ID,
     global_artifact_sha256: args.fit.global_core_lr.artifact_sha256,
     recent_artifact_sha256: null,
     global_feature_vector_sha256: featureVectorHash(args.fit.global_core_lr, args.globalFeatures),
     recent_feature_vector_sha256: null,
-    status: "scored",
+    status,
     fit_id: args.active.source === "live"
       ? args.active.fit_id
       : `bootstrap:${args.fit.combined_fit_sha256.slice(0, 12)}`,
     production_model_version: args.predictionRow.model_version ?? null,
-    shadow_error: null,
+    shadow_error: skipReason,
   } as never);
 }
 
@@ -221,6 +285,22 @@ export async function runModelCShadowForPrediction(
     const scoredAtMs = Date.now();
     const boundaryDeltaMs = scoredAtMs - targetMs;
 
+    const skipReason = validateEnsemble(
+      pGlobal.probability_green,
+      pRecent.probability_green,
+      decision.p_ensemble,
+    );
+    const expectedEnsemble =
+      MODEL_C_BLEND_WEIGHT_GLOBAL * pGlobal.probability_green +
+      MODEL_C_BLEND_WEIGHT_RECENT * pRecent.probability_green;
+    const ensembleDelta = decision.p_ensemble - expectedEnsemble;
+    const finalDecision = skipReason ? null : decision.final_decision;
+    const trade = skipReason ? false : true;
+    const status = skipReason ? "blocked" : "scored";
+    const overrideApplied = decision.override_reasons_json.some((o) => o.applied);
+    const overrideReason =
+      decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
+
     await supabase.from("model_c_shadow").insert({
       prediction_id: predictionRow.id,
       variant: "dual_horizon",
@@ -237,20 +317,29 @@ export async function runModelCShadowForPrediction(
       global_probability_green: pGlobal.probability_green,
       recent_probability_green: pRecent.probability_green,
       ensemble_probability_green: decision.p_ensemble,
+      blend_weight_global: MODEL_C_BLEND_WEIGHT_GLOBAL,
+      blend_weight_recent: MODEL_C_BLEND_WEIGHT_RECENT,
+      ensemble_threshold: MODEL_C_ENSEMBLE_THRESHOLD,
+      ensemble_delta: ensembleDelta,
       base_decision: decision.base_decision,
       override_reasons_json: decision.override_reasons_json,
-      final_decision: decision.final_decision,
-      trade: decision.trade,
+      override_applied: overrideApplied,
+      override_reason: overrideReason,
+      final_decision: finalDecision,
+      predicted_direction: predictedDirectionFor(finalDecision as "YES" | "NO" | null),
+      trade,
+      skip_reason: skipReason,
+      prospective_test_id: MODEL_C_PROSPECTIVE_TEST_ID,
       global_artifact_sha256: fit.global_core_lr.artifact_sha256,
       recent_artifact_sha256: fit.recent_full_lr.artifact_sha256,
       global_feature_vector_sha256: featureVectorHash(fit.global_core_lr, globalFeatures),
       recent_feature_vector_sha256: featureVectorHash(fit.recent_full_lr, recentFeatures),
-      status: "scored",
+      status,
       fit_id: active.source === "live"
         ? active.fit_id
         : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
-      shadow_error: null,
+      shadow_error: skipReason,
     } as never);
 
     try {
