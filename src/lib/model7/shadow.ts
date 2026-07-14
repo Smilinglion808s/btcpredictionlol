@@ -371,35 +371,8 @@ async function runVariant(
       } catch { /* never block shadow */ }
     }
 
-    // ---- B2 is the sole outbound webhook source. Emit iff eligible. ----
-    if (variant === "B2") {
-      const eligible =
-        res.decision != null &&
-        res.probability_green != null &&
-        (timingStatus === "ON_TIME" || timingStatus === "LATE_WARNING");
-      if (eligible) {
-        try {
-          const { deliverWebhook, buildB2WebhookPayload } = await import("../webhooks.server");
-          const payload = buildB2WebhookPayload({
-            shadow: { ...shadowRow, id: inserted?.id ?? null },
-            prediction: row as unknown as Record<string, unknown>,
-          });
-          await deliverWebhook(supabase, "prediction.created", payload);
-        } catch (whErr) {
-          try {
-            await supabase.from("api_runs").insert({
-              run_type: "webhook-created-error",
-              response_payload: {
-                error: whErr instanceof Error ? whErr.message : String(whErr),
-                prediction_id: row.id, variant: "B2",
-              },
-              success: false,
-              error_message: whErr instanceof Error ? whErr.message : String(whErr),
-            });
-          } catch { /* ignore */ }
-        }
-      }
-    }
+    // Outbound webhook is now emitted from Variant B4.2 (see below), not B2.
+
   } catch (e) {
     await insertShadowRow(supabase, {
       ...baseRow, status: "error",
