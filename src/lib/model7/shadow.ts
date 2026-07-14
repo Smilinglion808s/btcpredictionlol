@@ -21,6 +21,10 @@ import {
   computeB4_2Decision, applyB4_2Resolution, B4_2_POLICY_VERSION,
 } from "./b4_2";
 import { consumeWarmed } from "./warmCache";
+import {
+  evaluateA2, a2InputsUsable, probabilityBucket, A2_POLICIES,
+  type A2Policy, type A2PolicyOutput,
+} from "./a2";
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
