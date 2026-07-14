@@ -165,7 +165,10 @@ describe("B4.2 state machine — required invariants", () => {
   it("(6) a losing probe re-arms cooldown to 8", () => {
     const s = initialState();
     for (let i = 0; i < 5; i++) applyResolution(s, { id: `A${i}`, result: "LOSS" });
-    for (let i = 0; i < 8; i++) applyResolution(s, { id: `d${i}`, result: "WIN" });
+    // Drain with losses so edge stays deep-negative (edge caps drift-down).
+    for (let i = 0; i < 8; i++) applyResolution(s, { id: `d${i}`, result: "LOSS" });
+    expect(s.cooldown_remaining).toBe(0);
+    expect(s.edge_score).toBeLessThanOrEqual(-15);
     scoreDecision(s, "YES"); // arm probe
     applyResolution(s, { id: "probe1", result: "LOSS" });
     expect(s.circuit_active).toBe(true);
