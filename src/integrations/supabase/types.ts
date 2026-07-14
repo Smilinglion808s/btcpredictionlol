@@ -610,6 +610,7 @@ export type Database = {
           unknown_categories: Json | null
           updated_at: string
           variant: string
+          warm_cache_hit: boolean | null
           would_trade: boolean | null
         }
         Insert: {
@@ -662,6 +663,7 @@ export type Database = {
           unknown_categories?: Json | null
           updated_at?: string
           variant: string
+          warm_cache_hit?: boolean | null
           would_trade?: boolean | null
         }
         Update: {
@@ -714,6 +716,7 @@ export type Database = {
           unknown_categories?: Json | null
           updated_at?: string
           variant?: string
+          warm_cache_hit?: boolean | null
           would_trade?: boolean | null
         }
         Relationships: [
