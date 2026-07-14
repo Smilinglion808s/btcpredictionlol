@@ -141,7 +141,7 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const b2Hero = m7Q.data?.B2 ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
+  const b2Hero = m7Q.data?.B4_2 ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
@@ -152,7 +152,7 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = "B2";
+  const badge = "B4.2";
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
