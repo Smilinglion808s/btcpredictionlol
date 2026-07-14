@@ -264,7 +264,7 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B4_2", "M6"] as const).map((k) => {
+            {(["A", "B", "B2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -280,8 +280,8 @@ function StatsPage() {
                 ? "Variant A (frozen v1.1)"
                 : k === "B"
                 ? "Variant B (live-retrained)"
-                : k === "B4_2"
-                ? "Variant B4.2 (Daily Edge Guard)"
+                : k === "B2"
+                ? "Variant B2 (B minus NCE override)"
                 : "Model 6";
               const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
