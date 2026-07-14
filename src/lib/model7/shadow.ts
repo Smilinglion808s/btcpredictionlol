@@ -493,6 +493,7 @@ export async function runShadowForPrediction(
           b4_2_date_mt: guard.date_mt,
           b4_2_policy_version: guard.policy_version,
           b4_2_last_two_no_results_json: guard.last_two_no_results,
+          warm_cache_hit: warmHit,
         };
         const insertedB4 = await insertShadowRow(supabase, b4Row);
 
