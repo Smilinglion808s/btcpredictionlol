@@ -552,6 +552,8 @@ export type Database = {
       }
       model7_b4_2_state: {
         Row: {
+          awaiting_probe_resolution: boolean
+          circuit_active: boolean
           cooldown_remaining: number
           date_mt: string
           edge_score: number
@@ -563,6 +565,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          awaiting_probe_resolution?: boolean
+          circuit_active?: boolean
           cooldown_remaining?: number
           date_mt: string
           edge_score?: number
@@ -574,6 +578,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          awaiting_probe_resolution?: boolean
+          circuit_active?: boolean
           cooldown_remaining?: number
           date_mt?: string
           edge_score?: number
@@ -1396,6 +1402,10 @@ export type Database = {
           p_resolution_id: string
           p_resolved_at: string
         }
+        Returns: Json
+      }
+      arm_b4_2_probe: {
+        Args: { p_date_mt: string; p_prediction_id: string }
         Returns: Json
       }
       prediction_stats: { Args: never; Returns: Json }
