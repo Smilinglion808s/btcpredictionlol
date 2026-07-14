@@ -1183,8 +1183,7 @@ export async function resolvePredictionsServer(
             .eq("prediction_id", p.id)
             .eq("variant", "B2")
             .maybeSingle();
-          const dirForPayload: "GREEN" | "RED" | "DOJI" | null =
-            hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null;
+          const dirForPayload: "GREEN" | "RED" | "DOJI" | null = finalDirection;
           let b2Result: "win" | "loss" | "push" | null = null;
           if (b2 && dirForPayload) {
             if (dirForPayload === "DOJI") b2Result = "push";
@@ -1204,10 +1203,9 @@ export async function resolvePredictionsServer(
       }
       // Grade Model 7 shadow rows for this prediction. Best-effort.
       try {
-        let dir: "GREEN" | "RED" | "DOJI" | null = hasOhlc ? (actualDirection(resolution.candle) as "GREEN" | "RED" | "DOJI") : null;
-        // Fallback: if the production resolver zeroed OHLC (e.g. OKX/Coinbase
-        // rate-limited and Kalshi decided the outcome), read the confirmed
-        // candle from our own `candles` table so shadow rows still grade.
+        // Kalshi-authoritative direction; fall back to OHLC / local candles only
+        // when Kalshi hasn't finalized.
+        let dir: "GREEN" | "RED" | "DOJI" | null = finalDirection;
         if (!dir) {
           const { data: c } = await supabase
             .from("candles")
@@ -1229,6 +1227,7 @@ export async function resolvePredictionsServer(
           await resolveModelCShadowRowsFor(supabase, p.id, dir);
         } catch { /* never block resolver on Model C shadow */ }
       } catch { /* never block resolver on shadow */ }
+
 
     }
 
