@@ -22,7 +22,7 @@ import {
 } from "./b4_2";
 import { consumeWarmed } from "./warmCache";
 import {
-  evaluateA2, a2InputsUsable, probabilityBucket, A2_POLICIES,
+  evaluateA2, a2InputsUsable, probabilityBucket,
   type A2Policy, type A2PolicyOutput,
 } from "./a2";
 
