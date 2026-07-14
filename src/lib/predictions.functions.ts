@@ -289,6 +289,14 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
         ? JSON.stringify(r.b4_2_last_two_no_results_json) : "",
       b4_2_counterfactual_b2_result: r.b4_2_counterfactual_b2_result ?? null,
       b4_2_b2_would_have_won: r.b4_2_b2_would_have_won ?? null,
+      a2_filter_fired: r.a2_filter_fired ?? null,
+      a2_filter_reason: r.a2_filter_reason ?? null,
+      a2_probability_bucket: r.a2_probability_bucket ?? null,
+      a2_variant_a_base_decision: r.a2_variant_a_base_decision ?? null,
+      a2_variant_a_override_applied: r.a2_variant_a_override_applied ?? null,
+      a2_variant_a_applied_override_reason: r.a2_variant_a_applied_override_reason ?? null,
+      a2_variant_a_final_decision: r.a2_variant_a_final_decision ?? null,
+      a2_counterfactual_result: r.a2_counterfactual_result ?? null,
     };
   });
 });
@@ -300,7 +308,7 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     .from("model7_shadow")
     .select("variant, candle_ts, probability_green, decision, would_trade, status")
     .order("candle_ts", { ascending: false })
-    .limit(20);
+    .limit(50);
   if (error) throw error;
   const rows = (data ?? []) as Array<{
     variant: string; candle_ts: string; probability_green: number | null;
