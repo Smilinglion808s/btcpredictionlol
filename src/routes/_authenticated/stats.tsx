@@ -466,7 +466,7 @@ function StatsPage() {
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {(listQ.data ?? []).slice(0, 25).map((p) => (
+                {(listQ.data ?? []).slice(0, 25).map((p: any) => (
                   <tr key={p.id} className="border-b border-border/50 align-top">
                     <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
                     <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
