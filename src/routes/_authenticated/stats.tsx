@@ -350,6 +350,75 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Variant A2 — Three-Policy Shadow
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              post-decision filter on Variant A · tracking-only · not trading
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {(["A2_Conflict", "A2_MidBand", "A2_Combined"] as const).map((k) => {
+              const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+              const pending = (m7PendingQ.data as any)?.[k] ?? null;
+              const label = k === "A2_Conflict" ? "A2 Conflict (SKIP on override conflicts)"
+                : k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
+                : "A2 Combined (union of both)";
+              const decision = pending?.decision ?? null;
+              const prob = pending?.probability_green;
+              const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
+              const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
+                : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
+                : "text-muted-foreground border-border";
+              return (
+                <div key={k} className="rounded-md border border-border bg-card/50 p-4">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{label}</div>
+                  <div className="flex items-baseline justify-between mb-3">
+                    <span className="text-xs text-muted-foreground">Win Rate</span>
+                    <span className="font-mono text-2xl font-bold text-bull">{b.win_rate}%</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <M7Stat label="Trades" value={b.total} />
+                    <M7Stat label="Wins" value={b.wins} tone="bull" />
+                    <M7Stat label="Losses" value={b.losses} tone="bear" />
+                    <M7Stat label="Pushes" value={b.pushes} />
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-border/60">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Current pending candle
+                    </div>
+                    {pending && decision ? (
+                      <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                          {decision}
+                          {pending.would_trade === false && (
+                            <span className="text-[9px] text-muted-foreground ml-1">(skipped)</span>
+                          )}
+                        </span>
+                        <span className="text-muted-foreground">
+                          P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
+                    )}
+                  </div>
+                  {b.pending > 0 && (
+                    <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
+                      {b.pending} pending
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+
+      <Card>
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <CardTitle className="text-base flex items-center gap-2">
               Model C Shadow
