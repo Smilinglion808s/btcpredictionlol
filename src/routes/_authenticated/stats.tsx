@@ -213,7 +213,7 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant B2 (autobet)</span></h2>
+      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant B4.2 (autobet)</span></h2>
 
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
