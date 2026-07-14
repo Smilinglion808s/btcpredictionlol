@@ -152,9 +152,15 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     no_total: 0, no_wins: 0, no_win_rate: 0,
     avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0,
   });
-  type VKey = "A" | "B" | "B2" | "B4_2";
-  const out: Record<VKey, ReturnType<typeof blank>> = { A: blank(), B: blank(), B2: blank(), B4_2: blank() };
-  const perVariantResolved: Record<VKey, Array<{ ts: string; status: string }>> = { A: [], B: [], B2: [], B4_2: [] };
+  type VKey = "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
+  const VKEYS: VKey[] = ["A", "B", "B2", "B4_2", "A2_Conflict", "A2_MidBand", "A2_Combined"];
+  const out: Record<VKey, ReturnType<typeof blank>> = {
+    A: blank(), B: blank(), B2: blank(), B4_2: blank(),
+    A2_Conflict: blank(), A2_MidBand: blank(), A2_Combined: blank(),
+  };
+  const perVariantResolved: Record<VKey, Array<{ ts: string; status: string }>> = {
+    A: [], B: [], B2: [], B4_2: [], A2_Conflict: [], A2_MidBand: [], A2_Combined: [],
+  };
 
   const confPct = (p: number | null, decision: string | null) => {
     if (typeof p !== "number") return null;
@@ -166,7 +172,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   for (const r of typedRows) {
 
     if (!r.would_trade) continue;
-    if (r.variant !== "A" && r.variant !== "B" && r.variant !== "B2" && r.variant !== "B4_2") continue;
+    if (!(VKEYS as string[]).includes(r.variant)) continue;
     const v = r.variant as VKey;
     const b = out[v];
     b.total += 1;
@@ -191,7 +197,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   const wr = (w: number, l: number) => (w + l === 0 ? 0 : Math.round((w / (w + l)) * 10000) / 100);
   const avg = (sum: number, n: number) => (n === 0 ? 0 : Math.round((sum / n) * 100) / 100);
 
-  for (const k of ["A", "B", "B2", "B4_2"] as const) {
+  for (const k of VKEYS) {
     const b = out[k];
     const decided = b.wins + b.losses;
     b.win_rate = wr(b.wins, b.losses);
