@@ -77,16 +77,20 @@ export async function computeB4_2Decision(
 
   let edgeBefore = 0;
   let cooldownBefore = 0;
+  let circuitActive = false;
+  let awaitingProbe = false;
   try {
     const { data } = await supabase
       .from("model7_b4_2_state")
-      .select("edge_score, cooldown_remaining, date_mt")
+      .select("edge_score, cooldown_remaining, date_mt, circuit_active, awaiting_probe_resolution")
       .eq("symbol", "BTC-USDT").eq("timeframe", "15m")
       .eq("policy_version", B4_2_POLICY_VERSION).eq("date_mt", dateMt)
       .maybeSingle();
     if (data) {
       edgeBefore = Number(data.edge_score ?? 0);
       cooldownBefore = Number(data.cooldown_remaining ?? 0);
+      circuitActive = Boolean((data as { circuit_active?: boolean }).circuit_active);
+      awaitingProbe = Boolean((data as { awaiting_probe_resolution?: boolean }).awaiting_probe_resolution);
     }
   } catch {
     return {
@@ -97,14 +101,42 @@ export async function computeB4_2Decision(
     };
   }
 
-  // Cooldown active -> SKIP (probe decrement happens at resolution time).
-  if (cooldownBefore > 0) {
-    return {
-      decision: "SKIP", guard_fired: true, guard_reason: "DAILY_EDGE_CIRCUIT",
-      edge_score_before: edgeBefore, cooldown_before: cooldownBefore,
-      last_two_no_results: [], date_mt: dateMt,
-      policy_version: B4_2_POLICY_VERSION,
-    };
+  // Circuit active: SKIP unless cooldown drained AND no probe outstanding
+  // AND B2 wants to trade — then let exactly one probe through.
+  if (circuitActive) {
+    if (cooldownBefore > 0 || awaitingProbe) {
+      return {
+        decision: "SKIP", guard_fired: true, guard_reason: "DAILY_EDGE_CIRCUIT",
+        edge_score_before: edgeBefore, cooldown_before: cooldownBefore,
+        last_two_no_results: [], date_mt: dateMt,
+        policy_version: B4_2_POLICY_VERSION,
+      };
+    }
+    // Cooldown drained: attempt to atomically arm the probe. If another
+    // caller armed it first, the RPC returns armed=false and we SKIP.
+    try {
+      const { data: armed } = await supabase.rpc("arm_b4_2_probe", {
+        p_date_mt: dateMt,
+        p_prediction_id: "",
+      } as never);
+      const ok = Boolean((armed as { armed?: boolean } | null)?.armed);
+      if (!ok) {
+        return {
+          decision: "SKIP", guard_fired: true, guard_reason: "DAILY_EDGE_CIRCUIT",
+          edge_score_before: edgeBefore, cooldown_before: cooldownBefore,
+          last_two_no_results: [], date_mt: dateMt,
+          policy_version: B4_2_POLICY_VERSION,
+        };
+      }
+    } catch {
+      return {
+        decision: "SKIP", guard_fired: true, guard_reason: "STATE_UNAVAILABLE",
+        edge_score_before: edgeBefore, cooldown_before: cooldownBefore,
+        last_two_no_results: [], date_mt: dateMt,
+        policy_version: B4_2_POLICY_VERSION,
+      };
+    }
+    // Probe armed — fall through and passthrough B2's YES/NO as the probe.
   }
 
   // Extreme-NO guard: B2=NO with p<=0.15 AND last two same-day NO both LOSS.
