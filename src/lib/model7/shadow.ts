@@ -428,14 +428,14 @@ export async function runShadowForPrediction(
         shadow_error: `frozen_load_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
-    if (frozen) await runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage);
-
+    // Priority path: run B2 first so B4.2 (webhook source) can emit ASAP.
+    // Variant A and B still run for shadow tracking but are deferred until after
+    // B4.2 finishes so they never delay the outbound signal.
     const tmv = predictionRow.model_version ?? "6.0";
     const variantB = await loadLatestVariantBFit(supabase, tmv);
-    await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
-      variantB ? undefined : "warming_up");
     await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up", { skipUpstreamNoClearEdge: true });
+
 
     // ---- Variant B4.2 — Daily Edge Guard layered on top of B2. ----
     try {
@@ -533,6 +533,15 @@ export async function runShadowForPrediction(
         });
       } catch { /* ignore */ }
     }
+
+    // Deferred shadow variants — run after B4.2 has already emitted so they
+    // never delay the outbound webhook. Parallelized for speed.
+    await Promise.all([
+      frozen ? runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage) : Promise.resolve(),
+      runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
+        variantB ? undefined : "warming_up"),
+    ]);
+
 
 
   } catch (e) {
