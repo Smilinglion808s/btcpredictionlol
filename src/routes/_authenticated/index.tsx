@@ -21,15 +21,15 @@ function Dashboard() {
   const qc = useQueryClient();
 
   const candlesFn = useServerFn(listCandles);
-  const latestFn = useServerFn(getVariantB2Latest);
+  const latestFn = useServerFn(getVariantB4_2Latest);
   const settingsFn = useServerFn(getActiveSettings);
 
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
-  const latestQ = useQuery({ queryKey: ["b2-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
+  const latestQ = useQuery({ queryKey: ["b42-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
-  const listFn = useServerFn(listVariantB2Recent);
-  const listQ = useQuery({ queryKey: ["b2-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
+  const listFn = useServerFn(listVariantB4_2Recent);
+  const listQ = useQuery({ queryKey: ["b42-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
   const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
