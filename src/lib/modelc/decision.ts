@@ -91,6 +91,10 @@ export function decideModelC(inputs: ModelCDecisionInputs): ModelCDecisionResult
 
   const final: ModelCDecision = trendingApplied || failedApplied ? "NO" : base;
 
+  // Model C is a binary every-candle model: YES => trade GREEN, NO => trade RED.
+  // A valid final decision (YES or NO) always constitutes a trade. SKIP is
+  // reserved for fail-closed scoring conditions and is handled upstream in the
+  // shadow orchestrator, not here.
   return {
     p_global: inputs.p_global,
     p_recent: inputs.p_recent,
@@ -98,6 +102,6 @@ export function decideModelC(inputs: ModelCDecisionInputs): ModelCDecisionResult
     base_decision: base,
     override_reasons_json: overrides,
     final_decision: final,
-    trade: final === "YES",
+    trade: true,
   };
 }
