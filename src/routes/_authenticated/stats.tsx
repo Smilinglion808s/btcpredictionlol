@@ -107,9 +107,9 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
-  const b2RecentFn = useServerFn(listVariantB2Recent);
+  const b2RecentFn = useServerFn(listVariantB4_2Recent);
   const listQ = useQuery({
-    queryKey: ["b2-recent"],
+    queryKey: ["b42-recent-stats"],
     queryFn: () => b2RecentFn(),
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
