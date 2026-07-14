@@ -54,8 +54,8 @@ function Dashboard() {
         qc.invalidateQueries({ queryKey: ["candles"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["b2-latest"] });
-        qc.invalidateQueries({ queryKey: ["b2-recent"] });
+        qc.invalidateQueries({ queryKey: ["b42-latest"] });
+        qc.invalidateQueries({ queryKey: ["b42-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
