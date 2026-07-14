@@ -177,7 +177,7 @@ function Dashboard() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Last Result · Variant B2</CardTitle>
+              <CardTitle className="text-base">Last Result · Variant B4.2</CardTitle>
               <Link to="/stats" className="text-[11px] uppercase tracking-wider text-info hover:underline">View stats →</Link>
             </CardHeader>
             <CardContent>
