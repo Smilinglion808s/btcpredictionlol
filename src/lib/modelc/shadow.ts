@@ -31,6 +31,41 @@ const RECENT_HISTORY_ROWS = 40;
 export const MODEL_C_MODEL_ID = "model_c_dual_horizon_v1";
 export const MODEL_C_DECISION_POLICY_VERSION =
   "model-c-v1-global50-recent50-cutoff052-hardno3";
+export const MODEL_C_PROSPECTIVE_TEST_ID = "MODEL_C_100_CANDLE_BINARY_FIX_V1";
+export const MODEL_C_BLEND_WEIGHT_GLOBAL = 0.5;
+export const MODEL_C_BLEND_WEIGHT_RECENT = 0.5;
+export const MODEL_C_ENSEMBLE_THRESHOLD = 0.52;
+export const MODEL_C_ENSEMBLE_EPSILON = 1e-9;
+
+/**
+ * Guard rails around the ensemble math. Returns null when inputs pass,
+ * otherwise a fail-closed skip reason string.
+ */
+export function validateEnsemble(
+  pGlobal: number,
+  pRecent: number,
+  pEnsemble: number,
+): string | null {
+  const inRange = (x: number) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+  if (!inRange(pGlobal) || !inRange(pRecent) || !inRange(pEnsemble)) {
+    return "INVALID_PROBABILITY";
+  }
+  const expected =
+    MODEL_C_BLEND_WEIGHT_GLOBAL * pGlobal + MODEL_C_BLEND_WEIGHT_RECENT * pRecent;
+  if (Math.abs(pEnsemble - expected) > MODEL_C_ENSEMBLE_EPSILON) {
+    return "ENSEMBLE_ARITHMETIC_MISMATCH";
+  }
+  return null;
+}
+
+export function predictedDirectionFor(
+  finalDecision: "YES" | "NO" | null | undefined,
+): "GREEN" | "RED" | null {
+  if (finalDecision === "YES") return "GREEN";
+  if (finalDecision === "NO") return "RED";
+  return null;
+}
+
 
 export interface ModelCPredictionRow extends PredictionRowForFeatures {
   model_version?: string | null;
