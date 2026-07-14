@@ -561,6 +561,14 @@ export type Database = {
       }
       model7_shadow: {
         Row: {
+          a2_counterfactual_result: string | null
+          a2_filter_fired: boolean | null
+          a2_filter_reason: string | null
+          a2_probability_bucket: string | null
+          a2_variant_a_applied_override_reason: string | null
+          a2_variant_a_base_decision: string | null
+          a2_variant_a_final_decision: string | null
+          a2_variant_a_override_applied: boolean | null
           actual_direction: string | null
           b4_2_b2_would_have_won: boolean | null
           b4_2_cooldown_before: number | null
@@ -614,6 +622,14 @@ export type Database = {
           would_trade: boolean | null
         }
         Insert: {
+          a2_counterfactual_result?: string | null
+          a2_filter_fired?: boolean | null
+          a2_filter_reason?: string | null
+          a2_probability_bucket?: string | null
+          a2_variant_a_applied_override_reason?: string | null
+          a2_variant_a_base_decision?: string | null
+          a2_variant_a_final_decision?: string | null
+          a2_variant_a_override_applied?: boolean | null
           actual_direction?: string | null
           b4_2_b2_would_have_won?: boolean | null
           b4_2_cooldown_before?: number | null
@@ -667,6 +683,14 @@ export type Database = {
           would_trade?: boolean | null
         }
         Update: {
+          a2_counterfactual_result?: string | null
+          a2_filter_fired?: boolean | null
+          a2_filter_reason?: string | null
+          a2_probability_bucket?: string | null
+          a2_variant_a_applied_override_reason?: string | null
+          a2_variant_a_base_decision?: string | null
+          a2_variant_a_final_decision?: string | null
+          a2_variant_a_override_applied?: boolean | null
           actual_direction?: string | null
           b4_2_b2_would_have_won?: boolean | null
           b4_2_cooldown_before?: number | null
