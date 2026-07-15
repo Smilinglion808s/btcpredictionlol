@@ -83,6 +83,17 @@ function StatsPage() {
     }
   }
 
+  async function downloadTd1Csv() {
+    try {
+      setExportingTd1(true);
+      const rows = await exportTd1Fn();
+      if (rows.length === 0) { alert("No TD1-RC shadow rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `td1-rc-shadow-${stamp()}.csv`);
+    } finally {
+      setExportingTd1(false);
+    }
+  }
+
   async function downloadM7Csv(scope: ExportScope) {
     try {
       setExporting(scope);
