@@ -769,7 +769,7 @@ export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handle
     };
   }
 
-  const fit = activeFit as { fit_id: string; promoted_at: string; training_rows: number };
+  const fit = activeFit as { fit_id: string; promoted_at: string };
 
   // Phase 2: active fit is frozen for the first cohort of 200 matched resolved signals.
   const { count: cohortResolved } = await sb
