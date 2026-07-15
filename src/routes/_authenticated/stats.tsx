@@ -172,6 +172,10 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["modelc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["modelc-shadow-pending"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
+        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
