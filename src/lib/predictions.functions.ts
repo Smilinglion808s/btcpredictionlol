@@ -745,54 +745,163 @@ export const getTd1RcShadowPending = createServerFn({ method: "GET" }).handler(a
   return data ?? null;
 });
 
-/** Export TD1-RC shadow rows as CSV-ready records. */
+/** Export TD1-RC shadow rows as CSV-ready records — full tracker payload.
+ *  Includes every column on model7_td1_rc_shadow plus enrichment joins to the
+ *  A2_Combined source row (model7_shadow) and the underlying prediction row
+ *  (actual candle outcome, boundary timing, partial-candle audit). */
 export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const { data, error } = await sb
-    .from("model7_td1_rc_shadow")
-    .select("*")
-    .order("candle_ts", { ascending: false })
-    .limit(20000);
-  if (error) throw error;
-  return (data ?? []).map((r: any) => ({
-    candle_ts: r.candle_ts,
-    variant: r.variant,
-    prospective_test_id: r.prospective_test_id,
-    external_final_decision: r.external_final_decision,
-    would_trade: r.would_trade,
-    result: r.result,
-    actual_direction: r.actual_direction,
-    a2_original_decision: r.a2_original_decision,
-    a2_probability_green: r.a2_probability_green,
-    a2_counterfactual_result: r.a2_counterfactual_result,
-    a2_source_variant: r.a2_source_variant,
-    a2_source_row_id: r.a2_source_row_id,
-    a2_model_fit_id: r.a2_model_fit_id,
-    td1_fit_id: r.td1_fit_id,
-    td1_artifact_sha256: r.td1_artifact_sha256,
-    td1_feature_vector_sha256: r.td1_feature_vector_sha256,
-    td1_predicted_loss_probability: r.td1_predicted_loss_probability,
-    td1_threshold: r.td1_threshold,
-    td1_veto_fired: r.td1_veto_fired,
-    containment_veto_fired: r.containment_veto_fired,
-    containment_side: r.containment_side,
-    containment_slots_before: r.containment_slots_before,
-    containment_slots_after: r.containment_slots_after,
-    containment_episode_armed_before: r.containment_episode_armed_before,
-    containment_episode_armed_after: r.containment_episode_armed_after,
-    skip_reason: r.skip_reason,
-    all_veto_reasons_json: r.all_veto_reasons_json ? JSON.stringify(r.all_veto_reasons_json) : "",
-    td1_feature_cutoff_ts: r.td1_feature_cutoff_ts,
-    td1_latest_source_candle_ts: r.td1_latest_source_candle_ts,
-    timing_status: r.timing_status,
-    leakage_check_passed: r.leakage_check_passed,
-    shadow_error: r.shadow_error,
-    feature_values_json: r.feature_values_json ? JSON.stringify(r.feature_values_json) : "",
-    resolved_at: r.resolved_at,
-    created_at: r.created_at,
-    prediction_id: r.prediction_id,
-  }));
+
+  // Paginate to bypass PostgREST 1000-row cap.
+  async function fetchAll<T>(build: (from: number, to: number) => Promise<{ data: T[] | null }>): Promise<T[]> {
+    const PAGE = 1000;
+    const out: T[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await build(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      out.push(...data);
+      if (data.length < PAGE) break;
+    }
+    return out;
+  }
+
+  const td1Rows = await fetchAll<any>((from, to) =>
+    sb.from("model7_td1_rc_shadow").select("*").order("candle_ts", { ascending: false }).range(from, to) as any,
+  );
+
+  const predIds = Array.from(new Set(td1Rows.map((r) => r.prediction_id).filter(Boolean)));
+
+  // Batch fetch enrichment sources.
+  const chunk = <T,>(arr: T[], n: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const a2Map = new Map<string, any>();
+  const predMap = new Map<string, any>();
+  for (const ids of chunk(predIds, 500)) {
+    const [{ data: a2 }, { data: p }] = await Promise.all([
+      sb.from("model7_shadow").select("*").eq("variant", "A2_Combined").in("prediction_id", ids),
+      sb.from("predictions").select(
+        "id, created_at, resolved_at, prediction, confidence, actual_direction, actual_next_candle_open, actual_next_candle_high, actual_next_candle_low, actual_next_candle_close, setup_type, market_condition, model_version, changed_by_partial, original_prediction_before_partial, partial_veto_active, partial_veto_tier, partial_veto_direction, partial_hard_override_fired, partial_fetch_source, partial_snapshot_present, partial_snapshot_failure_reason",
+      ).in("id", ids),
+    ]);
+    for (const r of (a2 ?? [])) a2Map.set(r.prediction_id, r);
+    for (const r of (p ?? [])) predMap.set(r.id, r);
+  }
+
+  return td1Rows.map((r: any) => {
+    const a2 = a2Map.get(r.prediction_id) ?? null;
+    const p = predMap.get(r.prediction_id) ?? null;
+    return {
+      // ---- TD1-RC row (full column set) ----
+      td1_row_id: r.id,
+      prediction_id: r.prediction_id,
+      candle_ts: r.candle_ts,
+      variant: r.variant,
+      prospective_test_id: r.prospective_test_id,
+      external_final_decision: r.external_final_decision,
+      would_trade: r.would_trade,
+      result: r.result,
+      actual_direction: r.actual_direction,
+      skip_reason: r.skip_reason,
+      all_veto_reasons_json: r.all_veto_reasons_json ? JSON.stringify(r.all_veto_reasons_json) : "",
+      shadow_error: r.shadow_error,
+      // A2 source binding
+      a2_source_variant: r.a2_source_variant,
+      a2_source_row_id: r.a2_source_row_id,
+      a2_original_decision: r.a2_original_decision,
+      a2_probability_green: r.a2_probability_green,
+      a2_model_fit_id: r.a2_model_fit_id,
+      a2_counterfactual_result: r.a2_counterfactual_result,
+      // TD1 model artifact + scoring
+      td1_fit_id: r.td1_fit_id,
+      td1_artifact_sha256: r.td1_artifact_sha256,
+      td1_feature_vector_sha256: r.td1_feature_vector_sha256,
+      td1_predicted_loss_probability: r.td1_predicted_loss_probability,
+      td1_threshold: r.td1_threshold,
+      td1_veto_fired: r.td1_veto_fired,
+      td1_feature_cutoff_ts: r.td1_feature_cutoff_ts,
+      td1_latest_source_candle_ts: r.td1_latest_source_candle_ts,
+      feature_values_json: r.feature_values_json ? JSON.stringify(r.feature_values_json) : "",
+      // Containment state
+      containment_veto_fired: r.containment_veto_fired,
+      containment_side: r.containment_side,
+      containment_slots_before: r.containment_slots_before,
+      containment_slots_after: r.containment_slots_after,
+      containment_episode_armed_before: r.containment_episode_armed_before,
+      containment_episode_armed_after: r.containment_episode_armed_after,
+      // Timing / leakage on TD1-RC row
+      timing_status: r.timing_status,
+      leakage_check_passed: r.leakage_check_passed,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      resolved_at: r.resolved_at,
+
+      // ---- A2_Combined source row enrichment ----
+      a2_row_id: a2?.id ?? null,
+      a2_base_decision: a2?.base_decision ?? null,
+      a2_final_decision: a2?.decision ?? null,
+      a2_logit: a2?.logit ?? null,
+      a2_probability_bucket: a2?.a2_probability_bucket ?? null,
+      a2_filter_fired: a2?.a2_filter_fired ?? null,
+      a2_filter_reason: a2?.a2_filter_reason ?? null,
+      a2_variant_a_base_decision: a2?.a2_variant_a_base_decision ?? null,
+      a2_variant_a_override_applied: a2?.a2_variant_a_override_applied ?? null,
+      a2_variant_a_applied_override_reason: a2?.a2_variant_a_applied_override_reason ?? null,
+      a2_variant_a_final_decision: a2?.a2_variant_a_final_decision ?? null,
+      a2_override_reasons_json: a2?.override_reasons_json ? JSON.stringify(a2.override_reasons_json) : "",
+      a2_target_boundary_ts: a2?.target_boundary_ts ?? null,
+      a2_score_not_before_ts: a2?.score_not_before_ts ?? null,
+      a2_feature_cutoff_ts: a2?.feature_cutoff_ts ?? null,
+      a2_latest_source_candle_ts: a2?.latest_source_candle_ts ?? null,
+      a2_latest_source_event_ts: a2?.latest_source_event_ts ?? null,
+      a2_previous_candle_ts: a2?.previous_candle_ts ?? null,
+      a2_boundary_delta_ms: a2?.boundary_delta_ms ?? null,
+      a2_scored_at: a2?.scored_at ?? null,
+      a2_snapshot_ts: a2?.snapshot_ts ?? null,
+      a2_prediction_row_created_at: a2?.prediction_row_created_at ?? null,
+      a2_prediction_row_lead_ms: a2?.prediction_row_lead_ms ?? null,
+      a2_timing_status: a2?.timing_status ?? null,
+      a2_leakage_check_passed: a2?.leakage_check_passed ?? null,
+      a2_leakage_block_reason: a2?.leakage_block_reason ?? null,
+      a2_offending_features_json: a2?.offending_features_json ? JSON.stringify(a2.offending_features_json) : "",
+      a2_history_candles_available: a2?.history_candles_available ?? null,
+      a2_history_gap_encountered: a2?.history_gap_encountered ?? null,
+      a2_missing_raw_numeric_fields_json: a2?.missing_raw_numeric_fields_json ? JSON.stringify(a2.missing_raw_numeric_fields_json) : "",
+      a2_feature_vector_nonzero_count: a2?.feature_vector_nonzero_count ?? null,
+      a2_feature_vector_sha256: a2?.feature_vector_sha256 ?? null,
+      a2_model_artifact_sha256: a2?.model_artifact_sha256 ?? null,
+      a2_warm_cache_hit: a2?.warm_cache_hit ?? null,
+      a2_production_model_version: a2?.production_model_version ?? null,
+
+      // ---- Prediction / actual outcome enrichment ----
+      prediction_created_at: p?.created_at ?? null,
+      prediction_resolved_at: p?.resolved_at ?? null,
+      prediction_written_direction: p?.prediction ?? null,
+      prediction_confidence: p?.confidence ?? null,
+      prediction_model_version: p?.model_version ?? null,
+      prediction_setup_type: p?.setup_type ?? null,
+      prediction_market_condition: p?.market_condition ?? null,
+      actual_direction_prediction: p?.actual_direction ?? null,
+      actual_next_candle_open: p?.actual_next_candle_open ?? null,
+      actual_next_candle_high: p?.actual_next_candle_high ?? null,
+      actual_next_candle_low: p?.actual_next_candle_low ?? null,
+      actual_next_candle_close: p?.actual_next_candle_close ?? null,
+      changed_by_partial: p?.changed_by_partial ?? null,
+      original_prediction_before_partial: p?.original_prediction_before_partial ?? null,
+      partial_veto_active: p?.partial_veto_active ?? null,
+      partial_veto_tier: p?.partial_veto_tier ?? null,
+      partial_veto_direction: p?.partial_veto_direction ?? null,
+      partial_hard_override_fired: p?.partial_hard_override_fired ?? null,
+      partial_fetch_source: p?.partial_fetch_source ?? null,
+      partial_snapshot_present: p?.partial_snapshot_present ?? null,
+      partial_snapshot_failure_reason: p?.partial_snapshot_failure_reason ?? null,
+    };
+  });
 });
+
 
 
 const overrideSchema = z.object({
