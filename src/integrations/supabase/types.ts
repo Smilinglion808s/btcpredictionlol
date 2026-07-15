@@ -786,6 +786,246 @@ export type Database = {
           },
         ]
       }
+      model7_td1_fits: {
+        Row: {
+          active: boolean
+          artifact_sha256: string
+          base_variant: string
+          created_at: string
+          feature_order_json: Json
+          fit_id: string
+          id: string
+          promoted_at: string | null
+          trained_through_candle_ts: string
+          trainer_version: string
+          training_row_count: number
+          tree_artifact_json: Json
+        }
+        Insert: {
+          active?: boolean
+          artifact_sha256: string
+          base_variant: string
+          created_at?: string
+          feature_order_json: Json
+          fit_id: string
+          id?: string
+          promoted_at?: string | null
+          trained_through_candle_ts: string
+          trainer_version: string
+          training_row_count: number
+          tree_artifact_json: Json
+        }
+        Update: {
+          active?: boolean
+          artifact_sha256?: string
+          base_variant?: string
+          created_at?: string
+          feature_order_json?: Json
+          fit_id?: string
+          id?: string
+          promoted_at?: string | null
+          trained_through_candle_ts?: string
+          trainer_version?: string
+          training_row_count?: number
+          tree_artifact_json?: Json
+        }
+        Relationships: []
+      }
+      model7_td1_rc_resolutions: {
+        Row: {
+          a2_counterfactual_result: string
+          a2_decision: string
+          base_variant: string
+          candle_ts: string
+          created_at: string
+          prediction_id: string
+          resolution_id: string
+          state_after: Json
+          state_before: Json
+        }
+        Insert: {
+          a2_counterfactual_result: string
+          a2_decision: string
+          base_variant: string
+          candle_ts: string
+          created_at?: string
+          prediction_id: string
+          resolution_id: string
+          state_after: Json
+          state_before: Json
+        }
+        Update: {
+          a2_counterfactual_result?: string
+          a2_decision?: string
+          base_variant?: string
+          candle_ts?: string
+          created_at?: string
+          prediction_id?: string
+          resolution_id?: string
+          state_after?: Json
+          state_before?: Json
+        }
+        Relationships: []
+      }
+      model7_td1_rc_shadow: {
+        Row: {
+          a2_counterfactual_result: string | null
+          a2_model_fit_id: string | null
+          a2_original_decision: string | null
+          a2_probability_green: number | null
+          a2_source_row_id: string | null
+          a2_source_variant: string
+          actual_direction: string | null
+          all_veto_reasons_json: Json
+          candle_ts: string
+          containment_episode_armed_after: boolean | null
+          containment_episode_armed_before: boolean | null
+          containment_side: string | null
+          containment_slots_after: number | null
+          containment_slots_before: number | null
+          containment_veto_fired: boolean
+          created_at: string
+          external_final_decision: string | null
+          feature_values_json: Json | null
+          id: string
+          leakage_check_passed: boolean | null
+          prediction_id: string
+          prospective_test_id: string
+          resolved_at: string | null
+          result: string | null
+          shadow_error: string | null
+          skip_reason: string | null
+          td1_artifact_sha256: string | null
+          td1_feature_cutoff_ts: string | null
+          td1_feature_vector_sha256: string | null
+          td1_fit_id: string | null
+          td1_latest_source_candle_ts: string | null
+          td1_predicted_loss_probability: number | null
+          td1_threshold: number
+          td1_veto_fired: boolean
+          timing_status: string | null
+          updated_at: string
+          variant: string
+          would_trade: boolean
+        }
+        Insert: {
+          a2_counterfactual_result?: string | null
+          a2_model_fit_id?: string | null
+          a2_original_decision?: string | null
+          a2_probability_green?: number | null
+          a2_source_row_id?: string | null
+          a2_source_variant: string
+          actual_direction?: string | null
+          all_veto_reasons_json?: Json
+          candle_ts: string
+          containment_episode_armed_after?: boolean | null
+          containment_episode_armed_before?: boolean | null
+          containment_side?: string | null
+          containment_slots_after?: number | null
+          containment_slots_before?: number | null
+          containment_veto_fired?: boolean
+          created_at?: string
+          external_final_decision?: string | null
+          feature_values_json?: Json | null
+          id?: string
+          leakage_check_passed?: boolean | null
+          prediction_id: string
+          prospective_test_id: string
+          resolved_at?: string | null
+          result?: string | null
+          shadow_error?: string | null
+          skip_reason?: string | null
+          td1_artifact_sha256?: string | null
+          td1_feature_cutoff_ts?: string | null
+          td1_feature_vector_sha256?: string | null
+          td1_fit_id?: string | null
+          td1_latest_source_candle_ts?: string | null
+          td1_predicted_loss_probability?: number | null
+          td1_threshold?: number
+          td1_veto_fired?: boolean
+          timing_status?: string | null
+          updated_at?: string
+          variant?: string
+          would_trade?: boolean
+        }
+        Update: {
+          a2_counterfactual_result?: string | null
+          a2_model_fit_id?: string | null
+          a2_original_decision?: string | null
+          a2_probability_green?: number | null
+          a2_source_row_id?: string | null
+          a2_source_variant?: string
+          actual_direction?: string | null
+          all_veto_reasons_json?: Json
+          candle_ts?: string
+          containment_episode_armed_after?: boolean | null
+          containment_episode_armed_before?: boolean | null
+          containment_side?: string | null
+          containment_slots_after?: number | null
+          containment_slots_before?: number | null
+          containment_veto_fired?: boolean
+          created_at?: string
+          external_final_decision?: string | null
+          feature_values_json?: Json | null
+          id?: string
+          leakage_check_passed?: boolean | null
+          prediction_id?: string
+          prospective_test_id?: string
+          resolved_at?: string | null
+          result?: string | null
+          shadow_error?: string | null
+          skip_reason?: string | null
+          td1_artifact_sha256?: string | null
+          td1_feature_cutoff_ts?: string | null
+          td1_feature_vector_sha256?: string | null
+          td1_fit_id?: string | null
+          td1_latest_source_candle_ts?: string | null
+          td1_predicted_loss_probability?: number | null
+          td1_threshold?: number
+          td1_veto_fired?: boolean
+          timing_status?: string | null
+          updated_at?: string
+          variant?: string
+          would_trade?: boolean
+        }
+        Relationships: []
+      }
+      model7_td1_rc_state: {
+        Row: {
+          base_variant: string
+          last_resolution_id: string | null
+          no_consecutive_losses: number
+          no_episode_armed: boolean
+          no_slots_remaining: number
+          updated_at: string
+          yes_consecutive_losses: number
+          yes_episode_armed: boolean
+          yes_slots_remaining: number
+        }
+        Insert: {
+          base_variant: string
+          last_resolution_id?: string | null
+          no_consecutive_losses?: number
+          no_episode_armed?: boolean
+          no_slots_remaining?: number
+          updated_at?: string
+          yes_consecutive_losses?: number
+          yes_episode_armed?: boolean
+          yes_slots_remaining?: number
+        }
+        Update: {
+          base_variant?: string
+          last_resolution_id?: string | null
+          no_consecutive_losses?: number
+          no_episode_armed?: boolean
+          no_slots_remaining?: number
+          updated_at?: string
+          yes_consecutive_losses?: number
+          yes_episode_armed?: boolean
+          yes_slots_remaining?: number
+        }
+        Relationships: []
+      }
       model7_training_fits: {
         Row: {
           artifact_sha256: string | null
@@ -1404,8 +1644,23 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_td1_rc_resolution: {
+        Args: {
+          p_base_variant: string
+          p_candle_ts: string
+          p_prediction_id: string
+          p_resolution_id: string
+          p_result: string
+          p_side: string
+        }
+        Returns: Json
+      }
       arm_b4_2_probe: {
         Args: { p_date_mt: string; p_prediction_id: string }
+        Returns: Json
+      }
+      consume_td1_containment_slot: {
+        Args: { p_base_variant: string; p_side: string }
         Returns: Json
       }
       prediction_stats: { Args: never; Returns: Json }
