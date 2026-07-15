@@ -594,6 +594,78 @@ export const listVariantA2ConflictRecent = createServerFn({ method: "GET" }).han
   return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
 });
 
+// ---------- TD1-RC (Model 8 layer over A2_Combined) — active hero source ----------
+
+function shapeTd1RcRow(r: any, prod: any | null): B2UiRow {
+  const decision = r.external_final_decision as string | null;
+  const wouldTrade = Boolean(r.would_trade);
+  const p = Number(r.a2_probability_green ?? 0);
+  const prediction: "YES" | "NO" | "NO CLEAR EDGE" =
+    wouldTrade && decision === "YES" ? "YES"
+    : wouldTrade && decision === "NO" ? "NO"
+    : "NO CLEAR EDGE";
+  const confidence =
+    prediction === "YES" ? Math.round(p * 100)
+    : prediction === "NO" ? Math.round((1 - p) * 100)
+    : 0;
+  // Row status: resolved rows carry `result` (WIN/LOSS/PUSH). Map to
+  // shadow-row status codes used by the UI.
+  const result = r.result as string | null;
+  let status: string = "pending";
+  if (result === "WIN") status = "win";
+  else if (result === "LOSS") status = "loss";
+  else if (result === "PUSH") status = "push";
+  return {
+    id: r.id,
+    candle_ts: r.candle_ts,
+    prediction,
+    confidence,
+    status,
+    resolved_at: r.resolved_at ?? null,
+    created_at: r.created_at,
+    actual_next_candle_open: prod?.actual_next_candle_open != null ? Number(prod.actual_next_candle_open) : null,
+    actual_next_candle_close: prod?.actual_next_candle_close != null ? Number(prod.actual_next_candle_close) : null,
+  };
+}
+
+/** Latest TD1-RC row shaped for the home page's current/upcoming cards. */
+export const getTd1RcLatest = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_td1_rc_shadow")
+    .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, result, resolved_at, created_at, prediction_id")
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeTd1RcRow(data, null);
+});
+
+/** Recent TD1-RC rows shaped for the home page's last-5-trades + last-result cards. */
+export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_td1_rc_shadow")
+    .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, result, resolved_at, created_at, prediction_id")
+    .order("candle_ts", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  const ids = Array.from(new Set(rows.map((r: any) => r.prediction_id).filter(Boolean)));
+  const prodMap = new Map<string, any>();
+  if (ids.length) {
+    const [live, arch] = await Promise.all([
+      sb.from("predictions").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+      sb.from("predictions_archive").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+    ]);
+    for (const p of [...(live.data ?? []), ...(arch.data ?? [])]) {
+      if (!prodMap.has(p.id)) prodMap.set(p.id, p);
+    }
+  }
+  return rows.map((r: any) => shapeTd1RcRow(r, prodMap.get(r.prediction_id) ?? null));
+});
+
 
 /** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant). */
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () => {

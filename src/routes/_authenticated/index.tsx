@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
-import { getVariantA2ConflictLatest, listVariantA2ConflictRecent } from "@/lib/predictions.functions";
+import { getTd1RcLatest, listTd1RcRecent } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,15 +21,15 @@ function Dashboard() {
   const qc = useQueryClient();
 
   const candlesFn = useServerFn(listCandles);
-  const latestFn = useServerFn(getVariantA2ConflictLatest);
+  const latestFn = useServerFn(getTd1RcLatest);
   const settingsFn = useServerFn(getActiveSettings);
 
 
   const candlesQ = useQuery({ queryKey: ["candles"], queryFn: () => candlesFn() });
-  const latestQ = useQuery({ queryKey: ["a2c-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
+  const latestQ = useQuery({ queryKey: ["td1rc-latest"], queryFn: () => latestFn(), refetchInterval: 10_000 });
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
-  const listFn = useServerFn(listVariantA2ConflictRecent);
-  const listQ = useQuery({ queryKey: ["a2c-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
+  const listFn = useServerFn(listTd1RcRecent);
+  const listQ = useQuery({ queryKey: ["td1rc-recent"], queryFn: () => listFn(), refetchInterval: 15_000 });
   const resolvedSorted = useMemo(() => {
     return (listQ.data ?? [])
       .filter((p) => p.status === "win" || p.status === "loss" || p.status === "push")
@@ -53,9 +53,9 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "candles" }, () => {
         qc.invalidateQueries({ queryKey: ["candles"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["a2c-latest"] });
-        qc.invalidateQueries({ queryKey: ["a2c-recent"] });
+      .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["td1rc-latest"] });
+        qc.invalidateQueries({ queryKey: ["td1rc-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -128,7 +128,7 @@ function Dashboard() {
 
           <Card className="py-2">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades · Variant A2 Conflict</CardTitle>
+              <CardTitle className="text-[11px] uppercase tracking-wider text-muted-foreground">Last 5 Trades · TD1-RC (Model 8)</CardTitle>
             </CardHeader>
             <CardContent className="py-0">
               {last5.length === 0 ? (
@@ -177,7 +177,7 @@ function Dashboard() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Last Result · Variant A2 Conflict</CardTitle>
+              <CardTitle className="text-base">Last Result · TD1-RC (Model 8)</CardTitle>
               <Link to="/stats" className="text-[11px] uppercase tracking-wider text-info hover:underline">View stats →</Link>
             </CardHeader>
             <CardContent>
@@ -306,7 +306,7 @@ function HeaderStrip(props: {
         <Stat label="Time Left in Candle" value={timeLeft} tone="info" />
         <Stat label="Next Prediction" value={nextPrediction} tone="info" />
         <Stat label="Last Updated" value={props.lastCandleTs ? new Date(props.lastCandleTs).toLocaleTimeString() : "—"} />
-        <Stat label="Model" value={`A2C · ${props.modelVersion ?? "—"}`} />
+        <Stat label="Model" value={`TD1-RC · ${props.modelVersion ?? "—"}`} />
       </CardContent>
     </Card>
   );

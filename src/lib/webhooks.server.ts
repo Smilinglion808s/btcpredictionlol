@@ -90,7 +90,7 @@ export function buildB4_2WebhookPayload(inputs: B2WebhookInputs) {
   };
 }
 
-// Variant A2 Conflict — active outbound webhook source (SKIP on override conflicts).
+// Variant A2 Conflict — legacy outbound source; kept for backwards-compat only.
 export const A2_CONFLICT_DECISION_POLICY_VERSION = "model7-a2-conflict-v1";
 export const A2_CONFLICT_MODEL_ID = "model7_variant_a2_conflict";
 
@@ -103,6 +103,92 @@ export function buildA2ConflictWebhookPayload(inputs: B2WebhookInputs) {
     decision_policy_version: A2_CONFLICT_DECISION_POLICY_VERSION,
   };
 }
+
+// TD1-RC (Model 8 layer over A2_Combined) — ACTIVE outbound webhook source.
+// TD1-RC only preserves A2_Combined's YES/NO or converts to SKIP; it never
+// flips direction. Payload shape mirrors B2 for bot compatibility, but the
+// underlying decision fields come from the model7_td1_rc_shadow row.
+export const TD1_RC_DECISION_POLICY_VERSION = "model7-a2-combined-td1-rc-v1";
+export const TD1_RC_MODEL_ID = "model7_td1_rc";
+
+export interface Td1RcWebhookInputs {
+  td1Row: Record<string, any>;     // model7_td1_rc_shadow row
+  prediction: Record<string, any>; // predictions row
+}
+
+export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInputs) {
+  const candleTs = prediction.candle_ts as string;
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+  const decision: string | null = (td1Row.external_final_decision as string | null) ?? null;
+  const wouldTrade: boolean = Boolean(td1Row.would_trade);
+  const pGreen = td1Row.a2_probability_green != null ? Number(td1Row.a2_probability_green) : null;
+
+  let predictionLabel: "YES" | "NO" | "NO CLEAR EDGE";
+  if (!wouldTrade) predictionLabel = "NO CLEAR EDGE";
+  else if (decision === "YES") predictionLabel = "YES";
+  else if (decision === "NO") predictionLabel = "NO";
+  else predictionLabel = "NO CLEAR EDGE";
+
+  let confidence: number;
+  if (pGreen == null) confidence = 0;
+  else if (predictionLabel === "YES") confidence = Math.round(pGreen * 100);
+  else if (predictionLabel === "NO") confidence = Math.round((1 - pGreen) * 100);
+  else confidence = Math.round(Math.max(pGreen, 1 - pGreen) * 100);
+
+  return {
+    model: TD1_RC_MODEL_ID,
+    model_version: "td1-rc 1.0",
+    model_artifact_sha256: td1Row.td1_artifact_sha256 ?? null,
+    decision_policy_version: TD1_RC_DECISION_POLICY_VERSION,
+    model_fit_id: td1Row.td1_fit_id ?? null,
+    setup_type: prediction.setup_type ?? null,
+
+    prediction: predictionLabel,
+    confidence,
+
+    decision,
+    trade: wouldTrade,
+    probability_green: pGreen,
+    base_decision: td1Row.a2_original_decision ?? null,
+    override_reasons: td1Row.all_veto_reasons_json ?? [],
+
+    // TD1-RC specific audit fields
+    a2_source_variant: td1Row.a2_source_variant ?? "A2_Combined",
+    a2_original_decision: td1Row.a2_original_decision ?? null,
+    td1_veto_fired: Boolean(td1Row.td1_veto_fired),
+    containment_veto_fired: Boolean(td1Row.containment_veto_fired),
+    td1_predicted_loss_probability: td1Row.td1_predicted_loss_probability ?? null,
+    td1_threshold: td1Row.td1_threshold ?? 0.60,
+    skip_reason: td1Row.skip_reason ?? null,
+    prospective_test_id: td1Row.prospective_test_id ?? null,
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: endsAt,
+
+    dedupe_key: `BTC-USDT-15m-${startsAt}`,
+    prediction_id: prediction.id ?? null,
+    shadow_id: null,
+
+    btc_price_at_prediction: prediction.btc_price_at_prediction != null
+      ? Number(prediction.btc_price_at_prediction) : null,
+    market_condition: prediction.market_condition ?? null,
+
+    timing_status: td1Row.timing_status ?? null,
+    boundary_delta_ms: null,
+    scored_at: null,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
+
 
 export interface B2WebhookInputs {
   shadow: Record<string, any>;     // model7_shadow row (variant='B2')

@@ -639,54 +639,22 @@ async function runA2Policies(
       built.push({ policy, row, out });
     }
 
-    // ---- Priority: fire the A2_Conflict webhook BEFORE any DB insert. ----
-    // The payload doesn't require the shadow row's DB id (nullable), so we can
-    // emit immediately and let the inserts happen in parallel afterwards.
-    const conflict = built.find((b) => b.policy === "A2_Conflict")!;
-    const aTimingStatus = String((inherited.timing_status as string | null) ?? "");
-    const eligible =
-      conflict.out?.decision != null &&
-      probability != null &&
-      (aTimingStatus === "ON_TIME" || aTimingStatus === "LATE_WARNING");
-    const webhookPromise: Promise<unknown> = eligible
-      ? (async () => {
-          try {
-            const { deliverWebhook, buildA2ConflictWebhookPayload } = await import("../webhooks.server");
-            const payload = buildA2ConflictWebhookPayload({
-              shadow: { ...conflict.row, id: null },
-              prediction: predictionRow as unknown as Record<string, unknown>,
-            });
-            await deliverWebhook(supabase, "prediction.created", payload);
-          } catch (whErr) {
-            try {
-              await supabase.from("api_runs").insert({
-                run_type: "webhook-created-error",
-                response_payload: {
-                  error: whErr instanceof Error ? whErr.message : String(whErr),
-                  prediction_id: predictionRow.id, variant: "A2_Conflict",
-                },
-                success: false,
-                error_message: whErr instanceof Error ? whErr.message : String(whErr),
-              });
-            } catch { /* ignore */ }
-          }
-        })()
-      : Promise.resolve();
-
-    // Insert all three A2 rows in parallel with the webhook.
+    // ---- Insert all three A2 rows in parallel (no webhook here). ----
     const insertPromise = Promise.all(built.map(async ({ row }) => {
       try {
         await supabase.from("model7_shadow").insert(row as never);
       } catch { /* never block */ }
     }));
 
-    // TD1-RC runs AFTER A2_Combined is decided; reads A2 as immutable input.
-    // Runs in parallel with inserts/webhook; failures never affect A2.
+    // ---- TD1-RC is the ACTIVE webhook source. Runs on A2_Combined output. ----
+    // Emit the webhook AFTER TD1-RC decides so bot receives the gated signal.
     const combined = built.find((b) => b.policy === "A2_Combined")!;
+    const combinedTimingStatus = String((inherited.timing_status as string | null) ?? "");
     const td1Promise = (async () => {
+      let td1Row: Record<string, unknown> | null = null;
       try {
         const { runTd1RcForA2Combined } = await import("./td1/orchestrator");
-        await runTd1RcForA2Combined(supabase, {
+        td1Row = await runTd1RcForA2Combined(supabase, {
           predictionId: predictionRow.id,
           candleTs: predictionRow.candle_ts,
           targetBoundaryTs: String(inherited.target_boundary_ts ?? predictionRow.candle_ts),
@@ -698,9 +666,37 @@ async function runA2Policies(
           a2RowId: null,
         });
       } catch { /* never block */ }
+
+      // Emit TD1-RC webhook. Only fire when timing is real and TD1-RC produced
+      // a decision (YES / NO / SKIP). If TD1-RC failed catastrophically
+      // (td1Row null), do not send a payload so the bot doesn't act on noise.
+      const eligible =
+        td1Row != null &&
+        (combinedTimingStatus === "ON_TIME" || combinedTimingStatus === "LATE_WARNING");
+      if (!eligible) return;
+      try {
+        const { deliverWebhook, buildTd1RcWebhookPayload } = await import("../webhooks.server");
+        const payload = buildTd1RcWebhookPayload({
+          td1Row: td1Row as Record<string, unknown>,
+          prediction: predictionRow as unknown as Record<string, unknown>,
+        });
+        await deliverWebhook(supabase, "prediction.created", payload);
+      } catch (whErr) {
+        try {
+          await supabase.from("api_runs").insert({
+            run_type: "webhook-created-error",
+            response_payload: {
+              error: whErr instanceof Error ? whErr.message : String(whErr),
+              prediction_id: predictionRow.id, variant: "TD1_RC",
+            },
+            success: false,
+            error_message: whErr instanceof Error ? whErr.message : String(whErr),
+          });
+        } catch { /* ignore */ }
+      }
     })();
 
-    await Promise.all([webhookPromise, insertPromise, td1Promise]);
+    await Promise.all([insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
