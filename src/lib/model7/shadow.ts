@@ -276,7 +276,7 @@ async function runVariant(
       leakage_check_passed: false,
       leakage_block_reason: reasonIfNoFit ?? "no_fit",
     });
-    return;
+    return null;
   }
   if (predictionRowPostBoundary) {
     await insertShadowRow(supabase, {
@@ -291,7 +291,7 @@ async function runVariant(
         ts: createdAtIso ?? "unknown",
       }],
     });
-    return;
+    return null;
   }
   if (!leakage.passed) {
     await insertShadowRow(supabase, {
@@ -303,7 +303,7 @@ async function runVariant(
       leakage_block_reason: leakage.reason,
       offending_features_json: leakage.offending_features,
     });
-    return;
+    return null;
   }
   try {
     const { feature_map, categoricals } = buildFeatureMap(row, history);
@@ -328,7 +328,7 @@ async function runVariant(
         scored_at: scoredAt.toISOString(),
         boundary_delta_ms: boundaryDeltaMs,
       });
-      return;
+      return null;
     }
 
     const artifactHash = fitArtifactHash(fit);
@@ -377,7 +377,8 @@ async function runVariant(
       } catch { /* never block shadow */ }
     }
 
-    // Outbound webhook is now emitted from Variant B4.2 (see below), not B2.
+    // Outbound webhook is emitted from A2_Conflict (see runA2Policies).
+    return { ...shadowRow, id: inserted?.id ?? null };
 
   } catch (e) {
     await insertShadowRow(supabase, {
@@ -387,8 +388,10 @@ async function runVariant(
       timing_status: "SOURCE_TIMESTAMP_UNKNOWN",
       leakage_check_passed: false,
     });
+    return null;
   }
 }
+
 
 /**
  * Fire-and-forget from the production engine. Always resolves; never throws.
