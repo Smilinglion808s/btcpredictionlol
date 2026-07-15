@@ -28,20 +28,22 @@ async function writeSkipRow(
   supabase: SupabaseClient,
   base: Record<string, unknown>,
   reason: string,
-): Promise<void> {
-  await supabase.from("model7_td1_rc_shadow").insert({
+): Promise<Record<string, unknown>> {
+  const row = {
     ...base,
     external_final_decision: "SKIP",
     would_trade: false,
     skip_reason: reason,
     all_veto_reasons_json: [reason],
-  } as never);
+  };
+  await supabase.from("model7_td1_rc_shadow").insert(row as never);
+  return row;
 }
 
 export async function runTd1RcForA2Combined(
   supabase: SupabaseClient,
   ctx: A2CombinedContext,
-): Promise<void> {
+): Promise<Record<string, unknown> | null> {
   const baseRow: Record<string, unknown> = {
     prediction_id: ctx.predictionId,
     candle_ts: ctx.candleTs,
