@@ -184,7 +184,27 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const b2Hero = m7Q.data?.A2_Conflict ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
+  const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
+  const b2Hero = {
+    total: Number(td1Stats.total ?? 0),
+    wins: Number(td1Stats.wins ?? 0),
+    losses: Number(td1Stats.losses ?? 0),
+    pushes: Number(td1Stats.pushes ?? 0),
+    pending: Number(td1Stats.pending ?? 0),
+    win_rate: Number(td1Stats.win_rate ?? 0),
+    last_10_win_rate: Number(td1Stats.last_10_win_rate ?? 0),
+    last_25_win_rate: Number(td1Stats.last_25_win_rate ?? 0),
+    last_50_win_rate: Number(td1Stats.last_50_win_rate ?? 0),
+    yes_total: Number(td1Stats.yes_total ?? 0),
+    yes_wins: Number(td1Stats.yes_wins ?? 0),
+    yes_win_rate: Number(td1Stats.yes_win_rate ?? 0),
+    no_total: Number(td1Stats.no_total ?? 0),
+    no_wins: Number(td1Stats.no_wins ?? 0),
+    no_win_rate: Number(td1Stats.no_win_rate ?? 0),
+    avg_confidence: Number(td1Stats.avg_confidence ?? 0),
+    avg_confidence_wins: Number(td1Stats.avg_confidence_wins ?? 0),
+    avg_confidence_losses: Number(td1Stats.avg_confidence_losses ?? 0),
+  };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
@@ -195,7 +215,8 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = "A2C";
+  const badge = "TD1";
+
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
@@ -212,14 +233,14 @@ function StatsPage() {
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
               <div className="font-mono text-lg font-semibold flex items-center gap-2">
-                Variant A2 Conflict · BTCUSDT 15m
+                TD1-RC (A2 Combined Layer) · BTCUSDT 15m
                 <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
                   <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: Variant A2 Conflict · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
+                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
               </div>
             </div>
           </div>
@@ -239,15 +260,15 @@ function StatsPage() {
             </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Win Rate</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Win Rate</div>
                 <div className="font-mono text-2xl font-bold text-bull">{b2Hero.win_rate}%</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Resolved</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Resolved</div>
                 <div className="font-mono text-2xl font-bold">{b2Resolved}</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Trades</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Trades</div>
                 <div className="font-mono text-2xl font-bold">{b2Hero.total}</div>
               </div>
             </div>
@@ -256,7 +277,7 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant A2 Conflict (autobet)</span></h2>
+      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— TD1-RC (autobet)</span></h2>
 
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
