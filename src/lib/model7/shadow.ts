@@ -806,4 +806,11 @@ export async function resolveShadowRowsFor(
     const { resolveTd1RcRow } = await import("./td1/orchestrator");
     await resolveTd1RcRow(supabase, predictionId, actualDirection);
   } catch { /* never block */ }
+
+  // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.
+  try {
+    const { maybeRetrainTd1 } = await import("./td1/retrain");
+    await maybeRetrainTd1(supabase);
+  } catch { /* never block */ }
 }
+

@@ -19,6 +19,7 @@ import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authen
 import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
+import { Route as ApiPublicHooksTd1RcRetrainRouteImport } from './routes/api/public/hooks/td1-rc-retrain'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksModelcNightlyAuditRouteImport } from './routes/api/public/hooks/modelc-nightly-audit'
@@ -78,6 +79,12 @@ const ApiPublicPredictionsLatestRoute =
     path: '/api/public/predictions/latest',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksTd1RcRetrainRoute =
+  ApiPublicHooksTd1RcRetrainRouteImport.update({
+    id: '/api/public/hooks/td1-rc-retrain',
+    path: '/api/public/hooks/td1-rc-retrain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksScheduled15mRunRoute =
   ApiPublicHooksScheduled15mRunRouteImport.update({
     id: '/api/public/hooks/scheduled-15m-run',
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -145,6 +153,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -164,6 +173,7 @@ export interface FileRoutesById {
   '/api/public/hooks/modelc-nightly-audit': typeof ApiPublicHooksModelcNightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -218,6 +230,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/modelc-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -231,6 +244,7 @@ export interface RootRouteChildren {
   ApiPublicHooksModelcNightlyAuditRoute: typeof ApiPublicHooksModelcNightlyAuditRoute
   ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
+  ApiPublicHooksTd1RcRetrainRoute: typeof ApiPublicHooksTd1RcRetrainRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
   ApiPublicTimingBtc15mRoute: typeof ApiPublicTimingBtc15mRoute
@@ -308,6 +322,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPredictionsLatestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/td1-rc-retrain': {
+      id: '/api/public/hooks/td1-rc-retrain'
+      path: '/api/public/hooks/td1-rc-retrain'
+      fullPath: '/api/public/hooks/td1-rc-retrain'
+      preLoaderRoute: typeof ApiPublicHooksTd1RcRetrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/scheduled-15m-run': {
       id: '/api/public/hooks/scheduled-15m-run'
       path: '/api/public/hooks/scheduled-15m-run'
@@ -382,6 +403,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksModelcNightlyAuditRoute: ApiPublicHooksModelcNightlyAuditRoute,
   ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
+  ApiPublicHooksTd1RcRetrainRoute: ApiPublicHooksTd1RcRetrainRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
   ApiPublicTimingBtc15mRoute: ApiPublicTimingBtc15mRoute,
