@@ -126,7 +126,7 @@ export async function trainAndPromoteTd1(supabase: SupabaseClient): Promise<Trai
 // resolved eligible A2_Combined signals (including TD1-vetoed signals resolved
 // counterfactually — every non-SKIP TD1-RC row counts). No replacement fit is
 // promoted during the cohort; normal 96-signal cadence resumes afterward.
-export const TD1_FREEZE_FIRST_FIT = false;
+export const TD1_FREEZE_FIRST_FIT = true;
 export const FREEZE_COHORT_SIZE = 200;
 
 export async function maybeRetrainTd1(supabase: SupabaseClient): Promise<TrainOutcome> {
