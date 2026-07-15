@@ -723,6 +723,11 @@ export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async
 });
 
 
+const overrideSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["pending", "win", "loss", "push", "manual_review"]),
+  notes: z.string().optional().nullable(),
+});
 
 export const overridePrediction = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => overrideSchema.parse(input))
