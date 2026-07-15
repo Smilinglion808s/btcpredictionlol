@@ -233,7 +233,7 @@ function StatsPage() {
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
               <div className="font-mono text-lg font-semibold flex items-center gap-2">
-                Variant A2 Conflict · BTCUSDT 15m
+                TD1-RC (A2 Combined Layer) · BTCUSDT 15m
                 <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
                   <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
