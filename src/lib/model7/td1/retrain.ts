@@ -121,22 +121,54 @@ export async function trainAndPromoteTd1(supabase: SupabaseClient): Promise<Trai
   };
 }
 
+// Freeze first-fit cohort configuration. When enabled, the first promoted fit
+// is held active across the entire cohort of FREEZE_COHORT_SIZE matched
+// resolved eligible A2_Combined signals (including TD1-vetoed signals resolved
+// counterfactually — every non-SKIP TD1-RC row counts). No replacement fit is
+// promoted during the cohort; normal 96-signal cadence resumes afterward.
+export const TD1_FREEZE_FIRST_FIT = true;
+export const FREEZE_COHORT_SIZE = 200;
+
 export async function maybeRetrainTd1(supabase: SupabaseClient): Promise<TrainOutcome> {
   try {
     const { data: activeFit } = await supabase
       .from("model7_td1_fits")
-      .select("trained_through_candle_ts")
+      .select("fit_id, trained_through_candle_ts, promoted_at")
       .eq("base_variant", BASE_VARIANT)
       .eq("active", true)
       .maybeSingle();
     if (!activeFit) return await trainAndPromoteTd1(supabase);
+
+    const fit = activeFit as { fit_id: string; trained_through_candle_ts: string; promoted_at: string };
+
+    // Cohort progress: matched resolved eligible A2_Combined signals scored by
+    // this fit. A row counts once its A2 counterfactual result is known
+    // (a2_counterfactual_result IS NOT NULL) and the TD1 decision was made
+    // against a real fit (external_final_decision in YES/NO/SKIP with td1_fit_id set).
+    if (TD1_FREEZE_FIRST_FIT) {
+      const { count: cohortResolved } = await supabase
+        .from("model7_td1_rc_shadow")
+        .select("id", { count: "exact", head: true })
+        .eq("a2_source_variant", BASE_VARIANT)
+        .eq("td1_fit_id", fit.fit_id)
+        .not("a2_counterfactual_result", "is", null);
+      const resolvedInCohort = cohortResolved ?? 0;
+      if (resolvedInCohort < FREEZE_COHORT_SIZE) {
+        return {
+          status: "skip",
+          reason: `freeze_active:cohort_resolved=${resolvedInCohort}/${FREEZE_COHORT_SIZE}:fit=${fit.fit_id}`,
+        };
+      }
+      // Cohort complete — fall through to normal cadence check.
+    }
+
     const { count } = await supabase
       .from("model7_shadow")
       .select("id", { count: "exact", head: true })
       .eq("variant", BASE_VARIANT)
       .in("status", ["win", "loss"])
       .in("decision", ["YES", "NO"])
-      .gt("candle_ts", (activeFit as { trained_through_candle_ts: string }).trained_through_candle_ts);
+      .gt("candle_ts", fit.trained_through_candle_ts);
     if ((count ?? 0) < RETRAIN_EVERY) {
       return { status: "skip", reason: `new_resolved=${count ?? 0}` };
     }
