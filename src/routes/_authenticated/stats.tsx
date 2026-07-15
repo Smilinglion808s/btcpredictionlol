@@ -184,7 +184,27 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const b2Hero = m7Q.data?.A2_Conflict ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
+  const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
+  const b2Hero = {
+    total: Number(td1Stats.total ?? 0),
+    wins: Number(td1Stats.wins ?? 0),
+    losses: Number(td1Stats.losses ?? 0),
+    pushes: Number(td1Stats.pushes ?? 0),
+    pending: Number(td1Stats.pending ?? 0),
+    win_rate: Number(td1Stats.win_rate ?? 0),
+    last_10_win_rate: Number(td1Stats.last_10_win_rate ?? 0),
+    last_25_win_rate: Number(td1Stats.last_25_win_rate ?? 0),
+    last_50_win_rate: Number(td1Stats.last_50_win_rate ?? 0),
+    yes_total: Number(td1Stats.yes_total ?? 0),
+    yes_wins: Number(td1Stats.yes_wins ?? 0),
+    yes_win_rate: Number(td1Stats.yes_win_rate ?? 0),
+    no_total: Number(td1Stats.no_total ?? 0),
+    no_wins: Number(td1Stats.no_wins ?? 0),
+    no_win_rate: Number(td1Stats.no_win_rate ?? 0),
+    avg_confidence: Number(td1Stats.avg_confidence ?? 0),
+    avg_confidence_wins: Number(td1Stats.avg_confidence_wins ?? 0),
+    avg_confidence_losses: Number(td1Stats.avg_confidence_losses ?? 0),
+  };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
@@ -195,7 +215,8 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = "A2C";
+  const badge = "TD1";
+
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
