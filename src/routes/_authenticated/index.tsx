@@ -53,9 +53,9 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "candles" }, () => {
         qc.invalidateQueries({ queryKey: ["candles"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["a2c-latest"] });
-        qc.invalidateQueries({ queryKey: ["a2c-recent"] });
+      .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["td1rc-latest"] });
+        qc.invalidateQueries({ queryKey: ["td1rc-recent"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
