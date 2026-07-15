@@ -596,8 +596,35 @@ function StatsPage() {
           {(() => {
             const t = (td1Q.data ?? {}) as Record<string, any>;
             const p = (td1PendingQ.data ?? null) as Record<string, any> | null;
+            const prog = (td1ProgressQ.data ?? null) as null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
             return (
               <>
+                {prog ? (
+                  <div className="rounded-md border p-3">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <div className="font-medium">
+                        {prog.phase === "ready" ? "Training complete" : prog.label}
+                      </div>
+                      <div className="text-muted-foreground tabular-nums">
+                        {prog.current} / {prog.target}
+                        {prog.phase !== "ready" && (
+                          <span className="ml-2">({prog.remaining} candles left)</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${prog.phase === "ready" ? "bg-green-500" : prog.phase === "freeze_cohort" ? "bg-blue-500" : "bg-amber-500"}`}
+                        style={{ width: `${Math.max(2, Math.min(100, prog.percent))}%` }}
+                      />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      {prog.phase === "collecting_first_fit" && "Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes."}
+                      {prog.phase === "freeze_cohort" && "First fit is frozen for the initial cohort — TD1-RC is live and emitting decisions."}
+                      {prog.phase === "ready" && "Freeze cohort complete — TD1-RC now retrains on the normal 96-signal cadence."}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <Stat label="Win rate" value={`${(t.win_rate ?? 0)}%`} />
                   <Stat label="Trades" value={String(t.total ?? 0)} />
