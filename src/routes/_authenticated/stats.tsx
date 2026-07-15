@@ -240,7 +240,7 @@ function StatsPage() {
                 </span>
               </div>
               <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: Variant A2 Conflict · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
+                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
               </div>
             </div>
           </div>
