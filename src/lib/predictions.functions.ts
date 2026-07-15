@@ -741,7 +741,7 @@ export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handle
 
   const { data: activeFit } = await sb
     .from("model7_td1_fits")
-    .select("fit_id, promoted_at, training_rows")
+    .select("fit_id, promoted_at")
     .eq("base_variant", BASE_VARIANT)
     .eq("active", true)
     .maybeSingle();
