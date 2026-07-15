@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CandleChart } from "@/components/candle-chart";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { listCandles } from "@/lib/candles.functions";
-import { getVariantA2ConflictLatest, listVariantA2ConflictRecent } from "@/lib/predictions.functions";
+import { getTd1RcLatest, listTd1RcRecent } from "@/lib/predictions.functions";
 import { Link } from "@tanstack/react-router";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { supabase } from "@/integrations/supabase/client";
