@@ -234,7 +234,8 @@ async function runVariant(
   leakage: LeakageReport,
   reasonIfNoFit?: string,
   scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
-) {
+): Promise<Record<string, unknown> | null> {
+
   // Guard: prediction row must have been created strictly before target boundary.
   // Otherwise its indicator/module snapshot could contain post-boundary data.
   const createdAtIso = row.created_at ?? null;
