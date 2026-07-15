@@ -274,7 +274,7 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2", "M6"] as const).map((k) => {
+            {(["A", "B", "B2", "B4_2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -292,6 +292,8 @@ function StatsPage() {
                 ? "Variant B (live-retrained)"
                 : k === "B2"
                 ? "Variant B2 (B minus NCE override)"
+                : k === "B4_2"
+                ? "Variant B4.2 (Daily Edge Guard)"
                 : "Model 6";
               const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
@@ -359,11 +361,10 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A2_Conflict", "A2_MidBand", "A2_Combined"] as const).map((k) => {
+            {(["A2_MidBand", "A2_Combined"] as const).map((k) => {
               const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const pending = (m7PendingQ.data as any)?.[k] ?? null;
-              const label = k === "A2_Conflict" ? "A2 Conflict (SKIP on override conflicts)"
-                : k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
+              const label = k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
                 : "A2 Combined (union of both)";
               const decision = pending?.decision ?? null;
               const prob = pending?.probability_green;
