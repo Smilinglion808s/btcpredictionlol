@@ -266,6 +266,12 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
                 {exporting === "all" ? "Exporting…" : "CSV (All)"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingAll} onClick={downloadAllModelsCsv}>
+                {exportingAll ? "Exporting…" : "CSV (All Models)"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
+                {exporting === "all" ? "Exporting…" : "CSV (All)"}
+              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
                 {exporting === "A" ? "…" : "Variant A"}
               </Button>
@@ -293,7 +299,7 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2", "B4_2", "M6"] as const).map((k) => {
+            {(["A", "B2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -307,12 +313,8 @@ function StatsPage() {
                 : (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const label = k === "A"
                 ? "Variant A (frozen v1.1)"
-                : k === "B"
-                ? "Variant B (live-retrained)"
                 : k === "B2"
                 ? "Variant B2 (B minus NCE override)"
-                : k === "B4_2"
-                ? "Variant B4.2 (Daily Edge Guard)"
                 : "Model 6";
               const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
