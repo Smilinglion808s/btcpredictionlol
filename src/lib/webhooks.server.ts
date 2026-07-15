@@ -76,7 +76,7 @@ export function buildPredictionPayload(row: Record<string, any>) {
 export const B2_DECISION_POLICY_VERSION = "model7-b2-no-nce-v1";
 export const B2_MODEL_ID = "model7_variant_b2";
 
-// Variant B4.2 (Daily Edge Guard) — now the sole outbound webhook source.
+// Variant B4.2 (Daily Edge Guard) — kept for tracking; no longer webhook source.
 export const B4_2_DECISION_POLICY_VERSION = "model7-b4_2-daily-edge-guard-v1";
 export const B4_2_MODEL_ID = "model7_variant_b4_2";
 
@@ -87,6 +87,20 @@ export function buildB4_2WebhookPayload(inputs: B2WebhookInputs) {
     model: B4_2_MODEL_ID,
     model_version: "b4.2 6.0",
     decision_policy_version: B4_2_DECISION_POLICY_VERSION,
+  };
+}
+
+// Variant A2 Conflict — active outbound webhook source (SKIP on override conflicts).
+export const A2_CONFLICT_DECISION_POLICY_VERSION = "model7-a2-conflict-v1";
+export const A2_CONFLICT_MODEL_ID = "model7_variant_a2_conflict";
+
+export function buildA2ConflictWebhookPayload(inputs: B2WebhookInputs) {
+  const base = buildB2WebhookPayload(inputs);
+  return {
+    ...base,
+    model: A2_CONFLICT_MODEL_ID,
+    model_version: "a2-conflict 6.0",
+    decision_policy_version: A2_CONFLICT_DECISION_POLICY_VERSION,
   };
 }
 
