@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow, listAllPredictionsForHistory } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -36,29 +36,42 @@ function StatsPage() {
   const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
+  const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingMC, setExportingMC] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+
+  function rowsToCsv(rows: any[]): string {
+    if (rows.length === 0) return "";
+    const headers = Object.keys(rows[0]);
+    const esc = (v: unknown) => {
+      if (v === null || v === undefined) return "";
+      const s = typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+  }
+
+  function triggerDownload(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function stamp() {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  }
 
   async function downloadMCCsv() {
     try {
       setExportingMC(true);
       const rows = await exportMCFn();
       if (rows.length === 0) { alert("No Model C shadow rows to export."); return; }
-      const headers = Object.keys(rows[0]);
-      const esc = (v: unknown) => {
-        if (v === null || v === undefined) return "";
-        const s = typeof v === "string" ? v : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [headers.join(","), ...rows.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
-      const d = new Date();
-      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `modelc-shadow-${stamp}.csv`; a.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(rowsToCsv(rows as any[]), `modelc-shadow-${stamp()}.csv`);
     } finally {
       setExportingMC(false);
     }
@@ -70,24 +83,30 @@ function StatsPage() {
       const rows = await exportM7Fn();
       const filtered = scope === "all" ? rows : rows.filter((r: any) => r.variant === scope);
       if (filtered.length === 0) { alert("No shadow rows to export."); return; }
-      const headers = Object.keys(filtered[0]);
-      const esc = (v: unknown) => {
-        if (v === null || v === undefined) return "";
-        const s = typeof v === "string" ? v : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [headers.join(","), ...filtered.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
-      const d = new Date();
-      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
-
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
+      const name = scope === "all" ? `model7-shadow-all-${stamp()}.csv` : `model7-shadow-variant${scope}-${stamp()}.csv`;
+      triggerDownload(rowsToCsv(filtered as any[]), name);
     } finally {
       setExporting(null);
+    }
+  }
+
+  async function downloadAllModelsCsv() {
+    try {
+      setExportingAll(true);
+      const [m7, mc, preds] = await Promise.all([
+        exportM7Fn(),
+        exportMCFn(),
+        exportAllPredsFn(),
+      ]);
+      const s = stamp();
+      if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
+      if ((mc ?? []).length) triggerDownload(rowsToCsv(mc as any[]), `all-models-${s}-modelc-shadow.csv`);
+      if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
+      if (!(m7 ?? []).length && !(mc ?? []).length && !(preds ?? []).length) {
+        alert("No rows to export.");
+      }
+    } finally {
+      setExportingAll(false);
     }
   }
 
@@ -247,6 +266,12 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
                 {exporting === "all" ? "Exporting…" : "CSV (All)"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingAll} onClick={downloadAllModelsCsv}>
+                {exportingAll ? "Exporting…" : "CSV (All Models)"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
+                {exporting === "all" ? "Exporting…" : "CSV (All)"}
+              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
                 {exporting === "A" ? "…" : "Variant A"}
               </Button>
@@ -274,7 +299,7 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2", "B4_2", "M6"] as const).map((k) => {
+            {(["A", "B2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -288,12 +313,8 @@ function StatsPage() {
                 : (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const label = k === "A"
                 ? "Variant A (frozen v1.1)"
-                : k === "B"
-                ? "Variant B (live-retrained)"
                 : k === "B2"
                 ? "Variant B2 (B minus NCE override)"
-                : k === "B4_2"
-                ? "Variant B4.2 (Daily Edge Guard)"
                 : "Model 6";
               const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
@@ -361,11 +382,10 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A2_MidBand", "A2_Combined"] as const).map((k) => {
+            {(["A2_Combined"] as const).map((k) => {
               const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const pending = (m7PendingQ.data as any)?.[k] ?? null;
-              const label = k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
-                : "A2 Combined (union of both)";
+              const label = "A2 Combined (union of both)";
               const decision = pending?.decision ?? null;
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
@@ -454,7 +474,6 @@ function StatsPage() {
             } | null;
             const cards = [
               { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: mc.dual_horizon ?? blank, pending: pendingData?.dual_horizon ?? null },
-              { key: "global_only" as const, title: "Global-Only Diagnostic", stat: mc.global_only ?? blank, pending: pendingData?.global_only ?? null },
             ];
             return (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
