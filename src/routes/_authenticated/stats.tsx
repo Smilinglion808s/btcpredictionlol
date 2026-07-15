@@ -382,11 +382,10 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A2_MidBand", "A2_Combined"] as const).map((k) => {
+            {(["A2_Combined"] as const).map((k) => {
               const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const pending = (m7PendingQ.data as any)?.[k] ?? null;
-              const label = k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
-                : "A2 Combined (union of both)";
+              const label = "A2 Combined (union of both)";
               const decision = pending?.decision ?? null;
               const prob = pending?.probability_green;
               const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
