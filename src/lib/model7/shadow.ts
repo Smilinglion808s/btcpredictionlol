@@ -680,7 +680,27 @@ async function runA2Policies(
       } catch { /* never block */ }
     }));
 
-    await Promise.all([webhookPromise, insertPromise]);
+    // TD1-RC runs AFTER A2_Combined is decided; reads A2 as immutable input.
+    // Runs in parallel with inserts/webhook; failures never affect A2.
+    const combined = built.find((b) => b.policy === "A2_Combined")!;
+    const td1Promise = (async () => {
+      try {
+        const { runTd1RcForA2Combined } = await import("./td1/orchestrator");
+        await runTd1RcForA2Combined(supabase, {
+          predictionId: predictionRow.id,
+          candleTs: predictionRow.candle_ts,
+          targetBoundaryTs: String(inherited.target_boundary_ts ?? predictionRow.candle_ts),
+          finalDecision: (combined.row.decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          probabilityGreen: probability,
+          modelFitId: (inherited.model_fit_id as string | null) ?? null,
+          timingStatus: (inherited.timing_status as string | null) ?? null,
+          leakageCheckPassed: (inherited.leakage_check_passed as boolean | null) ?? null,
+          a2RowId: null,
+        });
+      } catch { /* never block */ }
+    })();
+
+    await Promise.all([webhookPromise, insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -780,4 +800,10 @@ export async function resolveShadowRowsFor(
         .eq("id", (r as { id: string }).id);
     }
   } catch { /* never block resolver */ }
+
+  // TD1-RC resolution (Model 8 layer). Never blocks the resolver.
+  try {
+    const { resolveTd1RcRow } = await import("./td1/orchestrator");
+    await resolveTd1RcRow(supabase, predictionId, actualDirection);
+  } catch { /* never block */ }
 }
