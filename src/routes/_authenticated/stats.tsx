@@ -474,7 +474,6 @@ function StatsPage() {
             } | null;
             const cards = [
               { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: mc.dual_horizon ?? blank, pending: pendingData?.dual_horizon ?? null },
-              { key: "global_only" as const, title: "Global-Only Diagnostic", stat: mc.global_only ?? blank, pending: pendingData?.global_only ?? null },
             ];
             return (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
