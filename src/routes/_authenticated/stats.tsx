@@ -37,9 +37,15 @@ function StatsPage() {
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
   const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
+  const td1Fn = useServerFn(getTd1RcShadowStats);
+  const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td1PendingFn = useServerFn(getTd1RcShadowPending);
+  const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportTd1Fn = useServerFn(exportTd1RcShadow);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingMC, setExportingMC] = useState(false);
+  const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
 
   function rowsToCsv(rows: any[]): string {
