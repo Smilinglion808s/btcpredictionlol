@@ -36,29 +36,42 @@ function StatsPage() {
   const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
+  const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingMC, setExportingMC] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+
+  function rowsToCsv(rows: any[]): string {
+    if (rows.length === 0) return "";
+    const headers = Object.keys(rows[0]);
+    const esc = (v: unknown) => {
+      if (v === null || v === undefined) return "";
+      const s = typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+  }
+
+  function triggerDownload(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function stamp() {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  }
 
   async function downloadMCCsv() {
     try {
       setExportingMC(true);
       const rows = await exportMCFn();
       if (rows.length === 0) { alert("No Model C shadow rows to export."); return; }
-      const headers = Object.keys(rows[0]);
-      const esc = (v: unknown) => {
-        if (v === null || v === undefined) return "";
-        const s = typeof v === "string" ? v : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [headers.join(","), ...rows.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
-      const d = new Date();
-      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `modelc-shadow-${stamp}.csv`; a.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(rowsToCsv(rows as any[]), `modelc-shadow-${stamp()}.csv`);
     } finally {
       setExportingMC(false);
     }
@@ -70,24 +83,30 @@ function StatsPage() {
       const rows = await exportM7Fn();
       const filtered = scope === "all" ? rows : rows.filter((r: any) => r.variant === scope);
       if (filtered.length === 0) { alert("No shadow rows to export."); return; }
-      const headers = Object.keys(filtered[0]);
-      const esc = (v: unknown) => {
-        if (v === null || v === undefined) return "";
-        const s = typeof v === "string" ? v : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [headers.join(","), ...filtered.map((r: any) => headers.map((h) => esc(r[h])).join(","))].join("\n");
-      const d = new Date();
-      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const name = scope === "all" ? `model7-shadow-all-${stamp}.csv` : `model7-shadow-variant${scope}-${stamp}.csv`;
-
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
+      const name = scope === "all" ? `model7-shadow-all-${stamp()}.csv` : `model7-shadow-variant${scope}-${stamp()}.csv`;
+      triggerDownload(rowsToCsv(filtered as any[]), name);
     } finally {
       setExporting(null);
+    }
+  }
+
+  async function downloadAllModelsCsv() {
+    try {
+      setExportingAll(true);
+      const [m7, mc, preds] = await Promise.all([
+        exportM7Fn(),
+        exportMCFn(),
+        exportAllPredsFn(),
+      ]);
+      const s = stamp();
+      if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
+      if ((mc ?? []).length) triggerDownload(rowsToCsv(mc as any[]), `all-models-${s}-modelc-shadow.csv`);
+      if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
+      if (!(m7 ?? []).length && !(mc ?? []).length && !(preds ?? []).length) {
+        alert("No rows to export.");
+      }
+    } finally {
+      setExportingAll(false);
     }
   }
 
