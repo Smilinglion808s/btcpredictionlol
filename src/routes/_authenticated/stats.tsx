@@ -559,6 +559,61 @@ function StatsPage() {
         </CardContent>
       </Card>
 
+      {/* TD1-RC Shadow (Model 8 layer) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>TD1-RC Shadow (A2 Combined + TD1 Veto & Containment)</span>
+            <Button size="sm" variant="outline" onClick={downloadTd1Csv} disabled={exportingTd1}>
+              {exportingTd1 ? "Exporting…" : "CSV (TD1-RC)"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const t = (td1Q.data ?? {}) as Record<string, any>;
+            const p = (td1PendingQ.data ?? null) as Record<string, any> | null;
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Win rate" value={`${(t.win_rate ?? 0)}%`} />
+                  <Stat label="Trades" value={String(t.total ?? 0)} />
+                  <Stat label="Wins" value={String(t.wins ?? 0)} />
+                  <Stat label="Losses" value={String(t.losses ?? 0)} />
+                  <Stat label="Pending" value={String(t.pending ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Last 10" value={`${(t.last_10_win_rate ?? 0)}%`} />
+                  <Stat label="Last 25" value={`${(t.last_25_win_rate ?? 0)}%`} />
+                  <Stat label="TD1 vetoes" value={String(t.td1_vetoes ?? 0)} />
+                  <Stat label="Containment vetoes" value={String(t.containment_vetoes ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Stat label="A2 baseline WR" value={`${(t.a2_baseline_win_rate ?? 0)}%`} />
+                  <Stat label="A2 baseline W" value={String(t.a2_baseline_wins ?? 0)} />
+                  <Stat label="A2 baseline L" value={String(t.a2_baseline_losses ?? 0)} />
+                </div>
+                <div className="rounded-md border p-3 text-sm">
+                  <div className="font-medium mb-1">Current pending candle</div>
+                  {p ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div><span className="text-muted-foreground">Decision:</span> {String(p.external_final_decision ?? "—")}</div>
+                      <div><span className="text-muted-foreground">A2 orig:</span> {String(p.a2_original_decision ?? "—")}</div>
+                      <div><span className="text-muted-foreground">p(loss):</span> {p.td1_predicted_loss_probability != null ? Number(p.td1_predicted_loss_probability).toFixed(4) : "—"}</div>
+                      <div><span className="text-muted-foreground">Skip reason:</span> {String(p.skip_reason ?? "—")}</div>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No pending row.</div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
