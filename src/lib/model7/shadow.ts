@@ -234,7 +234,8 @@ async function runVariant(
   leakage: LeakageReport,
   reasonIfNoFit?: string,
   scoreOptions?: { skipUpstreamNoClearEdge?: boolean },
-) {
+): Promise<Record<string, unknown> | null> {
+
   // Guard: prediction row must have been created strictly before target boundary.
   // Otherwise its indicator/module snapshot could contain post-boundary data.
   const createdAtIso = row.created_at ?? null;
@@ -275,7 +276,7 @@ async function runVariant(
       leakage_check_passed: false,
       leakage_block_reason: reasonIfNoFit ?? "no_fit",
     });
-    return;
+    return null;
   }
   if (predictionRowPostBoundary) {
     await insertShadowRow(supabase, {
@@ -290,7 +291,7 @@ async function runVariant(
         ts: createdAtIso ?? "unknown",
       }],
     });
-    return;
+    return null;
   }
   if (!leakage.passed) {
     await insertShadowRow(supabase, {
@@ -302,7 +303,7 @@ async function runVariant(
       leakage_block_reason: leakage.reason,
       offending_features_json: leakage.offending_features,
     });
-    return;
+    return null;
   }
   try {
     const { feature_map, categoricals } = buildFeatureMap(row, history);
@@ -327,7 +328,7 @@ async function runVariant(
         scored_at: scoredAt.toISOString(),
         boundary_delta_ms: boundaryDeltaMs,
       });
-      return;
+      return null;
     }
 
     const artifactHash = fitArtifactHash(fit);
@@ -376,7 +377,8 @@ async function runVariant(
       } catch { /* never block shadow */ }
     }
 
-    // Outbound webhook is now emitted from Variant B4.2 (see below), not B2.
+    // Outbound webhook is emitted from A2_Conflict (see runA2Policies).
+    return { ...shadowRow, id: inserted?.id ?? null };
 
   } catch (e) {
     await insertShadowRow(supabase, {
@@ -386,8 +388,10 @@ async function runVariant(
       timing_status: "SOURCE_TIMESTAMP_UNKNOWN",
       leakage_check_passed: false,
     });
+    return null;
   }
 }
+
 
 /**
  * Fire-and-forget from the production engine. Always resolves; never throws.
@@ -437,23 +441,27 @@ export async function runShadowForPrediction(
         shadow_error: `frozen_load_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
-    // Priority path: run B2 first so B4.2 (webhook source) can emit ASAP.
-    // Variant A and B still run for shadow tracking but are deferred until after
-    // B4.2 finishes so they never delay the outbound signal.
+    // Priority path: Variant A runs FIRST so A2_Conflict (webhook source) can
+    // emit ASAP. Variant A uses the frozen v1.1 fit (local file, no DB fetch)
+    // and shares the already-loaded / warmed history. B2, B4.2, and B are
+    // deferred until after the webhook fires so they never delay the outbound
+    // signal.
+    const aRow = frozen
+      ? await runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage)
+      : null;
+
+    // Fire the A2_Conflict webhook immediately from A's in-memory result.
+    // Also inserts the three A2 policy rows (Conflict/MidBand/Combined).
+    await runA2Policies(supabase, predictionRow, aRow);
+
+    // ---- Deferred shadow tracking (post-webhook). ----
     const tmv = predictionRow.model_version ?? "6.0";
     const variantB = warmed?.variantBFit ?? await loadLatestVariantBFit(supabase, tmv);
-    await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
+    const b2Row = await runVariant(supabase, "B2", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up", { skipUpstreamNoClearEdge: true });
 
-
-    // ---- Variant B4.2 — Daily Edge Guard layered on top of B2. ----
+    // ---- Variant B4.2 — Daily Edge Guard layered on top of B2 (tracking-only). ----
     try {
-      const { data: b2Row } = await supabase
-        .from("model7_shadow")
-        .select("*")
-        .eq("prediction_id", predictionRow.id).eq("variant", "B2")
-        .order("scored_at", { ascending: false, nullsFirst: false })
-        .limit(1).maybeSingle();
       if (b2Row) {
         const b2 = b2Row as Record<string, unknown>;
         const guard = await computeB4_2Decision(supabase, {
@@ -499,10 +507,7 @@ export async function runShadowForPrediction(
           b4_2_last_two_no_results_json: guard.last_two_no_results,
           warm_cache_hit: warmHit,
         };
-        const insertedB4 = await insertShadowRow(supabase, b4Row);
-
-        // B4.2 is tracking-only now; outbound webhook is emitted from A2_Conflict.
-        void insertedB4;
+        await insertShadowRow(supabase, b4Row);
       }
     } catch (b4err) {
       try {
@@ -518,15 +523,10 @@ export async function runShadowForPrediction(
       } catch { /* ignore */ }
     }
 
-    // Deferred shadow variants — run after B4.2 has already emitted so they
-    // never delay the outbound webhook. Parallelized for speed. Variant A2
-    // policies are layered on top of A (must await A first).
-    await Promise.all([
-      (frozen ? runVariant(supabase, "A", frozen, predictionRow, history, plan, leakage) : Promise.resolve())
-        .then(() => runA2Policies(supabase, predictionRow)),
-      runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
-        variantB ? undefined : "warming_up"),
-    ]);
+    // Variant B — deferred tracking only.
+    await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
+      variantB ? undefined : "warming_up");
+
 
 
 
@@ -551,16 +551,23 @@ export async function runShadowForPrediction(
 async function runA2Policies(
   supabase: SupabaseClient,
   predictionRow: { id: string; candle_ts: string; model_version?: string | null },
+  aRowInline?: Record<string, unknown> | null,
 ): Promise<void> {
   try {
-    const { data: aRow } = await supabase
-      .from("model7_shadow")
-      .select("*")
-      .eq("prediction_id", predictionRow.id).eq("variant", "A")
-      .maybeSingle();
+    // Prefer in-memory A row (saves a ~50-100ms DB round-trip on the critical
+    // path to the A2_Conflict webhook). Fall back to DB read.
+    let aRow: Record<string, unknown> | null = aRowInline ?? null;
+    if (!aRow) {
+      const { data } = await supabase
+        .from("model7_shadow")
+        .select("*")
+        .eq("prediction_id", predictionRow.id).eq("variant", "A")
+        .maybeSingle();
+      aRow = (data as Record<string, unknown> | null) ?? null;
+    }
     if (!aRow) return; // Variant A row absent; skip A2 (fail-closed, no rows).
 
-    const a = aRow as Record<string, unknown>;
+    const a = aRow;
     const baseDecision = (a.base_decision as "YES" | "NO" | "SKIP" | null) ?? null;
     const finalDecision = (a.decision as "YES" | "NO" | "SKIP" | null) ?? null;
     const probability = (a.probability_green as number | null) ?? null;
@@ -603,7 +610,9 @@ async function runA2Policies(
       a2_counterfactual_result: null,
     };
 
+    // Build all three policy rows in memory first.
     const policies: Array<A2Policy> = ["A2_Conflict", "A2_MidBand", "A2_Combined"];
+    const built: Array<{ policy: A2Policy; row: Record<string, unknown>; out: A2PolicyOutput | null }> = [];
     for (const policy of policies) {
       let out: A2PolicyOutput | null = null;
       if (evals) {
@@ -611,10 +620,6 @@ async function runA2Policies(
           : policy === "A2_MidBand" ? evals.midband
           : evals.combined;
       }
-      // Determine row status:
-      //  - fail-closed / A error / inputs missing -> skipped (no counterfactual grading)
-      //  - policy filtered the trade -> skipped (but counterfactual gets graded later)
-      //  - policy preserved YES/NO -> pending (will be graded like A)
       let status: string;
       if (!out || out.decision == null) status = "skipped";
       else if (out.decision === "SKIP") status = "skipped";
@@ -624,32 +629,31 @@ async function runA2Policies(
         ...auditBase,
         variant: policy,
         status,
-        base_decision: finalDecision, // A's final decision is A2's "base"
+        base_decision: finalDecision,
         decision: out?.decision ?? null,
         would_trade: out?.decision != null && out.decision !== "SKIP",
         shadow_error: usable ? null : "A2_INPUTS_UNUSABLE",
         a2_filter_fired: out?.filter_fired ?? false,
         a2_filter_reason: out?.filter_reason ?? "NONE",
       };
-      let insertedId: string | null = null;
-      try {
-        const { data: inserted } = await supabase
-          .from("model7_shadow").insert(row as never).select("id").maybeSingle();
-        insertedId = (inserted as { id?: string } | null)?.id ?? null;
-      } catch { /* never block */ }
+      built.push({ policy, row, out });
+    }
 
-      // A2 Conflict is the sole outbound webhook source.
-      if (policy === "A2_Conflict") {
-        const aTimingStatus = String((inherited.timing_status as string | null) ?? "");
-        const eligible =
-          out?.decision != null &&
-          probability != null &&
-          (aTimingStatus === "ON_TIME" || aTimingStatus === "LATE_WARNING");
-        if (eligible) {
+    // ---- Priority: fire the A2_Conflict webhook BEFORE any DB insert. ----
+    // The payload doesn't require the shadow row's DB id (nullable), so we can
+    // emit immediately and let the inserts happen in parallel afterwards.
+    const conflict = built.find((b) => b.policy === "A2_Conflict")!;
+    const aTimingStatus = String((inherited.timing_status as string | null) ?? "");
+    const eligible =
+      conflict.out?.decision != null &&
+      probability != null &&
+      (aTimingStatus === "ON_TIME" || aTimingStatus === "LATE_WARNING");
+    const webhookPromise: Promise<unknown> = eligible
+      ? (async () => {
           try {
             const { deliverWebhook, buildA2ConflictWebhookPayload } = await import("../webhooks.server");
             const payload = buildA2ConflictWebhookPayload({
-              shadow: { ...row, id: insertedId },
+              shadow: { ...conflict.row, id: null },
               prediction: predictionRow as unknown as Record<string, unknown>,
             });
             await deliverWebhook(supabase, "prediction.created", payload);
@@ -666,9 +670,17 @@ async function runA2Policies(
               });
             } catch { /* ignore */ }
           }
-        }
-      }
-    }
+        })()
+      : Promise.resolve();
+
+    // Insert all three A2 rows in parallel with the webhook.
+    const insertPromise = Promise.all(built.map(async ({ row }) => {
+      try {
+        await supabase.from("model7_shadow").insert(row as never);
+      } catch { /* never block */ }
+    }));
+
+    await Promise.all([webhookPromise, insertPromise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -683,6 +695,7 @@ async function runA2Policies(
     } catch { /* ignore */ }
   }
 }
+
 
 /**
  * Resolve shadow rows for a prediction once actual_direction is known.
