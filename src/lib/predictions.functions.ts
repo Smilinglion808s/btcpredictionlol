@@ -554,6 +554,46 @@ export const listVariantB4_2Recent = createServerFn({ method: "GET" }).handler(a
   return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
 });
 
+/** Latest A2 Conflict shadow row shaped for the home page's current/upcoming cards. */
+export const getVariantA2ConflictLatest = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_shadow")
+    .select("id, candle_ts, decision, probability_green, status, resolved_at, created_at, prediction_id")
+    .eq("variant", "A2_Conflict")
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeB2Row(data, null);
+});
+
+/** Recent A2 Conflict shadow rows shaped for the home page's last-5-trades + last-result cards. */
+export const listVariantA2ConflictRecent = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_shadow")
+    .select("id, candle_ts, decision, probability_green, status, resolved_at, created_at, prediction_id")
+    .eq("variant", "A2_Conflict")
+    .order("candle_ts", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  const ids = Array.from(new Set(rows.map((r: any) => r.prediction_id).filter(Boolean)));
+  const prodMap = new Map<string, any>();
+  if (ids.length) {
+    const [live, arch] = await Promise.all([
+      sb.from("predictions").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+      sb.from("predictions_archive").select("id, actual_next_candle_open, actual_next_candle_close").in("id", ids),
+    ]);
+    for (const p of [...(live.data ?? []), ...(arch.data ?? [])]) {
+      if (!prodMap.has(p.id)) prodMap.set(p.id, p);
+    }
+  }
+  return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
+});
+
 
 
 

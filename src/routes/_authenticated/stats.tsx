@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantB4_2Recent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -108,9 +108,9 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
-  const b2RecentFn = useServerFn(listVariantB4_2Recent);
+  const b2RecentFn = useServerFn(listVariantA2ConflictRecent);
   const listQ = useQuery({
-    queryKey: ["b42-recent-stats"],
+    queryKey: ["a2c-recent-stats"],
     queryFn: () => b2RecentFn(),
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
@@ -142,7 +142,7 @@ function StatsPage() {
   const num = (k: string) => Number(s[k] ?? 0);
 
   const modelVersion = activeVersion ?? "—";
-  const b2Hero = m7Q.data?.B4_2 ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
+  const b2Hero = m7Q.data?.A2_Conflict ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0, last_10_win_rate: 0, last_25_win_rate: 0, last_50_win_rate: 0, yes_total: 0, yes_wins: 0, yes_win_rate: 0, no_total: 0, no_wins: 0, no_win_rate: 0, avg_confidence: 0, avg_confidence_wins: 0, avg_confidence_losses: 0 };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
 
@@ -153,7 +153,7 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = "B4.2";
+  const badge = "A2C";
   const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
 
   return (
@@ -170,14 +170,14 @@ function StatsPage() {
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
               <div className="font-mono text-lg font-semibold flex items-center gap-2">
-                Variant B4.2 · BTCUSDT 15m
+                Variant A2 Conflict · BTCUSDT 15m
                 <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
                   <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: Variant B4.2 · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
+                autobet: Variant A2 Conflict · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
               </div>
             </div>
           </div>
@@ -197,15 +197,15 @@ function StatsPage() {
             </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B4.2 Win Rate</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Win Rate</div>
                 <div className="font-mono text-2xl font-bold text-bull">{b2Hero.win_rate}%</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B4.2 Resolved</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Resolved</div>
                 <div className="font-mono text-2xl font-bold">{b2Resolved}</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">B4.2 Trades</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">A2C Trades</div>
                 <div className="font-mono text-2xl font-bold">{b2Hero.total}</div>
               </div>
             </div>
@@ -214,7 +214,7 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant B4.2 (autobet)</span></h2>
+      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— Variant A2 Conflict (autobet)</span></h2>
 
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
@@ -274,7 +274,7 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B", "B2", "M6"] as const).map((k) => {
+            {(["A", "B", "B2", "B4_2", "M6"] as const).map((k) => {
               const isM6 = k === "M6";
               const b = isM6
                 ? {
@@ -292,6 +292,8 @@ function StatsPage() {
                 ? "Variant B (live-retrained)"
                 : k === "B2"
                 ? "Variant B2 (B minus NCE override)"
+                : k === "B4_2"
+                ? "Variant B4.2 (Daily Edge Guard)"
                 : "Model 6";
               const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
 
@@ -359,11 +361,10 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A2_Conflict", "A2_MidBand", "A2_Combined"] as const).map((k) => {
+            {(["A2_MidBand", "A2_Combined"] as const).map((k) => {
               const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
               const pending = (m7PendingQ.data as any)?.[k] ?? null;
-              const label = k === "A2_Conflict" ? "A2 Conflict (SKIP on override conflicts)"
-                : k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
+              const label = k === "A2_MidBand" ? "A2 MidBand (SKIP YES in 0.65–0.75)"
                 : "A2 Combined (union of both)";
               const decision = pending?.decision ?? null;
               const prob = pending?.probability_green;
@@ -528,7 +529,7 @@ function StatsPage() {
           <CardTitle className="text-base flex items-center gap-2">
             Recent History
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              Variant B4.2
+              Variant A2 Conflict
             </span>
           </CardTitle>
         </CardHeader>

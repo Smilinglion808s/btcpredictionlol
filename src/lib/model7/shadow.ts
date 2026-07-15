@@ -501,34 +501,8 @@ export async function runShadowForPrediction(
         };
         const insertedB4 = await insertShadowRow(supabase, b4Row);
 
-        // ---- B4.2 is the sole outbound webhook source. Emit iff eligible. ----
-        const b4TimingStatus = String((inherited.timing_status as string | null) ?? "");
-        const eligible =
-          guard.decision != null &&
-          (b2.probability_green as number | null) != null &&
-          (b4TimingStatus === "ON_TIME" || b4TimingStatus === "LATE_WARNING");
-        if (eligible) {
-          try {
-            const { deliverWebhook, buildB4_2WebhookPayload } = await import("../webhooks.server");
-            const payload = buildB4_2WebhookPayload({
-              shadow: { ...b4Row, id: insertedB4?.id ?? null },
-              prediction: predictionRow as unknown as Record<string, unknown>,
-            });
-            await deliverWebhook(supabase, "prediction.created", payload);
-          } catch (whErr) {
-            try {
-              await supabase.from("api_runs").insert({
-                run_type: "webhook-created-error",
-                response_payload: {
-                  error: whErr instanceof Error ? whErr.message : String(whErr),
-                  prediction_id: predictionRow.id, variant: "B4_2",
-                },
-                success: false,
-                error_message: whErr instanceof Error ? whErr.message : String(whErr),
-              });
-            } catch { /* ignore */ }
-          }
-        }
+        // B4.2 is tracking-only now; outbound webhook is emitted from A2_Conflict.
+        void insertedB4;
       }
     } catch (b4err) {
       try {
@@ -657,9 +631,43 @@ async function runA2Policies(
         a2_filter_fired: out?.filter_fired ?? false,
         a2_filter_reason: out?.filter_reason ?? "NONE",
       };
+      let insertedId: string | null = null;
       try {
-        await supabase.from("model7_shadow").insert(row as never);
+        const { data: inserted } = await supabase
+          .from("model7_shadow").insert(row as never).select("id").maybeSingle();
+        insertedId = (inserted as { id?: string } | null)?.id ?? null;
       } catch { /* never block */ }
+
+      // A2 Conflict is the sole outbound webhook source.
+      if (policy === "A2_Conflict") {
+        const aTimingStatus = String((inherited.timing_status as string | null) ?? "");
+        const eligible =
+          out?.decision != null &&
+          probability != null &&
+          (aTimingStatus === "ON_TIME" || aTimingStatus === "LATE_WARNING");
+        if (eligible) {
+          try {
+            const { deliverWebhook, buildA2ConflictWebhookPayload } = await import("../webhooks.server");
+            const payload = buildA2ConflictWebhookPayload({
+              shadow: { ...row, id: insertedId },
+              prediction: predictionRow as unknown as Record<string, unknown>,
+            });
+            await deliverWebhook(supabase, "prediction.created", payload);
+          } catch (whErr) {
+            try {
+              await supabase.from("api_runs").insert({
+                run_type: "webhook-created-error",
+                response_payload: {
+                  error: whErr instanceof Error ? whErr.message : String(whErr),
+                  prediction_id: predictionRow.id, variant: "A2_Conflict",
+                },
+                success: false,
+                error_message: whErr instanceof Error ? whErr.message : String(whErr),
+              });
+            } catch { /* ignore */ }
+          }
+        }
+      }
     }
   } catch (e) {
     try {
