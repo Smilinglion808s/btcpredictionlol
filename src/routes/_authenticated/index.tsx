@@ -306,7 +306,7 @@ function HeaderStrip(props: {
         <Stat label="Time Left in Candle" value={timeLeft} tone="info" />
         <Stat label="Next Prediction" value={nextPrediction} tone="info" />
         <Stat label="Last Updated" value={props.lastCandleTs ? new Date(props.lastCandleTs).toLocaleTimeString() : "—"} />
-        <Stat label="Model" value={`A2C · ${props.modelVersion ?? "—"}`} />
+        <Stat label="Model" value={`TD1-RC · ${props.modelVersion ?? "—"}`} />
       </CardContent>
     </Card>
   );
