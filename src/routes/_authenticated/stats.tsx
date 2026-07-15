@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow, listAllPredictionsForHistory } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -37,9 +37,15 @@ function StatsPage() {
   const exportM7Fn = useServerFn(exportModel7Shadow);
   const exportMCFn = useServerFn(exportModelCShadow);
   const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
+  const td1Fn = useServerFn(getTd1RcShadowStats);
+  const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td1PendingFn = useServerFn(getTd1RcShadowPending);
+  const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportTd1Fn = useServerFn(exportTd1RcShadow);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingMC, setExportingMC] = useState(false);
+  const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
 
   function rowsToCsv(rows: any[]): string {
@@ -77,6 +83,17 @@ function StatsPage() {
     }
   }
 
+  async function downloadTd1Csv() {
+    try {
+      setExportingTd1(true);
+      const rows = await exportTd1Fn();
+      if (rows.length === 0) { alert("No TD1-RC shadow rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `td1-rc-shadow-${stamp()}.csv`);
+    } finally {
+      setExportingTd1(false);
+    }
+  }
+
   async function downloadM7Csv(scope: ExportScope) {
     try {
       setExporting(scope);
@@ -93,16 +110,18 @@ function StatsPage() {
   async function downloadAllModelsCsv() {
     try {
       setExportingAll(true);
-      const [m7, mc, preds] = await Promise.all([
+      const [m7, mc, td1, preds] = await Promise.all([
         exportM7Fn(),
         exportMCFn(),
+        exportTd1Fn(),
         exportAllPredsFn(),
       ]);
       const s = stamp();
       if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
       if ((mc ?? []).length) triggerDownload(rowsToCsv(mc as any[]), `all-models-${s}-modelc-shadow.csv`);
+      if ((td1 ?? []).length) triggerDownload(rowsToCsv(td1 as any[]), `all-models-${s}-td1-rc-shadow.csv`);
       if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
-      if (!(m7 ?? []).length && !(mc ?? []).length && !(preds ?? []).length) {
+      if (!(m7 ?? []).length && !(mc ?? []).length && !(td1 ?? []).length && !(preds ?? []).length) {
         alert("No rows to export.");
       }
     } finally {
@@ -152,6 +171,10 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model_c_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["modelc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["modelc-shadow-pending"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
+        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
+        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -536,6 +559,61 @@ function StatsPage() {
         </CardContent>
       </Card>
 
+      {/* TD1-RC Shadow (Model 8 layer) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>TD1-RC Shadow (A2 Combined + TD1 Veto & Containment)</span>
+            <Button size="sm" variant="outline" onClick={downloadTd1Csv} disabled={exportingTd1}>
+              {exportingTd1 ? "Exporting…" : "CSV (TD1-RC)"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const t = (td1Q.data ?? {}) as Record<string, any>;
+            const p = (td1PendingQ.data ?? null) as Record<string, any> | null;
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Win rate" value={`${(t.win_rate ?? 0)}%`} />
+                  <Stat label="Trades" value={String(t.total ?? 0)} />
+                  <Stat label="Wins" value={String(t.wins ?? 0)} />
+                  <Stat label="Losses" value={String(t.losses ?? 0)} />
+                  <Stat label="Pending" value={String(t.pending ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Last 10" value={`${(t.last_10_win_rate ?? 0)}%`} />
+                  <Stat label="Last 25" value={`${(t.last_25_win_rate ?? 0)}%`} />
+                  <Stat label="TD1 vetoes" value={String(t.td1_vetoes ?? 0)} />
+                  <Stat label="Containment vetoes" value={String(t.containment_vetoes ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Stat label="A2 baseline WR" value={`${(t.a2_baseline_win_rate ?? 0)}%`} />
+                  <Stat label="A2 baseline W" value={String(t.a2_baseline_wins ?? 0)} />
+                  <Stat label="A2 baseline L" value={String(t.a2_baseline_losses ?? 0)} />
+                </div>
+                <div className="rounded-md border p-3 text-sm">
+                  <div className="font-medium mb-1">Current pending candle</div>
+                  {p ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div><span className="text-muted-foreground">Decision:</span> {String(p.external_final_decision ?? "—")}</div>
+                      <div><span className="text-muted-foreground">A2 orig:</span> {String(p.a2_original_decision ?? "—")}</div>
+                      <div><span className="text-muted-foreground">p(loss):</span> {p.td1_predicted_loss_probability != null ? Number(p.td1_predicted_loss_probability).toFixed(4) : "—"}</div>
+                      <div><span className="text-muted-foreground">Skip reason:</span> {String(p.skip_reason ?? "—")}</div>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No pending row.</div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
@@ -630,5 +708,14 @@ function BreakdownCard({ title, data }: { title: string; data?: Record<string, B
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border p-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-mono text-sm mt-0.5">{value}</div>
+    </div>
   );
 }

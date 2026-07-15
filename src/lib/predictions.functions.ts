@@ -595,8 +595,132 @@ export const listVariantA2ConflictRecent = createServerFn({ method: "GET" }).han
 });
 
 
+/** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant). */
+export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model7_td1_rc_shadow")
+      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result")
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 100000) break;
+  }
+  const traded = rows.filter((r) => r.would_trade === true);
+  const wins = traded.filter((r) => r.result === "WIN").length;
+  const losses = traded.filter((r) => r.result === "LOSS").length;
+  const pushes = traded.filter((r) => r.result === "PUSH").length;
+  const pending = traded.filter((r) => !r.result).length;
+  const total = traded.length;
+  const win_rate = wins + losses === 0 ? 0 : Math.round((wins / (wins + losses)) * 10000) / 100;
 
+  const sorted = traded
+    .filter((r) => r.result === "WIN" || r.result === "LOSS")
+    .sort((a, b) => ((b.resolved_at ?? b.candle_ts ?? "") > (a.resolved_at ?? a.candle_ts ?? "") ? 1 : -1));
+  const lastN = (n: number) => {
+    const slice = sorted.slice(0, n);
+    const w = slice.filter((x) => x.result === "WIN").length;
+    const l = slice.filter((x) => x.result === "LOSS").length;
+    return w + l === 0 ? 0 : Math.round((w / (w + l)) * 10000) / 100;
+  };
 
+  // Skip breakdown for diagnostics
+  const skips = rows.filter((r) => r.external_final_decision === "SKIP");
+  const skipReasons: Record<string, number> = {};
+  for (const s of skips) {
+    const k = s.skip_reason ?? "UNKNOWN";
+    skipReasons[k] = (skipReasons[k] ?? 0) + 1;
+  }
+  const td1Vetoes = rows.filter((r) => r.td1_veto_fired === true).length;
+  const containmentVetoes = rows.filter((r) => r.containment_veto_fired === true).length;
+
+  // A2 counterfactual comparison over resolved rows where we can compare
+  const compared = rows.filter((r) => r.a2_counterfactual_result === "WIN" || r.a2_counterfactual_result === "LOSS");
+  const a2WinsAlone = compared.filter((r) => r.a2_counterfactual_result === "WIN").length;
+  const a2LossesAlone = compared.filter((r) => r.a2_counterfactual_result === "LOSS").length;
+  const a2_baseline_win_rate = a2WinsAlone + a2LossesAlone === 0
+    ? 0 : Math.round((a2WinsAlone / (a2WinsAlone + a2LossesAlone)) * 10000) / 100;
+
+  return {
+    total, wins, losses, pushes, pending, win_rate,
+    last_10_win_rate: lastN(10), last_25_win_rate: lastN(25), last_50_win_rate: lastN(50),
+    td1_vetoes: td1Vetoes,
+    containment_vetoes: containmentVetoes,
+    total_rows: rows.length,
+    skip_breakdown: skipReasons,
+    a2_baseline_win_rate,
+    a2_baseline_wins: a2WinsAlone,
+    a2_baseline_losses: a2LossesAlone,
+  };
+});
+
+/** Latest TD1-RC shadow row for the current pending candle. */
+export const getTd1RcShadowPending = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_td1_rc_shadow")
+    .select("candle_ts, external_final_decision, would_trade, td1_predicted_loss_probability, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, td1_fit_id")
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+});
+
+/** Export TD1-RC shadow rows as CSV-ready records. */
+export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_td1_rc_shadow")
+    .select("*")
+    .order("candle_ts", { ascending: false })
+    .limit(20000);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    candle_ts: r.candle_ts,
+    variant: r.variant,
+    prospective_test_id: r.prospective_test_id,
+    external_final_decision: r.external_final_decision,
+    would_trade: r.would_trade,
+    result: r.result,
+    actual_direction: r.actual_direction,
+    a2_original_decision: r.a2_original_decision,
+    a2_probability_green: r.a2_probability_green,
+    a2_counterfactual_result: r.a2_counterfactual_result,
+    a2_source_variant: r.a2_source_variant,
+    a2_source_row_id: r.a2_source_row_id,
+    a2_model_fit_id: r.a2_model_fit_id,
+    td1_fit_id: r.td1_fit_id,
+    td1_artifact_sha256: r.td1_artifact_sha256,
+    td1_feature_vector_sha256: r.td1_feature_vector_sha256,
+    td1_predicted_loss_probability: r.td1_predicted_loss_probability,
+    td1_threshold: r.td1_threshold,
+    td1_veto_fired: r.td1_veto_fired,
+    containment_veto_fired: r.containment_veto_fired,
+    containment_side: r.containment_side,
+    containment_slots_before: r.containment_slots_before,
+    containment_slots_after: r.containment_slots_after,
+    containment_episode_armed_before: r.containment_episode_armed_before,
+    containment_episode_armed_after: r.containment_episode_armed_after,
+    skip_reason: r.skip_reason,
+    all_veto_reasons_json: r.all_veto_reasons_json ? JSON.stringify(r.all_veto_reasons_json) : "",
+    td1_feature_cutoff_ts: r.td1_feature_cutoff_ts,
+    td1_latest_source_candle_ts: r.td1_latest_source_candle_ts,
+    timing_status: r.timing_status,
+    leakage_check_passed: r.leakage_check_passed,
+    shadow_error: r.shadow_error,
+    feature_values_json: r.feature_values_json ? JSON.stringify(r.feature_values_json) : "",
+    resolved_at: r.resolved_at,
+    created_at: r.created_at,
+    prediction_id: r.prediction_id,
+  }));
+});
 
 
 const overrideSchema = z.object({
