@@ -494,7 +494,7 @@ function StatsPage() {
               </span>
             </CardTitle>
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingMC} onClick={downloadMCCsv}>
-              {exportingMC ? "Exporting…" : "CSV (Model C)"}
+              {exportingMC ? "Exporting…" : "CSV (Model 7 PRC)"}
             </Button>
           </div>
         </CardHeader>
