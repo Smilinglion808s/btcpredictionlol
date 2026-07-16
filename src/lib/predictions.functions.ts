@@ -622,12 +622,15 @@ function shapeTd1RcRow(r: any, prod: any | null): B2UiRow {
     : prediction === "NO" ? Math.round((1 - p) * 100)
     : 0;
   // Row status: resolved rows carry `result` (WIN/LOSS/PUSH). Map to
-  // shadow-row status codes used by the UI.
+  // shadow-row status codes used by the UI. TD1-RC skips (NO CLEAR EDGE)
+  // are surfaced as "push" so the outcome column always reflects TD1-RC's call.
   const result = r.result as string | null;
   let status: string = "pending";
-  if (result === "WIN") status = "win";
+  if (prediction === "NO CLEAR EDGE") status = "push";
+  else if (result === "WIN") status = "win";
   else if (result === "LOSS") status = "loss";
   else if (result === "PUSH") status = "push";
+
   return {
     id: r.id,
     candle_ts: r.candle_ts,
