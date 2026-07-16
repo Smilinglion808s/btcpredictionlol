@@ -336,6 +336,8 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
     status: string;
     trade: boolean | null;
     final_decision: string | null;
+    controller_decision: string | null;
+    raw_counterfactual_result: string | null;
     ensemble_probability_green: number | null;
     candle_ts: string | null;
     resolved_at: string | null;
@@ -343,7 +345,7 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from("model_c_shadow")
-      .select("variant, status, trade, final_decision, ensemble_probability_green, candle_ts, resolved_at")
+      .select("variant, status, trade, final_decision, controller_decision, raw_counterfactual_result, ensemble_probability_green, candle_ts, resolved_at")
       .in("variant", ["dual_horizon", "global_only"])
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -356,6 +358,9 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
   const blank = () => ({
     total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
     yes_total: 0, yes_wins: 0, no_total: 0, no_wins: 0,
+    // PRC-specific: controller acted (YES/NO) vs skipped, and base (raw) win rate.
+    controller_acted: 0, controller_skipped: 0,
+    base_wins: 0, base_losses: 0, base_win_rate: 0,
   });
   const out = {
     dual_horizon: blank(),
@@ -364,20 +369,28 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
   for (const r of rows) {
     const variant = r.variant === "global_only" ? "global_only" : "dual_horizon";
     const b = out[variant];
-    if (!r.trade) continue;
-    b.total += 1;
-    if (r.status === "win") b.wins += 1;
-    else if (r.status === "loss") b.losses += 1;
-    else if (r.status === "push") b.pushes += 1;
-    else if (r.status === "warming_up" || r.status === "scored") b.pending += 1;
-    if (r.status === "win" || r.status === "loss") {
-      if (r.final_decision === "YES") { b.yes_total += 1; if (r.status === "win") b.yes_wins += 1; }
-      else if (r.final_decision === "NO") { b.no_total += 1; if (r.status === "win") b.no_wins += 1; }
+    // Controller-based counters (win/loss/status now reflect controller_decision).
+    if (r.trade) {
+      b.total += 1;
+      if (r.status === "win") b.wins += 1;
+      else if (r.status === "loss") b.losses += 1;
+      else if (r.status === "push") b.pushes += 1;
+      else if (r.status === "warming_up" || r.status === "scored") b.pending += 1;
+      if (r.status === "win" || r.status === "loss") {
+        if (r.final_decision === "YES") { b.yes_total += 1; if (r.status === "win") b.yes_wins += 1; }
+        else if (r.final_decision === "NO") { b.no_total += 1; if (r.status === "win") b.no_wins += 1; }
+      }
     }
+    if (r.controller_decision === "SKIP") b.controller_skipped += 1;
+    else if (r.controller_decision === "YES" || r.controller_decision === "NO") b.controller_acted += 1;
+    if (r.raw_counterfactual_result === "WIN") b.base_wins += 1;
+    else if (r.raw_counterfactual_result === "LOSS") b.base_losses += 1;
   }
   for (const b of Object.values(out)) {
     const decided = b.wins + b.losses;
     b.win_rate = decided === 0 ? 0 : Math.round((b.wins / decided) * 10000) / 100;
+    const baseDecided = b.base_wins + b.base_losses;
+    b.base_win_rate = baseDecided === 0 ? 0 : Math.round((b.base_wins / baseDecided) * 10000) / 100;
   }
   return out;
 });
@@ -385,7 +398,7 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
 /** Latest Model C shadow rows for the current pending candle (per variant). */
 export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const cols = "variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status";
+  const cols = "variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status, raw_direction, controller_decision, controller_skip_reason, polarity_state, rolling_window_size, rolling_raw_wins, rolling_raw_losses, rolling_raw_edge";
   const [dh, go] = await Promise.all([
     sb.from("model_c_shadow").select(cols).eq("variant", "dual_horizon").order("candle_ts", { ascending: false }).limit(1),
     sb.from("model_c_shadow").select(cols).eq("variant", "global_only").order("candle_ts", { ascending: false }).limit(1),
