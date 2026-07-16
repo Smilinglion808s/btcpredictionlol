@@ -1,0 +1,1 @@
+DELETE FROM public.model_c_shadow;
