@@ -488,7 +488,7 @@ function StatsPage() {
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <CardTitle className="text-base flex items-center gap-2">
-              Model C Shadow
+              Model 7 PRC Shadow
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
                 PRC-36/4 · tracking-only · not trading
               </span>
