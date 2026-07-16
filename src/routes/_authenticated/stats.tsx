@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, getModelCShadowStats, getModelCShadowPending, exportModelCShadow, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -148,10 +148,10 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
-  const b2RecentFn = useServerFn(listVariantA2ConflictRecent);
+  const td1RecentFn = useServerFn(listTd1RcRecent);
   const listQ = useQuery({
-    queryKey: ["a2c-recent-stats"],
-    queryFn: () => b2RecentFn(),
+    queryKey: ["td1-rc-recent-stats"],
+    queryFn: () => td1RecentFn(),
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
     staleTime: 0,
@@ -710,7 +710,7 @@ function StatsPage() {
           <CardTitle className="text-base flex items-center gap-2">
             Recent History
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              Variant A2 Conflict
+              TD1-RC · Outcome follows TD1-RC
             </span>
           </CardTitle>
         </CardHeader>
@@ -720,7 +720,8 @@ function StatsPage() {
               <thead className="text-xs text-muted-foreground border-b border-border">
                 <tr>
                   <th className="text-left px-3 py-2">Candle</th>
-                  <th className="text-left px-3 py-2">Pred</th>
+                  <th className="text-left px-3 py-2">TD1-RC</th>
+                  <th className="text-left px-3 py-2">A2 Combined</th>
                   <th className="text-left px-3 py-2">Conf</th>
                   <th className="text-left px-3 py-2">Close</th>
                   <th className="text-left px-3 py-2">Outcome</th>
@@ -731,6 +732,7 @@ function StatsPage() {
                   <tr key={p.id} className="border-b border-border/50 align-top">
                     <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
                     <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
+                    <td className="px-3 py-2"><PredictionBadge value={p.a2_combined ?? "—"} /></td>
                     <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {p.actual_next_candle_close != null ? `$${Number(p.actual_next_candle_close).toLocaleString()}` : "—"}
