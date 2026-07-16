@@ -385,7 +385,7 @@ export const getModelCShadowStats = createServerFn({ method: "GET" }).handler(as
 /** Latest Model C shadow rows for the current pending candle (per variant). */
 export const getModelCShadowPending = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const cols = "variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status";
+  const cols = "variant, candle_ts, ensemble_probability_green, global_probability_green, recent_probability_green, final_decision, trade, status, raw_direction, controller_decision, controller_skip_reason, polarity_state, rolling_window_size, rolling_raw_wins, rolling_raw_losses, rolling_raw_edge";
   const [dh, go] = await Promise.all([
     sb.from("model_c_shadow").select(cols).eq("variant", "dual_horizon").order("candle_ts", { ascending: false }).limit(1),
     sb.from("model_c_shadow").select(cols).eq("variant", "global_only").order("candle_ts", { ascending: false }).limit(1),
