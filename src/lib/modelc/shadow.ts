@@ -488,14 +488,7 @@ export async function resolveModelCShadowRowsFor(
         } as never)
         .eq("id", r.id);
     }
-      if (!resolvedModelVersion && r.production_model_version) {
-        resolvedModelVersion = r.production_model_version;
-      }
-      await supabase
-        .from("model_c_shadow")
-        .update({ actual_direction: actualDirection, won, resolved_at: nowIso, status } as never)
-        .eq("id", r.id);
-    }
+
 
     // Retrain trigger — fires only when delta since last live fit crosses the
     // cadence threshold. Fail-closed inside `maybeRetrainModelC`, never blocks.
