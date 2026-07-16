@@ -165,6 +165,14 @@ async function insertGlobalOnlyRow(
   const overrideReason = decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
   const ensembleDelta = 0;
 
+  // PRC-36/4 controller — reports alongside base decision. Never modifies
+  // trained models, features, weights, or the 0.52 cutoff.
+  const prc = await computePrcDecision(supabase, {
+    variant: "global_only",
+    ensemble_probability_green: pGlobal,
+    target_boundary_ts: args.boundaryIso,
+  });
+
   await supabase.from("model_c_shadow").insert({
     prediction_id: args.predictionRow.id,
     variant: "global_only",
@@ -204,6 +212,19 @@ async function insertGlobalOnlyRow(
       : `bootstrap:${args.fit.combined_fit_sha256.slice(0, 12)}`,
     production_model_version: args.predictionRow.model_version ?? null,
     shadow_error: skipReason,
+    raw_direction: prc.raw_direction,
+    rolling_window_size: prc.rolling_window_size,
+    rolling_raw_wins: prc.rolling_raw_wins,
+    rolling_raw_losses: prc.rolling_raw_losses,
+    rolling_raw_edge: prc.rolling_raw_edge,
+    polarity_state: prc.polarity_state,
+    controller_decision: prc.controller_decision,
+    controller_skip_reason: prc.controller_skip_reason,
+    history_cutoff_ts: prc.history_cutoff_ts,
+    latest_resolution_ts_used: prc.latest_resolution_ts_used,
+    timing_guard_passed: prc.timing_guard_passed,
+    controller_error: prc.controller_error,
+    controller_model_version: prc.controller_model_version,
   } as never);
 }
 
