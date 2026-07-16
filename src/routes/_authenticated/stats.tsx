@@ -753,7 +753,7 @@ function StatsPage() {
 
 interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
 
-function M7Stat({ label, value, tone }: { label: string; value: number; tone?: "bull" | "bear" }) {
+function M7Stat({ label, value, tone }: { label: string; value: number | string; tone?: "bull" | "bear" }) {
   const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "";
   return (
     <div>
