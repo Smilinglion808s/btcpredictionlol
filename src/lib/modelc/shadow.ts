@@ -23,6 +23,7 @@ import {
 import { loadActiveModelCFit, verifyBootstrapFit } from "./fit";
 import { decideModelC } from "./decision";
 import { featureVectorHash, scoreComponent } from "./score";
+import { computePrcDecision, rawCounterfactualResult } from "./prc";
 
 const TF_MS = 15 * 60 * 1000;
 const CORE_HISTORY_ROWS = 20;
@@ -164,6 +165,14 @@ async function insertGlobalOnlyRow(
   const overrideReason = decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
   const ensembleDelta = 0;
 
+  // PRC-36/4 controller — reports alongside base decision. Never modifies
+  // trained models, features, weights, or the 0.52 cutoff.
+  const prc = await computePrcDecision(supabase, {
+    variant: "global_only",
+    ensemble_probability_green: pGlobal,
+    target_boundary_ts: args.boundaryIso,
+  });
+
   await supabase.from("model_c_shadow").insert({
     prediction_id: args.predictionRow.id,
     variant: "global_only",
@@ -203,6 +212,19 @@ async function insertGlobalOnlyRow(
       : `bootstrap:${args.fit.combined_fit_sha256.slice(0, 12)}`,
     production_model_version: args.predictionRow.model_version ?? null,
     shadow_error: skipReason,
+    raw_direction: prc.raw_direction,
+    rolling_window_size: prc.rolling_window_size,
+    rolling_raw_wins: prc.rolling_raw_wins,
+    rolling_raw_losses: prc.rolling_raw_losses,
+    rolling_raw_edge: prc.rolling_raw_edge,
+    polarity_state: prc.polarity_state,
+    controller_decision: prc.controller_decision,
+    controller_skip_reason: prc.controller_skip_reason,
+    history_cutoff_ts: prc.history_cutoff_ts,
+    latest_resolution_ts_used: prc.latest_resolution_ts_used,
+    timing_guard_passed: prc.timing_guard_passed,
+    controller_error: prc.controller_error,
+    controller_model_version: prc.controller_model_version,
   } as never);
 }
 
@@ -301,6 +323,13 @@ export async function runModelCShadowForPrediction(
     const overrideReason =
       decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
 
+    // PRC-36/4 controller for dual_horizon variant.
+    const prc = await computePrcDecision(supabase, {
+      variant: "dual_horizon",
+      ensemble_probability_green: decision.p_ensemble,
+      target_boundary_ts: boundaryIso,
+    });
+
     await supabase.from("model_c_shadow").insert({
       prediction_id: predictionRow.id,
       variant: "dual_horizon",
@@ -340,6 +369,19 @@ export async function runModelCShadowForPrediction(
         : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
       shadow_error: skipReason,
+      raw_direction: prc.raw_direction,
+      rolling_window_size: prc.rolling_window_size,
+      rolling_raw_wins: prc.rolling_raw_wins,
+      rolling_raw_losses: prc.rolling_raw_losses,
+      rolling_raw_edge: prc.rolling_raw_edge,
+      polarity_state: prc.polarity_state,
+      controller_decision: prc.controller_decision,
+      controller_skip_reason: prc.controller_skip_reason,
+      history_cutoff_ts: prc.history_cutoff_ts,
+      latest_resolution_ts_used: prc.latest_resolution_ts_used,
+      timing_guard_passed: prc.timing_guard_passed,
+      controller_error: prc.controller_error,
+      controller_model_version: prc.controller_model_version,
     } as never);
 
     try {
@@ -406,28 +448,47 @@ export async function resolveModelCShadowRowsFor(
   try {
     const { data: rows } = await supabase
       .from("model_c_shadow")
-      .select("id, final_decision, trade, production_model_version")
+      .select("id, final_decision, trade, production_model_version, raw_direction, controller_decision")
       .eq("prediction_id", predictionId)
       .is("actual_direction", null);
     if (!rows || rows.length === 0) return;
     const nowIso = new Date().toISOString();
     let resolvedModelVersion: string | null = null;
-    for (const r of rows as Array<{ id: string; final_decision: string | null; trade: boolean | null; production_model_version: string | null }>) {
+    for (const r of rows as Array<{
+      id: string;
+      final_decision: string | null;
+      trade: boolean | null;
+      production_model_version: string | null;
+      raw_direction: "YES" | "NO" | null;
+      controller_decision: "YES" | "NO" | "SKIP" | null;
+    }>) {
       let won: boolean | null = null;
       let status = "skip";
-      if (r.trade && r.final_decision) {
-        won = (r.final_decision === "YES" && actualDirection === "GREEN") ||
-          (r.final_decision === "NO" && actualDirection === "RED");
+      // Status/won reflect the CONTROLLER decision (PRC output), so the Stats
+      // UI reads Model C's real win rate. Base-decision performance stays
+      // recoverable via raw_direction + raw_counterfactual_result.
+      const effective = r.controller_decision ?? (r.trade && r.final_decision ? r.final_decision : null);
+      if (effective && effective !== "SKIP") {
+        won = (effective === "YES" && actualDirection === "GREEN") ||
+          (effective === "NO" && actualDirection === "RED");
         status = won ? "win" : "loss";
       }
       if (!resolvedModelVersion && r.production_model_version) {
         resolvedModelVersion = r.production_model_version;
       }
+      const rawCf = rawCounterfactualResult(r.raw_direction, actualDirection);
       await supabase
         .from("model_c_shadow")
-        .update({ actual_direction: actualDirection, won, resolved_at: nowIso, status } as never)
+        .update({
+          actual_direction: actualDirection,
+          won,
+          resolved_at: nowIso,
+          status,
+          raw_counterfactual_result: rawCf,
+        } as never)
         .eq("id", r.id);
     }
+
 
     // Retrain trigger — fires only when delta since last live fit crosses the
     // cadence threshold. Fail-closed inside `maybeRetrainModelC`, never blocks.

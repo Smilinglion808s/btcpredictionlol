@@ -145,6 +145,10 @@ export type Database = {
           blend_weight_recent: number | null
           boundary_delta_ms: number | null
           candle_ts: string
+          controller_decision: string | null
+          controller_error: string | null
+          controller_model_version: string | null
+          controller_skip_reason: string | null
           created_at: string
           ensemble_delta: number | null
           ensemble_probability_green: number | null
@@ -155,31 +159,41 @@ export type Database = {
           global_artifact_sha256: string | null
           global_feature_vector_sha256: string | null
           global_probability_green: number | null
+          history_cutoff_ts: string | null
           id: string
           in_sample_global_prob_mean: number | null
           in_sample_global_prob_std: number | null
           in_sample_recent_prob_mean: number | null
           in_sample_recent_prob_std: number | null
+          latest_resolution_ts_used: string | null
           latest_source_candle_ts: string | null
           leakage_check_passed: boolean | null
           override_applied: boolean | null
           override_reason: string | null
           override_reasons_json: Json | null
+          polarity_state: string | null
           predicted_direction: string | null
           prediction_id: string | null
           prediction_row_created_at: string | null
           prediction_row_lead_ms: number | null
           production_model_version: string | null
           prospective_test_id: string | null
+          raw_counterfactual_result: string | null
+          raw_direction: string | null
           recent_artifact_sha256: string | null
           recent_feature_vector_sha256: string | null
           recent_probability_green: number | null
           resolved_at: string | null
+          rolling_raw_edge: number | null
+          rolling_raw_losses: number | null
+          rolling_raw_wins: number | null
+          rolling_window_size: number | null
           scored_at: string | null
           shadow_error: string | null
           skip_reason: string | null
           status: string
           target_boundary_ts: string | null
+          timing_guard_passed: boolean | null
           timing_status: string | null
           trade: boolean | null
           variant: string
@@ -192,6 +206,10 @@ export type Database = {
           blend_weight_recent?: number | null
           boundary_delta_ms?: number | null
           candle_ts: string
+          controller_decision?: string | null
+          controller_error?: string | null
+          controller_model_version?: string | null
+          controller_skip_reason?: string | null
           created_at?: string
           ensemble_delta?: number | null
           ensemble_probability_green?: number | null
@@ -202,31 +220,41 @@ export type Database = {
           global_artifact_sha256?: string | null
           global_feature_vector_sha256?: string | null
           global_probability_green?: number | null
+          history_cutoff_ts?: string | null
           id?: string
           in_sample_global_prob_mean?: number | null
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
+          latest_resolution_ts_used?: string | null
           latest_source_candle_ts?: string | null
           leakage_check_passed?: boolean | null
           override_applied?: boolean | null
           override_reason?: string | null
           override_reasons_json?: Json | null
+          polarity_state?: string | null
           predicted_direction?: string | null
           prediction_id?: string | null
           prediction_row_created_at?: string | null
           prediction_row_lead_ms?: number | null
           production_model_version?: string | null
           prospective_test_id?: string | null
+          raw_counterfactual_result?: string | null
+          raw_direction?: string | null
           recent_artifact_sha256?: string | null
           recent_feature_vector_sha256?: string | null
           recent_probability_green?: number | null
           resolved_at?: string | null
+          rolling_raw_edge?: number | null
+          rolling_raw_losses?: number | null
+          rolling_raw_wins?: number | null
+          rolling_window_size?: number | null
           scored_at?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
           status?: string
           target_boundary_ts?: string | null
+          timing_guard_passed?: boolean | null
           timing_status?: string | null
           trade?: boolean | null
           variant?: string
@@ -239,6 +267,10 @@ export type Database = {
           blend_weight_recent?: number | null
           boundary_delta_ms?: number | null
           candle_ts?: string
+          controller_decision?: string | null
+          controller_error?: string | null
+          controller_model_version?: string | null
+          controller_skip_reason?: string | null
           created_at?: string
           ensemble_delta?: number | null
           ensemble_probability_green?: number | null
@@ -249,31 +281,41 @@ export type Database = {
           global_artifact_sha256?: string | null
           global_feature_vector_sha256?: string | null
           global_probability_green?: number | null
+          history_cutoff_ts?: string | null
           id?: string
           in_sample_global_prob_mean?: number | null
           in_sample_global_prob_std?: number | null
           in_sample_recent_prob_mean?: number | null
           in_sample_recent_prob_std?: number | null
+          latest_resolution_ts_used?: string | null
           latest_source_candle_ts?: string | null
           leakage_check_passed?: boolean | null
           override_applied?: boolean | null
           override_reason?: string | null
           override_reasons_json?: Json | null
+          polarity_state?: string | null
           predicted_direction?: string | null
           prediction_id?: string | null
           prediction_row_created_at?: string | null
           prediction_row_lead_ms?: number | null
           production_model_version?: string | null
           prospective_test_id?: string | null
+          raw_counterfactual_result?: string | null
+          raw_direction?: string | null
           recent_artifact_sha256?: string | null
           recent_feature_vector_sha256?: string | null
           recent_probability_green?: number | null
           resolved_at?: string | null
+          rolling_raw_edge?: number | null
+          rolling_raw_losses?: number | null
+          rolling_raw_wins?: number | null
+          rolling_window_size?: number | null
           scored_at?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
           status?: string
           target_boundary_ts?: string | null
+          timing_guard_passed?: boolean | null
           timing_status?: string | null
           trade?: boolean | null
           variant?: string
