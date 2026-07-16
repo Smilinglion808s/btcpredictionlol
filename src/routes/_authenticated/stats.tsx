@@ -490,7 +490,7 @@ function StatsPage() {
             <CardTitle className="text-base flex items-center gap-2">
               Model C Shadow
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-                dual-horizon · tracking-only · not trading
+                PRC-36/4 · tracking-only · not trading
               </span>
             </CardTitle>
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingMC} onClick={downloadMCCsv}>
@@ -500,42 +500,50 @@ function StatsPage() {
         </CardHeader>
         <CardContent>
           {(() => {
-            const blank = { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
+            const blank = {
+              total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0,
+              controller_acted: 0, controller_skipped: 0,
+              base_wins: 0, base_losses: 0, base_win_rate: 0,
+            };
             const mc = mcQ.data ?? { dual_horizon: blank, global_only: blank };
             const pendingData = mcPendingQ.data as {
-              dual_horizon?: {
-                ensemble_probability_green?: number | null;
-                global_probability_green?: number | null;
-                recent_probability_green?: number | null;
-                final_decision?: string | null;
-                trade?: boolean | null;
-              } | null;
-              global_only?: {
-                ensemble_probability_green?: number | null;
-                global_probability_green?: number | null;
-                recent_probability_green?: number | null;
-                final_decision?: string | null;
-                trade?: boolean | null;
-              } | null;
+              dual_horizon?: any | null;
+              global_only?: any | null;
             } | null;
             const cards = [
-              { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: mc.dual_horizon ?? blank, pending: pendingData?.dual_horizon ?? null },
+              { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: (mc.dual_horizon ?? blank) as typeof blank, pending: pendingData?.dual_horizon ?? null },
             ];
+            const polarityCls = (p: string | null | undefined) =>
+              p === "NORMAL" ? "text-bull border-bull/40 bg-bull/10"
+              : p === "INVERSE" ? "text-amber-500 border-amber-500/40 bg-amber-500/10"
+              : p === "NEUTRAL" ? "text-muted-foreground border-border"
+              : "text-muted-foreground/70 border-border/60";
             return (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                 {cards.map(({ key, title, stat, pending }) => {
-                  const decision = pending?.final_decision ?? null;
-                  const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
-                    : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
+                  const ctrl = pending?.controller_decision ?? null;
+                  const raw = pending?.raw_direction ?? null;
+                  const ctrlCls = ctrl === "YES" ? "text-bull border-bull/40 bg-bull/10"
+                    : ctrl === "NO" ? "text-bear border-bear/40 bg-bear/10"
                     : "text-muted-foreground border-border";
                   const pEns = typeof pending?.ensemble_probability_green === "number" ? (pending.ensemble_probability_green * 100).toFixed(1) : null;
                   const pGlobal = typeof pending?.global_probability_green === "number" ? (pending.global_probability_green * 100).toFixed(1) : null;
                   const pRecent = typeof pending?.recent_probability_green === "number" ? (pending.recent_probability_green * 100).toFixed(1) : null;
+                  const polarity = pending?.polarity_state ?? "INSUFFICIENT";
+                  const rWins = pending?.rolling_raw_wins ?? 0;
+                  const rLosses = pending?.rolling_raw_losses ?? 0;
+                  const rEdge = pending?.rolling_raw_edge ?? 0;
+                  const rSize = pending?.rolling_window_size ?? 0;
                   return (
                     <div key={key} className="rounded-md border border-border bg-card/50 p-4">
-                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{title}</div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{title}</div>
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono uppercase tracking-wider ${polarityCls(polarity)}`}>
+                          {polarity}
+                        </span>
+                      </div>
                       <div className="flex items-baseline justify-between mb-3">
-                        <span className="text-xs text-muted-foreground">Win Rate</span>
+                        <span className="text-xs text-muted-foreground">Controller Win Rate</span>
                         <span className="font-mono text-2xl font-bold text-bull">{stat.win_rate}%</span>
                       </div>
                       <div className="grid grid-cols-5 gap-2 text-center">
@@ -545,29 +553,58 @@ function StatsPage() {
                         <M7Stat label="Pushes" value={stat.pushes} />
                         <M7Stat label="Pending" value={stat.pending} />
                       </div>
+                      <div className="mt-3 pt-3 border-t border-border/60 grid grid-cols-3 gap-2 text-center">
+                        <M7Stat label="Base WR" value={`${stat.base_win_rate}%`} />
+                        <M7Stat label="Ctrl Acted" value={stat.controller_acted} />
+                        <M7Stat label="Ctrl SKIP" value={stat.controller_skipped} />
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-border/60">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                          Rolling window ({rSize}/36)
+                        </div>
+                        <div className="font-mono text-xs flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            W: <span className="text-bull">{rWins}</span>
+                            <span className="mx-1.5 text-muted-foreground/60">·</span>
+                            L: <span className="text-bear">{rLosses}</span>
+                            <span className="mx-1.5 text-muted-foreground/60">·</span>
+                            Edge: <span className={rEdge >= 4 ? "text-bull" : rEdge <= -4 ? "text-amber-500" : "text-foreground"}>{rEdge >= 0 ? `+${rEdge}` : rEdge}</span>
+                          </span>
+                          <span className="text-muted-foreground/60 text-[10px]">thr ±4</span>
+                        </div>
+                      </div>
                       <div className="mt-3 pt-3 border-t border-border/60">
                         <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
                           Current pending candle
                         </div>
-                        {pending && decision ? (
-                          <div className="flex items-center justify-between gap-2 font-mono text-xs">
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                              {decision}
-                              {pending.trade === false && (
-                                <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
-                              )}
-                            </span>
-                            <span className="text-muted-foreground">
-                              P: <span className="text-foreground">{pEns ?? "—"}%</span>
-                              <span className="mx-1.5 text-muted-foreground/60">·</span>
-                              G: <span className="text-foreground">{pGlobal ?? "—"}%</span>
-                              {key === "dual_horizon" && (
-                                <>
-                                  <span className="mx-1.5 text-muted-foreground/60">·</span>
-                                  R: <span className="text-foreground">{pRecent ?? "—"}%</span>
-                                </>
-                              )}
-                            </span>
+                        {pending ? (
+                          <div className="space-y-1.5 font-mono text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${ctrlCls}`}>
+                                CTRL {ctrl ?? "—"}
+                              </span>
+                              <span className="text-muted-foreground">
+                                RAW: <span className="text-foreground">{raw ?? "—"}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                              <span>
+                                P: <span className="text-foreground">{pEns ?? "—"}%</span>
+                                <span className="mx-1.5 text-muted-foreground/60">·</span>
+                                G: <span className="text-foreground">{pGlobal ?? "—"}%</span>
+                                {key === "dual_horizon" && (
+                                  <>
+                                    <span className="mx-1.5 text-muted-foreground/60">·</span>
+                                    R: <span className="text-foreground">{pRecent ?? "—"}%</span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                            {pending.controller_skip_reason && (
+                              <div className="text-[10px] text-muted-foreground/70 italic">
+                                {pending.controller_skip_reason}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
