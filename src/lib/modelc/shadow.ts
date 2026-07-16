@@ -448,20 +448,46 @@ export async function resolveModelCShadowRowsFor(
   try {
     const { data: rows } = await supabase
       .from("model_c_shadow")
-      .select("id, final_decision, trade, production_model_version")
+      .select("id, final_decision, trade, production_model_version, raw_direction, controller_decision")
       .eq("prediction_id", predictionId)
       .is("actual_direction", null);
     if (!rows || rows.length === 0) return;
     const nowIso = new Date().toISOString();
     let resolvedModelVersion: string | null = null;
-    for (const r of rows as Array<{ id: string; final_decision: string | null; trade: boolean | null; production_model_version: string | null }>) {
+    for (const r of rows as Array<{
+      id: string;
+      final_decision: string | null;
+      trade: boolean | null;
+      production_model_version: string | null;
+      raw_direction: "YES" | "NO" | null;
+      controller_decision: "YES" | "NO" | "SKIP" | null;
+    }>) {
       let won: boolean | null = null;
       let status = "skip";
-      if (r.trade && r.final_decision) {
-        won = (r.final_decision === "YES" && actualDirection === "GREEN") ||
-          (r.final_decision === "NO" && actualDirection === "RED");
+      // Status/won reflect the CONTROLLER decision (PRC output), so the Stats
+      // UI reads Model C's real win rate. Base-decision performance stays
+      // recoverable via raw_direction + raw_counterfactual_result.
+      const effective = r.controller_decision ?? (r.trade && r.final_decision ? r.final_decision : null);
+      if (effective && effective !== "SKIP") {
+        won = (effective === "YES" && actualDirection === "GREEN") ||
+          (effective === "NO" && actualDirection === "RED");
         status = won ? "win" : "loss";
       }
+      if (!resolvedModelVersion && r.production_model_version) {
+        resolvedModelVersion = r.production_model_version;
+      }
+      const rawCf = rawCounterfactualResult(r.raw_direction, actualDirection);
+      await supabase
+        .from("model_c_shadow")
+        .update({
+          actual_direction: actualDirection,
+          won,
+          resolved_at: nowIso,
+          status,
+          raw_counterfactual_result: rawCf,
+        } as never)
+        .eq("id", r.id);
+    }
       if (!resolvedModelVersion && r.production_model_version) {
         resolvedModelVersion = r.production_model_version;
       }
