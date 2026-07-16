@@ -784,37 +784,17 @@ export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handle
 
   const fit = activeFit as { fit_id: string; promoted_at: string };
 
-  // Phase 2: active fit is frozen for the first cohort of 200 matched resolved signals.
-  const { count: cohortResolved } = await sb
-    .from("model7_td1_rc_shadow")
-    .select("id", { count: "exact", head: true })
-    .eq("a2_source_variant", BASE_VARIANT)
-    .eq("td1_fit_id", fit.fit_id)
-    .not("a2_counterfactual_result", "is", null);
-  const have = cohortResolved ?? 0;
-  if (have < FREEZE_COHORT_SIZE) {
-    return {
-      phase: "freeze_cohort" as const,
-      label: "Freeze cohort — scoring with first live fit",
-      current: have,
-      target: FREEZE_COHORT_SIZE,
-      remaining: FREEZE_COHORT_SIZE - have,
-      percent: Math.min(100, Math.round((have / FREEZE_COHORT_SIZE) * 1000) / 10),
-      ready: true, // TD1-RC is already emitting live decisions during freeze
-      fit_id: fit.fit_id,
-    };
-  }
-
   return {
     phase: "ready" as const,
-    label: "TD1-RC live — freeze cohort complete",
-    current: have,
-    target: FREEZE_COHORT_SIZE,
+    label: "TD1-RC live",
+    current: MIN_SIGNALS_FOR_FIRST_FIT,
+    target: MIN_SIGNALS_FOR_FIRST_FIT,
     remaining: 0,
     percent: 100,
     ready: true,
     fit_id: fit.fit_id,
   };
+
 });
 
 /** Latest TD1-RC shadow row for the current pending candle. */
