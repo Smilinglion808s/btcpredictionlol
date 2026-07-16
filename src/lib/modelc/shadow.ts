@@ -23,6 +23,7 @@ import {
 import { loadActiveModelCFit, verifyBootstrapFit } from "./fit";
 import { decideModelC } from "./decision";
 import { featureVectorHash, scoreComponent } from "./score";
+import { computePrcDecision, rawCounterfactualResult, PRC_MODEL_VERSION } from "./prc";
 
 const TF_MS = 15 * 60 * 1000;
 const CORE_HISTORY_ROWS = 20;
