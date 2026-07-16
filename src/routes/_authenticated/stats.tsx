@@ -488,13 +488,13 @@ function StatsPage() {
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <CardTitle className="text-base flex items-center gap-2">
-              Model C Shadow
+              Model 7 PRC Shadow
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
                 PRC-36/4 · tracking-only · not trading
               </span>
             </CardTitle>
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingMC} onClick={downloadMCCsv}>
-              {exportingMC ? "Exporting…" : "CSV (Model C)"}
+              {exportingMC ? "Exporting…" : "CSV (Model 7 PRC)"}
             </Button>
           </div>
         </CardHeader>
@@ -511,7 +511,7 @@ function StatsPage() {
               global_only?: any | null;
             } | null;
             const cards = [
-              { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: (mc.dual_horizon ?? blank) as typeof blank, pending: pendingData?.dual_horizon ?? null },
+              { key: "dual_horizon" as const, title: "Model 7 PRC", stat: (mc.dual_horizon ?? blank) as typeof blank, pending: pendingData?.dual_horizon ?? null },
             ];
             const polarityCls = (p: string | null | undefined) =>
               p === "NORMAL" ? "text-bull border-bull/40 bg-bull/10"
