@@ -660,7 +660,7 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_td1_rc_shadow")
-    .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, result, resolved_at, created_at, prediction_id")
+    .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, a2_original_decision, result, resolved_at, created_at, prediction_id")
     .order("candle_ts", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -676,7 +676,10 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
       if (!prodMap.has(p.id)) prodMap.set(p.id, p);
     }
   }
-  return rows.map((r: any) => shapeTd1RcRow(r, prodMap.get(r.prediction_id) ?? null));
+  return rows.map((r: any) => ({
+    ...shapeTd1RcRow(r, prodMap.get(r.prediction_id) ?? null),
+    a2_combined: (r.a2_original_decision as string | null) ?? null,
+  }));
 });
 
 
