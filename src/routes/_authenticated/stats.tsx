@@ -148,10 +148,10 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
-  const b2RecentFn = useServerFn(listVariantA2ConflictRecent);
+  const td1RecentFn = useServerFn(listTd1RcRecent);
   const listQ = useQuery({
-    queryKey: ["a2c-recent-stats"],
-    queryFn: () => b2RecentFn(),
+    queryKey: ["td1-rc-recent-stats"],
+    queryFn: () => td1RecentFn(),
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
     staleTime: 0,
