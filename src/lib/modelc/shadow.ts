@@ -323,6 +323,13 @@ export async function runModelCShadowForPrediction(
     const overrideReason =
       decision.override_reasons_json.find((o) => o.applied)?.id ?? null;
 
+    // PRC-36/4 controller for dual_horizon variant.
+    const prc = await computePrcDecision(supabase, {
+      variant: "dual_horizon",
+      ensemble_probability_green: decision.p_ensemble,
+      target_boundary_ts: boundaryIso,
+    });
+
     await supabase.from("model_c_shadow").insert({
       prediction_id: predictionRow.id,
       variant: "dual_horizon",
@@ -362,6 +369,19 @@ export async function runModelCShadowForPrediction(
         : `bootstrap:${fit.combined_fit_sha256.slice(0, 12)}`,
       production_model_version: predictionRow.model_version ?? null,
       shadow_error: skipReason,
+      raw_direction: prc.raw_direction,
+      rolling_window_size: prc.rolling_window_size,
+      rolling_raw_wins: prc.rolling_raw_wins,
+      rolling_raw_losses: prc.rolling_raw_losses,
+      rolling_raw_edge: prc.rolling_raw_edge,
+      polarity_state: prc.polarity_state,
+      controller_decision: prc.controller_decision,
+      controller_skip_reason: prc.controller_skip_reason,
+      history_cutoff_ts: prc.history_cutoff_ts,
+      latest_resolution_ts_used: prc.latest_resolution_ts_used,
+      timing_guard_passed: prc.timing_guard_passed,
+      controller_error: prc.controller_error,
+      controller_model_version: prc.controller_model_version,
     } as never);
 
     try {
