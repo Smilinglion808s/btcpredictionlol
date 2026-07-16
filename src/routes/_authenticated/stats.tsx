@@ -511,7 +511,7 @@ function StatsPage() {
               global_only?: any | null;
             } | null;
             const cards = [
-              { key: "dual_horizon" as const, title: "Dual-Horizon Ensemble", stat: (mc.dual_horizon ?? blank) as typeof blank, pending: pendingData?.dual_horizon ?? null },
+              { key: "dual_horizon" as const, title: "Model 7 PRC", stat: (mc.dual_horizon ?? blank) as typeof blank, pending: pendingData?.dual_horizon ?? null },
             ];
             const polarityCls = (p: string | null | undefined) =>
               p === "NORMAL" ? "text-bull border-bull/40 bg-bull/10"
