@@ -556,6 +556,63 @@ function StatsPage() {
         </CardContent>
       </Card>
 
+      {/* AAS96 Shadow — Adaptive Armor Stack (independent, non-webhook) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>AAS96 Shadow (Adaptive Armor Stack)</span>
+            <Button size="sm" variant="outline" onClick={downloadAas96Csv} disabled={exportingAas96}>
+              {exportingAas96 ? "Exporting…" : "CSV (AAS96)"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const a = (aas96Q.data ?? {}) as Record<string, any>;
+            const trained = Number(a.training_row_count ?? 0);
+            const target = Number(a.training_target ?? 192);
+            const ready = Boolean(a.has_active_fit);
+            const pct = target > 0 ? Math.min(100, Math.round((trained / target) * 100)) : 0;
+            return (
+              <>
+                {!ready ? (
+                  <div className="rounded-md border p-3">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <div className="font-medium">Warmup — collecting resolved directional signals</div>
+                      <div className="text-muted-foreground tabular-nums">
+                        {trained} / {target}
+                        <span className="ml-2">({Math.max(0, target - trained)} candles left)</span>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, pct)}%` }} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      AAS96 will SKIP until the first fit promotes. Runs in parallel — never affects the trading bot.
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Win rate" value={`${a.win_rate ?? 0}%`} />
+                  <Stat label="Trades (W+L)" value={String((Number(a.win ?? 0) + Number(a.loss ?? 0)))} />
+                  <Stat label="Wins" value={String(a.win ?? 0)} />
+                  <Stat label="Losses" value={String(a.loss ?? 0)} />
+                  <Stat label="Pending" value={String(a.pending ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Skips" value={String(a.skip ?? 0)} />
+                  <Stat label="Pushes" value={String(a.push ?? 0)} />
+                  <Stat label="Total rows" value={String(a.total ?? 0)} />
+                  <Stat label="Training rows" value={String(trained)} />
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+
+
 
 
 
