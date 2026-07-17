@@ -904,7 +904,7 @@ export const getAas96ShadowStats = createServerFn({ method: "GET" }).handler(asy
     if (data.length < PAGE) break;
   }
   const { data: state } = await sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle();
-  const { data: fits } = await sb.from("model7_aas96_fits").select("id, status, trained_at").eq("status", "active").order("trained_at", { ascending: false }).limit(1);
+  const { data: fits } = await sb.from("model7_aas96_fits").select("fit_id, active, fitted_at").eq("active", true).order("fitted_at", { ascending: false }).limit(1);
   const trained = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
   const wl = counts.win + counts.loss;
   return {
