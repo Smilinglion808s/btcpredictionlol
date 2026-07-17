@@ -30,12 +30,7 @@ function StatsPage() {
   const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m7PendingFn = useServerFn(getModel7ShadowPending);
   const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const mcFn = useServerFn(getModelCShadowStats);
-  const mcQ = useQuery({ queryKey: ["modelc-shadow-stats"], queryFn: () => mcFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const mcPendingFn = useServerFn(getModelCShadowPending);
-  const mcPendingQ = useQuery({ queryKey: ["modelc-shadow-pending"], queryFn: () => mcPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportM7Fn = useServerFn(exportModel7Shadow);
-  const exportMCFn = useServerFn(exportModelCShadow);
   const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
@@ -46,7 +41,6 @@ function StatsPage() {
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
-  const [exportingMC, setExportingMC] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
 
