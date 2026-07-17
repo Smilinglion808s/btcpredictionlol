@@ -42,6 +42,30 @@ async function writeRow(
 
 export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<void> {
   const p = ctx.prediction;
+
+  // ---------- Temporal-safety audit (always compute, always persist) ----------
+  const targetTs = p.candle_ts ? new Date(String(p.candle_ts)) : null;
+  const inputTs = p.input_candle_ts ? new Date(String(p.input_candle_ts)) : null;
+  const targetOk = targetTs != null && !isNaN(targetTs.getTime());
+  const inputOk = inputTs != null && !isNaN(inputTs.getTime());
+  const deltaSec = targetOk && inputOk
+    ? (targetTs.getTime() - inputTs.getTime()) / 1000
+    : null;
+  // 15-minute continuity gate: input must be exactly one interval before target (±5s).
+  const continuityGatePassed = deltaSec != null && Math.abs(deltaSec - 900) <= 5;
+  const partialMinutesElapsed = p.current_partial_minutes_elapsed == null
+    ? null : Number(p.current_partial_minutes_elapsed);
+  // Snapshot belongs to prior candle when: input candle started, snapshot was
+  // taken within the input candle's 15-min window, and that window ends at or
+  // before the target candle start.
+  let snapshotBelongsToPrior: boolean | null = null;
+  if (targetOk && inputOk && partialMinutesElapsed != null) {
+    const snapshotCapturedMs = inputTs.getTime() + partialMinutesElapsed * 60_000;
+    snapshotBelongsToPrior =
+      snapshotCapturedMs <= targetTs.getTime() &&
+      inputTs.getTime() + 15 * 60_000 <= targetTs.getTime() + 5_000; // ≤5s slack
+  }
+
   const base: Record<string, unknown> = {
     prediction_id: p.id,
     candle_ts: p.candle_ts,
@@ -49,14 +73,23 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
     status: "pending",
     input_feature_timestamp: p.input_candle_ts ?? p.created_at ?? null,
     input_candle_age_seconds: p.input_candle_age_seconds ?? null,
+    target_candle_ts: p.candle_ts ?? null,
+    input_candle_ts: p.input_candle_ts ?? null,
+    continuity_delta_seconds: deltaSec,
+    continuity_gate_passed: continuityGatePassed,
+    snapshot_minutes_elapsed: partialMinutesElapsed,
+    snapshot_belongs_to_prior_candle: snapshotBelongsToPrior,
   };
   try {
     // Fetch state + fit in parallel.
     const [{ data: state }, artifact] = await Promise.all([
-      sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle(),
+      sb.from("model7_aas96_state").select("usable_training_rows, resolved_directional_count").eq("id", 1).maybeSingle(),
       loadActiveAas96Fit(sb),
     ]);
-    const count = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
+    const stateRow = state as { usable_training_rows?: number; resolved_directional_count?: number } | null;
+    // Prefer the new usable-rows counter; fall back to the legacy counter
+    // during transition so warmup progress does not visually regress.
+    const count = Number(stateRow?.usable_training_rows ?? stateRow?.resolved_directional_count ?? 0);
     base.training_row_count = count;
 
     // Warmup — no artifact yet.
@@ -74,6 +107,8 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
 
     // Eligibility gate (mirrors spec conditions we can enforce today).
     const eligibilityFailures: string[] = [];
+    if (!continuityGatePassed) eligibilityFailures.push("timestamp_discontinuity");
+    if (snapshotBelongsToPrior === false) eligibilityFailures.push("snapshot_from_target_candle");
     if (p.input_features_fresh === false) eligibilityFailures.push("input_features_stale");
     if (p.advance_check_passed === false) eligibilityFailures.push("advance_check_failed");
     if (p.partial_snapshot_present === false) eligibilityFailures.push("no_partial_snapshot");
