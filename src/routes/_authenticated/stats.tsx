@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, exportAas96Shadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -39,10 +39,26 @@ function StatsPage() {
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const aas96Fn = useServerFn(getAas96ShadowStats);
+  const aas96Q = useQuery({ queryKey: ["aas96-shadow-stats"], queryFn: () => aas96Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportAas96Fn = useServerFn(exportAas96Shadow);
+  const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+
+  async function downloadAas96Csv() {
+    try {
+      setExportingAas96(true);
+      const rows = await exportAas96Fn();
+      if (rows.length === 0) { alert("No AAS96 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `aas96-shadow-${stamp()}.csv`);
+    } finally {
+      setExportingAas96(false);
+    }
+  }
+
 
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
@@ -539,6 +555,63 @@ function StatsPage() {
           })()}
         </CardContent>
       </Card>
+
+      {/* AAS96 Shadow — Adaptive Armor Stack (independent, non-webhook) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>AAS96 Shadow (Adaptive Armor Stack)</span>
+            <Button size="sm" variant="outline" onClick={downloadAas96Csv} disabled={exportingAas96}>
+              {exportingAas96 ? "Exporting…" : "CSV (AAS96)"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const a = (aas96Q.data ?? {}) as Record<string, any>;
+            const trained = Number(a.training_row_count ?? 0);
+            const target = Number(a.training_target ?? 192);
+            const ready = Boolean(a.has_active_fit);
+            const pct = target > 0 ? Math.min(100, Math.round((trained / target) * 100)) : 0;
+            return (
+              <>
+                {!ready ? (
+                  <div className="rounded-md border p-3">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <div className="font-medium">Warmup — collecting resolved directional signals</div>
+                      <div className="text-muted-foreground tabular-nums">
+                        {trained} / {target}
+                        <span className="ml-2">({Math.max(0, target - trained)} candles left)</span>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, pct)}%` }} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      AAS96 will SKIP until the first fit promotes. Runs in parallel — never affects the trading bot.
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Win rate" value={`${a.win_rate ?? 0}%`} />
+                  <Stat label="Trades (W+L)" value={String((Number(a.win ?? 0) + Number(a.loss ?? 0)))} />
+                  <Stat label="Wins" value={String(a.win ?? 0)} />
+                  <Stat label="Losses" value={String(a.loss ?? 0)} />
+                  <Stat label="Pending" value={String(a.pending ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Skips" value={String(a.skip ?? 0)} />
+                  <Stat label="Pushes" value={String(a.push ?? 0)} />
+                  <Stat label="Total rows" value={String(a.total ?? 0)} />
+                  <Stat label="Training rows" value={String(trained)} />
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+
 
 
 

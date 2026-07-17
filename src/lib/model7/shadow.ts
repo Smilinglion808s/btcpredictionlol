@@ -527,6 +527,13 @@ export async function runShadowForPrediction(
     await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up");
 
+    // AAS96 shadow — deferred, never blocks webhook. Own storage table.
+    try {
+      const { runAas96Shadow } = await import("./aas96/orchestrator");
+      await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
+    } catch { /* never block */ }
+
+
 
 
 
@@ -721,7 +728,13 @@ export async function resolveShadowRowsFor(
   predictionId: string,
   actualDirection: "GREEN" | "RED" | "DOJI" | null,
 ): Promise<void> {
+  // AAS96 handles DOJI/null as push; resolve it before the directional gate.
+  try {
+    const { resolveAas96Row } = await import("./aas96/orchestrator");
+    await resolveAas96Row(supabase, predictionId, actualDirection);
+  } catch { /* never block */ }
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
+
   const { data: rows } = await supabase
     .from("model7_shadow")
     .select("id, variant, decision, would_trade, candle_ts, b4_2_counterfactual_b2_result, a2_variant_a_final_decision")
@@ -808,5 +821,9 @@ export async function resolveShadowRowsFor(
     const { maybeRetrainTd1 } = await import("./td1/retrain");
     await maybeRetrainTd1(supabase);
   } catch { /* never block */ }
+
+  // AAS96 resolution handled at top of function (supports DOJI push).
+
+
 }
 
