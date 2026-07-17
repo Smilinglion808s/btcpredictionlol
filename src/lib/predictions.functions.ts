@@ -881,3 +881,120 @@ export const overridePrediction = createServerFn({ method: "POST" })
     if (error) throw error;
     return { ok: true };
   });
+
+/** AAS96 shadow stats — win/loss/push/pending + training progress. */
+export const getAas96ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const counts = { pending: 0, win: 0, loss: 0, push: 0, skip: 0, total: 0 };
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("model7_aas96_shadow")
+      .select("status, result, final_prediction")
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<{ status: string; result: string | null; final_prediction: string | null }>) {
+      counts.total += 1;
+      if (r.status === "pending") counts.pending += 1;
+      else if (r.result === "win") counts.win += 1;
+      else if (r.result === "loss") counts.loss += 1;
+      else if (r.result === "push") counts.push += 1;
+      else if (r.result === "skip" || r.final_prediction === "SKIP") counts.skip += 1;
+    }
+    if (data.length < PAGE) break;
+  }
+  const { data: state } = await sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle();
+  const { data: fits } = await sb.from("model7_aas96_fits").select("id, status, trained_at").eq("status", "active").order("trained_at", { ascending: false }).limit(1);
+  const trained = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
+  const wl = counts.win + counts.loss;
+  return {
+    ...counts,
+    win_rate: wl ? Math.round((counts.win / wl) * 10000) / 100 : 0,
+    training_row_count: trained,
+    training_target: 192,
+    has_active_fit: (fits ?? []).length > 0,
+    active_fit_id: (fits ?? [])[0]?.id ?? null,
+  };
+});
+
+/** Full AAS96 CSV export — every column, enriched with prediction fields. */
+export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const rows: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model7_aas96_shadow")
+      .select("*")
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...(data as Record<string, unknown>[]));
+    if (data.length < PAGE) break;
+  }
+  const predIds = Array.from(new Set(rows.map((r) => r.prediction_id as string).filter(Boolean)));
+  const predMap = new Map<string, Record<string, unknown>>();
+  const cols = "id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_open, actual_next_candle_close, actual_direction, trend, model_version, agreement_gate_applied, final_trade_status, bullish_score, bearish_score";
+  for (let i = 0; i < predIds.length; i += 500) {
+    const slice = predIds.slice(i, i + 500);
+    const [live, arch] = await Promise.all([
+      sb.from("predictions").select(cols).in("id", slice),
+      sb.from("predictions_archive").select(cols).in("id", slice),
+    ]);
+    for (const p of [...(live.data ?? []), ...(arch.data ?? [])] as Record<string, unknown>[]) {
+      if (!predMap.has(p.id as string)) predMap.set(p.id as string, p);
+    }
+  }
+  return rows.map((r) => {
+    const p = predMap.get(r.prediction_id as string) ?? {};
+    return {
+      candle_ts: r.candle_ts,
+      variant: r.variant,
+      status: r.status,
+      final_prediction: r.final_prediction,
+      selected_layer: r.selected_layer,
+      layer_a_base_direction: r.layer_a_base_direction,
+      layer_a_final_direction: r.layer_a_final_direction,
+      layer_a_prob_l003: r.layer_a_prob_l003,
+      layer_a_prob_l010: r.layer_a_prob_l010,
+      layer_a_prob_mean: r.layer_a_prob_mean,
+      armor_override_fired: r.armor_override_fired,
+      armor_override_reason: r.armor_override_reason,
+      layer_b_h32_direction: r.layer_b_h32_direction,
+      layer_b_h64_direction: r.layer_b_h64_direction,
+      layer_b_h96_direction: r.layer_b_h96_direction,
+      layer_b_h192_direction: r.layer_b_h192_direction,
+      layer_b_final_direction: r.layer_b_final_direction,
+      layer_a_last96_net: r.layer_a_last96_net,
+      layer_b_last96_net: r.layer_b_last96_net,
+      eligibility_passed: r.eligibility_passed,
+      skip_reason: r.skip_reason,
+      shadow_error: r.shadow_error,
+      training_row_count: r.training_row_count,
+      fit_id: r.fit_id,
+      feature_schema_hash: r.feature_schema_hash,
+      input_feature_timestamp: r.input_feature_timestamp,
+      input_candle_age_seconds: r.input_candle_age_seconds,
+      actual_direction: r.actual_direction,
+      result: r.result,
+      resolved_at: r.resolved_at,
+      prediction_id: r.prediction_id,
+      prediction_created_at: (p as { created_at?: unknown }).created_at ?? null,
+      prediction_yesno: (p as { prediction?: unknown }).prediction ?? null,
+      prediction_confidence: (p as { confidence?: unknown }).confidence ?? null,
+      setup_type: (p as { setup_type?: unknown }).setup_type ?? null,
+      market_condition: (p as { market_condition?: unknown }).market_condition ?? null,
+      trend: (p as { trend?: unknown }).trend ?? null,
+      btc_price_at_prediction: (p as { btc_price_at_prediction?: unknown }).btc_price_at_prediction ?? null,
+      actual_next_candle_open: (p as { actual_next_candle_open?: unknown }).actual_next_candle_open ?? null,
+      actual_next_candle_close: (p as { actual_next_candle_close?: unknown }).actual_next_candle_close ?? null,
+      prediction_final_status: (p as { status?: unknown }).status ?? null,
+      final_trade_status: (p as { final_trade_status?: unknown }).final_trade_status ?? null,
+      production_model_version: (p as { model_version?: unknown }).model_version ?? null,
+      bullish_score: (p as { bullish_score?: unknown }).bullish_score ?? null,
+      bearish_score: (p as { bearish_score?: unknown }).bearish_score ?? null,
+    };
+  });
+});
+
