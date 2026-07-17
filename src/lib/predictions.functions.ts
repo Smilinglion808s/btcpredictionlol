@@ -917,6 +917,21 @@ export const getAas96ShadowStats = createServerFn({ method: "GET" }).handler(asy
   };
 });
 
+export const getAas96ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data, error } = await sb
+    .from("model7_aas96_shadow")
+    .select("candle_ts, final_prediction, selected_layer, layer_a_final_direction, layer_b_final_direction, layer_a_prob_mean, armor_override_fired, armor_override_reason, eligibility_passed, skip_reason, fit_id, status")
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+});
+
+
+
+
 /** Full AAS96 CSV export — every column, enriched with prediction fields. */
 export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();

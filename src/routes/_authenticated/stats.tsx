@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, exportAas96Shadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -41,7 +41,10 @@ function StatsPage() {
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
   const aas96Fn = useServerFn(getAas96ShadowStats);
   const aas96Q = useQuery({ queryKey: ["aas96-shadow-stats"], queryFn: () => aas96Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const aas96PendingFn = useServerFn(getAas96ShadowPending);
+  const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
+
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
@@ -585,9 +588,44 @@ function StatsPage() {
                   <Stat label="Total rows" value={String(a.total ?? 0)} />
                   <Stat label="Training rows" value={String(trained)} />
                 </div>
+                {(() => {
+                  const p = aas96PendingQ.data as Record<string, any> | null;
+                  if (!p) return null;
+                  const dir = p.final_prediction ?? "—";
+                  const dirClass = dir === "GREEN" ? "text-emerald-600" : dir === "RED" ? "text-rose-600" : "text-muted-foreground";
+                  return (
+                    <div className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium">Current pending candle</div>
+                        <div className="text-[11px] text-muted-foreground tabular-nums">
+                          {p.candle_ts ? new Date(p.candle_ts).toLocaleString() : "—"}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Stat label="Prediction" value={String(dir)} />
+                        <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
+                        <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
+                        <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Stat label="Layer A prob (mean)" value={p.layer_a_prob_mean != null ? Number(p.layer_a_prob_mean).toFixed(4) : "—"} />
+                        <Stat label="Armor override" value={p.armor_override_fired ? "YES" : "no"} />
+                        <Stat label="Eligible" value={p.eligibility_passed ? "yes" : "no"} />
+                        <Stat label="Status" value={String(p.status ?? "—")} />
+                      </div>
+                      {(p.skip_reason || p.armor_override_reason) ? (
+                        <div className="text-[11px] text-muted-foreground">
+                          {p.skip_reason ? <div>skip: {String(p.skip_reason)}</div> : null}
+                          {p.armor_override_reason ? <div>armor: {String(p.armor_override_reason)}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
+
 
         </CardContent>
       </Card>
