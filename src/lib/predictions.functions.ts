@@ -927,6 +927,9 @@ export const getAas96ShadowPending = createServerFn({ method: "GET" }).handler(a
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
+});
+
+
 
 
 /** Full AAS96 CSV export — every column, enriched with prediction fields. */
