@@ -1222,10 +1222,6 @@ export async function resolvePredictionsServer(
         }
         const { resolveShadowRowsFor } = await import("./model7/shadow");
         await resolveShadowRowsFor(supabase, p.id, dir);
-        try {
-          const { resolveModelCShadowRowsFor } = await import("./modelc/shadow");
-          await resolveModelCShadowRowsFor(supabase, p.id, dir);
-        } catch { /* never block resolver on Model C shadow */ }
       } catch { /* never block resolver on shadow */ }
 
 
