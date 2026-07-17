@@ -57,8 +57,11 @@ async function fetchTrainingRows(sb: SupabaseClient): Promise<Record<string, unk
 /** Run a full retrain if needed. Returns fit_id when trained, null otherwise. */
 export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null> {
   const { data: state } = await sb.from("model7_aas96_state").select("*").eq("id", 1).maybeSingle();
-  const count = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
-  const nextAt = Number((state as { next_retrain_at_count?: number } | null)?.next_retrain_at_count ?? AAS96_MIN_TRAINING_ROWS);
+  const s = state as { resolved_directional_count?: number; usable_training_rows?: number; next_retrain_at_count?: number } | null;
+  // Prefer usable-training-rows counter (spec: retrain cadence driven by
+  // usable labeled feature rows, not raw market resolutions).
+  const count = Number(s?.usable_training_rows ?? s?.resolved_directional_count ?? 0);
+  const nextAt = Number(s?.next_retrain_at_count ?? AAS96_MIN_TRAINING_ROWS);
   if (count < AAS96_MIN_TRAINING_ROWS) return null;
   if (count < nextAt) return null;
 
