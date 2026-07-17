@@ -220,7 +220,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, layer_a_final_direction, layer_b_final_direction, status")
+      .select("id, final_prediction, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -242,10 +242,20 @@ export async function resolveAas96Row(
     if (final === "GREEN" || final === "RED") {
       result = final === actualDirection ? "win" : "loss";
     }
+    // A row counts as a usable training row when its features were extractable
+    // (eligibility_passed truthy) OR it was a warmup skip (eligibility unset)
+    // — those still contribute to the underlying `predictions` training pool.
+    // Bad-input skips (input_features_stale, timestamp_discontinuity, etc.)
+    // must NOT advance the retrain cadence.
+    const eligibilityPassed = row.eligibility_passed as boolean | null;
+    const skipReason = (row.skip_reason as string | null) ?? "";
+    const isWarmupSkip = skipReason === "WARMUP_INSUFFICIENT_ROWS" || skipReason === "NO_ACTIVE_FIT";
+    const usableRow = eligibilityPassed === true || (eligibilityPassed == null && isWarmupSkip);
     await sb.from("model7_aas96_shadow").update({
       actual_direction: actualDirection,
       result,
       status: "resolved",
+      usable_training_row: usableRow,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
@@ -260,6 +270,8 @@ export async function resolveAas96Row(
         const artifact = await loadActiveAas96Fit(sb);
         if (artifact) {
           const inputs = extractExpertInputs(p as Record<string, unknown>);
+          // Layer B fallback: M6 bullish/bearish scores (bullish_score /
+          // bearish_score on predictions ARE the Model 6 module aggregates).
           const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
             >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
           updateExpertHistory(artifact.expertHistory, inputs, actualDirection, fallback);
@@ -268,12 +280,27 @@ export async function resolveAas96Row(
       }
     } catch { /* never block */ }
 
-    // Increment resolved directional counter.
+    // Advance counters: market count always +1; retrain cadence only when
+    // the row was usable (features extractable / warmup).
     try {
-      const { data: state } = await sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle();
-      const newCount = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0) + 1;
+      const { data: state } = await sb
+        .from("model7_aas96_state")
+        .select("resolved_directional_count, usable_training_rows, market_directional_resolutions")
+        .eq("id", 1)
+        .maybeSingle();
+      const s = state as {
+        resolved_directional_count?: number;
+        usable_training_rows?: number;
+        market_directional_resolutions?: number;
+      } | null;
+      const newUsable = Number(s?.usable_training_rows ?? s?.resolved_directional_count ?? 0) + (usableRow ? 1 : 0);
+      const newMarket = Number(s?.market_directional_resolutions ?? 0) + 1;
       await sb.from("model7_aas96_state").update({
-        resolved_directional_count: newCount,
+        // Keep legacy field in sync with usable rows so existing UI/preload
+        // continues to report the retrain-relevant count.
+        resolved_directional_count: newUsable,
+        usable_training_rows: newUsable,
+        market_directional_resolutions: newMarket,
         updated_at: new Date().toISOString(),
       } as never).eq("id", 1);
     } catch { /* ignore */ }
