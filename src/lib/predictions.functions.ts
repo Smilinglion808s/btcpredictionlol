@@ -921,7 +921,7 @@ export const getAas96ShadowStats = createServerFn({ method: "GET" }).handler(asy
 export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const PAGE = 1000;
-  const rows: Record<string, unknown>[] = [];
+  const rows: Record<string, any>[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from("model7_aas96_shadow")
