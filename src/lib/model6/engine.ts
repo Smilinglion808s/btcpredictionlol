@@ -157,13 +157,28 @@ export async function runModel6Prediction(supabase: SupabaseClient) {
     let partialPath: string = "unavailable";
     let partialAttempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }> = [];
     let partialSynthesized = false;
+    let partialRootCause: string | null = null;
     try {
       const ctx = await buildPartialCandleContext(supabase);
       partial = ctx.snapshot; partialPath = ctx.path; partialAttempts = ctx.attempts;
       partialSynthesized = ctx.synthesized;
+      partialRootCause = ctx.root_cause ?? null;
     } catch (e) {
       partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
+      partialRootCause = "build_partial_threw";
     }
+    // Fire-and-forget diagnostic log so every fetch attempt is inspectable via api_runs.
+    if (!partial || partialSynthesized || partialRootCause) {
+      try {
+        await supabase.from("api_runs").insert({
+          run_type: "partial-candle-fetch",
+          request_payload: { target_ts: targetCandleTs, input_ts: freshness.inputCandleTs },
+          response_payload: { path: partialPath, synthesized: partialSynthesized, root_cause: partialRootCause, attempts: partialAttempts },
+          success: !!partial && !partialSynthesized,
+        });
+      } catch { /* never block */ }
+    }
+
 
     const indicators = computeIndicatorBundle(ordered);
     if (!indicators) throw new Error("Failed to compute indicators");
