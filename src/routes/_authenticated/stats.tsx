@@ -570,28 +570,8 @@ function StatsPage() {
           {(() => {
             const a = (aas96Q.data ?? {}) as Record<string, any>;
             const trained = Number(a.training_row_count ?? 0);
-            const target = Number(a.training_target ?? 192);
-            const ready = Boolean(a.has_active_fit);
-            const pct = target > 0 ? Math.min(100, Math.round((trained / target) * 100)) : 0;
             return (
               <>
-                {!ready ? (
-                  <div className="rounded-md border p-3">
-                    <div className="flex items-center justify-between text-xs mb-2">
-                      <div className="font-medium">Warmup — collecting resolved directional signals</div>
-                      <div className="text-muted-foreground tabular-nums">
-                        {trained} / {target}
-                        <span className="ml-2">({Math.max(0, target - trained)} candles left)</span>
-                      </div>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, pct)}%` }} />
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-1">
-                      AAS96 will SKIP until the first fit promotes. Runs in parallel — never affects the trading bot.
-                    </div>
-                  </div>
-                ) : null}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <Stat label="Win rate" value={`${a.win_rate ?? 0}%`} />
                   <Stat label="Trades (W+L)" value={String((Number(a.win ?? 0) + Number(a.loss ?? 0)))} />
@@ -608,6 +588,7 @@ function StatsPage() {
               </>
             );
           })()}
+
         </CardContent>
       </Card>
 
