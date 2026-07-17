@@ -815,5 +815,12 @@ export async function resolveShadowRowsFor(
     const { maybeRetrainTd1 } = await import("./td1/retrain");
     await maybeRetrainTd1(supabase);
   } catch { /* never block */ }
+
+  // AAS96 resolution + retrain. Never blocks resolver.
+  try {
+    const { resolveAas96Row } = await import("./aas96/orchestrator");
+    await resolveAas96Row(supabase, predictionId, actualDirection);
+  } catch { /* never block */ }
+
 }
 
