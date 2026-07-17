@@ -96,18 +96,16 @@ function StatsPage() {
   async function downloadAllModelsCsv() {
     try {
       setExportingAll(true);
-      const [m7, mc, td1, preds] = await Promise.all([
+      const [m7, td1, preds] = await Promise.all([
         exportM7Fn(),
-        exportMCFn(),
         exportTd1Fn(),
         exportAllPredsFn(),
       ]);
       const s = stamp();
       if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
-      if ((mc ?? []).length) triggerDownload(rowsToCsv(mc as any[]), `all-models-${s}-modelc-shadow.csv`);
       if ((td1 ?? []).length) triggerDownload(rowsToCsv(td1 as any[]), `all-models-${s}-td1-rc-shadow.csv`);
       if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
-      if (!(m7 ?? []).length && !(mc ?? []).length && !(td1 ?? []).length && !(preds ?? []).length) {
+      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length) {
         alert("No rows to export.");
       }
     } finally {
