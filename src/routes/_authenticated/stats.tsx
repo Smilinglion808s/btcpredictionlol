@@ -588,9 +588,44 @@ function StatsPage() {
                   <Stat label="Total rows" value={String(a.total ?? 0)} />
                   <Stat label="Training rows" value={String(trained)} />
                 </div>
+                {(() => {
+                  const p = aas96PendingQ.data as Record<string, any> | null;
+                  if (!p) return null;
+                  const dir = p.final_prediction ?? "—";
+                  const dirClass = dir === "GREEN" ? "text-emerald-600" : dir === "RED" ? "text-rose-600" : "text-muted-foreground";
+                  return (
+                    <div className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium">Current pending candle</div>
+                        <div className="text-[11px] text-muted-foreground tabular-nums">
+                          {p.candle_ts ? new Date(p.candle_ts).toLocaleString() : "—"}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Stat label="Prediction" value={<span className={dirClass}>{dir}</span>} />
+                        <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
+                        <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
+                        <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Stat label="Layer A prob (mean)" value={p.layer_a_prob_mean != null ? Number(p.layer_a_prob_mean).toFixed(4) : "—"} />
+                        <Stat label="Armor override" value={p.armor_override_fired ? "YES" : "no"} />
+                        <Stat label="Eligible" value={p.eligibility_passed ? "yes" : "no"} />
+                        <Stat label="Status" value={String(p.status ?? "—")} />
+                      </div>
+                      {(p.skip_reason || p.armor_override_reason) ? (
+                        <div className="text-[11px] text-muted-foreground">
+                          {p.skip_reason ? <div>skip: {String(p.skip_reason)}</div> : null}
+                          {p.armor_override_reason ? <div>armor: {String(p.armor_override_reason)}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
+
 
         </CardContent>
       </Card>
