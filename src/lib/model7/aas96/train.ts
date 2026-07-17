@@ -110,6 +110,7 @@ export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null
 
   await sb.from("model7_aas96_state").update({
     resolved_directional_count: count,
+    usable_training_rows: count,
     last_training_at: new Date().toISOString(),
     next_retrain_at_count: count + AAS96_RETRAIN_EVERY,
     updated_at: new Date().toISOString(),
