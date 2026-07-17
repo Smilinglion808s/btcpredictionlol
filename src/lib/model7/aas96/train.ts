@@ -57,8 +57,11 @@ async function fetchTrainingRows(sb: SupabaseClient): Promise<Record<string, unk
 /** Run a full retrain if needed. Returns fit_id when trained, null otherwise. */
 export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null> {
   const { data: state } = await sb.from("model7_aas96_state").select("*").eq("id", 1).maybeSingle();
-  const count = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
-  const nextAt = Number((state as { next_retrain_at_count?: number } | null)?.next_retrain_at_count ?? AAS96_MIN_TRAINING_ROWS);
+  const s = state as { resolved_directional_count?: number; usable_training_rows?: number; next_retrain_at_count?: number } | null;
+  // Prefer usable-training-rows counter (spec: retrain cadence driven by
+  // usable labeled feature rows, not raw market resolutions).
+  const count = Number(s?.usable_training_rows ?? s?.resolved_directional_count ?? 0);
+  const nextAt = Number(s?.next_retrain_at_count ?? AAS96_MIN_TRAINING_ROWS);
   if (count < AAS96_MIN_TRAINING_ROWS) return null;
   if (count < nextAt) return null;
 
@@ -75,15 +78,22 @@ export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null
   const { names, matrix } = batchApply(scaler, training.map((t) => t.features));
   const y = training.map((t) => t.y);
 
-  const fitL003 = trainLogistic(matrix, y, AAS96_LAMBDAS[0], { maxIter: 400, tol: 1e-6 });
-  const fitL010 = trainLogistic(matrix, y, AAS96_LAMBDAS[1], { maxIter: 400, tol: 1e-6 });
+  // Spec-required convergence: max 5000 iters, tol 1e-9. Solver is deterministic
+  // (zero-init, no random restarts, full-batch gradient) — objective is convex so
+  // this yields the unique regularized MLE up to tol.
+  const fitL003 = trainLogistic(matrix, y, AAS96_LAMBDAS[0], { maxIter: 5000, tol: 1e-9 });
+  const fitL010 = trainLogistic(matrix, y, AAS96_LAMBDAS[1], { maxIter: 5000, tol: 1e-9 });
 
-  // Initialize expert history by replaying training rows in order.
+  // Initialize expert history by replaying training rows in order. Fallback
+  // for each row uses that row's M6 bullish/bearish score direction (spec:
+  // Layer B missing-signal fallback = m6_bullish_score >= m6_bearish_score).
   const history = emptyExpertHistory();
   for (const t of training) {
     const dir = t.y === 1 ? "GREEN" : "RED";
     const inputs = extractExpertInputs(t.raw);
-    const fallback: Dir = "GREEN";
+    const bs = Number((t.raw as Record<string, unknown>).bullish_score ?? 0);
+    const br = Number((t.raw as Record<string, unknown>).bearish_score ?? 0);
+    const fallback: Dir = bs >= br ? "GREEN" : "RED";
     updateExpertHistory(history, inputs, dir as Dir, fallback);
   }
 
@@ -100,6 +110,7 @@ export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null
 
   await sb.from("model7_aas96_state").update({
     resolved_directional_count: count,
+    usable_training_rows: count,
     last_training_at: new Date().toISOString(),
     next_retrain_at_count: count + AAS96_RETRAIN_EVERY,
     updated_at: new Date().toISOString(),

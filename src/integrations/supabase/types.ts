@@ -553,6 +553,8 @@ export type Database = {
           armor_override_fired: boolean | null
           armor_override_reason: string | null
           candle_ts: string
+          continuity_delta_seconds: number | null
+          continuity_gate_passed: boolean | null
           created_at: string
           eligibility_passed: boolean | null
           feature_schema_hash: string | null
@@ -560,6 +562,7 @@ export type Database = {
           fit_id: string | null
           id: string
           input_candle_age_seconds: number | null
+          input_candle_ts: string | null
           input_feature_timestamp: string | null
           last_training_at: string | null
           layer_a_base_direction: string | null
@@ -581,9 +584,13 @@ export type Database = {
           selected_layer: string | null
           shadow_error: string | null
           skip_reason: string | null
+          snapshot_belongs_to_prior_candle: boolean | null
+          snapshot_minutes_elapsed: number | null
           status: string
+          target_candle_ts: string | null
           training_row_count: number | null
           updated_at: string
+          usable_training_row: boolean | null
           variant: string
         }
         Insert: {
@@ -591,6 +598,8 @@ export type Database = {
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
           candle_ts: string
+          continuity_delta_seconds?: number | null
+          continuity_gate_passed?: boolean | null
           created_at?: string
           eligibility_passed?: boolean | null
           feature_schema_hash?: string | null
@@ -598,6 +607,7 @@ export type Database = {
           fit_id?: string | null
           id?: string
           input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
           input_feature_timestamp?: string | null
           last_training_at?: string | null
           layer_a_base_direction?: string | null
@@ -619,9 +629,13 @@ export type Database = {
           selected_layer?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
+          snapshot_belongs_to_prior_candle?: boolean | null
+          snapshot_minutes_elapsed?: number | null
           status?: string
+          target_candle_ts?: string | null
           training_row_count?: number | null
           updated_at?: string
+          usable_training_row?: boolean | null
           variant?: string
         }
         Update: {
@@ -629,6 +643,8 @@ export type Database = {
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
           candle_ts?: string
+          continuity_delta_seconds?: number | null
+          continuity_gate_passed?: boolean | null
           created_at?: string
           eligibility_passed?: boolean | null
           feature_schema_hash?: string | null
@@ -636,6 +652,7 @@ export type Database = {
           fit_id?: string | null
           id?: string
           input_candle_age_seconds?: number | null
+          input_candle_ts?: string | null
           input_feature_timestamp?: string | null
           last_training_at?: string | null
           layer_a_base_direction?: string | null
@@ -657,9 +674,13 @@ export type Database = {
           selected_layer?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
+          snapshot_belongs_to_prior_candle?: boolean | null
+          snapshot_minutes_elapsed?: number | null
           status?: string
+          target_candle_ts?: string | null
           training_row_count?: number | null
           updated_at?: string
+          usable_training_row?: boolean | null
           variant?: string
         }
         Relationships: [
@@ -676,23 +697,29 @@ export type Database = {
         Row: {
           id: number
           last_training_at: string | null
+          market_directional_resolutions: number
           next_retrain_at_count: number
           resolved_directional_count: number
           updated_at: string
+          usable_training_rows: number
         }
         Insert: {
           id?: number
           last_training_at?: string | null
+          market_directional_resolutions?: number
           next_retrain_at_count?: number
           resolved_directional_count?: number
           updated_at?: string
+          usable_training_rows?: number
         }
         Update: {
           id?: number
           last_training_at?: string | null
+          market_directional_resolutions?: number
           next_retrain_at_count?: number
           resolved_directional_count?: number
           updated_at?: string
+          usable_training_rows?: number
         }
         Relationships: []
       }

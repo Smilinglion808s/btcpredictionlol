@@ -42,6 +42,30 @@ async function writeRow(
 
 export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<void> {
   const p = ctx.prediction;
+
+  // ---------- Temporal-safety audit (always compute, always persist) ----------
+  const targetTs = p.candle_ts ? new Date(String(p.candle_ts)) : null;
+  const inputTs = p.input_candle_ts ? new Date(String(p.input_candle_ts)) : null;
+  const targetOk = targetTs != null && !isNaN(targetTs.getTime());
+  const inputOk = inputTs != null && !isNaN(inputTs.getTime());
+  const deltaSec = targetOk && inputOk
+    ? (targetTs.getTime() - inputTs.getTime()) / 1000
+    : null;
+  // 15-minute continuity gate: input must be exactly one interval before target (±5s).
+  const continuityGatePassed = deltaSec != null && Math.abs(deltaSec - 900) <= 5;
+  const partialMinutesElapsed = p.current_partial_minutes_elapsed == null
+    ? null : Number(p.current_partial_minutes_elapsed);
+  // Snapshot belongs to prior candle when: input candle started, snapshot was
+  // taken within the input candle's 15-min window, and that window ends at or
+  // before the target candle start.
+  let snapshotBelongsToPrior: boolean | null = null;
+  if (targetOk && inputOk && partialMinutesElapsed != null) {
+    const snapshotCapturedMs = inputTs.getTime() + partialMinutesElapsed * 60_000;
+    snapshotBelongsToPrior =
+      snapshotCapturedMs <= targetTs.getTime() &&
+      inputTs.getTime() + 15 * 60_000 <= targetTs.getTime() + 5_000; // ≤5s slack
+  }
+
   const base: Record<string, unknown> = {
     prediction_id: p.id,
     candle_ts: p.candle_ts,
@@ -49,14 +73,23 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
     status: "pending",
     input_feature_timestamp: p.input_candle_ts ?? p.created_at ?? null,
     input_candle_age_seconds: p.input_candle_age_seconds ?? null,
+    target_candle_ts: p.candle_ts ?? null,
+    input_candle_ts: p.input_candle_ts ?? null,
+    continuity_delta_seconds: deltaSec,
+    continuity_gate_passed: continuityGatePassed,
+    snapshot_minutes_elapsed: partialMinutesElapsed,
+    snapshot_belongs_to_prior_candle: snapshotBelongsToPrior,
   };
   try {
     // Fetch state + fit in parallel.
     const [{ data: state }, artifact] = await Promise.all([
-      sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle(),
+      sb.from("model7_aas96_state").select("usable_training_rows, resolved_directional_count").eq("id", 1).maybeSingle(),
       loadActiveAas96Fit(sb),
     ]);
-    const count = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0);
+    const stateRow = state as { usable_training_rows?: number; resolved_directional_count?: number } | null;
+    // Prefer the new usable-rows counter; fall back to the legacy counter
+    // during transition so warmup progress does not visually regress.
+    const count = Number(stateRow?.usable_training_rows ?? stateRow?.resolved_directional_count ?? 0);
     base.training_row_count = count;
 
     // Warmup — no artifact yet.
@@ -74,6 +107,8 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
 
     // Eligibility gate (mirrors spec conditions we can enforce today).
     const eligibilityFailures: string[] = [];
+    if (!continuityGatePassed) eligibilityFailures.push("timestamp_discontinuity");
+    if (snapshotBelongsToPrior === false) eligibilityFailures.push("snapshot_from_target_candle");
     if (p.input_features_fresh === false) eligibilityFailures.push("input_features_stale");
     if (p.advance_check_passed === false) eligibilityFailures.push("advance_check_failed");
     if (p.partial_snapshot_present === false) eligibilityFailures.push("no_partial_snapshot");
@@ -185,7 +220,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, layer_a_final_direction, layer_b_final_direction, status")
+      .select("id, final_prediction, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -207,10 +242,20 @@ export async function resolveAas96Row(
     if (final === "GREEN" || final === "RED") {
       result = final === actualDirection ? "win" : "loss";
     }
+    // A row counts as a usable training row when its features were extractable
+    // (eligibility_passed truthy) OR it was a warmup skip (eligibility unset)
+    // — those still contribute to the underlying `predictions` training pool.
+    // Bad-input skips (input_features_stale, timestamp_discontinuity, etc.)
+    // must NOT advance the retrain cadence.
+    const eligibilityPassed = row.eligibility_passed as boolean | null;
+    const skipReason = (row.skip_reason as string | null) ?? "";
+    const isWarmupSkip = skipReason === "WARMUP_INSUFFICIENT_ROWS" || skipReason === "NO_ACTIVE_FIT";
+    const usableRow = eligibilityPassed === true || (eligibilityPassed == null && isWarmupSkip);
     await sb.from("model7_aas96_shadow").update({
       actual_direction: actualDirection,
       result,
       status: "resolved",
+      usable_training_row: usableRow,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
@@ -225,6 +270,8 @@ export async function resolveAas96Row(
         const artifact = await loadActiveAas96Fit(sb);
         if (artifact) {
           const inputs = extractExpertInputs(p as Record<string, unknown>);
+          // Layer B fallback: M6 bullish/bearish scores (bullish_score /
+          // bearish_score on predictions ARE the Model 6 module aggregates).
           const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
             >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
           updateExpertHistory(artifact.expertHistory, inputs, actualDirection, fallback);
@@ -233,12 +280,27 @@ export async function resolveAas96Row(
       }
     } catch { /* never block */ }
 
-    // Increment resolved directional counter.
+    // Advance counters: market count always +1; retrain cadence only when
+    // the row was usable (features extractable / warmup).
     try {
-      const { data: state } = await sb.from("model7_aas96_state").select("resolved_directional_count").eq("id", 1).maybeSingle();
-      const newCount = Number((state as { resolved_directional_count?: number } | null)?.resolved_directional_count ?? 0) + 1;
+      const { data: state } = await sb
+        .from("model7_aas96_state")
+        .select("resolved_directional_count, usable_training_rows, market_directional_resolutions")
+        .eq("id", 1)
+        .maybeSingle();
+      const s = state as {
+        resolved_directional_count?: number;
+        usable_training_rows?: number;
+        market_directional_resolutions?: number;
+      } | null;
+      const newUsable = Number(s?.usable_training_rows ?? s?.resolved_directional_count ?? 0) + (usableRow ? 1 : 0);
+      const newMarket = Number(s?.market_directional_resolutions ?? 0) + 1;
       await sb.from("model7_aas96_state").update({
-        resolved_directional_count: newCount,
+        // Keep legacy field in sync with usable rows so existing UI/preload
+        // continues to report the retrain-relevant count.
+        resolved_directional_count: newUsable,
+        usable_training_rows: newUsable,
+        market_directional_resolutions: newMarket,
         updated_at: new Date().toISOString(),
       } as never).eq("id", 1);
     } catch { /* ignore */ }

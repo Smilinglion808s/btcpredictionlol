@@ -66,8 +66,8 @@ export function trainLogistic(
   lambda: number,
   opts?: { maxIter?: number; tol?: number },
 ): LogisticFit {
-  const maxIter = opts?.maxIter ?? 500;
-  const tol = opts?.tol ?? 1e-6;
+  const maxIter = opts?.maxIter ?? 5000;
+  const tol = opts?.tol ?? 1e-9;
   const p = X[0]?.length ?? 0;
   let b0 = 0;
   let beta = new Array<number>(p).fill(0);
