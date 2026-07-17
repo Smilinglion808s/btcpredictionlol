@@ -499,6 +499,203 @@ export type Database = {
         }
         Relationships: []
       }
+      model7_aas96_fits: {
+        Row: {
+          active: boolean
+          categorical_vocab_json: Json
+          coef_l003: Json
+          coef_l010: Json
+          feature_names: Json
+          feature_schema_hash: string
+          fit_id: string
+          fitted_at: string
+          intercept_l003: number
+          intercept_l010: number
+          layer_b_expert_history_json: Json | null
+          scaler_json: Json
+          training_row_count: number
+        }
+        Insert: {
+          active?: boolean
+          categorical_vocab_json: Json
+          coef_l003: Json
+          coef_l010: Json
+          feature_names: Json
+          feature_schema_hash: string
+          fit_id?: string
+          fitted_at?: string
+          intercept_l003: number
+          intercept_l010: number
+          layer_b_expert_history_json?: Json | null
+          scaler_json: Json
+          training_row_count: number
+        }
+        Update: {
+          active?: boolean
+          categorical_vocab_json?: Json
+          coef_l003?: Json
+          coef_l010?: Json
+          feature_names?: Json
+          feature_schema_hash?: string
+          fit_id?: string
+          fitted_at?: string
+          intercept_l003?: number
+          intercept_l010?: number
+          layer_b_expert_history_json?: Json | null
+          scaler_json?: Json
+          training_row_count?: number
+        }
+        Relationships: []
+      }
+      model7_aas96_shadow: {
+        Row: {
+          actual_direction: string | null
+          armor_override_fired: boolean | null
+          armor_override_reason: string | null
+          candle_ts: string
+          created_at: string
+          eligibility_passed: boolean | null
+          feature_schema_hash: string | null
+          final_prediction: string | null
+          fit_id: string | null
+          id: string
+          input_candle_age_seconds: number | null
+          input_feature_timestamp: string | null
+          last_training_at: string | null
+          layer_a_base_direction: string | null
+          layer_a_final_direction: string | null
+          layer_a_last96_net: number | null
+          layer_a_prob_l003: number | null
+          layer_a_prob_l010: number | null
+          layer_a_prob_mean: number | null
+          layer_b_final_direction: string | null
+          layer_b_h192_direction: string | null
+          layer_b_h32_direction: string | null
+          layer_b_h64_direction: string | null
+          layer_b_h96_direction: string | null
+          layer_b_last96_net: number | null
+          next_retrain_at_count: number | null
+          prediction_id: string | null
+          resolved_at: string | null
+          result: string | null
+          selected_layer: string | null
+          shadow_error: string | null
+          skip_reason: string | null
+          status: string
+          training_row_count: number | null
+          updated_at: string
+          variant: string
+        }
+        Insert: {
+          actual_direction?: string | null
+          armor_override_fired?: boolean | null
+          armor_override_reason?: string | null
+          candle_ts: string
+          created_at?: string
+          eligibility_passed?: boolean | null
+          feature_schema_hash?: string | null
+          final_prediction?: string | null
+          fit_id?: string | null
+          id?: string
+          input_candle_age_seconds?: number | null
+          input_feature_timestamp?: string | null
+          last_training_at?: string | null
+          layer_a_base_direction?: string | null
+          layer_a_final_direction?: string | null
+          layer_a_last96_net?: number | null
+          layer_a_prob_l003?: number | null
+          layer_a_prob_l010?: number | null
+          layer_a_prob_mean?: number | null
+          layer_b_final_direction?: string | null
+          layer_b_h192_direction?: string | null
+          layer_b_h32_direction?: string | null
+          layer_b_h64_direction?: string | null
+          layer_b_h96_direction?: string | null
+          layer_b_last96_net?: number | null
+          next_retrain_at_count?: number | null
+          prediction_id?: string | null
+          resolved_at?: string | null
+          result?: string | null
+          selected_layer?: string | null
+          shadow_error?: string | null
+          skip_reason?: string | null
+          status?: string
+          training_row_count?: number | null
+          updated_at?: string
+          variant?: string
+        }
+        Update: {
+          actual_direction?: string | null
+          armor_override_fired?: boolean | null
+          armor_override_reason?: string | null
+          candle_ts?: string
+          created_at?: string
+          eligibility_passed?: boolean | null
+          feature_schema_hash?: string | null
+          final_prediction?: string | null
+          fit_id?: string | null
+          id?: string
+          input_candle_age_seconds?: number | null
+          input_feature_timestamp?: string | null
+          last_training_at?: string | null
+          layer_a_base_direction?: string | null
+          layer_a_final_direction?: string | null
+          layer_a_last96_net?: number | null
+          layer_a_prob_l003?: number | null
+          layer_a_prob_l010?: number | null
+          layer_a_prob_mean?: number | null
+          layer_b_final_direction?: string | null
+          layer_b_h192_direction?: string | null
+          layer_b_h32_direction?: string | null
+          layer_b_h64_direction?: string | null
+          layer_b_h96_direction?: string | null
+          layer_b_last96_net?: number | null
+          next_retrain_at_count?: number | null
+          prediction_id?: string | null
+          resolved_at?: string | null
+          result?: string | null
+          selected_layer?: string | null
+          shadow_error?: string | null
+          skip_reason?: string | null
+          status?: string
+          training_row_count?: number | null
+          updated_at?: string
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model7_aas96_shadow_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: true
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model7_aas96_state: {
+        Row: {
+          id: number
+          last_training_at: string | null
+          next_retrain_at_count: number
+          resolved_directional_count: number
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          last_training_at?: string | null
+          next_retrain_at_count?: number
+          resolved_directional_count?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          last_training_at?: string | null
+          next_retrain_at_count?: number
+          resolved_directional_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       model7_b4_2_no_history: {
         Row: {
           b2_final_decision: string
