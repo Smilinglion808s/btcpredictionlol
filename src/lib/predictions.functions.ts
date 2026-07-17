@@ -913,7 +913,7 @@ export const getAas96ShadowStats = createServerFn({ method: "GET" }).handler(asy
     training_row_count: trained,
     training_target: 192,
     has_active_fit: (fits ?? []).length > 0,
-    active_fit_id: (fits ?? [])[0]?.id ?? null,
+    active_fit_id: (fits ?? [])[0]?.fit_id ?? null,
   };
 });
 
