@@ -41,7 +41,10 @@ function StatsPage() {
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
   const aas96Fn = useServerFn(getAas96ShadowStats);
   const aas96Q = useQuery({ queryKey: ["aas96-shadow-stats"], queryFn: () => aas96Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const aas96PendingFn = useServerFn(getAas96ShadowPending);
+  const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
+
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
