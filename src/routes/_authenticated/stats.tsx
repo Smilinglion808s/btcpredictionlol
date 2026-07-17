@@ -39,10 +39,26 @@ function StatsPage() {
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const aas96Fn = useServerFn(getAas96ShadowStats);
+  const aas96Q = useQuery({ queryKey: ["aas96-shadow-stats"], queryFn: () => aas96Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportAas96Fn = useServerFn(exportAas96Shadow);
+  const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+
+  async function downloadAas96Csv() {
+    try {
+      setExportingAas96(true);
+      const rows = await exportAas96Fn();
+      if (rows.length === 0) { alert("No AAS96 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `aas96-shadow-${stamp()}.csv`);
+    } finally {
+      setExportingAas96(false);
+    }
+  }
+
 
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
