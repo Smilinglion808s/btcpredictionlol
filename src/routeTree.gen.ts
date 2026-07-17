@@ -24,6 +24,7 @@ import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/
 import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
+import { Route as ApiPublicHooksAas96PreloadRouteImport } from './routes/api/public/hooks/aas96-preload'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -107,6 +108,12 @@ const ApiPublicHooksDailyArchiveRoute =
     path: '/api/public/hooks/daily-archive',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksAas96PreloadRoute =
+  ApiPublicHooksAas96PreloadRouteImport.update({
+    id: '/api/public/hooks/aas96-preload',
+    path: '/api/public/hooks/aas96-preload',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -131,6 +139,7 @@ export interface FileRoutesByTo {
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -149,6 +158,7 @@ export interface FileRoutesById {
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
+  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/settings/model'
+    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/'
     | '/settings/model'
+    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
@@ -200,6 +212,7 @@ export interface FileRouteTypes {
     | '/_authenticated/stats'
     | '/_authenticated/'
     | '/_authenticated/settings/model'
+    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/prewarm-b4_2'
@@ -212,6 +225,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiPublicHooksAas96PreloadRoute: typeof ApiPublicHooksAas96PreloadRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
@@ -329,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/aas96-preload': {
+      id: '/api/public/hooks/aas96-preload'
+      path: '/api/public/hooks/aas96-preload'
+      fullPath: '/api/public/hooks/aas96-preload'
+      preLoaderRoute: typeof ApiPublicHooksAas96PreloadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -355,6 +376,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiPublicHooksAas96PreloadRoute: ApiPublicHooksAas96PreloadRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
