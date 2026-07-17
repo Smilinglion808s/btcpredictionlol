@@ -935,17 +935,19 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
   }
   const predIds = Array.from(new Set(rows.map((r) => r.prediction_id as string).filter(Boolean)));
   const predMap = new Map<string, Record<string, unknown>>();
-  const cols = "id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_open, actual_next_candle_close, actual_direction, trend, model_version, agreement_gate_applied, final_trade_status, bullish_score, bearish_score";
+  const liveCols = "id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_open, actual_next_candle_close, actual_direction, trend, model_version, agreement_gate_applied, final_trade_status, bullish_score, bearish_score";
+  const archCols = "id, created_at, candle_ts, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_open, actual_next_candle_close, actual_direction, model_version, agreement_gate_applied, final_trade_status, bullish_score, bearish_score";
   for (let i = 0; i < predIds.length; i += 500) {
     const slice = predIds.slice(i, i + 500);
     const [live, arch] = await Promise.all([
-      sb.from("predictions").select(cols).in("id", slice),
-      sb.from("predictions_archive").select(cols).in("id", slice),
+      sb.from("predictions").select(liveCols).in("id", slice),
+      sb.from("predictions_archive").select(archCols).in("id", slice),
     ]);
-    for (const p of [...(live.data ?? []), ...(arch.data ?? [])] as Record<string, unknown>[]) {
+    for (const p of ([...(live.data ?? []), ...(arch.data ?? [])] as unknown as Record<string, unknown>[])) {
       if (!predMap.has(p.id as string)) predMap.set(p.id as string, p);
     }
   }
+
   return rows.map((r) => {
     const p = predMap.get(r.prediction_id as string) ?? {};
     return {
