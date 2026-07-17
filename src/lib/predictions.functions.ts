@@ -930,7 +930,7 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
       .range(from, from + PAGE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
-    rows.push(...(data as Record<string, unknown>[]));
+    rows.push(...(data as Record<string, any>[]));
     if (data.length < PAGE) break;
   }
   const predIds = Array.from(new Set(rows.map((r) => r.prediction_id as string).filter(Boolean)));
