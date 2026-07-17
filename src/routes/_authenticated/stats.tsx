@@ -602,7 +602,7 @@ function StatsPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Prediction" value={<span className={dirClass}>{dir}</span>} />
+                        <Stat label="Prediction" value={String(dir)} />
                         <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
                         <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
                         <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
