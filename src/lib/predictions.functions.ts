@@ -943,7 +943,7 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
       sb.from("predictions").select(liveCols).in("id", slice),
       sb.from("predictions_archive").select(archCols).in("id", slice),
     ]);
-    for (const p of ([...(live.data ?? []), ...(arch.data ?? [])] as unknown as Record<string, unknown>[])) {
+    for (const p of ([...(live.data ?? []), ...(arch.data ?? [])] as unknown as Record<string, any>[])) {
       if (!predMap.has(p.id as string)) predMap.set(p.id as string, p);
     }
   }
