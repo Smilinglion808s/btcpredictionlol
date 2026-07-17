@@ -822,11 +822,8 @@ export async function resolveShadowRowsFor(
     await maybeRetrainTd1(supabase);
   } catch { /* never block */ }
 
-  // AAS96 resolution + retrain. Never blocks resolver.
-  try {
-    const { resolveAas96Row } = await import("./aas96/orchestrator");
-    await resolveAas96Row(supabase, predictionId, actualDirection);
-  } catch { /* never block */ }
+  // AAS96 resolution handled at top of function (supports DOJI push).
+
 
 }
 
