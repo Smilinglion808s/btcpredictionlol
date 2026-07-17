@@ -234,6 +234,21 @@ async function trySpotSynthesizedPartial(
  *   5. Synthesized from spot ticker (open = last closed close, close = ticker)
  * The snapshot is only null when every source failed.
  */
+// Maximum acceptable drift between a partial's `open` and the last-confirmed
+// candle's `close`. Mirrors PARTIAL_OPEN_DRIFT_MAX in model6/config.ts so a
+// snapshot we accept here will not later trip the featureEngine feed-mismatch
+// gate. Kept as a local constant to avoid a cross-package import.
+const PARTIAL_OPEN_DRIFT_TOL = 0.003;
+
+function openMatchesLastClose(open: number, lastClose: number | null): boolean {
+  if (lastClose == null || !Number.isFinite(lastClose) || lastClose <= 0) return true;
+  return Math.abs(open - lastClose) / lastClose <= PARTIAL_OPEN_DRIFT_TOL;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export async function buildPartialCandleContext(
   supabase?: SupabaseClient,
 ): Promise<{
@@ -242,12 +257,24 @@ export async function buildPartialCandleContext(
   attempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }>;
   synthesized: boolean;
   last_closed_close: number | null;
+  root_cause?: string;
 }> {
   const now = Date.now();
   const currentStart = Math.floor(now / TF_MS) * TF_MS;
   const minutesElapsed = Math.min(15, Math.floor((now - currentStart) / 60_000));
   const attempts: Array<{ source: string; ok: boolean; status?: number; reason?: string }> = [];
   let lastClosedClose: number | null = null;
+
+  // Load last-confirmed close up front so every source path can validate against it.
+  if (supabase) {
+    try {
+      const { data: lastClosed } = await supabase
+        .from("candles").select("close")
+        .eq("symbol", SYMBOL).eq("timeframe", TF).eq("confirm", true)
+        .order("candle_ts", { ascending: false }).limit(1).maybeSingle();
+      if (lastClosed) lastClosedClose = Number(lastClosed.close);
+    } catch { /* non-fatal */ }
+  }
 
   if (supabase) {
     try {
@@ -259,73 +286,92 @@ export async function buildPartialCandleContext(
         .maybeSingle();
       if (error) attempts.push({ source: "db", ok: false, reason: error.message });
       else if (data && data.confirm === false) {
-        attempts.push({ source: "db", ok: true });
-        return {
-          snapshot: {
-            start_ts: new Date(data.candle_ts as string).toISOString(),
-            open: Number(data.open), high: Number(data.high), low: Number(data.low),
-            close: Number(data.close), volume: Number(data.volume ?? 0),
-            minutes_elapsed: minutesElapsed,
-            source: ((data.fetch_source as string) === "coinbase" ? "coinbase" : "okx"),
-          },
-          path: "db_unconfirmed", attempts, synthesized: false, last_closed_close: null,
-        };
+        const dbOpen = Number(data.open);
+        if (openMatchesLastClose(dbOpen, lastClosedClose)) {
+          attempts.push({ source: "db", ok: true });
+          return {
+            snapshot: {
+              start_ts: new Date(data.candle_ts as string).toISOString(),
+              open: dbOpen, high: Number(data.high), low: Number(data.low),
+              close: Number(data.close), volume: Number(data.volume ?? 0),
+              minutes_elapsed: minutesElapsed,
+              source: ((data.fetch_source as string) === "coinbase" ? "coinbase" : "okx"),
+            },
+            path: "db_unconfirmed", attempts, synthesized: false, last_closed_close: lastClosedClose,
+          };
+        }
+        // Stale/inconsistent DB row — reject and fall through to live sources.
+        attempts.push({
+          source: "db", ok: false,
+          reason: `stale_open drift=${(Math.abs(dbOpen - (lastClosedClose ?? dbOpen)) / (lastClosedClose ?? 1)).toFixed(5)} db_open=${dbOpen} last_close=${lastClosedClose}`,
+        });
       } else {
         attempts.push({ source: "db", ok: false, reason: data ? "row is confirmed, no partial yet" : "no row at currentStart" });
       }
-      const { data: lastClosed } = await supabase
-        .from("candles").select("close")
-        .eq("symbol", SYMBOL).eq("timeframe", TF).eq("confirm", true)
-        .order("candle_ts", { ascending: false }).limit(1).maybeSingle();
-      if (lastClosed) lastClosedClose = Number(lastClosed.close);
     } catch (e) {
       attempts.push({ source: "db", ok: false, reason: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  const okx = await tryOkxCandles();
-  if (okx.candles.length) {
-    const partial = okx.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart && !c.confirm);
-    if (partial) {
-      attempts.push({ source: "okx_live", ok: true, status: okx.status });
-      return {
-        snapshot: {
-          start_ts: partial.candle_ts,
-          open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
-          minutes_elapsed: minutesElapsed, source: "okx",
-        },
-        path: "okx_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
-      };
+  // Bounded retry across live sources. Two passes with a short backoff give
+  // the upstream feed a chance to serve the current-forming candle without
+  // ever waiting long enough to miss the boundary.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const okx = await tryOkxCandles();
+    if (okx.candles.length) {
+      const partial = okx.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart && !c.confirm);
+      if (partial && openMatchesLastClose(partial.open, lastClosedClose)) {
+        attempts.push({ source: "okx_live", ok: true, status: okx.status });
+        return {
+          snapshot: {
+            start_ts: partial.candle_ts,
+            open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
+            minutes_elapsed: minutesElapsed, source: "okx",
+          },
+          path: "okx_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
+        };
+      }
+      attempts.push({
+        source: "okx_live", ok: false, status: okx.status,
+        reason: partial ? `open_drift open=${partial.open} last_close=${lastClosedClose}` : "no unconfirmed row at currentStart",
+      });
+    } else {
+      attempts.push({ source: "okx_live", ok: false, status: okx.status, reason: okx.error ?? "empty response" });
     }
-    attempts.push({ source: "okx_live", ok: false, status: okx.status, reason: "no unconfirmed row at currentStart" });
-  } else {
-    attempts.push({ source: "okx_live", ok: false, status: okx.status, reason: okx.error ?? "empty response" });
-  }
 
-  const bn = await tryBinancePartial(currentStart, minutesElapsed);
-  if (bn.partial) {
-    attempts.push({ source: "binance_live", ok: true, status: bn.status });
-    return { snapshot: bn.partial, path: "binance_live", attempts, synthesized: false, last_closed_close: lastClosedClose };
-  }
-  attempts.push({ source: "binance_live", ok: false, status: bn.status, reason: bn.error });
-
-  const cb = await tryCoinbaseCandles();
-  if (cb.candles.length) {
-    const partial = cb.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart);
-    if (partial) {
-      attempts.push({ source: "coinbase_live", ok: true, status: cb.status });
-      return {
-        snapshot: {
-          start_ts: partial.candle_ts,
-          open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
-          minutes_elapsed: minutesElapsed, source: "coinbase",
-        },
-        path: "coinbase_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
-      };
+    const bn = await tryBinancePartial(currentStart, minutesElapsed);
+    if (bn.partial && openMatchesLastClose(bn.partial.open, lastClosedClose)) {
+      attempts.push({ source: "binance_live", ok: true, status: bn.status });
+      return { snapshot: bn.partial, path: "binance_live", attempts, synthesized: false, last_closed_close: lastClosedClose };
     }
-    attempts.push({ source: "coinbase_live", ok: false, status: cb.status, reason: "no row at currentStart" });
-  } else {
-    attempts.push({ source: "coinbase_live", ok: false, status: cb.status, reason: cb.error ?? "empty response" });
+    attempts.push({
+      source: "binance_live", ok: false, status: bn.status,
+      reason: bn.partial ? `open_drift open=${bn.partial.open} last_close=${lastClosedClose}` : bn.error,
+    });
+
+    const cb = await tryCoinbaseCandles();
+    if (cb.candles.length) {
+      const partial = cb.candles.find((c) => new Date(c.candle_ts).getTime() === currentStart);
+      if (partial && openMatchesLastClose(partial.open, lastClosedClose)) {
+        attempts.push({ source: "coinbase_live", ok: true, status: cb.status });
+        return {
+          snapshot: {
+            start_ts: partial.candle_ts,
+            open: partial.open, high: partial.high, low: partial.low, close: partial.close, volume: partial.volume,
+            minutes_elapsed: minutesElapsed, source: "coinbase",
+          },
+          path: "coinbase_live", attempts, synthesized: false, last_closed_close: lastClosedClose,
+        };
+      }
+      attempts.push({
+        source: "coinbase_live", ok: false, status: cb.status,
+        reason: partial ? `open_drift open=${partial.open} last_close=${lastClosedClose}` : "no row at currentStart",
+      });
+    } else {
+      attempts.push({ source: "coinbase_live", ok: false, status: cb.status, reason: cb.error ?? "empty response" });
+    }
+
+    if (attempt === 0) await sleep(400);
   }
 
   const synth = await trySpotSynthesizedPartial(currentStart, minutesElapsed, lastClosedClose);
@@ -335,7 +381,15 @@ export async function buildPartialCandleContext(
   }
   attempts.push({ source: "spot_synth", ok: false, reason: synth.error });
 
-  return { snapshot: null, path: "unavailable", attempts, synthesized: false, last_closed_close: lastClosedClose };
+  // Classify why we ended up empty so api_runs makes the root cause obvious.
+  const anyOpenDrift = attempts.some((a) => (a.reason ?? "").includes("open_drift") || (a.reason ?? "").includes("stale_open"));
+  const anyLiveFail = attempts.some((a) => !a.ok && (a.source === "okx_live" || a.source === "binance_live" || a.source === "coinbase_live"));
+  const rootCause = anyOpenDrift
+    ? "all_sources_open_drift"
+    : anyLiveFail
+      ? "live_sources_unavailable"
+      : "no_partial_yet";
+  return { snapshot: null, path: "unavailable", attempts, synthesized: false, last_closed_close: lastClosedClose, root_cause: rootCause };
 }
 
 /**
