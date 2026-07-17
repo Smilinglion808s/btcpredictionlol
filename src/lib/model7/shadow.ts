@@ -527,6 +527,13 @@ export async function runShadowForPrediction(
     await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up");
 
+    // AAS96 shadow — deferred, never blocks webhook. Own storage table.
+    try {
+      const { runAas96Shadow } = await import("./aas96/orchestrator");
+      await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
+    } catch { /* never block */ }
+
+
 
 
 
