@@ -75,8 +75,11 @@ export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null
   const { names, matrix } = batchApply(scaler, training.map((t) => t.features));
   const y = training.map((t) => t.y);
 
-  const fitL003 = trainLogistic(matrix, y, AAS96_LAMBDAS[0], { maxIter: 400, tol: 1e-6 });
-  const fitL010 = trainLogistic(matrix, y, AAS96_LAMBDAS[1], { maxIter: 400, tol: 1e-6 });
+  // Spec-required convergence: max 5000 iters, tol 1e-9. Solver is deterministic
+  // (zero-init, no random restarts, full-batch gradient) — objective is convex so
+  // this yields the unique regularized MLE up to tol.
+  const fitL003 = trainLogistic(matrix, y, AAS96_LAMBDAS[0], { maxIter: 5000, tol: 1e-9 });
+  const fitL010 = trainLogistic(matrix, y, AAS96_LAMBDAS[1], { maxIter: 5000, tol: 1e-9 });
 
   // Initialize expert history by replaying training rows in order.
   const history = emptyExpertHistory();
