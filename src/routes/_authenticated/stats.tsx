@@ -68,16 +68,6 @@ function StatsPage() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  async function downloadMCCsv() {
-    try {
-      setExportingMC(true);
-      const rows = await exportMCFn();
-      if (rows.length === 0) { alert("No Model C shadow rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `modelc-shadow-${stamp()}.csv`);
-    } finally {
-      setExportingMC(false);
-    }
-  }
 
   async function downloadTd1Csv() {
     try {
