@@ -81,12 +81,16 @@ export async function maybeTrainAas96(sb: SupabaseClient): Promise<string | null
   const fitL003 = trainLogistic(matrix, y, AAS96_LAMBDAS[0], { maxIter: 5000, tol: 1e-9 });
   const fitL010 = trainLogistic(matrix, y, AAS96_LAMBDAS[1], { maxIter: 5000, tol: 1e-9 });
 
-  // Initialize expert history by replaying training rows in order.
+  // Initialize expert history by replaying training rows in order. Fallback
+  // for each row uses that row's M6 bullish/bearish score direction (spec:
+  // Layer B missing-signal fallback = m6_bullish_score >= m6_bearish_score).
   const history = emptyExpertHistory();
   for (const t of training) {
     const dir = t.y === 1 ? "GREEN" : "RED";
     const inputs = extractExpertInputs(t.raw);
-    const fallback: Dir = "GREEN";
+    const bs = Number((t.raw as Record<string, unknown>).bullish_score ?? 0);
+    const br = Number((t.raw as Record<string, unknown>).bearish_score ?? 0);
+    const fallback: Dir = bs >= br ? "GREEN" : "RED";
     updateExpertHistory(history, inputs, dir as Dir, fallback);
   }
 
