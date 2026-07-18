@@ -286,7 +286,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
+      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -324,6 +324,25 @@ export async function resolveAas96Row(
     // +1 avoided loss, -1 sacrificed win, 0 otherwise.
     const vetoNetEffect = vetoAvoidedLoss ? 1 : vetoSacrificedWin ? -1 : 0;
 
+    // Selector B Confirmation V1 counterfactual grading vs original selector.
+    const preOverride = row.selector_pre_override_prediction as string | null;
+    const overrideFinal = row.selector_b_confirmation_v1_final_prediction as string | null;
+    let selectorBWouldWin: boolean | null = null;
+    let selectorBWouldLose: boolean | null = null;
+    if (overrideFinal === "GREEN" || overrideFinal === "RED") {
+      selectorBWouldWin = overrideFinal === actualDirection;
+      selectorBWouldLose = !selectorBWouldWin;
+    }
+    let selectorBNetEffect = 0;
+    if (preOverride === "GREEN" || preOverride === "RED") {
+      const preWon = preOverride === actualDirection;
+      const postWon = overrideFinal === actualDirection;
+      if (preOverride !== overrideFinal) {
+        if (!preWon && postWon) selectorBNetEffect = 2;
+        else if (preWon && !postWon) selectorBNetEffect = -2;
+      }
+    }
+
     // A row counts as a usable training row when its features were extractable
     // (eligibility_passed truthy) OR it was a warmup skip (eligibility unset)
     // — those still contribute to the underlying `predictions` training pool.
@@ -343,6 +362,9 @@ export async function resolveAas96Row(
       veto_avoided_loss: vetoAvoidedLoss,
       veto_sacrificed_win: vetoSacrificedWin,
       veto_net_effect: vetoNetEffect,
+      selector_b_confirmation_v1_would_win: selectorBWouldWin,
+      selector_b_confirmation_v1_would_lose: selectorBWouldLose,
+      selector_b_confirmation_v1_net_effect: selectorBNetEffect,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
