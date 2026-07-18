@@ -65,9 +65,11 @@ export function computeLayerB(
   fallback: Dir,
 ): {
   horizons: Record<number, Dir>;
+  scores: Record<number, number>;
   final: Dir;
 } {
   const horizons: Record<number, Dir> = {} as Record<number, Dir>;
+  const scores: Record<number, number> = {} as Record<number, number>;
 
   for (const H of HORIZONS) {
     let score = 0;
@@ -80,6 +82,7 @@ export function computeLayerB(
       const weight = usingFallback && hist.length === 0 ? 0 : Math.tanh(H.alpha * net);
       score += dir * weight;
     }
+    scores[H.candles] = score;
     horizons[H.candles] = score >= 0 ? "GREEN" : "RED";
   }
 
@@ -90,7 +93,7 @@ export function computeLayerB(
   if (greens >= 3) final = "GREEN";
   else if (greens <= 1) final = "RED";
   else final = horizons[192];
-  return { horizons, final };
+  return { horizons, scores, final };
 }
 
 /** Append expert results after a resolved directional candle. */
