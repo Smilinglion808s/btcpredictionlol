@@ -1275,6 +1275,8 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
       baseline_abstain_reason: r.baseline_abstain_reason,
       published_prediction: r.published_prediction,
       published_abstain_reason: r.published_abstain_reason,
+      active_abstain_rule: r.active_abstain_rule,
+
       cleanup_veto_v1_version: r.cleanup_veto_v1_version,
       cleanup_veto_v1_evaluable: r.cleanup_veto_v1_evaluable,
       cleanup_veto_v1_fired: r.cleanup_veto_v1_fired,
