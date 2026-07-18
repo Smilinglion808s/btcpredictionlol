@@ -170,8 +170,26 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       if (aDir === actual) netA += 1; else if (aDir === "GREEN" || aDir === "RED") netA -= 1;
       if (bDir === actual) netB += 1; else if (bDir === "GREEN" || bDir === "RED") netB -= 1;
     }
-    const selected: "A" | "B" = netA >= netB ? "A" : "B";
-    const baselineDir: Dir = selected === "A" ? armor.final : layerB.final;
+    const preOverrideSelected: "A" | "B" = netA >= netB ? "A" : "B";
+    const preOverrideDir: Dir = preOverrideSelected === "A" ? armor.final : layerB.final;
+
+    // Selector B Confirmation V1 — active override (never abstains).
+    const { evaluateSelectorBConfirmationV1, masterPredictionToDir,
+      SELECTOR_B_CONFIRMATION_V1_VERSION, SELECTOR_B_CONFIRMATION_V1_THRESHOLD } =
+      await import("./selectorBConfirmationV1");
+    const indicators = (p.indicators ?? {}) as Record<string, unknown>;
+    const masterDir = masterPredictionToDir(p.prediction);
+    const ema9 = indicators.ema9;
+    const ema21 = indicators.ema21;
+    const btcPrice = p.btc_price_at_prediction ?? indicators.last;
+    const selectorBResult = evaluateSelectorBConfirmationV1({
+      layerAFinalDirection: armor.final,
+      layerBFinalDirection: layerB.final,
+      masterPrediction: masterDir,
+      ema9, ema21, btcPrice,
+    });
+    const selectedLayer: "A" | "B" = selectorBResult.triggered ? "B" : preOverrideSelected;
+    const baselineDir: Dir = selectorBResult.triggered ? layerB.final : preOverrideDir;
 
     // Cleanup Veto V1 — narrow post-model abstention overlay. Never reverses.
     const { evaluateCleanupVetoV1 } = await import("./cleanupVetoV1");
