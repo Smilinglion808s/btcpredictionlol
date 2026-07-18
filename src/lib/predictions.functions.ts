@@ -929,59 +929,174 @@ export const getAas96ShadowPending = createServerFn({ method: "GET" }).handler(a
   return data ?? null;
 });
 
-/** Cleanup Veto V1 aggregate stats — evaluates baseline vs published outcomes. */
+/** Cleanup Veto V1 aggregate stats — baseline vs published w/ drawdown, streaks,
+ *  coverage, retention, subtype + exact-pattern breakdown, and weekly rollup.
+ *  wins − losses is the primary net-score metric; win-rate reported for context. */
 export const getAas96VetoStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const PAGE = 1000;
+  type SubStat = { fired: number; avoided: number; sacrificed: number; net: number };
+  type PatStat = { total: number; fired: number; avoided: number; sacrificed: number; net: number };
+  type Wk = { week_start: string; fired: number; avoided_losses: number; sacrificed_wins: number; net_effect: number; baseline_net: number; published_net: number; net_score_delta: number; coverage_pct: number; baseline_max_drawdown: number; published_max_drawdown: number; _bw: number; _bl: number; _pw: number; _pl: number; _pa: number; _bcum: number; _bpeak: number; _bdd: number; _pcum: number; _ppeak: number; _pdd: number };
+
   const s = {
     total_resolved_directional: 0,
     evaluable: 0,
+    non_evaluable: 0,
     fired: 0,
     baseline_wins: 0,
     baseline_losses: 0,
     published_wins: 0,
     published_losses: 0,
     published_abstains: 0,
+    baseline_actionable: 0,
+    published_actionable: 0,
     avoided_losses: 0,
     sacrificed_wins: 0,
     net_effect: 0,
-    by_subtype: {} as Record<string, { fired: number; avoided: number; sacrificed: number; net: number }>,
+    baseline_max_drawdown: 0,
+    baseline_longest_losing_streak: 0,
+    published_max_drawdown: 0,
+    published_longest_losing_streak: 0,
+    by_subtype: {} as Record<string, SubStat>,
+    by_pattern: {} as Record<string, PatStat>,
+    weekly: [] as Wk[],
   };
+
+  // Load rows ordered by candle_ts ascending so streak / drawdown are chronological.
+  const all: Array<Record<string, any>> = [];
   for (let from = 0; ; from += PAGE) {
     const { data } = await sb
       .from("model7_aas96_shadow")
-      .select("actual_direction, baseline_prediction, published_prediction, cleanup_veto_v1_evaluable, cleanup_veto_v1_fired, cleanup_veto_v1_conflict_subtype, baseline_would_win, baseline_would_lose, veto_avoided_loss, veto_sacrificed_win, veto_net_effect")
+      .select("candle_ts, actual_direction, baseline_prediction, published_prediction, cleanup_veto_v1_evaluable, cleanup_veto_v1_fired, cleanup_veto_v1_conflict_subtype, layer_b_horizon_pattern, baseline_would_win, baseline_would_lose, veto_avoided_loss, veto_sacrificed_win, veto_net_effect")
       .in("actual_direction", ["GREEN", "RED"])
+      .order("candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
     if (!data || data.length === 0) break;
-    for (const r of data as Array<Record<string, any>>) {
-      s.total_resolved_directional += 1;
-      if (r.cleanup_veto_v1_evaluable) s.evaluable += 1;
-      if (r.baseline_would_win) s.baseline_wins += 1;
-      if (r.baseline_would_lose) s.baseline_losses += 1;
-      const pub = r.published_prediction;
-      if (pub === "GREEN" || pub === "RED") {
-        if (pub === r.actual_direction) s.published_wins += 1; else s.published_losses += 1;
-      } else if (pub === "ABSTAIN") s.published_abstains += 1;
-      if (r.cleanup_veto_v1_fired) {
-        s.fired += 1;
-        if (r.veto_avoided_loss) s.avoided_losses += 1;
-        if (r.veto_sacrificed_win) s.sacrificed_wins += 1;
-        s.net_effect += Number(r.veto_net_effect ?? 0);
-        const st = String(r.cleanup_veto_v1_conflict_subtype ?? "unknown");
-        const b = (s.by_subtype[st] ||= { fired: 0, avoided: 0, sacrificed: 0, net: 0 });
-        b.fired += 1;
-        if (r.veto_avoided_loss) b.avoided += 1;
-        if (r.veto_sacrificed_win) b.sacrificed += 1;
-        b.net += Number(r.veto_net_effect ?? 0);
-      }
-    }
+    all.push(...(data as Array<Record<string, any>>));
     if (data.length < PAGE) break;
   }
-  const baseWL = s.baseline_wins + s.baseline_losses;
-  const pubWL = s.published_wins + s.published_losses;
+
+  // Cumulative net-score + drawdown / streak state.
+  let bCum = 0, bPeak = 0, bDD = 0, bStreak = 0, bMaxStreak = 0;
+  let pCum = 0, pPeak = 0, pDD = 0, pStreak = 0, pMaxStreak = 0;
+  const weekMap = new Map<string, Wk>();
+  const mondayIsoUtc = (iso: string): string => {
+    const d = new Date(iso);
+    const day = d.getUTCDay(); // 0..6, 0=Sun
+    const back = (day + 6) % 7;
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back));
+    return monday.toISOString().slice(0, 10);
+  };
+
+  for (const r of all) {
+    s.total_resolved_directional += 1;
+    if (r.cleanup_veto_v1_evaluable) s.evaluable += 1; else s.non_evaluable += 1;
+
+    // Baseline grading (counterfactual — never mutated after resolution).
+    if (r.baseline_would_win || r.baseline_would_lose) {
+      s.baseline_actionable += 1;
+      const bDelta = r.baseline_would_win ? 1 : -1;
+      if (r.baseline_would_win) { s.baseline_wins += 1; bStreak = 0; }
+      else { s.baseline_losses += 1; bStreak += 1; if (bStreak > bMaxStreak) bMaxStreak = bStreak; }
+      bCum += bDelta;
+      if (bCum > bPeak) bPeak = bCum;
+      const dd = bPeak - bCum;
+      if (dd > bDD) bDD = dd;
+    }
+
+    // Published grading — ABSTAINs contribute zero to wins/losses/net.
+    const pub = r.published_prediction as string | null;
+    let pDelta = 0;
+    if (pub === "GREEN" || pub === "RED") {
+      s.published_actionable += 1;
+      if (pub === r.actual_direction) { s.published_wins += 1; pDelta = 1; pStreak = 0; }
+      else { s.published_losses += 1; pDelta = -1; pStreak += 1; if (pStreak > pMaxStreak) pMaxStreak = pStreak; }
+    } else if (pub === "ABSTAIN") {
+      s.published_abstains += 1;
+    }
+    pCum += pDelta;
+    if (pCum > pPeak) pPeak = pCum;
+    const pdd = pPeak - pCum;
+    if (pdd > pDD) pDD = pdd;
+
+    // Pattern + subtype breakdown.
+    const pattern = String(r.layer_b_horizon_pattern ?? "unknown");
+    const pat = (s.by_pattern[pattern] ||= { total: 0, fired: 0, avoided: 0, sacrificed: 0, net: 0 });
+    pat.total += 1;
+
+    if (r.cleanup_veto_v1_fired) {
+      s.fired += 1;
+      if (r.veto_avoided_loss) s.avoided_losses += 1;
+      if (r.veto_sacrificed_win) s.sacrificed_wins += 1;
+      s.net_effect += Number(r.veto_net_effect ?? 0);
+      const stk = String(r.cleanup_veto_v1_conflict_subtype ?? "unknown");
+      const b = (s.by_subtype[stk] ||= { fired: 0, avoided: 0, sacrificed: 0, net: 0 });
+      b.fired += 1;
+      if (r.veto_avoided_loss) b.avoided += 1;
+      if (r.veto_sacrificed_win) b.sacrificed += 1;
+      b.net += Number(r.veto_net_effect ?? 0);
+      pat.fired += 1;
+      if (r.veto_avoided_loss) pat.avoided += 1;
+      if (r.veto_sacrificed_win) pat.sacrificed += 1;
+      pat.net += Number(r.veto_net_effect ?? 0);
+    }
+
+    // Weekly rollup (ISO Monday, UTC).
+    if (r.candle_ts) {
+      const ws = mondayIsoUtc(String(r.candle_ts));
+      let w = weekMap.get(ws);
+      if (!w) {
+        w = { week_start: ws, fired: 0, avoided_losses: 0, sacrificed_wins: 0, net_effect: 0, baseline_net: 0, published_net: 0, net_score_delta: 0, coverage_pct: 0, baseline_max_drawdown: 0, published_max_drawdown: 0, _bw: 0, _bl: 0, _pw: 0, _pl: 0, _pa: 0, _bcum: 0, _bpeak: 0, _bdd: 0, _pcum: 0, _ppeak: 0, _pdd: 0 };
+        weekMap.set(ws, w);
+      }
+      if (r.baseline_would_win) { w._bw += 1; w._bcum += 1; }
+      if (r.baseline_would_lose) { w._bl += 1; w._bcum -= 1; }
+      if (w._bcum > w._bpeak) w._bpeak = w._bcum;
+      if (w._bpeak - w._bcum > w._bdd) w._bdd = w._bpeak - w._bcum;
+      if (pub === "GREEN" || pub === "RED") {
+        if (pub === r.actual_direction) { w._pw += 1; w._pcum += 1; }
+        else { w._pl += 1; w._pcum -= 1; }
+      } else if (pub === "ABSTAIN") { w._pa += 1; }
+      if (w._pcum > w._ppeak) w._ppeak = w._pcum;
+      if (w._ppeak - w._pcum > w._pdd) w._pdd = w._ppeak - w._pcum;
+      if (r.cleanup_veto_v1_fired) {
+        w.fired += 1;
+        if (r.veto_avoided_loss) w.avoided_losses += 1;
+        if (r.veto_sacrificed_win) w.sacrificed_wins += 1;
+        w.net_effect += Number(r.veto_net_effect ?? 0);
+      }
+    }
+  }
+
+  s.baseline_max_drawdown = bDD;
+  s.baseline_longest_losing_streak = bMaxStreak;
+  s.published_max_drawdown = pDD;
+  s.published_longest_losing_streak = pMaxStreak;
+
+  const weekly: Wk[] = Array.from(weekMap.values()).map((w) => {
+    const tot = w._bw + w._bl; // baseline actionable per week = coverage denominator
+    const pubAct = w._pw + w._pl;
+    w.baseline_net = w._bw - w._bl;
+    w.published_net = w._pw - w._pl;
+    w.net_score_delta = w.published_net - w.baseline_net;
+    w.coverage_pct = tot ? Math.round((pubAct / tot) * 10000) / 100 : 0;
+    w.baseline_max_drawdown = w._bdd;
+    w.published_max_drawdown = w._pdd;
+    return w;
+  }).sort((a, b) => a.week_start.localeCompare(b.week_start));
+
+  const baselineNet = s.baseline_wins - s.baseline_losses;
+  const publishedNet = s.published_wins - s.published_losses;
+  const baseWL = s.baseline_actionable;
+  const pubWL = s.published_actionable;
+  const coverage = baseWL ? Math.round((pubWL / baseWL) * 10000) / 100 : 0;
+  const retained = pubWL;
   return {
     ...s,
+    baseline_net_score: baselineNet,
+    published_net_score: publishedNet,
+    net_score_improvement: publishedNet - baselineNet,
     baseline_win_rate: baseWL ? Math.round((s.baseline_wins / baseWL) * 10000) / 100 : 0,
     published_win_rate: pubWL ? Math.round((s.published_wins / pubWL) * 10000) / 100 : 0,
     fire_rate: s.total_resolved_directional
@@ -990,6 +1105,12 @@ export const getAas96VetoStats = createServerFn({ method: "GET" }).handler(async
     precision_when_fired: s.fired
       ? Math.round((s.avoided_losses / s.fired) * 10000) / 100
       : 0,
+    avoided_per_sacrificed: s.sacrificed_wins
+      ? Math.round((s.avoided_losses / s.sacrificed_wins) * 100) / 100
+      : (s.avoided_losses > 0 ? Number.POSITIVE_INFINITY : 0),
+    predictions_retained: retained,
+    coverage_pct: coverage,
+    weekly,
   };
 });
 
