@@ -171,7 +171,18 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       if (bDir === actual) netB += 1; else if (bDir === "GREEN" || bDir === "RED") netB -= 1;
     }
     const selected: "A" | "B" = netA >= netB ? "A" : "B";
-    const finalDir: Dir = selected === "A" ? armor.final : layerB.final;
+    const baselineDir: Dir = selected === "A" ? armor.final : layerB.final;
+
+    // Cleanup Veto V1 — narrow post-model abstention overlay. Never reverses.
+    const { evaluateCleanupVetoV1 } = await import("./cleanupVetoV1");
+    const veto = evaluateCleanupVetoV1({
+      baselinePrediction: baselineDir,
+      baselineAbstainReason: null,
+      h32: layerB.horizons[32],
+      h64: layerB.horizons[64],
+      h96: layerB.horizons[96],
+      h192: layerB.horizons[192],
+    });
 
     await writeRow(sb, {
       ...base,
@@ -186,11 +197,30 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       layer_b_h64_direction: layerB.horizons[64],
       layer_b_h96_direction: layerB.horizons[96],
       layer_b_h192_direction: layerB.horizons[192],
+      layer_b_h32_score: layerB.scores[32],
+      layer_b_h64_score: layerB.scores[64],
+      layer_b_h96_score: layerB.scores[96],
+      layer_b_h192_score: layerB.scores[192],
+      layer_b_horizon_pattern: veto.pattern,
       layer_b_final_direction: layerB.final,
       layer_a_last96_net: netA,
       layer_b_last96_net: netB,
       selected_layer: selected,
-      final_prediction: finalDir,
+      // Preserve baseline (pre-veto) prediction for independent grading.
+      baseline_prediction: baselineDir,
+      baseline_abstain_reason: null,
+      // Published = what AAS96 actually emits after the veto overlay.
+      published_prediction: veto.publishedPrediction,
+      published_abstain_reason: veto.publishedAbstainReason,
+      // final_prediction stays the source of truth for the shadow row's
+      // published outcome so existing grading + UI keep working.
+      final_prediction: veto.publishedPrediction,
+      skip_reason: veto.fired ? veto.reason : null,
+      cleanup_veto_v1_version: veto.version,
+      cleanup_veto_v1_evaluable: veto.evaluable,
+      cleanup_veto_v1_fired: veto.fired,
+      cleanup_veto_v1_reason: veto.reason,
+      cleanup_veto_v1_conflict_subtype: veto.conflictSubtype,
     });
   } catch (e) {
     await writeRow(sb, {
