@@ -1114,6 +1114,102 @@ export const getAas96VetoStats = createServerFn({ method: "GET" }).handler(async
   };
 });
 
+/** Abstain-rule registry summary. Every rule is evaluated on every prediction;
+ *  only the active rule may change the published output. Returns per-rule
+ *  tracking counters (triggers / losses avoided / wins sacrificed / net effect
+ *  / win-rate delta / coverage removed) so the dashboard can compare rules. */
+export const getAbstainRulesSummary = createServerFn({ method: "GET" }).handler(async () => {
+  const { ACTIVE_ABSTAIN_RULE, ALL_ABSTAIN_RULES } = await import("@/lib/model7/aas96/abstainRules");
+  const sb = await admin();
+  const PAGE = 1000;
+  const rows: Array<Record<string, any>> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("model7_aas96_shadow")
+      .select("actual_direction, baseline_prediction, baseline_would_win, baseline_would_lose, cleanup_veto_v1_fired, veto_avoided_loss, veto_sacrificed_win, veto_net_effect")
+      .in("actual_direction", ["GREEN", "RED"])
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    rows.push(...(data as Array<Record<string, any>>));
+    if (data.length < PAGE) break;
+  }
+  // Baseline-actionable universe (denominator for win-rate + coverage).
+  let baseWL = 0, baseW = 0;
+  for (const r of rows) {
+    if (r.baseline_would_win || r.baseline_would_lose) {
+      baseWL += 1;
+      if (r.baseline_would_win) baseW += 1;
+    }
+  }
+  const baselineWinRate = baseWL ? Math.round((baseW / baseWL) * 10000) / 100 : 0;
+
+  const summarise = (rule: string, pick: (r: Record<string, any>) => {
+    fired: boolean; avoided: boolean; sacrificed: boolean; net: number;
+  }) => {
+    let triggers = 0, avoided = 0, sacrificed = 0, net = 0;
+    let retW = 0, retL = 0; // published-equivalent wins/losses if this rule were live
+    for (const r of rows) {
+      const p = pick(r);
+      const baselineActionable = !!(r.baseline_would_win || r.baseline_would_lose);
+      if (p.fired) {
+        triggers += 1;
+        if (p.avoided) avoided += 1;
+        if (p.sacrificed) sacrificed += 1;
+        net += p.net;
+      } else if (baselineActionable) {
+        if (r.baseline_would_win) retW += 1; else retL += 1;
+      }
+    }
+    const retained = retW + retL;
+    const ruleWinRate = retained ? Math.round((retW / retained) * 10000) / 100 : 0;
+    const coverageRemoved = baseWL ? Math.round(((baseWL - retained) / baseWL) * 10000) / 100 : 0;
+    return {
+      rule,
+      active: rule === ACTIVE_ABSTAIN_RULE,
+      triggers,
+      losses_avoided: avoided,
+      wins_sacrificed: sacrificed,
+      net_effect: net,
+      win_rate: ruleWinRate,
+      baseline_win_rate: baselineWinRate,
+      win_rate_delta: Math.round((ruleWinRate - baselineWinRate) * 100) / 100,
+      coverage_removed_pct: coverageRemoved,
+      retained_actionable: retained,
+      baseline_actionable: baseWL,
+    };
+  };
+
+  const summaries: Array<ReturnType<typeof summarise>> = [];
+  // NONE row — always present, always the do-nothing baseline.
+  summaries.push({
+    rule: "NONE",
+    active: ACTIVE_ABSTAIN_RULE === "NONE",
+    triggers: 0,
+    losses_avoided: 0,
+    wins_sacrificed: 0,
+    net_effect: 0,
+    win_rate: baselineWinRate,
+    baseline_win_rate: baselineWinRate,
+    win_rate_delta: 0,
+    coverage_removed_pct: 0,
+    retained_actionable: baseWL,
+    baseline_actionable: baseWL,
+  });
+  for (const rule of ALL_ABSTAIN_RULES) {
+    if (rule === "cleanup_veto_v1") {
+      summaries.push(summarise(rule, (r) => ({
+        fired: !!r.cleanup_veto_v1_fired,
+        avoided: !!r.veto_avoided_loss,
+        sacrificed: !!r.veto_sacrificed_win,
+        net: Number(r.veto_net_effect ?? 0),
+      })));
+    }
+  }
+  return { active_rule: ACTIVE_ABSTAIN_RULE, rules: summaries };
+});
+
+
+
 
 
 

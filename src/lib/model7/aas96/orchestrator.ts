@@ -173,8 +173,9 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
     const selected: "A" | "B" = netA >= netB ? "A" : "B";
     const baselineDir: Dir = selected === "A" ? armor.final : layerB.final;
 
-    // Cleanup Veto V1 — narrow post-model abstention overlay. Never reverses.
+    // Cleanup Veto V1 — evaluated for tracking; only applied when active.
     const { evaluateCleanupVetoV1 } = await import("./cleanupVetoV1");
+    const { ACTIVE_ABSTAIN_RULE } = await import("./abstainRules");
     const veto = evaluateCleanupVetoV1({
       baselinePrediction: baselineDir,
       baselineAbstainReason: null,
@@ -183,6 +184,12 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       h96: layerB.horizons[96],
       h192: layerB.horizons[192],
     });
+
+    // Only the active abstain rule may modify the published prediction.
+    const cleanupVetoIsActive = ACTIVE_ABSTAIN_RULE === "cleanup_veto_v1";
+    const publishedPrediction = cleanupVetoIsActive ? veto.publishedPrediction : baselineDir;
+    const publishedAbstainReason = cleanupVetoIsActive ? veto.publishedAbstainReason : null;
+    const skipReason = cleanupVetoIsActive && veto.fired ? veto.reason : null;
 
     await writeRow(sb, {
       ...base,
@@ -206,16 +213,16 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       layer_a_last96_net: netA,
       layer_b_last96_net: netB,
       selected_layer: selected,
-      // Preserve baseline (pre-veto) prediction for independent grading.
+      // Baseline (pre-any-abstain-rule) prediction.
       baseline_prediction: baselineDir,
       baseline_abstain_reason: null,
-      // Published = what AAS96 actually emits after the veto overlay.
-      published_prediction: veto.publishedPrediction,
-      published_abstain_reason: veto.publishedAbstainReason,
-      // final_prediction stays the source of truth for the shadow row's
-      // published outcome so existing grading + UI keep working.
-      final_prediction: veto.publishedPrediction,
-      skip_reason: veto.fired ? veto.reason : null,
+      // Published = baseline unless an active abstain rule modifies it.
+      published_prediction: publishedPrediction,
+      published_abstain_reason: publishedAbstainReason,
+      active_abstain_rule: ACTIVE_ABSTAIN_RULE,
+      final_prediction: publishedPrediction,
+      skip_reason: skipReason,
+
       cleanup_veto_v1_version: veto.version,
       cleanup_veto_v1_evaluable: veto.evaluable,
       cleanup_veto_v1_fired: veto.fired,
