@@ -1,0 +1,21 @@
+
+ALTER TABLE public.model7_aas96_shadow
+  ADD COLUMN IF NOT EXISTS layer_b_h32_score numeric,
+  ADD COLUMN IF NOT EXISTS layer_b_h64_score numeric,
+  ADD COLUMN IF NOT EXISTS layer_b_h96_score numeric,
+  ADD COLUMN IF NOT EXISTS layer_b_h192_score numeric,
+  ADD COLUMN IF NOT EXISTS layer_b_horizon_pattern text,
+  ADD COLUMN IF NOT EXISTS cleanup_veto_v1_version text,
+  ADD COLUMN IF NOT EXISTS cleanup_veto_v1_evaluable boolean,
+  ADD COLUMN IF NOT EXISTS cleanup_veto_v1_fired boolean,
+  ADD COLUMN IF NOT EXISTS cleanup_veto_v1_reason text,
+  ADD COLUMN IF NOT EXISTS cleanup_veto_v1_conflict_subtype text,
+  ADD COLUMN IF NOT EXISTS baseline_prediction text,
+  ADD COLUMN IF NOT EXISTS baseline_abstain_reason text,
+  ADD COLUMN IF NOT EXISTS published_prediction text,
+  ADD COLUMN IF NOT EXISTS published_abstain_reason text,
+  ADD COLUMN IF NOT EXISTS baseline_would_win boolean,
+  ADD COLUMN IF NOT EXISTS baseline_would_lose boolean,
+  ADD COLUMN IF NOT EXISTS veto_avoided_loss boolean,
+  ADD COLUMN IF NOT EXISTS veto_sacrificed_win boolean,
+  ADD COLUMN IF NOT EXISTS veto_net_effect integer;
