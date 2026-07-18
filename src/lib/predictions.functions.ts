@@ -921,12 +921,76 @@ export const getAas96ShadowPending = createServerFn({ method: "GET" }).handler(a
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_aas96_shadow")
-    .select("candle_ts, final_prediction, selected_layer, layer_a_final_direction, layer_b_final_direction, layer_a_prob_mean, armor_override_fired, armor_override_reason, eligibility_passed, skip_reason, fit_id, status")
+    .select("candle_ts, final_prediction, baseline_prediction, published_prediction, published_abstain_reason, cleanup_veto_v1_fired, cleanup_veto_v1_reason, cleanup_veto_v1_conflict_subtype, layer_b_horizon_pattern, layer_b_h32_direction, layer_b_h64_direction, layer_b_h96_direction, layer_b_h192_direction, selected_layer, layer_a_final_direction, layer_b_final_direction, layer_a_prob_mean, armor_override_fired, armor_override_reason, eligibility_passed, skip_reason, fit_id, status")
     .order("candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
+});
+
+/** Cleanup Veto V1 aggregate stats — evaluates baseline vs published outcomes. */
+export const getAas96VetoStats = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const s = {
+    total_resolved_directional: 0,
+    evaluable: 0,
+    fired: 0,
+    baseline_wins: 0,
+    baseline_losses: 0,
+    published_wins: 0,
+    published_losses: 0,
+    published_abstains: 0,
+    avoided_losses: 0,
+    sacrificed_wins: 0,
+    net_effect: 0,
+    by_subtype: {} as Record<string, { fired: number; avoided: number; sacrificed: number; net: number }>,
+  };
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("model7_aas96_shadow")
+      .select("actual_direction, baseline_prediction, published_prediction, cleanup_veto_v1_evaluable, cleanup_veto_v1_fired, cleanup_veto_v1_conflict_subtype, baseline_would_win, baseline_would_lose, veto_avoided_loss, veto_sacrificed_win, veto_net_effect")
+      .in("actual_direction", ["GREEN", "RED"])
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<Record<string, any>>) {
+      s.total_resolved_directional += 1;
+      if (r.cleanup_veto_v1_evaluable) s.evaluable += 1;
+      if (r.baseline_would_win) s.baseline_wins += 1;
+      if (r.baseline_would_lose) s.baseline_losses += 1;
+      const pub = r.published_prediction;
+      if (pub === "GREEN" || pub === "RED") {
+        if (pub === r.actual_direction) s.published_wins += 1; else s.published_losses += 1;
+      } else if (pub === "ABSTAIN") s.published_abstains += 1;
+      if (r.cleanup_veto_v1_fired) {
+        s.fired += 1;
+        if (r.veto_avoided_loss) s.avoided_losses += 1;
+        if (r.veto_sacrificed_win) s.sacrificed_wins += 1;
+        s.net_effect += Number(r.veto_net_effect ?? 0);
+        const st = String(r.cleanup_veto_v1_conflict_subtype ?? "unknown");
+        const b = (s.by_subtype[st] ||= { fired: 0, avoided: 0, sacrificed: 0, net: 0 });
+        b.fired += 1;
+        if (r.veto_avoided_loss) b.avoided += 1;
+        if (r.veto_sacrificed_win) b.sacrificed += 1;
+        b.net += Number(r.veto_net_effect ?? 0);
+      }
+    }
+    if (data.length < PAGE) break;
+  }
+  const baseWL = s.baseline_wins + s.baseline_losses;
+  const pubWL = s.published_wins + s.published_losses;
+  return {
+    ...s,
+    baseline_win_rate: baseWL ? Math.round((s.baseline_wins / baseWL) * 10000) / 100 : 0,
+    published_win_rate: pubWL ? Math.round((s.published_wins / pubWL) * 10000) / 100 : 0,
+    fire_rate: s.total_resolved_directional
+      ? Math.round((s.fired / s.total_resolved_directional) * 10000) / 100
+      : 0,
+    precision_when_fired: s.fired
+      ? Math.round((s.avoided_losses / s.fired) * 10000) / 100
+      : 0,
+  };
 });
 
 
@@ -982,9 +1046,28 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
       layer_b_h64_direction: r.layer_b_h64_direction,
       layer_b_h96_direction: r.layer_b_h96_direction,
       layer_b_h192_direction: r.layer_b_h192_direction,
+      layer_b_h32_score: r.layer_b_h32_score,
+      layer_b_h64_score: r.layer_b_h64_score,
+      layer_b_h96_score: r.layer_b_h96_score,
+      layer_b_h192_score: r.layer_b_h192_score,
+      layer_b_horizon_pattern: r.layer_b_horizon_pattern,
       layer_b_final_direction: r.layer_b_final_direction,
       layer_a_last96_net: r.layer_a_last96_net,
       layer_b_last96_net: r.layer_b_last96_net,
+      baseline_prediction: r.baseline_prediction,
+      baseline_abstain_reason: r.baseline_abstain_reason,
+      published_prediction: r.published_prediction,
+      published_abstain_reason: r.published_abstain_reason,
+      cleanup_veto_v1_version: r.cleanup_veto_v1_version,
+      cleanup_veto_v1_evaluable: r.cleanup_veto_v1_evaluable,
+      cleanup_veto_v1_fired: r.cleanup_veto_v1_fired,
+      cleanup_veto_v1_reason: r.cleanup_veto_v1_reason,
+      cleanup_veto_v1_conflict_subtype: r.cleanup_veto_v1_conflict_subtype,
+      baseline_would_win: r.baseline_would_win,
+      baseline_would_lose: r.baseline_would_lose,
+      veto_avoided_loss: r.veto_avoided_loss,
+      veto_sacrificed_win: r.veto_sacrificed_win,
+      veto_net_effect: r.veto_net_effect,
       eligibility_passed: r.eligibility_passed,
       skip_reason: r.skip_reason,
       shadow_error: r.shadow_error,

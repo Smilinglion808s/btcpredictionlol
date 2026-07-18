@@ -552,7 +552,16 @@ export type Database = {
           actual_direction: string | null
           armor_override_fired: boolean | null
           armor_override_reason: string | null
+          baseline_abstain_reason: string | null
+          baseline_prediction: string | null
+          baseline_would_lose: boolean | null
+          baseline_would_win: boolean | null
           candle_ts: string
+          cleanup_veto_v1_conflict_subtype: string | null
+          cleanup_veto_v1_evaluable: boolean | null
+          cleanup_veto_v1_fired: boolean | null
+          cleanup_veto_v1_reason: string | null
+          cleanup_veto_v1_version: string | null
           continuity_delta_seconds: number | null
           continuity_gate_passed: boolean | null
           created_at: string
@@ -573,12 +582,19 @@ export type Database = {
           layer_a_prob_mean: number | null
           layer_b_final_direction: string | null
           layer_b_h192_direction: string | null
+          layer_b_h192_score: number | null
           layer_b_h32_direction: string | null
+          layer_b_h32_score: number | null
           layer_b_h64_direction: string | null
+          layer_b_h64_score: number | null
           layer_b_h96_direction: string | null
+          layer_b_h96_score: number | null
+          layer_b_horizon_pattern: string | null
           layer_b_last96_net: number | null
           next_retrain_at_count: number | null
           prediction_id: string | null
+          published_abstain_reason: string | null
+          published_prediction: string | null
           resolved_at: string | null
           result: string | null
           selected_layer: string | null
@@ -592,12 +608,24 @@ export type Database = {
           updated_at: string
           usable_training_row: boolean | null
           variant: string
+          veto_avoided_loss: boolean | null
+          veto_net_effect: number | null
+          veto_sacrificed_win: boolean | null
         }
         Insert: {
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
+          baseline_abstain_reason?: string | null
+          baseline_prediction?: string | null
+          baseline_would_lose?: boolean | null
+          baseline_would_win?: boolean | null
           candle_ts: string
+          cleanup_veto_v1_conflict_subtype?: string | null
+          cleanup_veto_v1_evaluable?: boolean | null
+          cleanup_veto_v1_fired?: boolean | null
+          cleanup_veto_v1_reason?: string | null
+          cleanup_veto_v1_version?: string | null
           continuity_delta_seconds?: number | null
           continuity_gate_passed?: boolean | null
           created_at?: string
@@ -618,12 +646,19 @@ export type Database = {
           layer_a_prob_mean?: number | null
           layer_b_final_direction?: string | null
           layer_b_h192_direction?: string | null
+          layer_b_h192_score?: number | null
           layer_b_h32_direction?: string | null
+          layer_b_h32_score?: number | null
           layer_b_h64_direction?: string | null
+          layer_b_h64_score?: number | null
           layer_b_h96_direction?: string | null
+          layer_b_h96_score?: number | null
+          layer_b_horizon_pattern?: string | null
           layer_b_last96_net?: number | null
           next_retrain_at_count?: number | null
           prediction_id?: string | null
+          published_abstain_reason?: string | null
+          published_prediction?: string | null
           resolved_at?: string | null
           result?: string | null
           selected_layer?: string | null
@@ -637,12 +672,24 @@ export type Database = {
           updated_at?: string
           usable_training_row?: boolean | null
           variant?: string
+          veto_avoided_loss?: boolean | null
+          veto_net_effect?: number | null
+          veto_sacrificed_win?: boolean | null
         }
         Update: {
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
+          baseline_abstain_reason?: string | null
+          baseline_prediction?: string | null
+          baseline_would_lose?: boolean | null
+          baseline_would_win?: boolean | null
           candle_ts?: string
+          cleanup_veto_v1_conflict_subtype?: string | null
+          cleanup_veto_v1_evaluable?: boolean | null
+          cleanup_veto_v1_fired?: boolean | null
+          cleanup_veto_v1_reason?: string | null
+          cleanup_veto_v1_version?: string | null
           continuity_delta_seconds?: number | null
           continuity_gate_passed?: boolean | null
           created_at?: string
@@ -663,12 +710,19 @@ export type Database = {
           layer_a_prob_mean?: number | null
           layer_b_final_direction?: string | null
           layer_b_h192_direction?: string | null
+          layer_b_h192_score?: number | null
           layer_b_h32_direction?: string | null
+          layer_b_h32_score?: number | null
           layer_b_h64_direction?: string | null
+          layer_b_h64_score?: number | null
           layer_b_h96_direction?: string | null
+          layer_b_h96_score?: number | null
+          layer_b_horizon_pattern?: string | null
           layer_b_last96_net?: number | null
           next_retrain_at_count?: number | null
           prediction_id?: string | null
+          published_abstain_reason?: string | null
+          published_prediction?: string | null
           resolved_at?: string | null
           result?: string | null
           selected_layer?: string | null
@@ -682,6 +736,9 @@ export type Database = {
           updated_at?: string
           usable_training_row?: boolean | null
           variant?: string
+          veto_avoided_loss?: boolean | null
+          veto_net_effect?: number | null
+          veto_sacrificed_win?: boolean | null
         }
         Relationships: [
           {

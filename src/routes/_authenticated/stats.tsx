@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, getAas96VetoStats } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -44,6 +44,8 @@ function StatsPage() {
   const aas96PendingFn = useServerFn(getAas96ShadowPending);
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
+  const aas96VetoFn = useServerFn(getAas96VetoStats);
+  const aas96VetoQ = useQuery({ queryKey: ["aas96-veto-stats"], queryFn: () => aas96VetoFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
 
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
@@ -591,8 +593,7 @@ function StatsPage() {
                 {(() => {
                   const p = aas96PendingQ.data as Record<string, any> | null;
                   if (!p) return null;
-                  const dir = p.final_prediction ?? "—";
-                  const dirClass = dir === "GREEN" ? "text-emerald-600" : dir === "RED" ? "text-rose-600" : "text-muted-foreground";
+                  const dir = p.published_prediction ?? p.final_prediction ?? "—";
                   return (
                     <div className="rounded-md border p-3 space-y-2">
                       <div className="flex items-center justify-between">
@@ -602,21 +603,82 @@ function StatsPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Prediction" value={String(dir)} />
+                        <Stat label="Published" value={String(dir)} />
+                        <Stat label="Baseline" value={String(p.baseline_prediction ?? "—")} />
                         <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
-                        <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
-                        <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
+                        <Stat label="Horizons (32/64/96/192)" value={String(p.layer_b_horizon_pattern ?? "—")} />
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
+                        <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
                         <Stat label="Layer A prob (mean)" value={p.layer_a_prob_mean != null ? Number(p.layer_a_prob_mean).toFixed(4) : "—"} />
+                        <Stat label="Cleanup Veto V1" value={p.cleanup_veto_v1_fired ? "FIRED" : "no"} />
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <Stat label="Armor override" value={p.armor_override_fired ? "YES" : "no"} />
                         <Stat label="Eligible" value={p.eligibility_passed ? "yes" : "no"} />
                         <Stat label="Status" value={String(p.status ?? "—")} />
+                        <Stat label="Conflict subtype" value={String(p.cleanup_veto_v1_conflict_subtype ?? "—")} />
                       </div>
-                      {(p.skip_reason || p.armor_override_reason) ? (
+                      {(p.skip_reason || p.armor_override_reason || p.published_abstain_reason) ? (
                         <div className="text-[11px] text-muted-foreground">
+                          {p.published_abstain_reason ? <div>abstain: {String(p.published_abstain_reason)}</div> : null}
                           {p.skip_reason ? <div>skip: {String(p.skip_reason)}</div> : null}
                           {p.armor_override_reason ? <div>armor: {String(p.armor_override_reason)}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
+                {/* Cleanup Veto V1 — independent evaluation of the overlay. */}
+                {(() => {
+                  const v = (aas96VetoQ.data ?? {}) as Record<string, any>;
+                  const subtype = (v.by_subtype ?? {}) as Record<string, { fired: number; avoided: number; sacrificed: number; net: number }>;
+                  return (
+                    <div className="rounded-md border p-3 space-y-2">
+                      <div className="text-xs font-medium">Cleanup Veto V1 Performance</div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <Stat label="Baseline win rate" value={`${v.baseline_win_rate ?? 0}%`} />
+                        <Stat label="Published win rate" value={`${v.published_win_rate ?? 0}%`} />
+                        <Stat label="Fire rate" value={`${v.fire_rate ?? 0}%`} />
+                        <Stat label="Precision (avoided/fired)" value={`${v.precision_when_fired ?? 0}%`} />
+                        <Stat label="Published abstains" value={String(v.published_abstains ?? 0)} />
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <Stat label="Fired" value={String(v.fired ?? 0)} />
+                        <Stat label="Avoided losses" value={String(v.avoided_losses ?? 0)} />
+                        <Stat label="Sacrificed wins" value={String(v.sacrificed_wins ?? 0)} />
+                        <Stat label="Net effect" value={String(v.net_effect ?? 0)} />
+                        <Stat label="Evaluable" value={String(v.evaluable ?? 0)} />
+                      </div>
+                      {Object.keys(subtype).length > 0 ? (
+                        <div className="pt-1">
+                          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">By conflict subtype</div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead className="text-muted-foreground">
+                                <tr>
+                                  <th className="text-left px-2 py-1">Subtype</th>
+                                  <th className="text-right px-2 py-1">Fired</th>
+                                  <th className="text-right px-2 py-1">Avoided</th>
+                                  <th className="text-right px-2 py-1">Sacrificed</th>
+                                  <th className="text-right px-2 py-1">Net</th>
+                                </tr>
+                              </thead>
+                              <tbody className="font-mono">
+                                {Object.entries(subtype).map(([k, s]) => (
+                                  <tr key={k} className="border-t border-border/50">
+                                    <td className="px-2 py-1">{k}</td>
+                                    <td className="px-2 py-1 text-right">{s.fired}</td>
+                                    <td className="px-2 py-1 text-right">{s.avoided}</td>
+                                    <td className="px-2 py-1 text-right">{s.sacrificed}</td>
+                                    <td className="px-2 py-1 text-right">{s.net}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       ) : null}
                     </div>
