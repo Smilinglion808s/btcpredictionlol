@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, getAas96VetoStats } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -44,8 +44,6 @@ function StatsPage() {
   const aas96PendingFn = useServerFn(getAas96ShadowPending);
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
-  const aas96VetoFn = useServerFn(getAas96VetoStats);
-  const aas96VetoQ = useQuery({ queryKey: ["aas96-veto-stats"], queryFn: () => aas96VetoFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
 
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
@@ -631,158 +629,7 @@ function StatsPage() {
                   );
                 })()}
 
-                {/* Cleanup Veto V1 — independent evaluation of the overlay. */}
-                {(() => {
-                  const v = (aas96VetoQ.data ?? {}) as Record<string, any>;
-                  const subtype = (v.by_subtype ?? {}) as Record<string, { fired: number; avoided: number; sacrificed: number; net: number }>;
-                  const pattern = (v.by_pattern ?? {}) as Record<string, { total: number; fired: number; avoided: number; sacrificed: number; net: number }>;
-                  const weekly = (v.weekly ?? []) as Array<Record<string, any>>;
-                  const avoidedPerSac = v.avoided_per_sacrificed;
-                  const avoidedPerSacStr = avoidedPerSac === Number.POSITIVE_INFINITY || avoidedPerSac === "Infinity"
-                    ? "∞" : String(avoidedPerSac ?? 0);
-                  return (
-                    <div className="rounded-md border p-3 space-y-3">
-                      <div className="text-xs font-medium">Cleanup Veto V1 Performance</div>
-
-                      {/* Primary: wins − losses (net score). Win rate secondary. */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <Stat label="Baseline net (W−L)" value={String(v.baseline_net_score ?? 0)} />
-                        <Stat label="Published net (W−L)" value={String(v.published_net_score ?? 0)} />
-                        <Stat label="Net-score improvement" value={String(v.net_score_improvement ?? 0)} />
-                        <Stat label="Coverage" value={`${v.coverage_pct ?? 0}%`} />
-                        <Stat label="Predictions retained" value={String(v.predictions_retained ?? 0)} />
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <Stat label="Baseline W / L / A" value={`${v.baseline_wins ?? 0} / ${v.baseline_losses ?? 0} / ${v.published_abstains ?? 0}`} />
-                        <Stat label="Published W / L / A" value={`${v.published_wins ?? 0} / ${v.published_losses ?? 0} / ${v.published_abstains ?? 0}`} />
-                        <Stat label="Baseline win rate (2°)" value={`${v.baseline_win_rate ?? 0}%`} />
-                        <Stat label="Published win rate (2°)" value={`${v.published_win_rate ?? 0}%`} />
-                        <Stat label="Non-evaluable rows" value={String(v.non_evaluable ?? 0)} />
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <Stat label="Veto triggers" value={String(v.fired ?? 0)} />
-                        <Stat label="Losses avoided" value={String(v.avoided_losses ?? 0)} />
-                        <Stat label="Wins sacrificed" value={String(v.sacrificed_wins ?? 0)} />
-                        <Stat label="Veto net effect" value={String(v.net_effect ?? 0)} />
-                        <Stat label="Avoided / sacrificed" value={avoidedPerSacStr} />
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <Stat label="Fire rate" value={`${v.fire_rate ?? 0}%`} />
-                        <Stat label="Precision (avoided/fired)" value={`${v.precision_when_fired ?? 0}%`} />
-                        <Stat label="Baseline max DD" value={String(v.baseline_max_drawdown ?? 0)} />
-                        <Stat label="Published max DD" value={String(v.published_max_drawdown ?? 0)} />
-                        <Stat label="Longest losing streak (B / P)" value={`${v.baseline_longest_losing_streak ?? 0} / ${v.published_longest_losing_streak ?? 0}`} />
-                      </div>
-
-                      {Object.keys(subtype).length > 0 ? (
-                        <div className="pt-1">
-                          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">By conflict subtype</div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead className="text-muted-foreground">
-                                <tr>
-                                  <th className="text-left px-2 py-1">Subtype</th>
-                                  <th className="text-right px-2 py-1">Fired</th>
-                                  <th className="text-right px-2 py-1">Avoided</th>
-                                  <th className="text-right px-2 py-1">Sacrificed</th>
-                                  <th className="text-right px-2 py-1">Net</th>
-                                </tr>
-                              </thead>
-                              <tbody className="font-mono">
-                                {Object.entries(subtype).map(([k, s]) => (
-                                  <tr key={k} className="border-t border-border/50">
-                                    <td className="px-2 py-1">{k}</td>
-                                    <td className="px-2 py-1 text-right">{s.fired}</td>
-                                    <td className="px-2 py-1 text-right">{s.avoided}</td>
-                                    <td className="px-2 py-1 text-right">{s.sacrificed}</td>
-                                    <td className="px-2 py-1 text-right">{s.net}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {Object.keys(pattern).length > 0 ? (
-                        <div className="pt-1">
-                          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">By exact horizon pattern (H32/H64/H96/H192)</div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead className="text-muted-foreground">
-                                <tr>
-                                  <th className="text-left px-2 py-1">Pattern</th>
-                                  <th className="text-right px-2 py-1">Total</th>
-                                  <th className="text-right px-2 py-1">Fired</th>
-                                  <th className="text-right px-2 py-1">Avoided</th>
-                                  <th className="text-right px-2 py-1">Sacrificed</th>
-                                  <th className="text-right px-2 py-1">Net</th>
-                                </tr>
-                              </thead>
-                              <tbody className="font-mono">
-                                {Object.entries(pattern).sort((a,b)=>b[1].total-a[1].total).map(([k, s]) => (
-                                  <tr key={k} className="border-t border-border/50">
-                                    <td className="px-2 py-1">{k}</td>
-                                    <td className="px-2 py-1 text-right">{s.total}</td>
-                                    <td className="px-2 py-1 text-right">{s.fired}</td>
-                                    <td className="px-2 py-1 text-right">{s.avoided}</td>
-                                    <td className="px-2 py-1 text-right">{s.sacrificed}</td>
-                                    <td className="px-2 py-1 text-right">{s.net}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {weekly.length > 0 ? (
-                        <div className="pt-1">
-                          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Weekly (ISO week, Mon-start UTC)</div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead className="text-muted-foreground">
-                                <tr>
-                                  <th className="text-left px-2 py-1">Week</th>
-                                  <th className="text-right px-2 py-1">Fired</th>
-                                  <th className="text-right px-2 py-1">Avoided</th>
-                                  <th className="text-right px-2 py-1">Sacrificed</th>
-                                  <th className="text-right px-2 py-1">Veto net</th>
-                                  <th className="text-right px-2 py-1">Baseline net</th>
-                                  <th className="text-right px-2 py-1">Published net</th>
-                                  <th className="text-right px-2 py-1">Δ Net</th>
-                                  <th className="text-right px-2 py-1">Coverage</th>
-                                  <th className="text-right px-2 py-1">B DD</th>
-                                  <th className="text-right px-2 py-1">P DD</th>
-                                </tr>
-                              </thead>
-                              <tbody className="font-mono">
-                                {weekly.slice(-12).reverse().map((w) => (
-                                  <tr key={w.week_start} className="border-t border-border/50">
-                                    <td className="px-2 py-1">{w.week_start}</td>
-                                    <td className="px-2 py-1 text-right">{w.fired}</td>
-                                    <td className="px-2 py-1 text-right">{w.avoided_losses}</td>
-                                    <td className="px-2 py-1 text-right">{w.sacrificed_wins}</td>
-                                    <td className="px-2 py-1 text-right">{w.net_effect}</td>
-                                    <td className="px-2 py-1 text-right">{w.baseline_net}</td>
-                                    <td className="px-2 py-1 text-right">{w.published_net}</td>
-                                    <td className="px-2 py-1 text-right">{w.net_score_delta}</td>
-                                    <td className="px-2 py-1 text-right">{w.coverage_pct}%</td>
-                                    <td className="px-2 py-1 text-right">{w.baseline_max_drawdown}</td>
-                                    <td className="px-2 py-1 text-right">{w.published_max_drawdown}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })()}
+                {/* Cleanup Veto V1 metrics live in the AAS96 CSV export only. */}
               </>
             );
           })()}
