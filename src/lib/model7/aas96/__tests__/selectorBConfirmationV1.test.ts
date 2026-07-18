@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   evaluateSelectorBConfirmationV1,
+  masterPredictionToDir,
   SELECTOR_B_CONFIRMATION_V1_THRESHOLD,
+  SELECTOR_B_CONFIRMATION_V1_REASON,
 } from "../selectorBConfirmationV1";
 
 const T = SELECTOR_B_CONFIRMATION_V1_THRESHOLD; // 0.0001
