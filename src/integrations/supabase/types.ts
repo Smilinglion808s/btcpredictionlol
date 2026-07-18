@@ -549,7 +549,6 @@ export type Database = {
       }
       model7_aas96_shadow: {
         Row: {
-          active_abstain_rule: string | null
           actual_direction: string | null
           armor_override_fired: boolean | null
           armor_override_reason: string | null
@@ -614,7 +613,6 @@ export type Database = {
           veto_sacrificed_win: boolean | null
         }
         Insert: {
-          active_abstain_rule?: string | null
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
@@ -679,7 +677,6 @@ export type Database = {
           veto_sacrificed_win?: boolean | null
         }
         Update: {
-          active_abstain_rule?: string | null
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null

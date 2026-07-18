@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, getAbstainRulesSummary } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -644,10 +644,12 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      <AbstainRulesCard />
+
+
+
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Market Condition" data={s.by_market_condition as Record<string, BucketStat> | undefined} />
@@ -753,58 +755,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-function AbstainRulesCard() {
-  const fn = useServerFn(getAbstainRulesSummary);
-  const q = useQuery({ queryKey: ["abstain-rules-summary"], queryFn: () => fn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const data = (q.data ?? { active_rule: "NONE", rules: [] }) as { active_rule: string; rules: Array<Record<string, any>> };
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          Abstain Rules
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-            Live: {data.active_rule}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground border-b border-border">
-              <tr>
-                <th className="text-left px-3 py-2">Rule</th>
-                <th className="text-left px-3 py-2">Active</th>
-                <th className="text-right px-3 py-2">Triggers</th>
-                <th className="text-right px-3 py-2">Losses Avoided</th>
-                <th className="text-right px-3 py-2">Wins Sacrificed</th>
-                <th className="text-right px-3 py-2">Net Effect</th>
-                <th className="text-right px-3 py-2">Win Rate</th>
-                <th className="text-right px-3 py-2">Δ vs Baseline</th>
-                <th className="text-right px-3 py-2">Coverage Removed</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono">
-              {data.rules.length === 0 ? (
-                <tr><td colSpan={9} className="px-3 py-4 text-center text-muted-foreground text-xs">No data yet.</td></tr>
-              ) : data.rules.map((r) => (
-                <tr key={r.rule} className={`border-b border-border/40 ${r.active ? "bg-primary/10" : ""}`}>
-                  <td className="px-3 py-2 text-xs">{r.rule}</td>
-                  <td className="px-3 py-2 text-xs">{r.active ? "LIVE" : "tracking"}</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.triggers}</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.losses_avoided}</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.wins_sacrificed}</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.net_effect > 0 ? `+${r.net_effect}` : r.net_effect}</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.win_rate}%</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.win_rate_delta > 0 ? `+${r.win_rate_delta}` : r.win_rate_delta}%</td>
-                  <td className="px-3 py-2 text-right text-xs">{r.coverage_removed_pct}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
