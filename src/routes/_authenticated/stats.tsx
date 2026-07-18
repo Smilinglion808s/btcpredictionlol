@@ -644,12 +644,10 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-
-
-
-
+      <AbstainRulesCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Market Condition" data={s.by_market_condition as Record<string, BucketStat> | undefined} />
