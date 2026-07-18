@@ -1,0 +1,1 @@
+ALTER TABLE public.model7_aas96_shadow ADD COLUMN IF NOT EXISTS active_abstain_rule text;
