@@ -172,3 +172,77 @@ describe("resolveAas96Row — counterfactual grading + immutability", () => {
     for (const k of Object.keys(patch)) expect(allowed.has(k)).toBe(true);
   });
 });
+
+describe("resolveAas96Row — selector_b_confirmation_v1 net effect", () => {
+  it("original selector LOSS → B WIN produces net_effect = +2", async () => {
+    const { sb, updates } = makeSb({
+      ...BASE_ROW,
+      selector_pre_override_prediction: "RED", // would lose vs GREEN
+      selector_b_confirmation_v1_final_prediction: "GREEN", // wins vs GREEN
+    });
+    await resolveAas96Row(sb, "pred-sel-1", "GREEN");
+    const patch = updates.find((u) => u.table === "model7_aas96_shadow")!.patch;
+    expect(patch.selector_b_confirmation_v1_would_win).toBe(true);
+    expect(patch.selector_b_confirmation_v1_would_lose).toBe(false);
+    expect(patch.selector_b_confirmation_v1_net_effect).toBe(2);
+  });
+
+  it("original selector WIN → B LOSS produces net_effect = -2", async () => {
+    const { sb, updates } = makeSb({
+      ...BASE_ROW,
+      selector_pre_override_prediction: "GREEN", // would win vs GREEN
+      selector_b_confirmation_v1_final_prediction: "RED", // loses vs GREEN
+    });
+    await resolveAas96Row(sb, "pred-sel-2", "GREEN");
+    const patch = updates.find((u) => u.table === "model7_aas96_shadow")!.patch;
+    expect(patch.selector_b_confirmation_v1_would_win).toBe(false);
+    expect(patch.selector_b_confirmation_v1_would_lose).toBe(true);
+    expect(patch.selector_b_confirmation_v1_net_effect).toBe(-2);
+  });
+
+  it("no prediction change (pre == post) produces net_effect = 0", async () => {
+    const { sb, updates } = makeSb({
+      ...BASE_ROW,
+      selector_pre_override_prediction: "GREEN",
+      selector_b_confirmation_v1_final_prediction: "GREEN",
+    });
+    await resolveAas96Row(sb, "pred-sel-3", "RED");
+    const patch = updates.find((u) => u.table === "model7_aas96_shadow")!.patch;
+    expect(patch.selector_b_confirmation_v1_net_effect).toBe(0);
+  });
+
+  it("stored pre-override layer/prediction and selector fields remain unchanged during resolution", async () => {
+    const { sb, updates, stored } = makeSb({
+      ...BASE_ROW,
+      selector_pre_override_selected_layer: "A",
+      selector_pre_override_prediction: "RED",
+      selector_b_confirmation_v1_triggered: true,
+      selector_b_confirmation_v1_applied: true,
+      selector_b_confirmation_v1_final_selected_layer: "B",
+      selector_b_confirmation_v1_final_prediction: "GREEN",
+      selector_b_confirmation_v1_ema_separation_ratio: 0.00042,
+    });
+    await resolveAas96Row(sb, "pred-sel-4", "GREEN");
+    const patch = updates.find((u) => u.table === "model7_aas96_shadow")!.patch;
+    // Resolver must not rewrite pre-override or active override fields.
+    const forbidden = [
+      "selector_pre_override_selected_layer",
+      "selector_pre_override_prediction",
+      "selector_b_confirmation_v1_triggered",
+      "selector_b_confirmation_v1_applied",
+      "selector_b_confirmation_v1_final_selected_layer",
+      "selector_b_confirmation_v1_final_prediction",
+      "selector_b_confirmation_v1_ema_separation_ratio",
+    ];
+    for (const k of forbidden) {
+      expect(Object.prototype.hasOwnProperty.call(patch, k)).toBe(false);
+    }
+    expect(stored.selector_pre_override_selected_layer).toBe("A");
+    expect(stored.selector_pre_override_prediction).toBe("RED");
+    expect(stored.selector_b_confirmation_v1_final_selected_layer).toBe("B");
+    expect(stored.selector_b_confirmation_v1_final_prediction).toBe("GREEN");
+    expect(stored.selector_b_confirmation_v1_ema_separation_ratio).toBe(0.00042);
+    // Only outcome/net_effect fields on this row are touched.
+    expect(patch.selector_b_confirmation_v1_net_effect).toBe(2);
+  });
+});
