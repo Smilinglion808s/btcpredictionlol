@@ -101,6 +101,8 @@ describe("selector_b_confirmation_v1", () => {
     });
     expect(a.evaluable).toBe(false);
     expect(b.evaluable).toBe(false);
+  });
+
   it("triggered result carries B-confirmation reason (selector picks B, uses B's stored dir)", () => {
     // Emulates the orchestrator selection: when triggered, selected_layer=B
     // and baseline direction is Layer B's exact stored direction (never
