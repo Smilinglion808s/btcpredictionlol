@@ -250,7 +250,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
+      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -267,11 +267,27 @@ export async function resolveAas96Row(
       return;
     }
 
-    const final = row.final_prediction as string | null;
+    const final = (row.published_prediction as string | null) ?? (row.final_prediction as string | null);
     let result: "win" | "loss" | "skip" = "skip";
     if (final === "GREEN" || final === "RED") {
       result = final === actualDirection ? "win" : "loss";
     }
+
+    // Baseline (pre-veto) counterfactual grading — always compute when we know
+    // the market outcome, so the Cleanup Veto V1 net effect is auditable.
+    const baseline = row.baseline_prediction as string | null;
+    const vetoFired = !!row.cleanup_veto_v1_fired;
+    let baselineWouldWin: boolean | null = null;
+    let baselineWouldLose: boolean | null = null;
+    if (baseline === "GREEN" || baseline === "RED") {
+      baselineWouldWin = baseline === actualDirection;
+      baselineWouldLose = !baselineWouldWin;
+    }
+    const vetoAvoidedLoss = vetoFired && baselineWouldLose === true;
+    const vetoSacrificedWin = vetoFired && baselineWouldWin === true;
+    // +1 avoided loss, -1 sacrificed win, 0 otherwise.
+    const vetoNetEffect = vetoAvoidedLoss ? 1 : vetoSacrificedWin ? -1 : 0;
+
     // A row counts as a usable training row when its features were extractable
     // (eligibility_passed truthy) OR it was a warmup skip (eligibility unset)
     // — those still contribute to the underlying `predictions` training pool.
@@ -286,6 +302,11 @@ export async function resolveAas96Row(
       result,
       status: "resolved",
       usable_training_row: usableRow,
+      baseline_would_win: baselineWouldWin,
+      baseline_would_lose: baselineWouldLose,
+      veto_avoided_loss: vetoAvoidedLoss,
+      veto_sacrificed_win: vetoSacrificedWin,
+      veto_net_effect: vetoNetEffect,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
