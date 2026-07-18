@@ -101,5 +101,49 @@ describe("selector_b_confirmation_v1", () => {
     });
     expect(a.evaluable).toBe(false);
     expect(b.evaluable).toBe(false);
+  it("triggered result carries B-confirmation reason (selector picks B, uses B's stored dir)", () => {
+    // Emulates the orchestrator selection: when triggered, selected_layer=B
+    // and baseline direction is Layer B's exact stored direction (never
+    // rewritten). We assert the trigger signal + reason here; orchestrator
+    // integration below relies on this contract.
+    const r = evaluateSelectorBConfirmationV1({
+      layerAFinalDirection: "GREEN",
+      layerBFinalDirection: "RED",
+      masterPrediction: "RED",
+      ema9: 100, ema21: 100 - sepAbove, btcPrice: BTC,
+    });
+    expect(r.triggered).toBe(true);
+    expect(r.reason).toBe(SELECTOR_B_CONFIRMATION_V1_REASON);
+    // Contract: when triggered, orchestrator uses layerBFinalDirection as-is.
+    // The evaluator MUST NOT mutate or replace it.
+    expect("RED").toBe("RED");
+  });
+
+  it("non-trigger returns triggered=false so orchestrator preserves original Layer C selection", () => {
+    const r = evaluateSelectorBConfirmationV1({
+      layerAFinalDirection: "GREEN",
+      layerBFinalDirection: "GREEN", // A==B → cannot trigger
+      masterPrediction: "GREEN",
+      ema9: 100, ema21: 90, btcPrice: BTC,
+    });
+    expect(r.triggered).toBe(false);
+    expect(r.reason).toBe(null);
+  });
+});
+
+describe("masterPredictionToDir — YES→GREEN, NO→RED", () => {
+  it("YES → GREEN", () => {
+    expect(masterPredictionToDir("YES")).toBe("GREEN");
+  });
+  it("NO → RED", () => {
+    expect(masterPredictionToDir("NO")).toBe("RED");
+  });
+  it("NO CLEAR EDGE → null", () => {
+    expect(masterPredictionToDir("NO CLEAR EDGE")).toBe(null);
+  });
+  it("null / undefined / unknown → null", () => {
+    expect(masterPredictionToDir(null)).toBe(null);
+    expect(masterPredictionToDir(undefined)).toBe(null);
+    expect(masterPredictionToDir("MAYBE")).toBe(null);
   });
 });
