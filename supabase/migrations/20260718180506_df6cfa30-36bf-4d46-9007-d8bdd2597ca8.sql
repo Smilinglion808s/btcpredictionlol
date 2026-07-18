@@ -1,0 +1,21 @@
+
+ALTER TABLE public.model7_aas96_shadow
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_version text,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_evaluable boolean,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_triggered boolean,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_applied boolean,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_reason text,
+  ADD COLUMN IF NOT EXISTS selector_pre_override_selected_layer text,
+  ADD COLUMN IF NOT EXISTS selector_pre_override_prediction text,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_master_prediction text,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_ema9 numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_ema21 numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_btc_price numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_ema_separation numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_ema_separation_ratio numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_threshold numeric,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_final_selected_layer text,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_final_prediction text,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_would_win boolean,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_would_lose boolean,
+  ADD COLUMN IF NOT EXISTS selector_b_confirmation_v1_net_effect integer;

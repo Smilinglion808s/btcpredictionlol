@@ -599,6 +599,25 @@ export type Database = {
           resolved_at: string | null
           result: string | null
           selected_layer: string | null
+          selector_b_confirmation_v1_applied: boolean | null
+          selector_b_confirmation_v1_btc_price: number | null
+          selector_b_confirmation_v1_ema_separation: number | null
+          selector_b_confirmation_v1_ema_separation_ratio: number | null
+          selector_b_confirmation_v1_ema21: number | null
+          selector_b_confirmation_v1_ema9: number | null
+          selector_b_confirmation_v1_evaluable: boolean | null
+          selector_b_confirmation_v1_final_prediction: string | null
+          selector_b_confirmation_v1_final_selected_layer: string | null
+          selector_b_confirmation_v1_master_prediction: string | null
+          selector_b_confirmation_v1_net_effect: number | null
+          selector_b_confirmation_v1_reason: string | null
+          selector_b_confirmation_v1_threshold: number | null
+          selector_b_confirmation_v1_triggered: boolean | null
+          selector_b_confirmation_v1_version: string | null
+          selector_b_confirmation_v1_would_lose: boolean | null
+          selector_b_confirmation_v1_would_win: boolean | null
+          selector_pre_override_prediction: string | null
+          selector_pre_override_selected_layer: string | null
           shadow_error: string | null
           skip_reason: string | null
           snapshot_belongs_to_prior_candle: boolean | null
@@ -664,6 +683,25 @@ export type Database = {
           resolved_at?: string | null
           result?: string | null
           selected_layer?: string | null
+          selector_b_confirmation_v1_applied?: boolean | null
+          selector_b_confirmation_v1_btc_price?: number | null
+          selector_b_confirmation_v1_ema_separation?: number | null
+          selector_b_confirmation_v1_ema_separation_ratio?: number | null
+          selector_b_confirmation_v1_ema21?: number | null
+          selector_b_confirmation_v1_ema9?: number | null
+          selector_b_confirmation_v1_evaluable?: boolean | null
+          selector_b_confirmation_v1_final_prediction?: string | null
+          selector_b_confirmation_v1_final_selected_layer?: string | null
+          selector_b_confirmation_v1_master_prediction?: string | null
+          selector_b_confirmation_v1_net_effect?: number | null
+          selector_b_confirmation_v1_reason?: string | null
+          selector_b_confirmation_v1_threshold?: number | null
+          selector_b_confirmation_v1_triggered?: boolean | null
+          selector_b_confirmation_v1_version?: string | null
+          selector_b_confirmation_v1_would_lose?: boolean | null
+          selector_b_confirmation_v1_would_win?: boolean | null
+          selector_pre_override_prediction?: string | null
+          selector_pre_override_selected_layer?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
           snapshot_belongs_to_prior_candle?: boolean | null
@@ -729,6 +767,25 @@ export type Database = {
           resolved_at?: string | null
           result?: string | null
           selected_layer?: string | null
+          selector_b_confirmation_v1_applied?: boolean | null
+          selector_b_confirmation_v1_btc_price?: number | null
+          selector_b_confirmation_v1_ema_separation?: number | null
+          selector_b_confirmation_v1_ema_separation_ratio?: number | null
+          selector_b_confirmation_v1_ema21?: number | null
+          selector_b_confirmation_v1_ema9?: number | null
+          selector_b_confirmation_v1_evaluable?: boolean | null
+          selector_b_confirmation_v1_final_prediction?: string | null
+          selector_b_confirmation_v1_final_selected_layer?: string | null
+          selector_b_confirmation_v1_master_prediction?: string | null
+          selector_b_confirmation_v1_net_effect?: number | null
+          selector_b_confirmation_v1_reason?: string | null
+          selector_b_confirmation_v1_threshold?: number | null
+          selector_b_confirmation_v1_triggered?: boolean | null
+          selector_b_confirmation_v1_version?: string | null
+          selector_b_confirmation_v1_would_lose?: boolean | null
+          selector_b_confirmation_v1_would_win?: boolean | null
+          selector_pre_override_prediction?: string | null
+          selector_pre_override_selected_layer?: string | null
           shadow_error?: string | null
           skip_reason?: string | null
           snapshot_belongs_to_prior_candle?: boolean | null
