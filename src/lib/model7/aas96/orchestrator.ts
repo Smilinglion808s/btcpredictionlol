@@ -170,8 +170,26 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       if (aDir === actual) netA += 1; else if (aDir === "GREEN" || aDir === "RED") netA -= 1;
       if (bDir === actual) netB += 1; else if (bDir === "GREEN" || bDir === "RED") netB -= 1;
     }
-    const selected: "A" | "B" = netA >= netB ? "A" : "B";
-    const baselineDir: Dir = selected === "A" ? armor.final : layerB.final;
+    const preOverrideSelected: "A" | "B" = netA >= netB ? "A" : "B";
+    const preOverrideDir: Dir = preOverrideSelected === "A" ? armor.final : layerB.final;
+
+    // Selector B Confirmation V1 — active override (never abstains).
+    const { evaluateSelectorBConfirmationV1, masterPredictionToDir,
+      SELECTOR_B_CONFIRMATION_V1_VERSION, SELECTOR_B_CONFIRMATION_V1_THRESHOLD } =
+      await import("./selectorBConfirmationV1");
+    const indicators = (p.indicators ?? {}) as Record<string, unknown>;
+    const masterDir = masterPredictionToDir(p.prediction);
+    const ema9 = indicators.ema9;
+    const ema21 = indicators.ema21;
+    const btcPrice = p.btc_price_at_prediction ?? indicators.last;
+    const selectorBResult = evaluateSelectorBConfirmationV1({
+      layerAFinalDirection: armor.final,
+      layerBFinalDirection: layerB.final,
+      masterPrediction: masterDir,
+      ema9, ema21, btcPrice,
+    });
+    const selectedLayer: "A" | "B" = selectorBResult.triggered ? "B" : preOverrideSelected;
+    const baselineDir: Dir = selectorBResult.triggered ? layerB.final : preOverrideDir;
 
     // Cleanup Veto V1 — narrow post-model abstention overlay. Never reverses.
     const { evaluateCleanupVetoV1 } = await import("./cleanupVetoV1");
@@ -205,7 +223,25 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       layer_b_final_direction: layerB.final,
       layer_a_last96_net: netA,
       layer_b_last96_net: netB,
-      selected_layer: selected,
+      selected_layer: selectedLayer,
+      // Preserve original Layer C selection for override auditing.
+      selector_pre_override_selected_layer: preOverrideSelected,
+      selector_pre_override_prediction: preOverrideDir,
+      // Selector B Confirmation V1 audit fields.
+      selector_b_confirmation_v1_version: SELECTOR_B_CONFIRMATION_V1_VERSION,
+      selector_b_confirmation_v1_threshold: SELECTOR_B_CONFIRMATION_V1_THRESHOLD,
+      selector_b_confirmation_v1_evaluable: selectorBResult.evaluable,
+      selector_b_confirmation_v1_triggered: selectorBResult.triggered,
+      selector_b_confirmation_v1_applied: selectorBResult.triggered,
+      selector_b_confirmation_v1_reason: selectorBResult.reason,
+      selector_b_confirmation_v1_master_prediction: masterDir,
+      selector_b_confirmation_v1_ema9: ema9 == null ? null : Number(ema9),
+      selector_b_confirmation_v1_ema21: ema21 == null ? null : Number(ema21),
+      selector_b_confirmation_v1_btc_price: btcPrice == null ? null : Number(btcPrice),
+      selector_b_confirmation_v1_ema_separation: selectorBResult.emaSeparation,
+      selector_b_confirmation_v1_ema_separation_ratio: selectorBResult.emaSeparationRatio,
+      selector_b_confirmation_v1_final_selected_layer: selectedLayer,
+      selector_b_confirmation_v1_final_prediction: baselineDir,
       // Preserve baseline (pre-veto) prediction for independent grading.
       baseline_prediction: baselineDir,
       baseline_abstain_reason: null,
@@ -250,7 +286,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row")
+      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -288,6 +324,25 @@ export async function resolveAas96Row(
     // +1 avoided loss, -1 sacrificed win, 0 otherwise.
     const vetoNetEffect = vetoAvoidedLoss ? 1 : vetoSacrificedWin ? -1 : 0;
 
+    // Selector B Confirmation V1 counterfactual grading vs original selector.
+    const preOverride = row.selector_pre_override_prediction as string | null;
+    const overrideFinal = row.selector_b_confirmation_v1_final_prediction as string | null;
+    let selectorBWouldWin: boolean | null = null;
+    let selectorBWouldLose: boolean | null = null;
+    if (overrideFinal === "GREEN" || overrideFinal === "RED") {
+      selectorBWouldWin = overrideFinal === actualDirection;
+      selectorBWouldLose = !selectorBWouldWin;
+    }
+    let selectorBNetEffect = 0;
+    if (preOverride === "GREEN" || preOverride === "RED") {
+      const preWon = preOverride === actualDirection;
+      const postWon = overrideFinal === actualDirection;
+      if (preOverride !== overrideFinal) {
+        if (!preWon && postWon) selectorBNetEffect = 2;
+        else if (preWon && !postWon) selectorBNetEffect = -2;
+      }
+    }
+
     // A row counts as a usable training row when its features were extractable
     // (eligibility_passed truthy) OR it was a warmup skip (eligibility unset)
     // — those still contribute to the underlying `predictions` training pool.
@@ -307,6 +362,9 @@ export async function resolveAas96Row(
       veto_avoided_loss: vetoAvoidedLoss,
       veto_sacrificed_win: vetoSacrificedWin,
       veto_net_effect: vetoNetEffect,
+      selector_b_confirmation_v1_would_win: selectorBWouldWin,
+      selector_b_confirmation_v1_would_lose: selectorBWouldLose,
+      selector_b_confirmation_v1_net_effect: selectorBNetEffect,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);

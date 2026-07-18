@@ -164,6 +164,9 @@ describe("resolveAas96Row — counterfactual grading + immutability", () => {
       "actual_direction", "result", "status", "usable_training_row",
       "baseline_would_win", "baseline_would_lose",
       "veto_avoided_loss", "veto_sacrificed_win", "veto_net_effect",
+      "selector_b_confirmation_v1_would_win",
+      "selector_b_confirmation_v1_would_lose",
+      "selector_b_confirmation_v1_net_effect",
       "resolved_at", "updated_at",
     ]);
     for (const k of Object.keys(patch)) expect(allowed.has(k)).toBe(true);
