@@ -65,13 +65,19 @@ function StatsPage() {
 
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
-    const headers = Object.keys(rows[0]);
+    // Union of keys across all rows so columns that are null/undefined in
+    // the first row (e.g. veto fields on non-vetoed rows) still appear.
+    const headerSet = new Set<string>();
+    for (const r of rows) {
+      if (r && typeof r === "object") for (const k of Object.keys(r)) headerSet.add(k);
+    }
+    const headers = Array.from(headerSet);
     const esc = (v: unknown) => {
       if (v === null || v === undefined) return "";
       const s = typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+    return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r?.[h])).join(","))].join("\n");
   }
 
   function triggerDownload(csv: string, filename: string) {
