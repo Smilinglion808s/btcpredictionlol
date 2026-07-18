@@ -44,8 +44,6 @@ function StatsPage() {
   const aas96PendingFn = useServerFn(getAas96ShadowPending);
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
-  const aas96VetoFn = useServerFn(getAas96VetoStats);
-  const aas96VetoQ = useQuery({ queryKey: ["aas96-veto-stats"], queryFn: () => aas96VetoFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
 
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
