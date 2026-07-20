@@ -37,16 +37,7 @@ async function loadCandles(supabase: SupabaseClient): Promise<PredictionCandle[]
     .order("candle_ts", { ascending: false })
     .limit(100);
   if (error) throw error;
-  // Strip any unconfirmed / in-forming candle row. The current partial candle
-  // is delivered separately via buildPartialCandleContext; including it in
-  // `ordered` would make `last` the same row as the partial, so featureEngine's
-  // openDrift check compares that row's open→close (i.e. body size) against a
-  // 0.3% tolerance and falsely trips feed_mismatch → present=false →
-  // partial_snapshot_failure_reason="invalid_payload" → AAS96 no_partial_snapshot skip.
-  return (data ?? [])
-    .filter((c) => (c as PredictionCandle).confirm !== false)
-    .slice()
-    .reverse() as PredictionCandle[];
+  return (data ?? []).slice().reverse() as PredictionCandle[];
 }
 
 function freshnessFor(candleTs: string, now: number) {
