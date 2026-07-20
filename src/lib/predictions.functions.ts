@@ -1151,6 +1151,19 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
   return rows.map((r) => {
     const p = predMap.get(r.prediction_id as string) ?? {};
     return {
+      id: r.id,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      target_candle_ts: r.target_candle_ts,
+      input_candle_ts: r.input_candle_ts,
+      continuity_delta_seconds: r.continuity_delta_seconds,
+      continuity_gate_passed: r.continuity_gate_passed,
+      snapshot_minutes_elapsed: r.snapshot_minutes_elapsed,
+      snapshot_belongs_to_prior_candle: r.snapshot_belongs_to_prior_candle,
+      usable_training_row: r.usable_training_row,
+      active_abstain_rule: r.active_abstain_rule,
+      last_training_at: r.last_training_at,
+      next_retrain_at_count: r.next_retrain_at_count,
       candle_ts: r.candle_ts,
       variant: r.variant,
       status: r.status,
