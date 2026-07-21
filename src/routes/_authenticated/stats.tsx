@@ -324,20 +324,8 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
                 {exporting === "A" ? "…" : "Variant A"}
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B")}>
-                {exporting === "B" ? "…" : "Variant B"}
-              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B2")}>
                 {exporting === "B2" ? "…" : "Variant B2"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B4_2")}>
-                {exporting === "B4_2" ? "…" : "Variant B4.2"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A2_Conflict")}>
-                {exporting === "A2_Conflict" ? "…" : "A2 Conflict"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A2_MidBand")}>
-                {exporting === "A2_MidBand" ? "…" : "A2 MidBand"}
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A2_Combined")}>
                 {exporting === "A2_Combined" ? "…" : "A2 Combined"}
