@@ -244,8 +244,10 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
       freshnessAction = "no_advance_since_last_prediction";
     }
 
-    const indicators = computeIndicatorBundle(ordered);
-    if (!indicators) throw new Error("Failed to compute indicators");
+    const indicatorsBase = computeIndicatorBundle(ordered);
+    if (!indicatorsBase) throw new Error("Failed to compute indicators");
+    const telemetryV1 = buildTelemetryV1(ordered);
+    const indicators = { ...(indicatorsBase as Record<string, unknown>), telemetry_v1: telemetryV1 } as typeof indicatorsBase & { telemetry_v1: ReturnType<typeof buildTelemetryV1> };
 
     const last = indicators.last;
     // Target candle = the UPCOMING candle (next 15m boundary), aligned to
