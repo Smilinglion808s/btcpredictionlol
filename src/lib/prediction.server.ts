@@ -2,6 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { computeIndicatorBundle, type Candle } from "./indicators";
+import { buildTelemetryV1 } from "./model6/telemetry";
 import {
   fetchAndUpsertCandles,
   fetchOkxClosedCandle,
