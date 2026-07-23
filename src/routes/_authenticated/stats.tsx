@@ -120,19 +120,32 @@ function StatsPage() {
     }
   }
 
+  async function downloadModel6Csv() {
+    try {
+      setExportingM6(true);
+      const rows = await exportM6Fn();
+      if (!rows || rows.length === 0) { alert("No Model 6 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model6-predictions-${stamp()}.csv`);
+    } finally {
+      setExportingM6(false);
+    }
+  }
+
   async function downloadAllModelsCsv() {
     try {
       setExportingAll(true);
-      const [m7, td1, preds] = await Promise.all([
+      const [m7, td1, preds, m6] = await Promise.all([
         exportM7Fn(),
         exportTd1Fn(),
         exportAllPredsFn(),
+        exportM6Fn(),
       ]);
       const s = stamp();
       if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
       if ((td1 ?? []).length) triggerDownload(rowsToCsv(td1 as any[]), `all-models-${s}-td1-rc-shadow.csv`);
       if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
-      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length) {
+      if ((m6 ?? []).length) triggerDownload(rowsToCsv(m6 as any[]), `all-models-${s}-model6.csv`);
+      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length && !(m6 ?? []).length) {
         alert("No rows to export.");
       }
     } finally {
