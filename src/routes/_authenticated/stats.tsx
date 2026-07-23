@@ -44,12 +44,14 @@ function StatsPage() {
   const aas96PendingFn = useServerFn(getAas96ShadowPending);
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
+  const exportM6Fn = useServerFn(exportModel6Predictions);
 
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+  const [exportingM6, setExportingM6] = useState(false);
 
   async function downloadAas96Csv() {
     try {
