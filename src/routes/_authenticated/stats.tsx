@@ -333,6 +333,9 @@ function StatsPage() {
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingAll} onClick={downloadAllModelsCsv}>
                 {exportingAll ? "Exporting…" : "CSV (All Models)"}
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingM6} onClick={downloadModel6Csv}>
+                {exportingM6 ? "Exporting…" : "CSV (Model 6)"}
+              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
                 {exporting === "all" ? "Exporting…" : "CSV (All)"}
               </Button>
