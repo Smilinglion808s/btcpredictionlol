@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -44,12 +44,14 @@ function StatsPage() {
   const aas96PendingFn = useServerFn(getAas96ShadowPending);
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
+  const exportM6Fn = useServerFn(exportModel6Predictions);
 
   const [exportingAas96, setExportingAas96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+  const [exportingM6, setExportingM6] = useState(false);
 
   async function downloadAas96Csv() {
     try {
@@ -118,19 +120,32 @@ function StatsPage() {
     }
   }
 
+  async function downloadModel6Csv() {
+    try {
+      setExportingM6(true);
+      const rows = await exportM6Fn();
+      if (!rows || rows.length === 0) { alert("No Model 6 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model6-predictions-${stamp()}.csv`);
+    } finally {
+      setExportingM6(false);
+    }
+  }
+
   async function downloadAllModelsCsv() {
     try {
       setExportingAll(true);
-      const [m7, td1, preds] = await Promise.all([
+      const [m7, td1, preds, m6] = await Promise.all([
         exportM7Fn(),
         exportTd1Fn(),
         exportAllPredsFn(),
+        exportM6Fn(),
       ]);
       const s = stamp();
       if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
       if ((td1 ?? []).length) triggerDownload(rowsToCsv(td1 as any[]), `all-models-${s}-td1-rc-shadow.csv`);
       if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
-      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length) {
+      if ((m6 ?? []).length) triggerDownload(rowsToCsv(m6 as any[]), `all-models-${s}-model6.csv`);
+      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length && !(m6 ?? []).length) {
         alert("No rows to export.");
       }
     } finally {
@@ -317,6 +332,9 @@ function StatsPage() {
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingAll} onClick={downloadAllModelsCsv}>
                 {exportingAll ? "Exporting…" : "CSV (All Models)"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingM6} onClick={downloadModel6Csv}>
+                {exportingM6 ? "Exporting…" : "CSV (Model 6)"}
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
                 {exporting === "all" ? "Exporting…" : "CSV (All)"}

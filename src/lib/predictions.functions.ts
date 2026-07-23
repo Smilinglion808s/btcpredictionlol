@@ -1251,3 +1251,132 @@ export const exportAas96Shadow = createServerFn({ method: "GET" }).handler(async
   });
 });
 
+/** Model 6 predictions CSV — flattens indicators.telemetry_v1 + derives actual_direction from OHLC. */
+export const exportModel6Predictions = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const cols =
+    "id, created_at, candle_ts, model_version, prediction, confidence, setup_type, status, market_condition, btc_price_at_prediction, actual_next_candle_open, actual_next_candle_close, actual_direction, indicators, final_trade_status, bullish_score, bearish_score, agreement_gate_applied, agreement_gate_reason, resolved_at";
+  const collect = async (table: "predictions" | "predictions_archive") => {
+    const out: Record<string, any>[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb
+        .from(table)
+        .select(cols)
+        .like("model_version", "6.%")
+        .order("candle_ts", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      out.push(...(data as Record<string, any>[]));
+      if (data.length < PAGE) break;
+    }
+    return out;
+  };
+  const [live, arch] = await Promise.all([collect("predictions"), collect("predictions_archive")]);
+  const seen = new Set<string>();
+  const rows: Record<string, any>[] = [];
+  for (const r of [...live, ...arch]) {
+    const id = String(r.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    rows.push(r);
+  }
+
+  return rows.map((r) => {
+    const ind = (r.indicators ?? {}) as Record<string, any>;
+    const t = (ind.telemetry_v1 ?? {}) as Record<string, any>;
+    const nextOpen = r.actual_next_candle_open;
+    const nextClose = r.actual_next_candle_close;
+    let derived_actual_direction: string | null = null;
+    if (nextOpen != null && nextClose != null) {
+      const o = Number(nextOpen), c = Number(nextClose);
+      derived_actual_direction = c > o ? "GREEN" : c < o ? "RED" : "DOJI";
+    }
+    const pred = String(r.prediction ?? "");
+    const trendDir = t.trend_direction ?? null;
+    const is_trend_continuation =
+      trendDir === "UP" ? pred === "YES" : trendDir === "DOWN" ? pred === "NO" : false;
+    const is_countertrend_trade =
+      trendDir === "UP" ? pred === "NO" : trendDir === "DOWN" ? pred === "YES" : false;
+
+    const trendScore = Number(t.trend_score ?? 0);
+    const strScore = Number(t.structure_score ?? 0);
+    const continuation_strength = is_trend_continuation ? Math.round(((trendScore + strScore) / 2) * 100) / 100 : 0;
+    let reversal_strength = 0;
+    if (is_countertrend_trade) {
+      const evidence =
+        (t.failed_breakout_up || t.failed_breakout_down ? 30 : 0) +
+        (t.bullish_liquidity_sweep || t.bearish_liquidity_sweep ? 30 : 0) +
+        (strScore * 0.4);
+      reversal_strength = Math.max(0, Math.min(100, Math.round(evidence * 100) / 100));
+    }
+
+    return {
+      id: r.id,
+      created_at: r.created_at,
+      candle_ts: r.candle_ts,
+      model_version: r.model_version,
+      prediction: r.prediction,
+      confidence: r.confidence,
+      setup_type: r.setup_type,
+      status: r.status,
+      resolved_at: r.resolved_at,
+      market_condition: r.market_condition,
+      btc_price_at_prediction: r.btc_price_at_prediction,
+      final_trade_status: r.final_trade_status,
+      agreement_gate_applied: r.agreement_gate_applied,
+      agreement_gate_reason: r.agreement_gate_reason,
+      bullish_score: r.bullish_score,
+      bearish_score: r.bearish_score,
+      // Ground truth
+      actual_next_open: nextOpen,
+      actual_next_close: nextClose,
+      actual_direction: derived_actual_direction,   // derived from OHLC (authoritative)
+      stored_actual_direction: r.actual_direction,  // legacy, for divergence audits
+      // Telemetry v1
+      telemetry_version: t.version ?? null,
+      channel_low: t.channel_low ?? null,
+      channel_high: t.channel_high ?? null,
+      channel_width_pct: t.channel_width_pct ?? null,
+      channel_position: t.channel_position ?? null,
+      channel_position_numeric: t.channel_position_numeric ?? null,
+      channel_fib_zone: t.channel_fib_zone ?? null,
+      distance_to_upper_channel_pct: t.distance_to_upper_channel_pct ?? null,
+      distance_to_lower_channel_pct: t.distance_to_lower_channel_pct ?? null,
+      trend_direction: t.trend_direction ?? null,
+      trend_strength: t.trend_strength ?? null,
+      trend_slope: t.trend_slope ?? null,
+      trend_age_candles: t.trend_age_candles ?? null,
+      distance_from_fast_ema: t.distance_from_fast_ema ?? null,
+      distance_from_slow_ema: t.distance_from_slow_ema ?? null,
+      trend_score: t.trend_score ?? null,
+      ema_score: t.ema_score ?? null,
+      momentum_score: t.momentum_score ?? null,
+      volatility_score: t.volatility_score ?? null,
+      structure_score: t.structure_score ?? null,
+      market_regime_score: t.market_regime_score ?? null,
+      ema9: t.ema9 ?? null,
+      ema21: t.ema21 ?? null,
+      ema50: t.ema50 ?? null,
+      atr_14: t.atr_14 ?? null,
+      avg_range_20: t.avg_range_20 ?? null,
+      close: t.close ?? null,
+      volume_expansion: t.volume_expansion ?? null,
+      same_color_streak: t.same_color_streak ?? null,
+      higher_low_sequence: t.higher_low_sequence ?? null,
+      lower_high_sequence: t.lower_high_sequence ?? null,
+      failed_breakout_up: t.failed_breakout_up ?? null,
+      failed_breakout_down: t.failed_breakout_down ?? null,
+      bullish_liquidity_sweep: t.bullish_liquidity_sweep ?? null,
+      bearish_liquidity_sweep: t.bearish_liquidity_sweep ?? null,
+      // Router diagnostics
+      is_trend_continuation,
+      is_countertrend_trade,
+      continuation_strength,
+      reversal_strength,
+    };
+  });
+});
+
+
