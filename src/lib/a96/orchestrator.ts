@@ -28,7 +28,9 @@ function rejectExternalModelInputs(obj: unknown, path = ""): void {
 async function getOrMintFitEpisode(sb: SupabaseClient, artifactFitId: string): Promise<FitState> {
   const { data, error } = await sb.rpc("get_or_mint_a96_fit_episode", { p_artifact_fit_id: artifactFitId });
   if (error) throw error;
-  const s = data as Record<string, unknown>;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("get_or_mint_a96_fit_episode returned no row");
+  const s = row as Record<string, unknown>;
   return {
     fit_episode_id: String(s.fit_episode_id),
     artifact_fit_id: String(s.artifact_fit_id),
