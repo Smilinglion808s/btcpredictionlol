@@ -1425,7 +1425,7 @@ export const getA96Pending = createServerFn({ method: "GET" }).handler(async () 
   const sb = await admin();
   const { data } = await sb
     .from("a96_predictions")
-    .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at")
+    .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at, feature_history_valid, feature_history_error, base_prediction, actual_direction, actual_open, actual_close, actual_high, actual_low, layer_a_result_score, layer_b_result_score, base_result_score, resolution_attempt_count, last_resolution_error")
     .order("target_candle_ts", { ascending: false })
     .limit(1).maybeSingle();
   return data ?? null;
