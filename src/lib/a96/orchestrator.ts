@@ -98,8 +98,8 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     const priorCandles = await fetchPriorCandles(sb, targetTs);
 
     const engineInput = {
-      layerADirection: a,
-      layerBDirection: b,
+      layerADirection: a as "GREEN" | "RED",
+      layerBDirection: b as "GREEN" | "RED",
       baseSelectedLayer: base as Layer,
       fitState,
       targetTimestamp: targetTs,
