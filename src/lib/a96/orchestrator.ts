@@ -28,7 +28,9 @@ function rejectExternalModelInputs(obj: unknown, path = ""): void {
 async function getOrMintFitEpisode(sb: SupabaseClient, artifactFitId: string): Promise<FitState> {
   const { data, error } = await sb.rpc("get_or_mint_a96_fit_episode", { p_artifact_fit_id: artifactFitId });
   if (error) throw error;
-  const s = data as Record<string, unknown>;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("get_or_mint_a96_fit_episode returned no row");
+  const s = row as Record<string, unknown>;
   return {
     fit_episode_id: String(s.fit_episode_id),
     artifact_fit_id: String(s.artifact_fit_id),
@@ -111,7 +113,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
 
     const decision = a96Decide(engineInput);
 
-    await sb.from("a96_predictions").upsert({
+    const { error: upsertError } = await sb.from("a96_predictions").upsert({
       prediction_id: predictionId,
       source_prediction_id: predictionId,
       model_name: A96_MODEL_NAME,
@@ -136,6 +138,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       layer_a_net_at_prediction: fitState.layer_a_net,
       layer_b_net_at_prediction: fitState.layer_b_net,
     } as never, { onConflict: "prediction_id" });
+    if (upsertError) throw upsertError;
   } catch (e) {
     try {
       await sb.from("api_runs").insert({
