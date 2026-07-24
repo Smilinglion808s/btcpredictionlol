@@ -14,6 +14,155 @@ export type Database = {
   }
   public: {
     Tables: {
+      a96_fit_state: {
+        Row: {
+          activated_at: string
+          artifact_fit_id: string
+          comparable_resolved_count: number
+          fit_episode_id: string
+          is_active: boolean
+          layer_a_losses: number
+          layer_a_net: number
+          layer_a_wins: number
+          layer_b_losses: number
+          layer_b_net: number
+          layer_b_wins: number
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string
+          artifact_fit_id: string
+          comparable_resolved_count?: number
+          fit_episode_id: string
+          is_active?: boolean
+          layer_a_losses?: number
+          layer_a_net?: number
+          layer_a_wins?: number
+          layer_b_losses?: number
+          layer_b_net?: number
+          layer_b_wins?: number
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string
+          artifact_fit_id?: string
+          comparable_resolved_count?: number
+          fit_episode_id?: string
+          is_active?: boolean
+          layer_a_losses?: number
+          layer_a_net?: number
+          layer_a_wins?: number
+          layer_b_losses?: number
+          layer_b_net?: number
+          layer_b_wins?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      a96_predictions: {
+        Row: {
+          actual_close: number | null
+          actual_direction: string | null
+          actual_open: number | null
+          agreement_veto_fired: boolean
+          artifact_fit_id: string
+          base_selected_layer: string
+          body_ratio_veto_condition: boolean
+          decision_reason: string
+          distance_from_4_candle_low_bps: number | null
+          distance_veto_condition: boolean
+          final_prediction: string
+          fit_episode_id: string
+          fit_resolved_count_at_prediction: number
+          fit_selector_override_fired: boolean
+          layer_a_direction: string
+          layer_a_net_at_prediction: number
+          layer_b_direction: string
+          layer_b_net_at_prediction: number
+          mean_2_candle_body_to_range: number | null
+          model_name: string
+          model_version: string
+          prediction_created_at: string
+          prediction_id: string
+          resolved_at: string | null
+          result_score: number | null
+          selected_layer: string
+          source_prediction_id: string | null
+          target_candle_ts: string
+          target_open: number | null
+        }
+        Insert: {
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_open?: number | null
+          agreement_veto_fired?: boolean
+          artifact_fit_id: string
+          base_selected_layer: string
+          body_ratio_veto_condition?: boolean
+          decision_reason: string
+          distance_from_4_candle_low_bps?: number | null
+          distance_veto_condition?: boolean
+          final_prediction: string
+          fit_episode_id: string
+          fit_resolved_count_at_prediction: number
+          fit_selector_override_fired?: boolean
+          layer_a_direction: string
+          layer_a_net_at_prediction: number
+          layer_b_direction: string
+          layer_b_net_at_prediction: number
+          mean_2_candle_body_to_range?: number | null
+          model_name?: string
+          model_version?: string
+          prediction_created_at?: string
+          prediction_id: string
+          resolved_at?: string | null
+          result_score?: number | null
+          selected_layer: string
+          source_prediction_id?: string | null
+          target_candle_ts: string
+          target_open?: number | null
+        }
+        Update: {
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_open?: number | null
+          agreement_veto_fired?: boolean
+          artifact_fit_id?: string
+          base_selected_layer?: string
+          body_ratio_veto_condition?: boolean
+          decision_reason?: string
+          distance_from_4_candle_low_bps?: number | null
+          distance_veto_condition?: boolean
+          final_prediction?: string
+          fit_episode_id?: string
+          fit_resolved_count_at_prediction?: number
+          fit_selector_override_fired?: boolean
+          layer_a_direction?: string
+          layer_a_net_at_prediction?: number
+          layer_b_direction?: string
+          layer_b_net_at_prediction?: number
+          mean_2_candle_body_to_range?: number | null
+          model_name?: string
+          model_version?: string
+          prediction_created_at?: string
+          prediction_id?: string
+          resolved_at?: string | null
+          result_score?: number | null
+          selected_layer?: string
+          source_prediction_id?: string | null
+          target_candle_ts?: string
+          target_open?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "a96_predictions_fit_episode_id_fkey"
+            columns: ["fit_episode_id"]
+            isOneToOne: false
+            referencedRelation: "a96_fit_state"
+            referencedColumns: ["fit_episode_id"]
+          },
+        ]
+      }
       api_runs: {
         Row: {
           created_at: string
@@ -2013,7 +2162,41 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      a96_daily_performance: {
+        Row: {
+          abstains: number | null
+          losses: number | null
+          net_score: number | null
+          resolved_predictions: number | null
+          utc_date: string | null
+          wins: number | null
+        }
+        Relationships: []
+      }
+      a96_fit_performance: {
+        Row: {
+          abstains: number | null
+          agreement_vetoes: number | null
+          artifact_fit_id: string | null
+          first_target_candle_ts: string | null
+          fit_episode_id: string | null
+          last_target_candle_ts: string | null
+          losses: number | null
+          net_score: number | null
+          resolved_predictions: number | null
+          selector_overrides: number | null
+          wins: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "a96_predictions_fit_episode_id_fkey"
+            columns: ["fit_episode_id"]
+            isOneToOne: false
+            referencedRelation: "a96_fit_state"
+            referencedColumns: ["fit_episode_id"]
+          },
+        ]
+      }
     }
     Functions: {
       apply_b4_2_resolution: {
@@ -2046,10 +2229,78 @@ export type Database = {
         Args: { p_base_variant: string; p_side: string }
         Returns: Json
       }
+      get_or_mint_a96_fit_episode: {
+        Args: { p_artifact_fit_id: string }
+        Returns: {
+          activated_at: string
+          artifact_fit_id: string
+          comparable_resolved_count: number
+          fit_episode_id: string
+          is_active: boolean
+          layer_a_losses: number
+          layer_a_net: number
+          layer_a_wins: number
+          layer_b_losses: number
+          layer_b_net: number
+          layer_b_wins: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "a96_fit_state"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       prediction_stats: { Args: never; Returns: Json }
       prediction_stats_filtered: {
         Args: { model_version_filter?: string }
         Returns: Json
+      }
+      resolve_a96_prediction: {
+        Args: {
+          p_actual_close: number
+          p_actual_open: number
+          p_prediction_id: string
+          p_resolved_at?: string
+        }
+        Returns: {
+          actual_close: number | null
+          actual_direction: string | null
+          actual_open: number | null
+          agreement_veto_fired: boolean
+          artifact_fit_id: string
+          base_selected_layer: string
+          body_ratio_veto_condition: boolean
+          decision_reason: string
+          distance_from_4_candle_low_bps: number | null
+          distance_veto_condition: boolean
+          final_prediction: string
+          fit_episode_id: string
+          fit_resolved_count_at_prediction: number
+          fit_selector_override_fired: boolean
+          layer_a_direction: string
+          layer_a_net_at_prediction: number
+          layer_b_direction: string
+          layer_b_net_at_prediction: number
+          mean_2_candle_body_to_range: number | null
+          model_name: string
+          model_version: string
+          prediction_created_at: string
+          prediction_id: string
+          resolved_at: string | null
+          result_score: number | null
+          selected_layer: string
+          source_prediction_id: string | null
+          target_candle_ts: string
+          target_open: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "a96_predictions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
