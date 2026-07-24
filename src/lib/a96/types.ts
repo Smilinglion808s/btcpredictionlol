@@ -1,0 +1,37 @@
+export type Direction = "GREEN" | "RED" | "PUSH" | "ABSTAIN";
+export type Layer = "A" | "B" | "NONE";
+
+export interface Candle {
+  timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface FitState {
+  fit_episode_id: string;
+  artifact_fit_id: string;
+  comparable_resolved_count: number;
+  layer_a_wins: number;
+  layer_a_losses: number;
+  layer_a_net: number;
+  layer_b_wins: number;
+  layer_b_losses: number;
+  layer_b_net: number;
+}
+
+export interface Decision {
+  prediction: Direction;
+  selected_layer: Layer;
+  reason: string;
+  fit_selector_override_fired: boolean;
+  agreement_veto_fired: boolean;
+  feature_values: {
+    distance_from_4_candle_low_bps: number | null;
+    mean_2_candle_body_to_range: number | null;
+    distance_veto_condition: boolean;
+    body_ratio_veto_condition: boolean;
+  };
+  fit_state_snapshot: FitState & { net_gap_a_minus_b: number };
+}
