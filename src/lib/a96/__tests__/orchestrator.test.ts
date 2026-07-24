@@ -125,7 +125,7 @@ function makeDb() {
           if (limitN != null) rows = rows.slice(0, limitN);
           return rows;
         },
-        then(res: any, rej: any) { return api._exec().then((data) => res({ data, error: null }), rej); },
+        then(res: any, rej: any) { return api._exec().then((data: Row[]) => res({ data, error: null }), rej); },
         async upsert(row: Row, _opts: any) {
           if (table === "a96_predictions") {
             const existing = state.predictions.get(row.prediction_id) ?? {};
