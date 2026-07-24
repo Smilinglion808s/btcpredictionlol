@@ -1435,7 +1435,7 @@ export const getA96Pending = createServerFn({ method: "GET" }).handler(async () 
 export const exportA96Csv = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const PAGE = 1000;
-  const out: Array<Record<string, unknown>> = [];
+  const out: Array<Record<string, any>> = [];
   for (let from = 0; ; from += PAGE) {
     const { data } = await sb
       .from("a96_predictions")
