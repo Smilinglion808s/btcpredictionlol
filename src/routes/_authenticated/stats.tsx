@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -45,13 +45,30 @@ function StatsPage() {
   const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportAas96Fn = useServerFn(exportAas96Shadow);
   const exportM6Fn = useServerFn(exportModel6Predictions);
+  const a96Fn = useServerFn(getA96Stats);
+  const a96Q = useQuery({ queryKey: ["a96-stats"], queryFn: () => a96Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const a96PendingFn = useServerFn(getA96Pending);
+  const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportA96Fn = useServerFn(exportA96Csv);
 
   const [exportingAas96, setExportingAas96] = useState(false);
+  const [exportingA96, setExportingA96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
   const [exportingM6, setExportingM6] = useState(false);
+
+  async function downloadA96Csv() {
+    try {
+      setExportingA96(true);
+      const rows = await exportA96Fn();
+      if (rows.length === 0) { alert("No a96 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `a96-${stamp()}.csv`);
+    } finally {
+      setExportingA96(false);
+    }
+  }
 
   async function downloadAas96Csv() {
     try {
@@ -571,84 +588,83 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-      {/* AAS96 Shadow — Adaptive Armor Stack (independent, non-webhook) */}
+      {/* a96 (a96-r1) — deterministic post-AAS decision engine, non-webhook */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>AAS96 Shadow (Adaptive Armor Stack)</span>
-            <Button size="sm" variant="outline" onClick={downloadAas96Csv} disabled={exportingAas96}>
-              {exportingAas96 ? "Exporting…" : "CSV (AAS96)"}
+            <span>a96 (a96-r1)</span>
+            <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
+              {exportingA96 ? "Exporting…" : "CSV (a96)"}
             </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {(() => {
-            const a = (aas96Q.data ?? {}) as Record<string, any>;
-            const trained = Number(a.training_row_count ?? 0);
+            const a = (a96Q.data ?? {}) as Record<string, any>;
+            const ep = (a.active_episode ?? {}) as Record<string, any>;
             return (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <Stat label="Win rate" value={`${a.win_rate ?? 0}%`} />
-                  <Stat label="Trades (W+L)" value={String((Number(a.win ?? 0) + Number(a.loss ?? 0)))} />
-                  <Stat label="Wins" value={String(a.win ?? 0)} />
-                  <Stat label="Losses" value={String(a.loss ?? 0)} />
+                  <Stat label="Trades (W+L)" value={String((Number(a.wins ?? 0) + Number(a.losses ?? 0)))} />
+                  <Stat label="Wins" value={String(a.wins ?? 0)} />
+                  <Stat label="Losses" value={String(a.losses ?? 0)} />
                   <Stat label="Pending" value={String(a.pending ?? 0)} />
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Stat label="Skips" value={String(a.skip ?? 0)} />
-                  <Stat label="Pushes" value={String(a.push ?? 0)} />
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Abstains" value={String(a.abstains ?? 0)} />
+                  <Stat label="Pushes" value={String(a.pushes ?? 0)} />
+                  <Stat label="Fit overrides" value={String(a.overrides ?? 0)} />
+                  <Stat label="Agreement vetoes" value={String(a.agreement_vetoes ?? 0)} />
                   <Stat label="Total rows" value={String(a.total ?? 0)} />
-                  <Stat label="Training rows" value={String(trained)} />
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium mb-2">Active fit episode</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Stat label="Comparable resolved" value={String(ep.comparable_resolved_count ?? 0)} />
+                    <Stat label="Layer A net" value={String(ep.layer_a_net ?? 0)} />
+                    <Stat label="Layer B net" value={String(ep.layer_b_net ?? 0)} />
+                    <Stat label="Activated" value={ep.activated_at ? new Date(ep.activated_at).toLocaleString() : "—"} />
+                  </div>
                 </div>
                 {(() => {
-                  const p = aas96PendingQ.data as Record<string, any> | null;
+                  const p = a96PendingQ.data as Record<string, any> | null;
                   if (!p) return null;
-                  const dir = p.published_prediction ?? p.final_prediction ?? "—";
                   return (
                     <div className="rounded-md border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-medium">Current pending candle</div>
                         <div className="text-[11px] text-muted-foreground tabular-nums">
-                          {p.candle_ts ? new Date(p.candle_ts).toLocaleString() : "—"}
+                          {p.target_candle_ts ? new Date(p.target_candle_ts).toLocaleString() : "—"}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Published" value={String(dir)} />
-                        <Stat label="Baseline" value={String(p.baseline_prediction ?? "—")} />
+                        <Stat label="Final" value={String(p.final_prediction ?? "—")} />
                         <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
-                        <Stat label="Horizons (32/64/96/192)" value={String(p.layer_b_horizon_pattern ?? "—")} />
+                        <Stat label="Base layer" value={String(p.base_selected_layer ?? "—")} />
+                        <Stat label="Reason" value={String(p.decision_reason ?? "—")} />
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Layer A" value={String(p.layer_a_final_direction ?? "—")} />
-                        <Stat label="Layer B" value={String(p.layer_b_final_direction ?? "—")} />
-                        <Stat label="Layer A prob (mean)" value={p.layer_a_prob_mean != null ? Number(p.layer_a_prob_mean).toFixed(4) : "—"} />
-                        <Stat label="Cleanup Veto V1" value={p.cleanup_veto_v1_fired ? "FIRED" : "no"} />
+                        <Stat label="Layer A" value={String(p.layer_a_direction ?? "—")} />
+                        <Stat label="Layer B" value={String(p.layer_b_direction ?? "—")} />
+                        <Stat label="Fit override" value={p.fit_selector_override_fired ? "YES" : "no"} />
+                        <Stat label="Agreement veto" value={p.agreement_veto_fired ? "YES" : "no"} />
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Armor override" value={p.armor_override_fired ? "YES" : "no"} />
-                        <Stat label="Eligible" value={p.eligibility_passed ? "yes" : "no"} />
-                        <Stat label="Status" value={String(p.status ?? "—")} />
-                        <Stat label="Conflict subtype" value={String(p.cleanup_veto_v1_conflict_subtype ?? "—")} />
+                        <Stat label="Dist 4-low (bps)" value={p.distance_from_4_candle_low_bps != null ? Number(p.distance_from_4_candle_low_bps).toFixed(2) : "—"} />
+                        <Stat label="Mean body/range (2)" value={p.mean_2_candle_body_to_range != null ? Number(p.mean_2_candle_body_to_range).toFixed(3) : "—"} />
+                        <Stat label="Fit resolved @ pred" value={String(p.fit_resolved_count_at_prediction ?? 0)} />
+                        <Stat label="A/B net @ pred" value={`${p.layer_a_net_at_prediction ?? 0} / ${p.layer_b_net_at_prediction ?? 0}`} />
                       </div>
-                      {(p.skip_reason || p.armor_override_reason || p.published_abstain_reason) ? (
-                        <div className="text-[11px] text-muted-foreground">
-                          {p.published_abstain_reason ? <div>abstain: {String(p.published_abstain_reason)}</div> : null}
-                          {p.skip_reason ? <div>skip: {String(p.skip_reason)}</div> : null}
-                          {p.armor_override_reason ? <div>armor: {String(p.armor_override_reason)}</div> : null}
-                        </div>
-                      ) : null}
                     </div>
                   );
                 })()}
-
-                {/* Cleanup Veto V1 metrics live in the AAS96 CSV export only. */}
               </>
             );
           })()}
-
-
         </CardContent>
       </Card>
+
 
 
 

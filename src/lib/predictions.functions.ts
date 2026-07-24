@@ -1380,3 +1380,71 @@ export const exportModel6Predictions = createServerFn({ method: "GET" }).handler
 });
 
 
+
+/** a96-r1 stats: totals, wins, losses, abstains, override + agreement veto counts,
+ *  active fit episode state. Reads from a96_predictions + a96_fit_state. */
+export const getA96Stats = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0 };
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("a96_predictions")
+      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,actual_direction")
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<Record<string, unknown>>) {
+      c.total += 1;
+      if (r.fit_selector_override_fired) c.overrides += 1;
+      if (r.agreement_veto_fired) c.agreement_vetoes += 1;
+      if (r.resolved_at) {
+        c.resolved += 1;
+        if (r.final_prediction === "ABSTAIN") c.abstains += 1;
+        else if (r.actual_direction === "PUSH") c.pushes += 1;
+        else if (r.result_score === 1) c.wins += 1;
+        else if (r.result_score === -1) c.losses += 1;
+      } else {
+        c.pending += 1;
+      }
+    }
+    if (data.length < PAGE) break;
+  }
+  const { data: active } = await sb
+    .from("a96_fit_state")
+    .select("fit_episode_id, artifact_fit_id, comparable_resolved_count, layer_a_wins, layer_a_losses, layer_a_net, layer_b_wins, layer_b_losses, layer_b_net, activated_at")
+    .eq("is_active", true).maybeSingle();
+  const wl = c.wins + c.losses;
+  return {
+    ...c,
+    win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
+    active_episode: active ?? null,
+  };
+});
+
+export const getA96Pending = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("a96_predictions")
+    .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at")
+    .order("target_candle_ts", { ascending: false })
+    .limit(1).maybeSingle();
+  return data ?? null;
+});
+
+/** Full a96_predictions CSV export (joins source prediction OHLC for auditability). */
+export const exportA96Csv = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+  const out: Array<Record<string, any>> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("a96_predictions")
+      .select("*")
+      .order("target_candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<Record<string, unknown>>) out.push(r);
+    if (data.length < PAGE) break;
+  }
+  return out;
+});
