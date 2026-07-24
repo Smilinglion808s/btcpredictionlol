@@ -113,7 +113,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
 
     const decision = a96Decide(engineInput);
 
-    await sb.from("a96_predictions").upsert({
+    const { error: upsertError } = await sb.from("a96_predictions").upsert({
       prediction_id: predictionId,
       source_prediction_id: predictionId,
       model_name: A96_MODEL_NAME,
@@ -138,6 +138,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       layer_a_net_at_prediction: fitState.layer_a_net,
       layer_b_net_at_prediction: fitState.layer_b_net,
     } as never, { onConflict: "prediction_id" });
+    if (upsertError) throw upsertError;
   } catch (e) {
     try {
       await sb.from("api_runs").insert({
