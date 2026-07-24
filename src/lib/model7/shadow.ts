@@ -528,9 +528,12 @@ export async function runShadowForPrediction(
       variantB ? undefined : "warming_up");
 
     // AAS96 shadow — deferred, never blocks webhook. Own storage table.
+    // a96-r1 runs after and consumes AAS96 Layer A/B + base selector only.
     try {
       const { runAas96Shadow } = await import("./aas96/orchestrator");
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
+      const { runA96 } = await import("@/lib/a96/orchestrator");
+      await runA96(supabase, predictionRow.id);
     } catch { /* never block */ }
 
 
