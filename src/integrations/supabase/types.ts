@@ -2244,12 +2244,12 @@ export type Database = {
           layer_b_net: number
           layer_b_wins: number
           updated_at: string
-        }
+        }[]
         SetofOptions: {
           from: "*"
           to: "a96_fit_state"
-          isOneToOne: true
-          isSetofReturn: false
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       prediction_stats: { Args: never; Returns: Json }
@@ -2257,51 +2257,60 @@ export type Database = {
         Args: { model_version_filter?: string }
         Returns: Json
       }
-      resolve_a96_prediction: {
-        Args: {
-          p_actual_close: number
-          p_actual_open: number
-          p_prediction_id: string
-          p_resolved_at?: string
-        }
-        Returns: {
-          actual_close: number | null
-          actual_direction: string | null
-          actual_open: number | null
-          agreement_veto_fired: boolean
-          artifact_fit_id: string
-          base_selected_layer: string
-          body_ratio_veto_condition: boolean
-          decision_reason: string
-          distance_from_4_candle_low_bps: number | null
-          distance_veto_condition: boolean
-          final_prediction: string
-          fit_episode_id: string
-          fit_resolved_count_at_prediction: number
-          fit_selector_override_fired: boolean
-          layer_a_direction: string
-          layer_a_net_at_prediction: number
-          layer_b_direction: string
-          layer_b_net_at_prediction: number
-          mean_2_candle_body_to_range: number | null
-          model_name: string
-          model_version: string
-          prediction_created_at: string
-          prediction_id: string
-          resolved_at: string | null
-          result_score: number | null
-          selected_layer: string
-          source_prediction_id: string | null
-          target_candle_ts: string
-          target_open: number | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "a96_predictions"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      resolve_a96_prediction:
+        | {
+            Args: {
+              p_actual_close: number
+              p_actual_open: number
+              p_prediction_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actual_close: number
+              p_actual_open: number
+              p_prediction_id: string
+              p_resolved_at?: string
+            }
+            Returns: {
+              actual_close: number | null
+              actual_direction: string | null
+              actual_open: number | null
+              agreement_veto_fired: boolean
+              artifact_fit_id: string
+              base_selected_layer: string
+              body_ratio_veto_condition: boolean
+              decision_reason: string
+              distance_from_4_candle_low_bps: number | null
+              distance_veto_condition: boolean
+              final_prediction: string
+              fit_episode_id: string
+              fit_resolved_count_at_prediction: number
+              fit_selector_override_fired: boolean
+              layer_a_direction: string
+              layer_a_net_at_prediction: number
+              layer_b_direction: string
+              layer_b_net_at_prediction: number
+              mean_2_candle_body_to_range: number | null
+              model_name: string
+              model_version: string
+              prediction_created_at: string
+              prediction_id: string
+              resolved_at: string | null
+              result_score: number | null
+              selected_layer: string
+              source_prediction_id: string | null
+              target_candle_ts: string
+              target_open: number | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "a96_predictions"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
     }
     Enums: {
       [_ in never]: never
