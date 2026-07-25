@@ -50,6 +50,7 @@ function StatsPage() {
   const a96PendingFn = useServerFn(getA96Pending);
   const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportA96Fn = useServerFn(exportA96Csv);
+  const resetA96Fn = useServerFn(resetA96VisualStats);
 
   const [exportingAas96, setExportingAas96] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
