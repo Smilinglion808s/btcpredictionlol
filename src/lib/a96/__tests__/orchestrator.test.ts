@@ -483,3 +483,110 @@ describe("a96 candle-data-integrity guard", () => {
   });
 });
 
+
+describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
+  it("queries exactly the four expected timestamps and never substitutes older confirmed rows", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitExact");
+    const pid = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    const targetTs = "2026-07-25T01:15:00.000Z";
+    seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
+    // Seed OLDER confirmed candles (three days earlier). These MUST NOT be
+    // substituted for the missing T-15m..T-60m timestamps.
+    for (let i = 4; i >= 1; i--) {
+      const ts = new Date(new Date(targetTs).getTime() - i * 900_000 - 3 * 24 * 60 * 60 * 1000).toISOString();
+      seedCandle(state, ts, 199, 201, 198, 200);
+    }
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    await runA96(sb, pid);
+    const row = state.predictions.get(pid)!;
+    expect(row.candle_data_valid).toBe(false);
+    expect(row.decision_reason).toMatch(/ABSTAIN_INVALID_CANDLE_DATA/);
+    expect(row.prior_candles_snapshot.length).toBe(0);
+    expect(row.prior_candle_row_ids.length).toBe(0);
+    expect(row.prospective_valid).toBe(false);
+    expect(row.prospective_invalid_reason).toBe("FINALIZED_PRIOR_CANDLE_UNAVAILABLE");
+    vi.useRealTimers();
+  });
+
+  it("candle_data_valid=false always implies prospective_valid=false", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitInv");
+    const pid = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+    const targetTs = "2026-07-25T02:00:00.000Z";
+    seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
+    for (let i = 4; i >= 1; i--) {
+      const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
+      seedCandle(state, ts, 180, 182, 178, 180);
+    }
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    await runA96(sb, pid);
+    const row = state.predictions.get(pid)!;
+    expect(row.candle_data_valid).toBe(false);
+    expect(row.prospective_valid).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("target_open_difference_bps is populated on every resolved row (even below threshold)", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitDiff");
+    const pid = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+    const targetTs = "2026-07-25T02:15:00.000Z";
+    state.predictions.set(pid, {
+      prediction_id: pid, fit_episode_id: "ep-fitDiff", artifact_fit_id: "fitDiff",
+      target_candle_ts: targetTs,
+      layer_a_direction: "GREEN", layer_b_direction: "GREEN",
+      final_prediction: "GREEN", resolved_at: null,
+      target_open: 63955.62,
+      candle_provider: "okx",
+    });
+    state.fitEpisodes.set("ep-fitDiff", {
+      fit_episode_id: "ep-fitDiff", artifact_fit_id: "fitDiff", is_active: true,
+      comparable_resolved_count: 0,
+      layer_a_wins: 0, layer_a_losses: 0, layer_a_net: 0,
+      layer_b_wins: 0, layer_b_losses: 0, layer_b_net: 0,
+    });
+    state.activeEpisodeByArtifact.set("fitDiff", "ep-fitDiff");
+    seedCandle(state, targetTs, 64021.70, 64100, 63900, 64050);
+    vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() + 20 * 60 * 1000));
+    await resolveDueA96Predictions(sb);
+    const row = state.predictions.get(pid)!;
+    expect(row.target_open_difference_bps).not.toBeNull();
+    expect(typeof row.target_open_difference_bps).toBe("number");
+    expect(row.target_open_difference_bps).toBeGreaterThan(9);
+    expect(row.target_open_difference_bps).toBeLessThan(12);
+    expect(row.resolution_data_invalid).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("resolution demotes prospective_valid=false when actual_open drifts beyond tolerance", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitBad");
+    const pid = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    const targetTs = "2026-07-25T02:30:00.000Z";
+    state.predictions.set(pid, {
+      prediction_id: pid, fit_episode_id: "ep-fitBad", artifact_fit_id: "fitBad",
+      target_candle_ts: targetTs,
+      layer_a_direction: "GREEN", layer_b_direction: "GREEN",
+      final_prediction: "GREEN", resolved_at: null,
+      target_open: 60000, candle_provider: "okx",
+      prospective_valid: true,
+    });
+    state.fitEpisodes.set("ep-fitBad", {
+      fit_episode_id: "ep-fitBad", artifact_fit_id: "fitBad", is_active: true,
+      comparable_resolved_count: 0,
+      layer_a_wins: 0, layer_a_losses: 0, layer_a_net: 0,
+      layer_b_wins: 0, layer_b_losses: 0, layer_b_net: 0,
+    });
+    seedCandle(state, targetTs, 63000, 63100, 62900, 63050);
+    vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() + 20 * 60 * 1000));
+    await resolveDueA96Predictions(sb);
+    const row = state.predictions.get(pid)!;
+    expect(row.resolution_data_invalid).toBe(true);
+    expect(row.prospective_valid).toBe(false);
+    expect(row.prospective_invalid_reason).toMatch(/actual_open_vs_target_open/);
+    vi.useRealTimers();
+  });
+});
