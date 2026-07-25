@@ -571,17 +571,27 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
 });
 
 
-/** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant). */
+/** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant).
+ *  Visual stats honor td1_rc_visual_stats_reset.reset_at so users can refresh
+ *  the Stats page without deleting audit rows (CSV export stays full). */
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const PAGE = 1000;
+  const { data: resetRow } = await sb
+    .from("td1_rc_visual_stats_reset")
+    .select("reset_at")
+    .eq("id", 1)
+    .maybeSingle();
+  const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
   const rows: any[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
+    let q = sb
       .from("model7_td1_rc_shadow")
       .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result")
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
+    if (resetAt) q = q.gt("candle_ts", resetAt);
+    const { data, error } = await q;
     if (error) throw error;
     const batch = data ?? [];
     rows.push(...batch);
@@ -635,6 +645,17 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
     a2_baseline_losses: a2LossesAlone,
   };
 });
+
+/** Visual-only reset for TD1-RC Stats page counters. CSV export remains unchanged. */
+export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { error } = await sb
+    .from("td1_rc_visual_stats_reset")
+    .upsert({ id: 1, reset_at: new Date().toISOString(), reason: "user-ui-reset" }, { onConflict: "id" });
+  if (error) throw error;
+  return { ok: true, reset_at: new Date().toISOString() };
+});
+
 
 /** Training progress for TD1-RC: shows how many candles remain before the model is ready to make live predictions. */
 export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handler(async () => {
