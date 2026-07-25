@@ -2,6 +2,25 @@
 // existing AAS Layer A/B directions + internal base selector from that row,
 // then applies the a96-r1 engine and writes to a96_predictions.
 //
+// Candle-data integrity (2026-07 pipeline-alignment fix):
+//   - All candle reads are scoped to a single canonical stream
+//     (symbol, timeframe, provider) from A96_CANDLE_STREAM and require
+//     confirm=true. The database has a UNIQUE(symbol,timeframe,candle_ts,
+//     fetch_source) index guaranteeing at most one authoritative row per
+//     stream+boundary.
+//   - The immediately-prior candle is retry-polled (bounded) if the
+//     ingester has not finalized it at prediction time.
+//   - Contiguity, count, and target_open-vs-prev-close consistency checks
+//     run before the engine. Any failure yields ABSTAIN with
+//     candle_data_valid=false and a diagnostic reason; snapshot + row IDs
+//     are still persisted for audit.
+//   - Once written, candle snapshots are immutable (upsert only fills
+//     these on first insert; resolution never rewrites priors).
+//   - At resolution time we re-query the target candle scoped to the same
+//     stream, persist its row id, and compare actual_open to the stored
+//     target_open. Beyond A96_RESOLUTION_OPEN_TOLERANCE_BPS the resolution
+//     is flagged (resolution_data_invalid=true) but still recorded.
+//
 // Resolution is handled by the transactional resolve_a96_prediction RPC and
 // always uses OHLC from the `candles` table for the target candle timestamp
 // (never any upstream/exported direction label). Every prediction generation
@@ -13,7 +32,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { a96Decide } from "./engine";
 import { agreementFeatures, CandleHistoryError } from "./features";
 import type { Candle, FitState, Layer } from "./types";
-import { A96_MODEL_NAME, A96_MODEL_VERSION } from "./config";
+import {
+  A96_MODEL_NAME,
+  A96_MODEL_VERSION,
+  A96_CANDLE_STREAM,
+  A96_TARGET_OPEN_TOLERANCE_BPS,
+  A96_RESOLUTION_OPEN_TOLERANCE_BPS,
+  A96_PRIOR_CANDLE_POLL_ATTEMPTS,
+  A96_PRIOR_CANDLE_POLL_INTERVAL_MS,
+  A96_CONFIG,
+} from "./config";
+
+const TF_MS = A96_CONFIG.expected_candle_seconds * 1000;
 
 const FORBIDDEN_KEY_TOKENS = ["td1", "a2_", "router", "model6_prediction", "external_final_decision", "opposite_model"];
 function rejectExternalModelInputs(obj: unknown, path = ""): void {
@@ -58,35 +88,116 @@ async function getOrMintFitEpisode(sb: SupabaseClient, artifactFitId: string): P
   };
 }
 
-async function fetchPriorCandles(sb: SupabaseClient, targetTs: Date): Promise<Candle[]> {
-  const { data } = await sb
+interface PriorCandleRow {
+  id: string;
+  candle: Candle;
+}
+
+/** Fetch the last N confirmed prior candles for the canonical stream, oldest→newest. */
+async function fetchPriorCandlesScoped(
+  sb: SupabaseClient,
+  targetTs: Date,
+  limit: number,
+): Promise<PriorCandleRow[]> {
+  let q = sb
     .from("candles")
-    .select("candle_ts, open, high, low, close")
-    .eq("symbol", "BTC-USDT")
-    .eq("timeframe", "15m")
+    .select("id, candle_ts, open, high, low, close, fetch_source, confirm")
+    .eq("symbol", A96_CANDLE_STREAM.symbol)
+    .eq("timeframe", A96_CANDLE_STREAM.timeframe)
+    .eq("confirm", true)
     .lt("candle_ts", targetTs.toISOString())
     .order("candle_ts", { ascending: false })
-    .limit(4);
+    .limit(limit);
+  // Scope to canonical provider when the column exists.
+  q = q.eq("fetch_source", A96_CANDLE_STREAM.provider);
+  const { data } = await q;
   const rows = (data ?? []) as Array<Record<string, unknown>>;
-  return rows.map((r) => ({
-    timestamp: new Date(String(r.candle_ts)),
-    open: Number(r.open),
-    high: Number(r.high),
-    low: Number(r.low),
-    close: Number(r.close),
-  })).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  return rows
+    .map((r) => ({
+      id: String(r.id),
+      candle: {
+        timestamp: new Date(String(r.candle_ts)),
+        open: Number(r.open),
+        high: Number(r.high),
+        low: Number(r.low),
+        close: Number(r.close),
+      },
+    }))
+    .sort((a, b) => a.candle.timestamp.getTime() - b.candle.timestamp.getTime());
+}
+
+/**
+ * Retry-poll the prior-candle read so a slow ingester (which lags a few
+ * hundred ms after boundary) does not cause spurious ABSTAINs. Bounded by
+ * A96_PRIOR_CANDLE_POLL_ATTEMPTS.
+ */
+async function pollPriorCandles(
+  sb: SupabaseClient,
+  targetTs: Date,
+): Promise<PriorCandleRow[]> {
+  const need = A96_CONFIG.required_prior_candles;
+  const previousBoundary = new Date(targetTs.getTime() - TF_MS).getTime();
+  for (let attempt = 0; attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS; attempt++) {
+    const rows = await fetchPriorCandlesScoped(sb, targetTs, need);
+    const last = rows[rows.length - 1];
+    if (rows.length >= need && last && last.candle.timestamp.getTime() === previousBoundary) {
+      return rows;
+    }
+    if (attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, A96_PRIOR_CANDLE_POLL_INTERVAL_MS));
+    }
+  }
+  return fetchPriorCandlesScoped(sb, targetTs, need);
+}
+
+interface CandleValidation {
+  valid: boolean;
+  reason: string | null;
+  target_open_difference_bps: number | null;
+}
+
+function validatePriorCandleStream(args: {
+  rows: PriorCandleRow[];
+  targetTs: Date;
+  targetOpen: number;
+}): CandleValidation {
+  const need = A96_CONFIG.required_prior_candles;
+  if (args.rows.length < need) {
+    return { valid: false, reason: `insufficient_prior_candles:${args.rows.length}/${need}`, target_open_difference_bps: null };
+  }
+  for (let i = 1; i < args.rows.length; i++) {
+    const delta = (args.rows[i].candle.timestamp.getTime() - args.rows[i - 1].candle.timestamp.getTime()) / 1000;
+    if (delta !== A96_CONFIG.expected_candle_seconds) {
+      return { valid: false, reason: `non_contiguous_prior:${delta}s`, target_open_difference_bps: null };
+    }
+  }
+  const last = args.rows[args.rows.length - 1];
+  const finalDelta = (args.targetTs.getTime() - last.candle.timestamp.getTime()) / 1000;
+  if (finalDelta !== A96_CONFIG.expected_candle_seconds) {
+    return { valid: false, reason: `latest_prior_gap:${finalDelta}s`, target_open_difference_bps: null };
+  }
+  const prevClose = last.candle.close;
+  if (!(prevClose > 0) || !(args.targetOpen > 0)) {
+    return { valid: false, reason: "non_positive_price", target_open_difference_bps: null };
+  }
+  const diffBps = Math.abs((args.targetOpen - prevClose) / prevClose) * 10_000;
+  if (diffBps > A96_TARGET_OPEN_TOLERANCE_BPS) {
+    return { valid: false, reason: `target_open_vs_prev_close_${diffBps.toFixed(2)}bps`, target_open_difference_bps: diffBps };
+  }
+  return { valid: true, reason: null, target_open_difference_bps: diffBps };
 }
 
 async function fetchTargetCandle(sb: SupabaseClient, targetTs: Date): Promise<
-  { open: number; high: number; low: number; close: number; volume: number | null } | null
+  { id: string; provider: string; open: number; high: number; low: number; close: number; volume: number | null } | null
 > {
-  const { data } = await sb
+  let q = sb
     .from("candles")
-    .select("open, high, low, close, volume, confirm")
-    .eq("symbol", "BTC-USDT")
-    .eq("timeframe", "15m")
-    .eq("candle_ts", targetTs.toISOString())
-    .maybeSingle();
+    .select("id, open, high, low, close, volume, confirm, fetch_source")
+    .eq("symbol", A96_CANDLE_STREAM.symbol)
+    .eq("timeframe", A96_CANDLE_STREAM.timeframe)
+    .eq("candle_ts", targetTs.toISOString());
+  q = q.eq("fetch_source", A96_CANDLE_STREAM.provider);
+  const { data } = await q.maybeSingle();
   if (!data) return null;
   const r = data as Record<string, unknown>;
   const confirm = r.confirm as boolean | null;
@@ -95,7 +206,12 @@ async function fetchTargetCandle(sb: SupabaseClient, targetTs: Date): Promise<
   if (![open, high, low, close].every((n) => isFinite(n) && n > 0)) return null;
   const volRaw = r.volume;
   const volume = volRaw == null ? null : Number(volRaw);
-  return { open, high, low, close, volume: volume != null && isFinite(volume) ? volume : null };
+  return {
+    id: String(r.id),
+    provider: String(r.fetch_source ?? A96_CANDLE_STREAM.provider),
+    open, high, low, close,
+    volume: volume != null && isFinite(volume) ? volume : null,
+  };
 }
 
 /**
@@ -125,7 +241,7 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
   try {
     const { data: row } = await sb
       .from("a96_predictions")
-      .select("prediction_id, target_candle_ts, resolved_at, fit_episode_id")
+      .select("prediction_id, target_candle_ts, resolved_at, fit_episode_id, target_open, candle_provider")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return false;
@@ -135,18 +251,30 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
     if (Date.now() < targetTs.getTime() + 15 * 60 * 1000) return false; // not due yet
     const ohlc = await fetchTargetCandle(sb, targetTs);
     if (!ohlc) {
-      await sb.from("a96_predictions").update({
-        resolution_attempt_count: undefined, // handled by RPC path; but log via api_runs
-      } as never).eq("prediction_id", predictionId);
       await logApiError(sb, "a96-resolve-missing-candle", {
         prediction_id: predictionId, target_candle_ts: targetTs.toISOString(), fit_episode_id: r.fit_episode_id,
-      }, new Error("target candle not confirmed / not in candles table"));
-      // Still stamp last_resolution_error so it shows up in the CSV.
+      }, new Error("target candle not confirmed / not in canonical stream"));
       await sb.from("a96_predictions").update({
         last_resolution_error: "target_candle_unavailable",
         last_resolution_attempt_at: new Date().toISOString(),
       } as never).eq("prediction_id", predictionId);
       return false;
+    }
+    // Resolution-time consistency: actual_open vs stored target_open.
+    const storedTargetOpen = r.target_open == null ? null : Number(r.target_open);
+    const storedProvider = r.candle_provider ? String(r.candle_provider) : A96_CANDLE_STREAM.provider;
+    let resolution_data_invalid = false;
+    let resolution_error: string | null = null;
+    if (storedProvider !== ohlc.provider) {
+      resolution_data_invalid = true;
+      resolution_error = `provider_mismatch:${storedProvider}->${ohlc.provider}`;
+    }
+    if (storedTargetOpen != null && storedTargetOpen > 0) {
+      const diffBps = Math.abs((ohlc.open - storedTargetOpen) / storedTargetOpen) * 10_000;
+      if (diffBps > A96_RESOLUTION_OPEN_TOLERANCE_BPS) {
+        resolution_data_invalid = true;
+        resolution_error = `actual_open_vs_target_open_${diffBps.toFixed(2)}bps`;
+      }
     }
     const { data: rpc, error } = await sb.rpc("resolve_a96_prediction", {
       p_prediction_id: predictionId,
@@ -165,6 +293,13 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
       }, new Error(String(rpcRow.reason ?? "rpc rejected")));
       return false;
     }
+    // Stamp resolution audit fields (RPC already set actual_*).
+    await sb.from("a96_predictions").update({
+      target_candle_row_id: ohlc.id,
+      resolution_candle_row_id: ohlc.id,
+      resolution_data_invalid,
+      ...(resolution_error ? { last_resolution_error: resolution_error.slice(0, 500) } : {}),
+    } as never).eq("prediction_id", predictionId);
     return true;
   } catch (e) {
     await logApiError(sb, "a96-resolve-error", { prediction_id: predictionId }, e);
@@ -223,9 +358,71 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
 
     // Freshly load fit-episode state AFTER catch-up resolution.
     const fitState = await getOrMintFitEpisode(sb, artifactFitId);
-    const priorCandles = await fetchPriorCandles(sb, targetTs);
 
-    // Always compute agreement candle features + snapshot (regardless of agreement branch).
+    // Canonical-stream, finalized, retry-polled prior candles.
+    const priorRows = await pollPriorCandles(sb, targetTs);
+    const priorCandles: Candle[] = priorRows.map((r) => r.candle);
+    const priorRowIds: string[] = priorRows.map((r) => r.id);
+    const priorSnapshot = priorRows.map((r) => ({
+      id: r.id,
+      provider: A96_CANDLE_STREAM.provider,
+      timestamp: r.candle.timestamp.toISOString(),
+      open: r.candle.open, high: r.candle.high, low: r.candle.low, close: r.candle.close,
+    }));
+
+    const streamCheck = validatePriorCandleStream({ rows: priorRows, targetTs, targetOpen });
+
+    const streamAudit = {
+      candle_symbol: A96_CANDLE_STREAM.symbol,
+      candle_timeframe: A96_CANDLE_STREAM.timeframe,
+      candle_provider: A96_CANDLE_STREAM.provider,
+      prior_candle_row_ids: priorRowIds,
+      candle_data_valid: streamCheck.valid,
+      candle_data_invalid_reason: streamCheck.reason,
+      target_open_difference_bps: streamCheck.target_open_difference_bps,
+      prior_candles_snapshot: priorSnapshot,
+      // A fresh prospective episode has been started; every new row is valid
+      // for the prospective evaluation from this point forward.
+      prospective_valid: true,
+      prospective_invalid_reason: null,
+    };
+
+    // Fail-closed: if the candle data pipeline is inconsistent, ABSTAIN and
+    // record the reason. Do not touch the engine or fit-state counters.
+    if (!streamCheck.valid) {
+      const { error: absErr } = await sb.from("a96_predictions").upsert({
+        prediction_id: predictionId,
+        source_prediction_id: predictionId,
+        model_name: A96_MODEL_NAME,
+        model_version: A96_MODEL_VERSION,
+        fit_episode_id: fitState.fit_episode_id,
+        artifact_fit_id: artifactFitId,
+        target_candle_ts: targetTs.toISOString(),
+        layer_a_direction: a,
+        layer_b_direction: b,
+        base_selected_layer: base,
+        selected_layer: "NONE",
+        final_prediction: "ABSTAIN",
+        decision_reason: `INVALID_CANDLE_DATA:${streamCheck.reason ?? "unknown"}`,
+        fit_selector_override_fired: false,
+        agreement_veto_fired: false,
+        distance_from_4_candle_low_bps: null,
+        mean_2_candle_body_to_range: null,
+        distance_veto_condition: false,
+        body_ratio_veto_condition: false,
+        target_open: targetOpen,
+        fit_resolved_count_at_prediction: fitState.comparable_resolved_count,
+        layer_a_net_at_prediction: fitState.layer_a_net,
+        layer_b_net_at_prediction: fitState.layer_b_net,
+        feature_history_valid: false,
+        feature_history_error: streamCheck.reason,
+        ...streamAudit,
+      } as never, { onConflict: "prediction_id" });
+      if (absErr) throw absErr;
+      return;
+    }
+
+    // Compute agreement features from the validated snapshot.
     let feature_history_valid = true;
     let feature_history_error: string | null = null;
     let features: { distance_from_4_candle_low_bps: number; mean_2_candle_body_to_range: number } | null = null;
@@ -235,9 +432,6 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       feature_history_valid = false;
       feature_history_error = e instanceof CandleHistoryError ? e.message : (e instanceof Error ? e.message : String(e));
     }
-    const priorSnapshot = priorCandles.map((c) => ({
-      timestamp: c.timestamp.toISOString(), open: c.open, high: c.high, low: c.low, close: c.close,
-    }));
 
     const engineInput = {
       layerADirection: a as "GREEN" | "RED",
@@ -251,7 +445,6 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     rejectExternalModelInputs(engineInput);
     const decision = a96Decide(engineInput);
 
-    // Feature values: prefer engine-produced (agreement branch); otherwise use raw computed features.
     const distanceBps = decision.feature_values.distance_from_4_candle_low_bps
       ?? (features ? features.distance_from_4_candle_low_bps : null);
     const meanBody = decision.feature_values.mean_2_candle_body_to_range
@@ -283,7 +476,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       layer_b_net_at_prediction: fitState.layer_b_net,
       feature_history_valid,
       feature_history_error,
-      prior_candles_snapshot: priorSnapshot,
+      ...streamAudit,
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
   } catch (e) {
