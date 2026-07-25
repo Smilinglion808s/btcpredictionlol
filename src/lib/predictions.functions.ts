@@ -646,6 +646,17 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
   };
 });
 
+/** Visual-only reset for TD1-RC Stats page counters. CSV export remains unchanged. */
+export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { error } = await sb
+    .from("td1_rc_visual_stats_reset")
+    .upsert({ id: 1, reset_at: new Date().toISOString(), reason: "user-ui-reset" }, { onConflict: "id" });
+  if (error) throw error;
+  return { ok: true, reset_at: new Date().toISOString() };
+});
+
+
 /** Training progress for TD1-RC: shows how many candles remain before the model is ready to make live predictions. */
 export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
