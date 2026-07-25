@@ -45,6 +45,14 @@ import {
 
 const TF_MS = A96_CONFIG.expected_candle_seconds * 1000;
 
+// Test-only override so unit tests can shrink the retry-poll window without
+// mocking global timers (vitest fake timers do not intercept setTimeout in
+// dynamically-imported modules reliably). Production leaves this null.
+let __POLL_OVERRIDE: { attempts: number; intervalMs: number } | null = null;
+export function __setA96PollForTests(v: { attempts: number; intervalMs: number } | null): void {
+  __POLL_OVERRIDE = v;
+}
+
 const FORBIDDEN_KEY_TOKENS = ["td1", "a2_", "router", "model6_prediction", "external_final_decision", "opposite_model"];
 function rejectExternalModelInputs(obj: unknown, path = ""): void {
   if (obj && typeof obj === "object" && !Array.isArray(obj)) {
@@ -93,61 +101,99 @@ interface PriorCandleRow {
   candle: Candle;
 }
 
-/** Fetch the last N confirmed prior candles for the canonical stream, oldest→newest. */
-async function fetchPriorCandlesScoped(
+/**
+ * Compute the four exact required prior-candle timestamps for a given target,
+ * as ISO strings ordered oldest → newest: [T-60m, T-45m, T-30m, T-15m].
+ */
+function requiredPriorTimestamps(targetTs: Date): string[] {
+  const need = A96_CONFIG.required_prior_candles;
+  const out: string[] = [];
+  for (let i = need; i >= 1; i--) {
+    out.push(new Date(targetTs.getTime() - i * TF_MS).toISOString());
+  }
+  return out;
+}
+
+/**
+ * Fetch exactly the four required prior candles by exact `candle_ts` match,
+ * scoped to the canonical stream. Never substitutes older confirmed rows for
+ * a missing exact timestamp. Returns the rows (oldest→newest) plus the list
+ * of any missing timestamps.
+ */
+async function fetchExactPriorTimestamps(
   sb: SupabaseClient,
   targetTs: Date,
-  limit: number,
-): Promise<PriorCandleRow[]> {
-  let q = sb
+): Promise<{ rows: PriorCandleRow[]; missing: string[] }> {
+  const expected = requiredPriorTimestamps(targetTs);
+  const { data } = await sb
     .from("candles")
     .select("id, candle_ts, open, high, low, close, fetch_source, confirm")
     .eq("symbol", A96_CANDLE_STREAM.symbol)
     .eq("timeframe", A96_CANDLE_STREAM.timeframe)
+    .eq("fetch_source", A96_CANDLE_STREAM.provider)
     .eq("confirm", true)
-    .lt("candle_ts", targetTs.toISOString())
-    .order("candle_ts", { ascending: false })
-    .limit(limit);
-  // Scope to canonical provider when the column exists.
-  q = q.eq("fetch_source", A96_CANDLE_STREAM.provider);
-  const { data } = await q;
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
-  return rows
-    .map((r) => ({
+    .in("candle_ts", expected);
+  const rowsRaw = (data ?? []) as Array<Record<string, unknown>>;
+  const byTs = new Map<string, PriorCandleRow>();
+  for (const r of rowsRaw) {
+    const iso = new Date(String(r.candle_ts)).toISOString();
+    if (!expected.includes(iso)) continue; // never substitute unrelated candles
+    if (byTs.has(iso)) continue; // stream is UNIQUE(symbol,tf,ts,source); dedupe defensively
+    byTs.set(iso, {
       id: String(r.id),
       candle: {
-        timestamp: new Date(String(r.candle_ts)),
+        timestamp: new Date(iso),
         open: Number(r.open),
         high: Number(r.high),
         low: Number(r.low),
         close: Number(r.close),
       },
-    }))
-    .sort((a, b) => a.candle.timestamp.getTime() - b.candle.timestamp.getTime());
+    });
+  }
+  const rows: PriorCandleRow[] = [];
+  const missing: string[] = [];
+  for (const ts of expected) {
+    const row = byTs.get(ts);
+    if (row) rows.push(row); else missing.push(ts);
+  }
+  return { rows, missing };
 }
 
 /**
- * Retry-poll the prior-candle read so a slow ingester (which lags a few
- * hundred ms after boundary) does not cause spurious ABSTAINs. Bounded by
- * A96_PRIOR_CANDLE_POLL_ATTEMPTS.
+ * Trigger a canonical OKX ingest refresh so the exact required T-15m row
+ * becomes available in `public.candles`. Best-effort: network failures
+ * are swallowed so the poll loop can retry. Skipped under Vitest to keep
+ * the test suite hermetic.
  */
-async function pollPriorCandles(
+async function refreshCanonicalCandleIngest(sb: SupabaseClient): Promise<void> {
+  if (process.env.VITEST) return;
+  try {
+    const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
+    await fetchAndUpsertCandles(sb);
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Poll for the four exact prior candles, refreshing the OKX ingest between
+ * attempts. Returns as soon as all four are present, otherwise after the
+ * bounded window.
+ */
+async function pollExactPriorCandles(
   sb: SupabaseClient,
   targetTs: Date,
-): Promise<PriorCandleRow[]> {
-  const need = A96_CONFIG.required_prior_candles;
-  const previousBoundary = new Date(targetTs.getTime() - TF_MS).getTime();
-  for (let attempt = 0; attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS; attempt++) {
-    const rows = await fetchPriorCandlesScoped(sb, targetTs, need);
-    const last = rows[rows.length - 1];
-    if (rows.length >= need && last && last.candle.timestamp.getTime() === previousBoundary) {
-      return rows;
-    }
-    if (attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS - 1) {
-      await new Promise((r) => setTimeout(r, A96_PRIOR_CANDLE_POLL_INTERVAL_MS));
+): Promise<{ rows: PriorCandleRow[]; missing: string[]; attempts: number }> {
+  const attemptsMax = __POLL_OVERRIDE?.attempts ?? A96_PRIOR_CANDLE_POLL_ATTEMPTS;
+  const intervalMs = __POLL_OVERRIDE?.intervalMs ?? A96_PRIOR_CANDLE_POLL_INTERVAL_MS;
+  let last: { rows: PriorCandleRow[]; missing: string[] } = { rows: [], missing: requiredPriorTimestamps(targetTs) };
+  for (let attempt = 0; attempt < attemptsMax; attempt++) {
+    if (attempt > 0) await refreshCanonicalCandleIngest(sb);
+    last = await fetchExactPriorTimestamps(sb, targetTs);
+    if (last.missing.length === 0) return { ...last, attempts: attempt + 1 };
+    if (attempt < attemptsMax - 1) {
+      await new Promise((r) => setTimeout(r, intervalMs));
     }
   }
-  return fetchPriorCandlesScoped(sb, targetTs, need);
+  return { ...last, attempts: attemptsMax };
 }
 
 interface CandleValidation {
@@ -158,11 +204,19 @@ interface CandleValidation {
 
 function validatePriorCandleStream(args: {
   rows: PriorCandleRow[];
+  missing: string[];
   targetTs: Date;
   targetOpen: number;
 }): CandleValidation {
   const need = A96_CONFIG.required_prior_candles;
-  if (args.rows.length < need) {
+  if (args.missing.length > 0) {
+    return {
+      valid: false,
+      reason: `missing_prior_timestamps:${args.missing.length}/${need}`,
+      target_open_difference_bps: null,
+    };
+  }
+  if (args.rows.length !== need) {
     return { valid: false, reason: `insufficient_prior_candles:${args.rows.length}/${need}`, target_open_difference_bps: null };
   }
   for (let i = 1; i < args.rows.length; i++) {
@@ -261,19 +315,22 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
       return false;
     }
     // Resolution-time consistency: actual_open vs stored target_open.
+    // Always persist the numeric difference (even below threshold) so the
+    // CSV always has open-vs-actual audit data.
     const storedTargetOpen = r.target_open == null ? null : Number(r.target_open);
     const storedProvider = r.candle_provider ? String(r.candle_provider) : A96_CANDLE_STREAM.provider;
     let resolution_data_invalid = false;
     let resolution_error: string | null = null;
+    let target_open_difference_bps: number | null = null;
     if (storedProvider !== ohlc.provider) {
       resolution_data_invalid = true;
       resolution_error = `provider_mismatch:${storedProvider}->${ohlc.provider}`;
     }
     if (storedTargetOpen != null && storedTargetOpen > 0) {
-      const diffBps = Math.abs((ohlc.open - storedTargetOpen) / storedTargetOpen) * 10_000;
-      if (diffBps > A96_RESOLUTION_OPEN_TOLERANCE_BPS) {
+      target_open_difference_bps = Math.abs((ohlc.open - storedTargetOpen) / storedTargetOpen) * 10_000;
+      if (target_open_difference_bps > A96_RESOLUTION_OPEN_TOLERANCE_BPS) {
         resolution_data_invalid = true;
-        resolution_error = `actual_open_vs_target_open_${diffBps.toFixed(2)}bps`;
+        resolution_error = `actual_open_vs_target_open_${target_open_difference_bps.toFixed(2)}bps`;
       }
     }
     const { data: rpc, error } = await sb.rpc("resolve_a96_prediction", {
@@ -294,10 +351,17 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
       return false;
     }
     // Stamp resolution audit fields (RPC already set actual_*).
+    // Always store target_open_difference_bps (numeric or null), and only
+    // demote prospective_valid on resolution when resolution_data_invalid.
     await sb.from("a96_predictions").update({
       target_candle_row_id: ohlc.id,
       resolution_candle_row_id: ohlc.id,
       resolution_data_invalid,
+      target_open_difference_bps,
+      ...(resolution_data_invalid ? {
+        prospective_valid: false,
+        prospective_invalid_reason: resolution_error ?? "RESOLUTION_DATA_INVALID",
+      } : {}),
       ...(resolution_error ? { last_resolution_error: resolution_error.slice(0, 500) } : {}),
     } as never).eq("prediction_id", predictionId);
     return true;
@@ -359,8 +423,11 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     // Freshly load fit-episode state AFTER catch-up resolution.
     const fitState = await getOrMintFitEpisode(sb, artifactFitId);
 
-    // Canonical-stream, finalized, retry-polled prior candles.
-    const priorRows = await pollPriorCandles(sb, targetTs);
+    // Canonical-stream, exact-timestamp, finalized, retry-polled prior candles.
+    // Poll refreshes OKX ingest between attempts so the exact required T-15m
+    // row can be written to `public.candles` before we give up.
+    const poll = await pollExactPriorCandles(sb, targetTs);
+    const priorRows = poll.rows;
     const priorCandles: Candle[] = priorRows.map((r) => r.candle);
     const priorRowIds: string[] = priorRows.map((r) => r.id);
     const priorSnapshot = priorRows.map((r) => ({
@@ -370,7 +437,20 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       open: r.candle.open, high: r.candle.high, low: r.candle.low, close: r.candle.close,
     }));
 
-    const streamCheck = validatePriorCandleStream({ rows: priorRows, targetTs, targetOpen });
+    const streamCheck = validatePriorCandleStream({ rows: priorRows, missing: poll.missing, targetTs, targetOpen });
+
+    // Prospective-validity invariant. Only rows with fully consistent
+    // prediction-time candle data may participate in the prospective
+    // evaluation. Resolution-time drift can further demote a row.
+    const prospectiveValid =
+      streamCheck.valid === true &&
+      priorRowIds.length === A96_CONFIG.required_prior_candles &&
+      A96_CANDLE_STREAM.provider === "okx";
+    const prospectiveInvalidReason = prospectiveValid
+      ? null
+      : (poll.missing.length > 0
+          ? "FINALIZED_PRIOR_CANDLE_UNAVAILABLE"
+          : (streamCheck.reason ?? "INVALID_CANDLE_DATA"));
 
     const streamAudit = {
       candle_symbol: A96_CANDLE_STREAM.symbol,
@@ -381,15 +461,18 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       candle_data_invalid_reason: streamCheck.reason,
       target_open_difference_bps: streamCheck.target_open_difference_bps,
       prior_candles_snapshot: priorSnapshot,
-      // A fresh prospective episode has been started; every new row is valid
-      // for the prospective evaluation from this point forward.
-      prospective_valid: true,
-      prospective_invalid_reason: null,
+      prospective_valid: prospectiveValid,
+      prospective_invalid_reason: prospectiveInvalidReason,
     };
 
-    // Fail-closed: if the candle data pipeline is inconsistent, ABSTAIN and
-    // record the reason. Do not touch the engine or fit-state counters.
+    // Fail-closed: if the exact prior candles are unavailable or the data
+    // pipeline is inconsistent, ABSTAIN with the specific reason. Do not
+    // touch the engine or fit-state counters. Rows with candle_data_valid
+    // === false always have prospective_valid === false (invariant above).
     if (!streamCheck.valid) {
+      const reason = poll.missing.length > 0
+        ? "ABSTAIN_INVALID_CANDLE_DATA"
+        : `INVALID_CANDLE_DATA:${streamCheck.reason ?? "unknown"}`;
       const { error: absErr } = await sb.from("a96_predictions").upsert({
         prediction_id: predictionId,
         source_prediction_id: predictionId,
@@ -403,7 +486,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         base_selected_layer: base,
         selected_layer: "NONE",
         final_prediction: "ABSTAIN",
-        decision_reason: `INVALID_CANDLE_DATA:${streamCheck.reason ?? "unknown"}`,
+        decision_reason: reason,
         fit_selector_override_fired: false,
         agreement_veto_fired: false,
         distance_from_4_candle_low_bps: null,
