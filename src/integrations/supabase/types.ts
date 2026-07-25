@@ -2179,6 +2179,30 @@ export type Database = {
         }
         Relationships: []
       }
+      td1_rc_visual_stats_reset: {
+        Row: {
+          created_at: string
+          id: number
+          reason: string | null
+          reset_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          reason?: string | null
+          reset_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          reason?: string | null
+          reset_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       webhook_deliveries: {
         Row: {
           attempt: number
