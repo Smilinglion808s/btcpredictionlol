@@ -606,9 +606,14 @@ function StatsPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>a96 (a96-r1)</span>
-            <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
-              {exportingA96 ? "Exporting…" : "CSV (a96)"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
+                {exportingA96 ? "Exporting…" : "CSV (a96)"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={doResetA96Stats} disabled={resettingA96}>
+                {resettingA96 ? "Resetting…" : "Reset stats"}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
