@@ -28,7 +28,9 @@ export const A96_CANDLE_STREAM = {
 export const A96_TARGET_OPEN_TOLERANCE_BPS = 30;
 export const A96_RESOLUTION_OPEN_TOLERANCE_BPS = 50;
 
-// Retry-poll for the immediately-prior candle if it has not been finalized
-// by the ingester yet at prediction time.
-export const A96_PRIOR_CANDLE_POLL_ATTEMPTS = 8;
-export const A96_PRIOR_CANDLE_POLL_INTERVAL_MS = 400;
+// Retry-poll for the immediately-prior canonical candle. OKX + ingestion
+// commonly lag ~30-60s after boundary, so this is bounded at 30 × 3000ms
+// (~90s). Each retry (attempt > 0) first triggers a canonical OKX ingest
+// refresh so the exact required T-15m row can appear in `public.candles`.
+export const A96_PRIOR_CANDLE_POLL_ATTEMPTS = 30;
+export const A96_PRIOR_CANDLE_POLL_INTERVAL_MS = 3000;
