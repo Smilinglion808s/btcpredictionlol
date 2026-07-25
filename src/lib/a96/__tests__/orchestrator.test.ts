@@ -431,7 +431,7 @@ describe("a96 candle-data-integrity guard", () => {
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
-    expect(row.candle_data_invalid_reason).toMatch(/insufficient_prior_candles/);
+    expect(row.candle_data_invalid_reason).toMatch(/missing_prior_timestamps/);
     expect(row.final_prediction).toBe("ABSTAIN");
     expect(row.decision_reason).toMatch(/INVALID_CANDLE_DATA/);
     expect(row.candle_symbol).toBe("BTC-USDT");
