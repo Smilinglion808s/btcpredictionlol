@@ -192,8 +192,10 @@ function seedFit(state: any, fitId: string) {
 
 function seedCandle(state: any, ts: string, o: number, h: number, l: number, c: number) {
   state.candles.set(ts, {
+    id: `cand-${ts}`,
     candle_ts: ts, symbol: "BTC-USDT", timeframe: "15m",
     open: o, high: h, low: l, close: c, volume: 100, confirm: true,
+    fetch_source: "okx",
   });
 }
 
