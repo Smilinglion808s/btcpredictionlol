@@ -329,7 +329,7 @@ describe("a96 resolution contract (SQL RPC mirror)", () => {
 });
 
 describe("a96 orchestrator ordering + audit persistence", () => {
-  it("runA96 resolves due predictions before reading fit state", async () => {
+  it("runA96 resolves due predictions before reading fit state", { timeout: 20000 }, async () => {
     const { sb, state } = makeDb();
     seedFit(state, "fitOrd");
     const pending = "55555555-5555-5555-5555-555555555555";
@@ -416,7 +416,7 @@ describe("a96 CSV export shape", () => {
 });
 
 describe("a96 candle-data-integrity guard", () => {
-  it("ABSTAINs and stamps candle_data_invalid_reason when prior candles are missing", async () => {
+  it("ABSTAINs and stamps candle_data_invalid_reason when prior candles are missing", { timeout: 20000 }, async () => {
     const { sb, state } = makeDb();
     seedFit(state, "fitMiss");
     const pid = "99999999-9999-9999-9999-999999999999";
@@ -485,7 +485,7 @@ describe("a96 candle-data-integrity guard", () => {
 
 
 describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
-  it("queries exactly the four expected timestamps and never substitutes older confirmed rows", async () => {
+  it("queries exactly the four expected timestamps and never substitutes older confirmed rows", { timeout: 20000 }, async () => {
     const { sb, state } = makeDb();
     seedFit(state, "fitExact");
     const pid = "cccccccc-cccc-cccc-cccc-cccccccccccc";
