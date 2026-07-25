@@ -351,7 +351,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
     const newTargetTs = "2026-07-24T21:00:00.000Z";
     seedAasAndSourcePrediction(state, { predictionId: newPid, targetTs: newTargetTs, open: 200, layerA: "GREEN", layerB: "RED", base: "A" });
 
-    vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
+    vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
     await runA96(sb, newPid);
     const order = state.resolveDueCalledBeforeFitRead;
     const firstFitRead = order.indexOf("fitRead");
