@@ -182,16 +182,18 @@ async function pollExactPriorCandles(
   sb: SupabaseClient,
   targetTs: Date,
 ): Promise<{ rows: PriorCandleRow[]; missing: string[]; attempts: number }> {
+  const attemptsMax = __POLL_OVERRIDE?.attempts ?? A96_PRIOR_CANDLE_POLL_ATTEMPTS;
+  const intervalMs = __POLL_OVERRIDE?.intervalMs ?? A96_PRIOR_CANDLE_POLL_INTERVAL_MS;
   let last: { rows: PriorCandleRow[]; missing: string[] } = { rows: [], missing: requiredPriorTimestamps(targetTs) };
-  for (let attempt = 0; attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < attemptsMax; attempt++) {
     if (attempt > 0) await refreshCanonicalCandleIngest(sb);
     last = await fetchExactPriorTimestamps(sb, targetTs);
     if (last.missing.length === 0) return { ...last, attempts: attempt + 1 };
-    if (attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS - 1) {
-      await new Promise((r) => setTimeout(r, A96_PRIOR_CANDLE_POLL_INTERVAL_MS));
+    if (attempt < attemptsMax - 1) {
+      await new Promise((r) => setTimeout(r, intervalMs));
     }
   }
-  return { ...last, attempts: A96_PRIOR_CANDLE_POLL_ATTEMPTS };
+  return { ...last, attempts: attemptsMax };
 }
 
 interface CandleValidation {
