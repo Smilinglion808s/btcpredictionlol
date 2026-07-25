@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, resetA96VisualStats } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -50,9 +50,11 @@ function StatsPage() {
   const a96PendingFn = useServerFn(getA96Pending);
   const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportA96Fn = useServerFn(exportA96Csv);
+  const resetA96Fn = useServerFn(resetA96VisualStats);
 
   const [exportingAas96, setExportingAas96] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
+  const [resettingA96, setResettingA96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
@@ -67,6 +69,17 @@ function StatsPage() {
       triggerDownload(rowsToCsv(rows as any[]), `a96-${stamp()}.csv`);
     } finally {
       setExportingA96(false);
+    }
+  }
+
+  async function doResetA96Stats() {
+    if (!confirm("Reset a96 visual stats to zero? The CSV export will keep all historical rows.")) return;
+    try {
+      setResettingA96(true);
+      await resetA96Fn();
+      qc.invalidateQueries({ queryKey: ["a96-stats"] });
+    } finally {
+      setResettingA96(false);
     }
   }
 
@@ -593,9 +606,14 @@ function StatsPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>a96 (a96-r1)</span>
-            <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
-              {exportingA96 ? "Exporting…" : "CSV (a96)"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
+                {exportingA96 ? "Exporting…" : "CSV (a96)"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={doResetA96Stats} disabled={resettingA96}>
+                {resettingA96 ? "Resetting…" : "Reset stats"}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">

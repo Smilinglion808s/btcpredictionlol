@@ -241,6 +241,24 @@ export type Database = {
           },
         ]
       }
+      a96_visual_stats_reset: {
+        Row: {
+          id: number
+          reason: string | null
+          reset_at: string
+        }
+        Insert: {
+          id?: number
+          reason?: string | null
+          reset_at?: string
+        }
+        Update: {
+          id?: number
+          reason?: string | null
+          reset_at?: string
+        }
+        Relationships: []
+      }
       api_runs: {
         Row: {
           created_at: string

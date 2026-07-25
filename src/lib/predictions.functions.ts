@@ -1382,16 +1382,26 @@ export const exportModel6Predictions = createServerFn({ method: "GET" }).handler
 
 
 /** a96-r1 stats: totals, wins, losses, abstains, override + agreement veto counts,
- *  active fit episode state. Reads from a96_predictions + a96_fit_state. */
+ *  active fit episode state. Reads from a96_predictions + a96_fit_state.
+ *  Visual stats honor a96_visual_stats_reset.reset_at so users can refresh the
+ *  Stats page without deleting the underlying audit rows (CSV export stays full). */
 export const getA96Stats = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const PAGE = 1000;
+  const { data: resetRow } = await sb
+    .from("a96_visual_stats_reset")
+    .select("reset_at")
+    .eq("id", 1)
+    .maybeSingle();
+  const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
   const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0 };
   for (let from = 0; ; from += PAGE) {
-    const { data } = await sb
+    let q = sb
       .from("a96_predictions")
-      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,actual_direction")
+      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,actual_direction,prediction_created_at")
       .range(from, from + PAGE - 1);
+    if (resetAt) q = q.gt("prediction_created_at", resetAt);
+    const { data } = await q;
     if (!data || data.length === 0) break;
     for (const r of data as Array<Record<string, unknown>>) {
       c.total += 1;
@@ -1419,6 +1429,16 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
     win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
     active_episode: active ?? null,
   };
+});
+
+/** Visual-only reset for a96 Stats page counters. CSV export remains unchanged. */
+export const resetA96VisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { error } = await sb
+    .from("a96_visual_stats_reset")
+    .upsert({ id: 1, reset_at: new Date().toISOString(), reason: "user-ui-reset" }, { onConflict: "id" });
+  if (error) throw error;
+  return { ok: true, reset_at: new Date().toISOString() };
 });
 
 export const getA96Pending = createServerFn({ method: "GET" }).handler(async () => {
