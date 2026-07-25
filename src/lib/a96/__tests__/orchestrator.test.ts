@@ -393,7 +393,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
     seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
     for (let i = 4; i >= 1; i--) {
       const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
-      seedCandle(state, ts, 190 + i, 195 + i, 185 + i, 192 + i);
+      seedCandle(state, ts, 199, 201, 198, 200);
     }
     vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
