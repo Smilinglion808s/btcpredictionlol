@@ -577,7 +577,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
           .eq("prediction_id", predictionId)
           .maybeSingle();
         if (a96Row) {
-          const { deliverWebhook, buildA96WebhookPayload } = await import("../../lib/webhooks.server");
+          const { deliverWebhook, buildA96WebhookPayload } = await import("../webhooks.server");
           const payload = buildA96WebhookPayload({
             a96Row: a96Row as Record<string, unknown>,
             prediction: pred as unknown as Record<string, unknown>,
