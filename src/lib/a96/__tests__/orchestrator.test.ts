@@ -4,9 +4,12 @@
 // no-op on counters, updates the prediction's ORIGINAL fit_episode_id).
 // Orchestrator tests use these mocks to prove the acceptance criteria.
 
-import { describe, it, expect, vi } from "vitest";
-import { runA96, resolveDueA96Predictions } from "../orchestrator";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { runA96, resolveDueA96Predictions, __setA96PollForTests } from "../orchestrator";
 import { authoritativeDirection, scoreDirection } from "../engine";
+
+beforeAll(() => __setA96PollForTests({ attempts: 2, intervalMs: 1 }));
+afterAll(() => __setA96PollForTests(null));
 
 type Row = Record<string, any>;
 
