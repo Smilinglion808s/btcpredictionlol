@@ -1489,3 +1489,41 @@ export const exportA96Csv = createServerFn({ method: "GET" }).handler(async () =
   }
   return out;
 });
+
+/** Combined CSV export: a96 (a96-r1) + legacy AAS96 shadow rows in one file.
+ *  The `source` column distinguishes "a96" from "aas96"; all other columns are
+ *  left as-is and unioned by the CSV renderer so every tracking field is preserved. */
+export const exportA96CombinedCsv = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+
+  const a96Rows: Record<string, any>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("a96_predictions")
+      .select("*")
+      .order("target_candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<Record<string, any>>) {
+      a96Rows.push({ ...r, source: "a96" });
+    }
+    if (data.length < PAGE) break;
+  }
+
+  const aas96Rows: Record<string, any>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("model7_aas96_shadow")
+      .select("*")
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<Record<string, any>>) {
+      aas96Rows.push({ ...r, source: "aas96" });
+    }
+    if (data.length < PAGE) break;
+  }
+
+  return [...a96Rows, ...aas96Rows];
+});

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, resetA96VisualStats, resetTd1RcVisualStats } from "@/lib/predictions.functions";
+import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, exportA96CombinedCsv, resetA96VisualStats, resetTd1RcVisualStats } from "@/lib/predictions.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -50,11 +50,13 @@ function StatsPage() {
   const a96PendingFn = useServerFn(getA96Pending);
   const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportA96Fn = useServerFn(exportA96Csv);
+  const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const [exportingAas96, setExportingAas96] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
+  const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
@@ -71,6 +73,17 @@ function StatsPage() {
       triggerDownload(rowsToCsv(rows as any[]), `a96-${stamp()}.csv`);
     } finally {
       setExportingA96(false);
+    }
+  }
+
+  async function downloadA96CombinedCsv() {
+    try {
+      setExportingA96Combined(true);
+      const rows = await exportA96CombinedFn();
+      if (rows.length === 0) { alert("No a96 / AAS96 rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `a96-combined-${stamp()}.csv`);
+    } finally {
+      setExportingA96Combined(false);
     }
   }
 
@@ -629,6 +642,9 @@ function StatsPage() {
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
                 {exportingA96 ? "Exporting…" : "CSV (a96)"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={downloadA96CombinedCsv} disabled={exportingA96Combined}>
+                {exportingA96Combined ? "Exporting…" : "CSV (a96 + AAS96)"}
               </Button>
               <Button size="sm" variant="outline" onClick={doResetA96Stats} disabled={resettingA96}>
                 {resettingA96 ? "Resetting…" : "Reset stats"}
