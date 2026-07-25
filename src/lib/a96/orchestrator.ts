@@ -93,61 +93,97 @@ interface PriorCandleRow {
   candle: Candle;
 }
 
-/** Fetch the last N confirmed prior candles for the canonical stream, oldest→newest. */
-async function fetchPriorCandlesScoped(
+/**
+ * Compute the four exact required prior-candle timestamps for a given target,
+ * as ISO strings ordered oldest → newest: [T-60m, T-45m, T-30m, T-15m].
+ */
+function requiredPriorTimestamps(targetTs: Date): string[] {
+  const need = A96_CONFIG.required_prior_candles;
+  const out: string[] = [];
+  for (let i = need; i >= 1; i--) {
+    out.push(new Date(targetTs.getTime() - i * TF_MS).toISOString());
+  }
+  return out;
+}
+
+/**
+ * Fetch exactly the four required prior candles by exact `candle_ts` match,
+ * scoped to the canonical stream. Never substitutes older confirmed rows for
+ * a missing exact timestamp. Returns the rows (oldest→newest) plus the list
+ * of any missing timestamps.
+ */
+async function fetchExactPriorTimestamps(
   sb: SupabaseClient,
   targetTs: Date,
-  limit: number,
-): Promise<PriorCandleRow[]> {
-  let q = sb
+): Promise<{ rows: PriorCandleRow[]; missing: string[] }> {
+  const expected = requiredPriorTimestamps(targetTs);
+  const { data } = await sb
     .from("candles")
     .select("id, candle_ts, open, high, low, close, fetch_source, confirm")
     .eq("symbol", A96_CANDLE_STREAM.symbol)
     .eq("timeframe", A96_CANDLE_STREAM.timeframe)
+    .eq("fetch_source", A96_CANDLE_STREAM.provider)
     .eq("confirm", true)
-    .lt("candle_ts", targetTs.toISOString())
-    .order("candle_ts", { ascending: false })
-    .limit(limit);
-  // Scope to canonical provider when the column exists.
-  q = q.eq("fetch_source", A96_CANDLE_STREAM.provider);
-  const { data } = await q;
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
-  return rows
-    .map((r) => ({
+    .in("candle_ts", expected);
+  const rowsRaw = (data ?? []) as Array<Record<string, unknown>>;
+  const byTs = new Map<string, PriorCandleRow>();
+  for (const r of rowsRaw) {
+    const iso = new Date(String(r.candle_ts)).toISOString();
+    if (!expected.includes(iso)) continue; // never substitute unrelated candles
+    if (byTs.has(iso)) continue; // stream is UNIQUE(symbol,tf,ts,source); dedupe defensively
+    byTs.set(iso, {
       id: String(r.id),
       candle: {
-        timestamp: new Date(String(r.candle_ts)),
+        timestamp: new Date(iso),
         open: Number(r.open),
         high: Number(r.high),
         low: Number(r.low),
         close: Number(r.close),
       },
-    }))
-    .sort((a, b) => a.candle.timestamp.getTime() - b.candle.timestamp.getTime());
+    });
+  }
+  const rows: PriorCandleRow[] = [];
+  const missing: string[] = [];
+  for (const ts of expected) {
+    const row = byTs.get(ts);
+    if (row) rows.push(row); else missing.push(ts);
+  }
+  return { rows, missing };
 }
 
 /**
- * Retry-poll the prior-candle read so a slow ingester (which lags a few
- * hundred ms after boundary) does not cause spurious ABSTAINs. Bounded by
- * A96_PRIOR_CANDLE_POLL_ATTEMPTS.
+ * Trigger a canonical OKX ingest refresh so the exact required T-15m row
+ * becomes available in `public.candles`. Best-effort: network failures
+ * are swallowed so the poll loop can retry. Skipped under Vitest to keep
+ * the test suite hermetic.
  */
-async function pollPriorCandles(
+async function refreshCanonicalCandleIngest(sb: SupabaseClient): Promise<void> {
+  if (process.env.VITEST) return;
+  try {
+    const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
+    await fetchAndUpsertCandles(sb);
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Poll for the four exact prior candles, refreshing the OKX ingest between
+ * attempts. Returns as soon as all four are present, otherwise after the
+ * bounded window.
+ */
+async function pollExactPriorCandles(
   sb: SupabaseClient,
   targetTs: Date,
-): Promise<PriorCandleRow[]> {
-  const need = A96_CONFIG.required_prior_candles;
-  const previousBoundary = new Date(targetTs.getTime() - TF_MS).getTime();
+): Promise<{ rows: PriorCandleRow[]; missing: string[]; attempts: number }> {
+  let last: { rows: PriorCandleRow[]; missing: string[] } = { rows: [], missing: requiredPriorTimestamps(targetTs) };
   for (let attempt = 0; attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS; attempt++) {
-    const rows = await fetchPriorCandlesScoped(sb, targetTs, need);
-    const last = rows[rows.length - 1];
-    if (rows.length >= need && last && last.candle.timestamp.getTime() === previousBoundary) {
-      return rows;
-    }
+    if (attempt > 0) await refreshCanonicalCandleIngest(sb);
+    last = await fetchExactPriorTimestamps(sb, targetTs);
+    if (last.missing.length === 0) return { ...last, attempts: attempt + 1 };
     if (attempt < A96_PRIOR_CANDLE_POLL_ATTEMPTS - 1) {
       await new Promise((r) => setTimeout(r, A96_PRIOR_CANDLE_POLL_INTERVAL_MS));
     }
   }
-  return fetchPriorCandlesScoped(sb, targetTs, need);
+  return { ...last, attempts: A96_PRIOR_CANDLE_POLL_ATTEMPTS };
 }
 
 interface CandleValidation {
@@ -158,11 +194,19 @@ interface CandleValidation {
 
 function validatePriorCandleStream(args: {
   rows: PriorCandleRow[];
+  missing: string[];
   targetTs: Date;
   targetOpen: number;
 }): CandleValidation {
   const need = A96_CONFIG.required_prior_candles;
-  if (args.rows.length < need) {
+  if (args.missing.length > 0) {
+    return {
+      valid: false,
+      reason: `missing_prior_timestamps:${args.missing.length}/${need}`,
+      target_open_difference_bps: null,
+    };
+  }
+  if (args.rows.length !== need) {
     return { valid: false, reason: `insufficient_prior_candles:${args.rows.length}/${need}`, target_open_difference_bps: null };
   }
   for (let i = 1; i < args.rows.length; i++) {
