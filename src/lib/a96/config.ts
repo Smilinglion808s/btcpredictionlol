@@ -13,3 +13,22 @@ export const A96_CONFIG = {
   expected_candle_seconds: 900,
   abstain_on_unusable_agreement_history: true,
 } as const;
+
+// Canonical candle stream. All a96-r1 operations must read from this single
+// (symbol, timeframe, provider) tuple and require confirm=true.
+export const A96_CANDLE_STREAM = {
+  symbol: "BTC-USDT",
+  timeframe: "15m",
+  provider: "okx",
+} as const;
+
+// Consistency tolerances (basis points, target_open vs prior candle close /
+// vs resolved actual_open). Anything beyond these is treated as a
+// cross-stream / staleness fault, not a normal spot drift.
+export const A96_TARGET_OPEN_TOLERANCE_BPS = 30;
+export const A96_RESOLUTION_OPEN_TOLERANCE_BPS = 50;
+
+// Retry-poll for the immediately-prior candle if it has not been finalized
+// by the ingester yet at prediction time.
+export const A96_PRIOR_CANDLE_POLL_ATTEMPTS = 8;
+export const A96_PRIOR_CANDLE_POLL_INTERVAL_MS = 400;

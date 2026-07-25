@@ -27,6 +27,7 @@ export type Database = {
           layer_b_losses: number
           layer_b_net: number
           layer_b_wins: number
+          reset_reason: string | null
           updated_at: string
         }
         Insert: {
@@ -41,6 +42,7 @@ export type Database = {
           layer_b_losses?: number
           layer_b_net?: number
           layer_b_wins?: number
+          reset_reason?: string | null
           updated_at?: string
         }
         Update: {
@@ -55,6 +57,7 @@ export type Database = {
           layer_b_losses?: number
           layer_b_net?: number
           layer_b_wins?: number
+          reset_reason?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -73,6 +76,11 @@ export type Database = {
           base_result_score: number | null
           base_selected_layer: string
           body_ratio_veto_condition: boolean
+          candle_data_invalid_reason: string | null
+          candle_data_valid: boolean | null
+          candle_provider: string | null
+          candle_symbol: string | null
+          candle_timeframe: string | null
           decision_reason: string
           distance_from_4_candle_low_bps: number | null
           distance_veto_condition: boolean
@@ -95,14 +103,21 @@ export type Database = {
           model_version: string
           prediction_created_at: string
           prediction_id: string
+          prior_candle_row_ids: string[] | null
           prior_candles_snapshot: Json | null
+          prospective_invalid_reason: string | null
+          prospective_valid: boolean
           resolution_attempt_count: number
+          resolution_candle_row_id: string | null
+          resolution_data_invalid: boolean
           resolved_at: string | null
           result_score: number | null
           selected_layer: string
           source_prediction_id: string | null
+          target_candle_row_id: string | null
           target_candle_ts: string
           target_open: number | null
+          target_open_difference_bps: number | null
         }
         Insert: {
           actual_close?: number | null
@@ -117,6 +132,11 @@ export type Database = {
           base_result_score?: number | null
           base_selected_layer: string
           body_ratio_veto_condition?: boolean
+          candle_data_invalid_reason?: string | null
+          candle_data_valid?: boolean | null
+          candle_provider?: string | null
+          candle_symbol?: string | null
+          candle_timeframe?: string | null
           decision_reason: string
           distance_from_4_candle_low_bps?: number | null
           distance_veto_condition?: boolean
@@ -139,14 +159,21 @@ export type Database = {
           model_version?: string
           prediction_created_at?: string
           prediction_id: string
+          prior_candle_row_ids?: string[] | null
           prior_candles_snapshot?: Json | null
+          prospective_invalid_reason?: string | null
+          prospective_valid?: boolean
           resolution_attempt_count?: number
+          resolution_candle_row_id?: string | null
+          resolution_data_invalid?: boolean
           resolved_at?: string | null
           result_score?: number | null
           selected_layer: string
           source_prediction_id?: string | null
+          target_candle_row_id?: string | null
           target_candle_ts: string
           target_open?: number | null
+          target_open_difference_bps?: number | null
         }
         Update: {
           actual_close?: number | null
@@ -161,6 +188,11 @@ export type Database = {
           base_result_score?: number | null
           base_selected_layer?: string
           body_ratio_veto_condition?: boolean
+          candle_data_invalid_reason?: string | null
+          candle_data_valid?: boolean | null
+          candle_provider?: string | null
+          candle_symbol?: string | null
+          candle_timeframe?: string | null
           decision_reason?: string
           distance_from_4_candle_low_bps?: number | null
           distance_veto_condition?: boolean
@@ -183,14 +215,21 @@ export type Database = {
           model_version?: string
           prediction_created_at?: string
           prediction_id?: string
+          prior_candle_row_ids?: string[] | null
           prior_candles_snapshot?: Json | null
+          prospective_invalid_reason?: string | null
+          prospective_valid?: boolean
           resolution_attempt_count?: number
+          resolution_candle_row_id?: string | null
+          resolution_data_invalid?: boolean
           resolved_at?: string | null
           result_score?: number | null
           selected_layer?: string
           source_prediction_id?: string | null
+          target_candle_row_id?: string | null
           target_candle_ts?: string
           target_open?: number | null
+          target_open_difference_bps?: number | null
         }
         Relationships: [
           {
@@ -2282,6 +2321,7 @@ export type Database = {
           layer_b_losses: number
           layer_b_net: number
           layer_b_wins: number
+          reset_reason: string | null
           updated_at: string
         }[]
         SetofOptions: {
