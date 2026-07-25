@@ -544,9 +544,14 @@ function StatsPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>TD1-RC Shadow (A2 Combined + TD1 Veto & Containment)</span>
-            <Button size="sm" variant="outline" onClick={downloadTd1Csv} disabled={exportingTd1}>
-              {exportingTd1 ? "Exporting…" : "CSV (TD1-RC)"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" className="h-8 text-muted-foreground hover:text-foreground" onClick={doResetTd1Stats} disabled={resettingTd1}>
+                {resettingTd1 ? "Resetting…" : "Reset Visual"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={downloadTd1Csv} disabled={exportingTd1}>
+                {exportingTd1 ? "Exporting…" : "CSV (TD1-RC)"}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
