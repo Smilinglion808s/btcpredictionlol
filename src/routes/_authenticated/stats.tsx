@@ -54,6 +54,7 @@ function StatsPage() {
 
   const [exportingAas96, setExportingAas96] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
+  const [resettingA96, setResettingA96] = useState(false);
   type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
   const [exporting, setExporting] = useState<null | ExportScope>(null);
   const [exportingTd1, setExportingTd1] = useState(false);
