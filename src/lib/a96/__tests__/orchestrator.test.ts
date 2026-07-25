@@ -353,7 +353,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
     const newTargetTs = "2026-07-24T21:00:00.000Z";
     seedAasAndSourcePrediction(state, { predictionId: newPid, targetTs: newTargetTs, open: 200, layerA: "GREEN", layerB: "RED", base: "A" });
 
-    vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 }); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
     await runA96(sb, newPid);
     const order = state.resolveDueCalledBeforeFitRead;
     const firstFitRead = order.indexOf("fitRead");
@@ -423,7 +423,7 @@ describe("a96 candle-data-integrity guard", () => {
     const targetTs = "2026-07-24T21:00:00.000Z";
     seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
     // NO prior candles seeded. Retry-poll returns empty; guard must abstain.
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
@@ -448,7 +448,7 @@ describe("a96 candle-data-integrity guard", () => {
       const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
       seedCandle(state, ts, 180, 182, 178, 180);
     }
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
@@ -469,7 +469,7 @@ describe("a96 candle-data-integrity guard", () => {
       const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
       seedCandle(state, ts, 199, 201, 198, 200);
     }
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
@@ -497,7 +497,7 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
       const ts = new Date(new Date(targetTs).getTime() - i * 900_000 - 3 * 24 * 60 * 60 * 1000).toISOString();
       seedCandle(state, ts, 199, 201, 198, 200);
     }
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
@@ -520,7 +520,7 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
       const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
       seedCandle(state, ts, 180, 182, 178, 180);
     }
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
