@@ -305,19 +305,22 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
       return false;
     }
     // Resolution-time consistency: actual_open vs stored target_open.
+    // Always persist the numeric difference (even below threshold) so the
+    // CSV always has open-vs-actual audit data.
     const storedTargetOpen = r.target_open == null ? null : Number(r.target_open);
     const storedProvider = r.candle_provider ? String(r.candle_provider) : A96_CANDLE_STREAM.provider;
     let resolution_data_invalid = false;
     let resolution_error: string | null = null;
+    let target_open_difference_bps: number | null = null;
     if (storedProvider !== ohlc.provider) {
       resolution_data_invalid = true;
       resolution_error = `provider_mismatch:${storedProvider}->${ohlc.provider}`;
     }
     if (storedTargetOpen != null && storedTargetOpen > 0) {
-      const diffBps = Math.abs((ohlc.open - storedTargetOpen) / storedTargetOpen) * 10_000;
-      if (diffBps > A96_RESOLUTION_OPEN_TOLERANCE_BPS) {
+      target_open_difference_bps = Math.abs((ohlc.open - storedTargetOpen) / storedTargetOpen) * 10_000;
+      if (target_open_difference_bps > A96_RESOLUTION_OPEN_TOLERANCE_BPS) {
         resolution_data_invalid = true;
-        resolution_error = `actual_open_vs_target_open_${diffBps.toFixed(2)}bps`;
+        resolution_error = `actual_open_vs_target_open_${target_open_difference_bps.toFixed(2)}bps`;
       }
     }
     const { data: rpc, error } = await sb.rpc("resolve_a96_prediction", {
@@ -338,10 +341,17 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
       return false;
     }
     // Stamp resolution audit fields (RPC already set actual_*).
+    // Always store target_open_difference_bps (numeric or null), and only
+    // demote prospective_valid on resolution when resolution_data_invalid.
     await sb.from("a96_predictions").update({
       target_candle_row_id: ohlc.id,
       resolution_candle_row_id: ohlc.id,
       resolution_data_invalid,
+      target_open_difference_bps,
+      ...(resolution_data_invalid ? {
+        prospective_valid: false,
+        prospective_invalid_reason: resolution_error ?? "RESOLUTION_DATA_INVALID",
+      } : {}),
       ...(resolution_error ? { last_resolution_error: resolution_error.slice(0, 500) } : {}),
     } as never).eq("prediction_id", predictionId);
     return true;
