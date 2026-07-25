@@ -72,6 +72,17 @@ function StatsPage() {
     }
   }
 
+  async function doResetA96Stats() {
+    if (!confirm("Reset a96 visual stats to zero? The CSV export will keep all historical rows.")) return;
+    try {
+      setResettingA96(true);
+      await resetA96Fn();
+      qc.invalidateQueries({ queryKey: ["a96-stats"] });
+    } finally {
+      setResettingA96(false);
+    }
+  }
+
   async function downloadAas96Csv() {
     try {
       setExportingAas96(true);
