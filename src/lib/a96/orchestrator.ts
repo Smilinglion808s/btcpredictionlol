@@ -45,6 +45,14 @@ import {
 
 const TF_MS = A96_CONFIG.expected_candle_seconds * 1000;
 
+// Test-only override so unit tests can shrink the retry-poll window without
+// mocking global timers (vitest fake timers do not intercept setTimeout in
+// dynamically-imported modules reliably). Production leaves this null.
+let __POLL_OVERRIDE: { attempts: number; intervalMs: number } | null = null;
+export function __setA96PollForTests(v: { attempts: number; intervalMs: number } | null): void {
+  __POLL_OVERRIDE = v;
+}
+
 const FORBIDDEN_KEY_TOKENS = ["td1", "a2_", "router", "model6_prediction", "external_final_decision", "opposite_model"];
 function rejectExternalModelInputs(obj: unknown, path = ""): void {
   if (obj && typeof obj === "object" && !Array.isArray(obj)) {
