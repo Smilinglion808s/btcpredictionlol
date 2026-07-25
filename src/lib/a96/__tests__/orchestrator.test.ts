@@ -95,6 +95,7 @@ function makeDb() {
         lt(k: string, v: any) { filters.push([k, "lt", v]); return api; },
         lte(k: string, v: any) { filters.push([k, "lte", v]); return api; },
         is(k: string, v: any) { filters.push([k, "is", v]); return api; },
+        in(k: string, arr: any[]) { filters.push([k, "in", arr]); return api; },
         order(k: string, o: any) { orderCol = k; orderAsc = !!o?.ascending; return api; },
         limit(n: number) { limitN = n; return api; },
         async maybeSingle() {
@@ -112,6 +113,7 @@ function makeDb() {
             rows = rows.filter((r) => {
               if (op === "eq") return r[k] === v;
               if (op === "is" && v === null) return r[k] == null;
+              if (op === "in") return (v as any[]).includes(r[k]);
               if (op === "lt") return new Date(r[k]).getTime() < new Date(v).getTime();
               if (op === "lte") return new Date(r[k]).getTime() <= new Date(v).getTime();
               return true;
