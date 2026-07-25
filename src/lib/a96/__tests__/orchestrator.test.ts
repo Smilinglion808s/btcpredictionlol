@@ -412,3 +412,72 @@ describe("a96 CSV export shape", () => {
     expect(exportBlock).toMatch(/\.from\("a96_predictions"\)[\s\S]*\.select\("\*"\)/);
   });
 });
+
+describe("a96 candle-data-integrity guard", () => {
+  it("ABSTAINs and stamps candle_data_invalid_reason when prior candles are missing", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitMiss");
+    const pid = "99999999-9999-9999-9999-999999999999";
+    const targetTs = "2026-07-24T21:00:00.000Z";
+    seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
+    // NO prior candles seeded. Retry-poll returns empty; guard must abstain.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    await runA96(sb, pid);
+    const row = state.predictions.get(pid)!;
+    expect(row.candle_data_valid).toBe(false);
+    expect(row.candle_data_invalid_reason).toMatch(/insufficient_prior_candles/);
+    expect(row.final_prediction).toBe("ABSTAIN");
+    expect(row.decision_reason).toMatch(/INVALID_CANDLE_DATA/);
+    expect(row.candle_symbol).toBe("BTC-USDT");
+    expect(row.candle_timeframe).toBe("15m");
+    expect(row.candle_provider).toBe("okx");
+    vi.useRealTimers();
+  });
+
+  it("ABSTAINs when target_open drifts beyond the tolerance from prev close", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitDrift");
+    const pid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const targetTs = "2026-07-24T21:00:00.000Z";
+    // targetOpen 200, but the immediate prior candle closes at 180 (>1000 bps drift).
+    seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
+    for (let i = 4; i >= 1; i--) {
+      const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
+      seedCandle(state, ts, 180, 182, 178, 180);
+    }
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    await runA96(sb, pid);
+    const row = state.predictions.get(pid)!;
+    expect(row.candle_data_valid).toBe(false);
+    expect(row.candle_data_invalid_reason).toMatch(/target_open_vs_prev_close/);
+    expect(row.final_prediction).toBe("ABSTAIN");
+    expect(row.target_open_difference_bps).toBeGreaterThan(30);
+    vi.useRealTimers();
+  });
+
+  it("persists stream identity (symbol/timeframe/provider + row ids) on a valid AGREEMENT row", async () => {
+    const { sb, state } = makeDb();
+    seedFit(state, "fitOk");
+    const pid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const targetTs = "2026-07-24T21:00:00.000Z";
+    seedAasAndSourcePrediction(state, { predictionId: pid, targetTs, open: 200, layerA: "GREEN", layerB: "GREEN", base: "A" });
+    for (let i = 4; i >= 1; i--) {
+      const ts = new Date(new Date(targetTs).getTime() - i * 900_000).toISOString();
+      seedCandle(state, ts, 199, 201, 198, 200);
+    }
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    await runA96(sb, pid);
+    const row = state.predictions.get(pid)!;
+    expect(row.candle_data_valid).toBe(true);
+    expect(row.candle_symbol).toBe("BTC-USDT");
+    expect(row.candle_provider).toBe("okx");
+    expect(Array.isArray(row.prior_candle_row_ids)).toBe(true);
+    expect(row.prior_candle_row_ids.length).toBe(4);
+    expect(row.prospective_valid).toBe(true);
+    vi.useRealTimers();
+  });
+});
+
