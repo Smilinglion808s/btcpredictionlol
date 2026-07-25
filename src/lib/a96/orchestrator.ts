@@ -403,8 +403,11 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     // Freshly load fit-episode state AFTER catch-up resolution.
     const fitState = await getOrMintFitEpisode(sb, artifactFitId);
 
-    // Canonical-stream, finalized, retry-polled prior candles.
-    const priorRows = await pollPriorCandles(sb, targetTs);
+    // Canonical-stream, exact-timestamp, finalized, retry-polled prior candles.
+    // Poll refreshes OKX ingest between attempts so the exact required T-15m
+    // row can be written to `public.candles` before we give up.
+    const poll = await pollExactPriorCandles(sb, targetTs);
+    const priorRows = poll.rows;
     const priorCandles: Candle[] = priorRows.map((r) => r.candle);
     const priorRowIds: string[] = priorRows.map((r) => r.id);
     const priorSnapshot = priorRows.map((r) => ({
@@ -414,7 +417,20 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       open: r.candle.open, high: r.candle.high, low: r.candle.low, close: r.candle.close,
     }));
 
-    const streamCheck = validatePriorCandleStream({ rows: priorRows, targetTs, targetOpen });
+    const streamCheck = validatePriorCandleStream({ rows: priorRows, missing: poll.missing, targetTs, targetOpen });
+
+    // Prospective-validity invariant. Only rows with fully consistent
+    // prediction-time candle data may participate in the prospective
+    // evaluation. Resolution-time drift can further demote a row.
+    const prospectiveValid =
+      streamCheck.valid === true &&
+      priorRowIds.length === A96_CONFIG.required_prior_candles &&
+      A96_CANDLE_STREAM.provider === "okx";
+    const prospectiveInvalidReason = prospectiveValid
+      ? null
+      : (poll.missing.length > 0
+          ? "FINALIZED_PRIOR_CANDLE_UNAVAILABLE"
+          : (streamCheck.reason ?? "INVALID_CANDLE_DATA"));
 
     const streamAudit = {
       candle_symbol: A96_CANDLE_STREAM.symbol,
@@ -425,15 +441,18 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       candle_data_invalid_reason: streamCheck.reason,
       target_open_difference_bps: streamCheck.target_open_difference_bps,
       prior_candles_snapshot: priorSnapshot,
-      // A fresh prospective episode has been started; every new row is valid
-      // for the prospective evaluation from this point forward.
-      prospective_valid: true,
-      prospective_invalid_reason: null,
+      prospective_valid: prospectiveValid,
+      prospective_invalid_reason: prospectiveInvalidReason,
     };
 
-    // Fail-closed: if the candle data pipeline is inconsistent, ABSTAIN and
-    // record the reason. Do not touch the engine or fit-state counters.
+    // Fail-closed: if the exact prior candles are unavailable or the data
+    // pipeline is inconsistent, ABSTAIN with the specific reason. Do not
+    // touch the engine or fit-state counters. Rows with candle_data_valid
+    // === false always have prospective_valid === false (invariant above).
     if (!streamCheck.valid) {
+      const reason = poll.missing.length > 0
+        ? "ABSTAIN_INVALID_CANDLE_DATA"
+        : `INVALID_CANDLE_DATA:${streamCheck.reason ?? "unknown"}`;
       const { error: absErr } = await sb.from("a96_predictions").upsert({
         prediction_id: predictionId,
         source_prediction_id: predictionId,
@@ -447,7 +466,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         base_selected_layer: base,
         selected_layer: "NONE",
         final_prediction: "ABSTAIN",
-        decision_reason: `INVALID_CANDLE_DATA:${streamCheck.reason ?? "unknown"}`,
+        decision_reason: reason,
         fit_selector_override_fired: false,
         agreement_veto_fired: false,
         distance_from_4_candle_low_bps: null,
