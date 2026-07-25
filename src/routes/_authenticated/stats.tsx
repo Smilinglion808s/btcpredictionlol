@@ -643,6 +643,9 @@ function StatsPage() {
               <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
                 {exportingA96 ? "Exporting…" : "CSV (a96)"}
               </Button>
+              <Button size="sm" variant="outline" onClick={downloadA96CombinedCsv} disabled={exportingA96Combined}>
+                {exportingA96Combined ? "Exporting…" : "CSV (a96 + AAS96)"}
+              </Button>
               <Button size="sm" variant="outline" onClick={doResetA96Stats} disabled={resettingA96}>
                 {resettingA96 ? "Resetting…" : "Reset stats"}
               </Button>
