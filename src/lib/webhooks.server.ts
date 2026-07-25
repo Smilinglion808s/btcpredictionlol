@@ -189,6 +189,70 @@ export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInp
   };
 }
 
+// a96-r1 — SECOND active outbound webhook source (alongside TD1-RC).
+// Deterministic engine: GREEN → YES, RED → NO. ABSTAIN never emits.
+export const A96_DECISION_POLICY_VERSION = "a96-r1";
+export const A96_MODEL_ID = "a96";
+
+export interface A96WebhookInputs {
+  a96Row: Record<string, any>;     // a96_predictions row
+  prediction: Record<string, any>; // predictions row (for btc price + candle_ts)
+}
+
+export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs) {
+  const candleTs = (a96Row.target_candle_ts ?? prediction.candle_ts) as string;
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+  const final = String(a96Row.final_prediction ?? "");
+  const predictionLabel: "YES" | "NO" | "NO CLEAR EDGE" =
+    final === "GREEN" ? "YES" : final === "RED" ? "NO" : "NO CLEAR EDGE";
+
+  return {
+    model: A96_MODEL_ID,
+    model_version: "a96-r1",
+    decision_policy_version: A96_DECISION_POLICY_VERSION,
+    fit_episode_id: a96Row.fit_episode_id ?? null,
+    artifact_fit_id: a96Row.artifact_fit_id ?? null,
+
+    prediction: predictionLabel,
+    confidence: predictionLabel === "NO CLEAR EDGE" ? 0 : 100,
+
+    final_prediction: final || null,
+    selected_layer: a96Row.selected_layer ?? null,
+    base_selected_layer: a96Row.base_selected_layer ?? null,
+    layer_a_direction: a96Row.layer_a_direction ?? null,
+    layer_b_direction: a96Row.layer_b_direction ?? null,
+    decision_reason: a96Row.decision_reason ?? null,
+    fit_selector_override_fired: Boolean(a96Row.fit_selector_override_fired),
+    agreement_veto_fired: Boolean(a96Row.agreement_veto_fired),
+    distance_from_4_candle_low_bps: a96Row.distance_from_4_candle_low_bps ?? null,
+    mean_2_candle_body_to_range: a96Row.mean_2_candle_body_to_range ?? null,
+    target_open: a96Row.target_open != null ? Number(a96Row.target_open) : null,
+    prospective_valid: Boolean(a96Row.prospective_valid),
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: endsAt,
+
+    dedupe_key: `a96-BTC-USDT-15m-${startsAt}`,
+    prediction_id: prediction.id ?? a96Row.prediction_id ?? null,
+
+    btc_price_at_prediction: prediction.btc_price_at_prediction != null
+      ? Number(prediction.btc_price_at_prediction) : null,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
+
+
+
+
 
 export interface B2WebhookInputs {
   shadow: Record<string, any>;     // model7_shadow row (variant='B2')
