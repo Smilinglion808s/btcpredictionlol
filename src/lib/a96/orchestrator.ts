@@ -562,6 +562,33 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       ...streamAudit,
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
+
+    // Emit a96 prediction webhook — second active outbound source alongside
+    // TD1-RC. Only fire on directional (GREEN/RED) decisions with a valid
+    // prospective row; ABSTAIN and invalid rows do not emit.
+    if (
+      prospectiveValid &&
+      (decision.prediction === "GREEN" || decision.prediction === "RED")
+    ) {
+      try {
+        const { data: a96Row } = await sb
+          .from("a96_predictions")
+          .select("*")
+          .eq("prediction_id", predictionId)
+          .maybeSingle();
+        if (a96Row) {
+          const { deliverWebhook, buildA96WebhookPayload } = await import("../webhooks.server");
+          const payload = buildA96WebhookPayload({
+            a96Row: a96Row as Record<string, unknown>,
+            prediction: pred as unknown as Record<string, unknown>,
+          });
+          await deliverWebhook(sb, "prediction.created", payload);
+        }
+      } catch (whErr) {
+        await logApiError(sb, "a96-webhook-created-error", { prediction_id: predictionId }, whErr);
+      }
+    }
+
   } catch (e) {
     await logApiError(sb, "a96-error", { prediction_id: predictionId }, e);
   }
