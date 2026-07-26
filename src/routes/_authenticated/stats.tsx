@@ -594,6 +594,7 @@ interface ModelCardProps {
   predictionLabel?: string;
   predictionTs?: string | null;
   predictionValue?: string | null;
+  abstainReason?: string | null;
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }
