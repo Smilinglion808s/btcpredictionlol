@@ -192,6 +192,35 @@ interface DualFit {
   n_train: number;
 }
 
+export async function bootstrapModel8V3ActiveFit(sb: SupabaseClient): Promise<
+  | { ok: true; fit_id: string; n_train: number; status: "active" | "pending_review" }
+  | { ok: false; reason: string }
+> {
+  await ingestRefresh(sb);
+  // Anchor at the most recent finalized OKX candle so we don't require a
+  // future prior boundary to exist yet.
+  const { data: last } = await sb
+    .from("candles")
+    .select("candle_ts")
+    .eq("symbol", M8V3_STREAM.symbol)
+    .eq("timeframe", M8V3_STREAM.timeframe)
+    .eq("fetch_source", M8V3_STREAM.provider)
+    .eq("confirm", true)
+    .order("candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!last) return { ok: false, reason: "no_confirmed_candles" };
+  const beforeTs = new Date(new Date(String((last as { candle_ts: string }).candle_ts)).getTime() + TF_MS);
+  const candles = await fetchRecentCandles(sb, beforeTs, HISTORY_LOAD);
+  const existingActive = await loadActiveFit(sb);
+  const trained = await trainNewFit(sb, candles, {
+    intent: "bootstrap",
+    priorActiveFitId: existingActive?.fit_id ?? null,
+  });
+  if (!trained.ok) return { ok: false, reason: trained.reason };
+  return { ok: true, fit_id: trained.fit.fit_id, n_train: trained.fit.n_train, status: trained.status };
+}
+
 async function trainNewFit(
   sb: SupabaseClient,
   candles: Candle[],
