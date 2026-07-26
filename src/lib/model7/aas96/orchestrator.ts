@@ -306,7 +306,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction")
+      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction, layer_b_history_episode_id, artifact_fit_id_at_prediction, fit_id")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
