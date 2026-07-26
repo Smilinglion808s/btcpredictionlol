@@ -294,10 +294,10 @@ function StatsPage() {
   const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
   const a96WinRate = Number(a96Stats.win_rate ?? 0);
 
-  const m8v3Stats = (m8v3StatsQ.data ?? {}) as Record<string, any>;
-  const m8v3Qualified = (m8v3Stats.qualified ?? {}) as Record<string, any>;
-  const m8v3Pending = m8v3PendingQ.data as Record<string, any> | null;
-  const m8v3Q = m8v3Pending?.qualified_prediction ?? null;
+  const m3seStats = (m3seStatsQ.data ?? {}) as Record<string, any>;
+  const m3sePublished = (m3seStats.published ?? {}) as Record<string, any>;
+  const m3sePending = m3sePendingQ.data as Record<string, any> | null;
+  const m3seCurrent = m3sePending?.published_prediction ?? null;
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
