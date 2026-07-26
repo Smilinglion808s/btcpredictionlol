@@ -53,15 +53,35 @@ export const listPredictions = createServerFn({ method: "POST" })
 /** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
+  const PAGE = 1000;
+  const MAX_LIVE = 5000;
+  const MAX_ARCH = 20000;
+
+  async function paginate(table: "predictions" | "predictions_archive", cap: number) {
+    const out: any[] = [];
+    for (let from = 0; from < cap; from += PAGE) {
+      const to = Math.min(from + PAGE, cap) - 1;
+      const { data, error } = await sb
+        .from(table)
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, to);
+      if (error) throw error;
+      const batch = data ?? [];
+      out.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    return out;
+  }
+
   const [live, arch] = await Promise.all([
-    sb.from("predictions").select("*").order("created_at", { ascending: false }).limit(5000),
-    sb.from("predictions_archive").select("*").order("created_at", { ascending: false }).limit(20000),
+    paginate("predictions", MAX_LIVE),
+    paginate("predictions_archive", MAX_ARCH),
   ]);
-  if (live.error) throw live.error;
-  if (arch.error) throw arch.error;
+
   const seen = new Set<string>();
-  const merged: typeof live.data = [];
-  for (const row of [...(live.data ?? []), ...(arch.data ?? [])]) {
+  const merged: any[] = [];
+  for (const row of [...live, ...arch]) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
     merged.push(row);
