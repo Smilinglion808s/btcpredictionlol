@@ -1,9 +1,66 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
+
+/** Pending candidate fit awaiting manual review, if any. Includes the pre-computed report. */
+export const getModel8V3PendingCandidate = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("model8_v3_fits")
+    .select("fit_id, model_version, fitted_at, review_requested_at, prior_active_fit_id, review_report, training_metrics, calibration_metrics, config_snapshot")
+    .eq("status", "pending_review")
+    .order("review_requested_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+});
+
+/** Historical review decisions (approved / rejected / continued). */
+export const listModel8V3Reviews = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("model8_v3_fit_reviews")
+    .select("review_id, candidate_fit_id, active_fit_id, requested_at, reviewed_at, reviewed_by, decision, notes")
+    .order("requested_at", { ascending: false })
+    .limit(50);
+  return data ?? [];
+});
+
+/** Approve a candidate fit → atomic swap; takes effect on next unopened candle. */
+export const approveModel8V3Candidate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { fit_id: string; notes?: string }) => data)
+  .handler(async ({ data, context }) => {
+    const sb = await admin();
+    const { data: res, error } = await sb.rpc("activate_model8_v3_fit", {
+      p_fit_id: data.fit_id,
+      p_reviewed_by: context.userId,
+      p_notes: data.notes ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return res as Record<string, unknown>;
+  });
+
+/** Reject a candidate, or explicitly continue the current active fit. */
+export const rejectModel8V3Candidate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { fit_id: string; decision?: "reject" | "continue"; notes?: string }) => data)
+  .handler(async ({ data, context }) => {
+    const sb = await admin();
+    const { data: res, error } = await sb.rpc("reject_model8_v3_fit", {
+      p_fit_id: data.fit_id,
+      p_reviewed_by: context.userId,
+      p_notes: data.notes ?? null,
+      p_decision: data.decision ?? "reject",
+    });
+    if (error) throw new Error(error.message);
+    return res as Record<string, unknown>;
+  });
+
 
 async function fetchAllModel8V3Rows() {
   const sb = await admin();
