@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listAllPredictionsForHistory } from "@/lib/predictions.functions";
+import {
+  listAllPredictionsForHistory,
+  exportTd1RcShadow,
+  exportAas96Shadow,
+  exportA96Csv,
+} from "@/lib/predictions.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
 
@@ -424,6 +429,10 @@ function CsvDataPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listAllPredictionsForHistory);
   const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
+  const exportTd1 = useServerFn(exportTd1RcShadow);
+  const exportAas96 = useServerFn(exportAas96Shadow);
+  const exportA96 = useServerFn(exportA96Csv);
+  const [buildingUniversal, setBuildingUniversal] = useState(false);
 
   useEffect(() => {
     const ch = supabase
@@ -475,15 +484,100 @@ function CsvDataPage() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadUniversal = async () => {
+    try {
+      setBuildingUniversal(true);
+      const [predRows, td1Rows, aasRows, a96Rows] = await Promise.all([
+        Promise.resolve(listQ.data ?? []),
+        exportTd1().catch(() => [] as any[]),
+        exportAas96().catch(() => [] as any[]),
+        exportA96().catch(() => [] as any[]),
+      ]);
+
+      const bucket = (ts: unknown): string => {
+        if (!ts) return "";
+        const d = new Date(String(ts));
+        if (!Number.isFinite(d.getTime())) return "";
+        return d.toISOString();
+      };
+
+      // Base rows come from `predictions` (model 6+ core CSV).
+      const merged = new Map<string, Record<string, unknown>>();
+      for (const p of predRows as PredRow[]) {
+        const e = enrich(p);
+        const key = bucket(e.candle_ts);
+        if (!key) continue;
+        merged.set(key, { ...e });
+      }
+
+      const attach = (rows: any[], prefix: string, tsKeys: string[]) => {
+        for (const r of rows ?? []) {
+          let key = "";
+          for (const k of tsKeys) { if (r?.[k]) { key = bucket(r[k]); if (key) break; } }
+          if (!key) continue;
+          const base = merged.get(key) ?? { candle_ts: key };
+          for (const [k, v] of Object.entries(r)) {
+            if (v && typeof v === "object") {
+              base[`${prefix}${k}`] = JSON.stringify(v);
+            } else {
+              base[`${prefix}${k}`] = v as unknown;
+            }
+          }
+          merged.set(key, base);
+        }
+      };
+      attach(td1Rows as any[], "td1_", ["candle_ts", "target_candle_ts"]);
+      attach(aasRows as any[], "aas96_", ["target_candle_ts", "candle_ts"]);
+      attach(a96Rows as any[], "a96_", ["target_candle_ts", "candle_ts"]);
+
+      const rows = Array.from(merged.values()).sort((a, b) => {
+        const ta = new Date(String(a.candle_ts)).getTime();
+        const tb = new Date(String(b.candle_ts)).getTime();
+        return tb - ta;
+      });
+      if (rows.length === 0) { alert("No data to export."); return; }
+
+      const headerSet = new Set<string>();
+      // Preserve base column order first, then any extra keys discovered.
+      const baseCols = columnsForRows(rows as PredRow[]);
+      for (const c of baseCols) headerSet.add(c.key);
+      for (const r of rows) for (const k of Object.keys(r)) headerSet.add(k);
+      const headers = Array.from(headerSet);
+      const header = headers.join(",");
+      const body = rows.map((r) => headers.map((h) => csvEscape((r as Record<string, unknown>)[h])).join(",")).join("\n");
+      const csv = `${header}\n${body}\n`;
+
+      const times = rows.map((r) => new Date(String(r.candle_ts)).getTime()).filter(Number.isFinite);
+      const from = fmtDate(Math.min(...times));
+      const to = fmtDate(Math.max(...times));
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `btc15m_universal_${from}_to_${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBuildingUniversal(false);
+    }
+  };
+
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-4 max-w-[1400px] mx-auto">
-      <div>
-        <h1 className="text-xl font-semibold">CSV Training Data</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          One downloadable CSV per model — enriched trade + indicator fields for training.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">CSV Training Data</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Universal CSV merges every tracked field across the core engine, TD1-RC, AAS96, and a96 — one row per candle. Per-model exports remain below.
+          </p>
+        </div>
+        <Button size="lg" className="gap-2" onClick={downloadUniversal} disabled={buildingUniversal || listQ.isLoading}>
+          <Download className="size-4" />
+          {buildingUniversal ? "Building…" : "Download Universal CSV"}
+        </Button>
       </div>
+
 
       {groups.length === 0 && (
         <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
