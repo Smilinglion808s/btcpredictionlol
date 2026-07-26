@@ -240,9 +240,9 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["a96-stats"] });
         qc.invalidateQueries({ queryKey: ["a96-pending"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model8_v3_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] });
-        qc.invalidateQueries({ queryKey: ["model8-v3-pending"] });
+      .on("postgres_changes", { event: "*", schema: "public", table: "model3_se_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["m3se-stats"] });
+        qc.invalidateQueries({ queryKey: ["m3se-pending"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
