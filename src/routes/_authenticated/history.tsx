@@ -10,6 +10,7 @@ import {
   exportAas96Shadow,
   exportA96Csv,
 } from "@/lib/predictions.functions";
+import { exportModel8V3Csv } from "@/lib/model8_v3.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
 
@@ -453,6 +454,7 @@ function CsvDataPage() {
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportAas96 = useServerFn(exportAas96Shadow);
   const exportA96 = useServerFn(exportA96Csv);
+  const exportM3 = useServerFn(exportModel8V3Csv);
   const [buildingUniversal, setBuildingUniversal] = useState(false);
 
   useEffect(() => {
@@ -643,6 +645,17 @@ function CsvDataPage() {
             }}
           >
             <Download className="size-4" /> a96 CSV
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const rows = (await exportM3().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_model3_fwd");
+            }}
+          >
+            <Download className="size-4" /> Model 3 FWD CSV
           </Button>
         </div>
       </div>
