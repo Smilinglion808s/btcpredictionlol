@@ -1,87 +1,111 @@
+# Replace Model 3 with Selective Edge R1
 
-# AAS96 + TD1 Governance Update
+The current `model8_v3` (v3.0.2 — dual-head direction + movement gate) is retired in favor of a completely different architecture: two direction experts + a stacker + a correctness selector that gates publication toward ~50 of every 96 valid candles.
 
-Three coordinated changes. No touches to a96-r1, Cleanup Veto v1.1.0, TD1 feature definitions, TD1 tree-training params, Layer A training, or Layer B expert-calculation math.
+Old fits and predictions remain under `model_version = v3.0.2` in the existing tables (per acceptance criterion 11). The new model runs under `model_version = m3-se-r1`, `feature_schema_version = m3-se-features-v1`, and is written to fresh tables to keep the two schemas from colliding.
 
-## 1. Selector B Confirmation V1 → Shadow only
+## Architecture
 
-**Files**
-- `src/lib/model7/aas96/orchestrator.ts` — re-order decision pipeline:
-  1. Layer A + Layer B
-  2. Layer C selector → `preOverrideSelected` / `preOverrideDir`
-  3. **Active baseline = Layer C** (`selectedLayer = preOverrideSelected`, `baselineDir = preOverrideDir`)
-  4. Evaluate Selector B Confirmation V1 in shadow only; populate `selector_b_confirmation_v1_*` counterfactual fields.
-  5. Cleanup Veto v1.1 runs on the Layer C baseline (unchanged rule, new upstream input).
-  6. Publish.
-- `selector_b_confirmation_v1_applied = false` on all new rows.
-- New column `selector_b_confirmation_v1_mode` set to `SHADOW` for new rows; historical rows keep whatever value they had (or NULL).
-- Rule (`selectorBConfirmationV1.ts`), version `1.0.0`, threshold `0.0001`, reason string: unchanged.
+```text
+Slow expert (L2 logistic, ~1536 rows)   Fast expert (L2 logistic, ~512 rows)
+        └────────────────┬─────────────────────┘
+                         ▼
+               Direction stacker (L2 logistic on OOF logits + a few features)
+                         ▼
+              Platt-calibrated p_green_stacked_calibrated
+                         ▼
+            raw_prediction = p >= 0.5 ? GREEN : RED
+                         ▼
+              Correctness selector (L2 logistic on aligned features)
+                         ▼
+           Platt-calibrated p_correct_calibrated
+                         ▼
+          selected = p_correct >= max(0.50, Q_{1-50/96}(cal))
+                         ▼
+              published = raw_prediction OR ABSTAIN
+```
 
-**Migration**
-- Add column `selector_b_confirmation_v1_mode TEXT` on `model7_aas96_shadow` (nullable, no backfill).
+## Feature schema (21 direction features)
 
-**Resolution**
-- Grading logic in `resolveAas96Row` already compares pre-override vs shadow-final and stores `selector_b_confirmation_v1_net_effect` (+2 / −2 / 0) — keep as-is; add explicit direction-change flag if missing.
+- **Returns (5):** log returns 1/2/4/8/16
+- **Candle structure (4):** body_to_atr, range_to_atr, wick_imbalance, close_location_in_range
+- **Trend & location (6):** ema9_minus_ema21_to_atr, ema21_minus_ema50_to_atr, price_minus_ema21_to_atr, rolling_position_16, rolling_position_32, rsi14_centered
+- **Volatility & participation (6):** realized_volatility_8_to_32, atr_percentile_256, range_percentile_256, trend_efficiency_8, trend_efficiency_32, volume_zscore_32
 
-**Stats UI (`src/routes/_authenticated/stats.tsx`, AAS96 card)**
-- Rename block to “Selector B Confirmation V1 — Shadow”.
-- Show evaluable, triggered, direction-change count, counterfactual W/L/net; add group-by-fit and group-by-day/week subpanels. Filter to `mode = SHADOW` OR `deployed_at >= <shadow cutover ts>` to prevent mixing.
+Preprocessing (fit on training rows only, stored per fit): median imputation + missing indicator, 1st/99th winsorization, median/IQR scaling.
 
-**CSV**: no removals — every existing `selector_b_confirmation_v1_*` column continues to export, plus new `selector_b_confirmation_v1_mode`.
+## Files (new)
 
-## 2. TD1 incumbent vs candidate promotion
+Under `src/lib/model3_selective_edge/`:
+- `config.ts`, `types.ts`
+- `features.ts` — 21-feature builder + ATR/EMA/RSI helpers
+- `preprocess.ts` — winsorize + median/IQR scaler
+- `logistic.ts` — L2 logistic + Platt (reuse pattern from model8_v3)
+- `oof.ts` — expanding chronological OOF blocks (512 warmup, 32-row blocks)
+- `directionExperts.ts` — slow (1536/1024) + fast (512/384), λ ∈ {0.03, 0.10, 0.30, 1.00} chosen by OOF log-loss
+- `directionStacker.ts` — small L2 stacker on OOF logits + `realized_volatility_8_to_32`, `trend_efficiency_32`, `ema9_minus_ema21_to_atr`
+- `correctnessSelector.ts` — aligned features from raw prediction
+- `calibration.ts` — Platt for stacked direction + correctness selector
+- `train.ts` — end-to-end fit with 256-row calibration holdout, validation gates
+- `predict.ts` — live per-candle scoring
+- `resolve.ts` — actual_direction / raw_result / published_result / selector_net_effect
+- `csvExport.ts` — predictions, fits, and 96-row block CSVs
 
-**Schema (new migration)**
-- Extend `model7_td1_fits` with: `status` (`training|pending_forward_review|active|rejected|superseded`), `trained_through_candle_ts`, `training_row_count`, `artifact_sha256`, `incumbent_fit_id`, `forward_review_started_at`, `forward_review_completed_at`, `forward_review_resolved_count`, `review_decision`, `review_reason`, `review_report jsonb`, `activated_at`, `rejected_at`.
-- Partial unique index: `UNIQUE (base_variant) WHERE status='active'` — enforces single active fit.
-- Extend `model7_td1_rc_shadow` with candidate/incumbent columns:
-  - `td1_incumbent_fit_id`, `td1_incumbent_loss_probability`, `td1_incumbent_veto_fired`, `td1_incumbent_final_decision`
-  - `td1_candidate_fit_id`, `td1_candidate_loss_probability`, `td1_candidate_veto_fired`, `td1_candidate_final_decision`
-  - `td1_candidate_evaluable`, `td1_candidate_shadow_only`
-  - Post-resolution: `td1_incumbent_would_win/lose/net_score`, `td1_candidate_would_win/lose/net_score`, `td1_candidate_net_effect_vs_incumbent`
-  - Tree audit (both incumbent & candidate): `..._tree_leaf_id`, `..._tree_path`, `..._leaf_training_sample_count`, `..._leaf_training_loss_count`, `..._leaf_training_loss_rate`
-- New RPC `promote_td1_candidate(p_candidate_fit_id, p_expected_incumbent_fit_id, p_report jsonb)` — verifies status, atomically supersedes active + promotes candidate.
-- New RPC `reject_td1_candidate(p_candidate_fit_id, p_reason, p_report jsonb)`.
+Server-fn wrapper: `src/lib/model3_selective_edge.functions.ts` mirroring `model8_v3.functions.ts` (list predictions, export CSVs).
 
-**Code**
-- `src/lib/model7/td1/retrain.ts` — cadence unchanged; new fit persists as `pending_forward_review` with `incumbent_fit_id = <current active>`. Skip retrain when a candidate is already pending.
-- `src/lib/model7/td1/decision.ts` — scorer returns leaf audit metadata (leaf id, path, training sample/loss counts).
-- `src/lib/model7/td1/orchestrator.ts` — during pending review, score both incumbent and candidate on same feature snapshot; live decision = incumbent only; persist candidate shadow fields.
-- New `src/lib/model7/td1/promotion.ts` — resolution-side updater that computes candidate/incumbent per-row net scores; when review window is met, evaluates promotion criteria (net > incumbent; net delta ≥ +3; YES-net delta ≥ −2; NO-net delta ≥ −2; candidate veto net effect > 0; leakage clean; artifact/feature-order integrity). On pass → calls promote RPC; on any mandatory fail → reject RPC.
-- Review window: ≥96 resolved evaluable rows AND ≥12 candidate veto triggers, else continue until either condition or hard cap 192.
+Orchestrator entry point: called from the same shared trigger already used for a96/aas96/model8_v3 in `src/lib/model7/shadow.ts`, replacing the model8_v3 call.
 
-**Stats UI (TD1 card)**
-- New “TD1 Fit Review” section: incumbent id, candidate id, forward resolved count, candidate trigger count, candidate/incumbent net + delta, YES/NO split, veto effect, review status, per-requirement pass/fail badges.
+## Database
 
-**Tests** — new `src/lib/model7/td1/__tests__/promotion.test.ts` covering the ~19 required assertions using in-memory fits and synthetic prediction rows (pure functions; no DB).
+New migration:
+- `model3_se_fits` — full artifact JSONB (preprocess, slow/fast/stacker/selector weights, plattDirection, plattCorrectness), selection_threshold, target_coverage, estimated_coverage, OOF & calibration diagnostics, feature_schema_hash, artifact_hash, fit_status, failure_reason
+- `model3_se_predictions` — every field listed in spec §16 (identity, 21 flat features, 8 direction outputs, 10 selector inputs/outputs, resolved outcomes, 4 counterfactual fields)
+- `model3_se_blocks` — 96-row rolling summaries (spec §18). Materialized by a small server-side aggregator after each resolution
 
-## 3. AAS96 Layer B history bound to original fit
+Each table gets explicit GRANTs + RLS `SELECT to authenticated` policies matching existing shadow tables.
 
-**Schema (new migration)**
-- New table `model7_aas96_layer_b_history_episodes`: `history_episode_id uuid PK`, `artifact_fit_id text UNIQUE NOT NULL`, `is_active bool`, `created_at`, `updated_at`, `resolved_count int`, `history_payload jsonb` (h32/h64/h96/h192 arrays).
-- Partial unique index: `UNIQUE (is_active) WHERE is_active` — one active episode.
-- Extend `model7_aas96_shadow`:
-  - `artifact_fit_id_at_prediction text` (nullable; we already store `fit_id` — reuse if it already unambiguously identifies the artifact; add new column only if the existing one is ambiguous).
-  - `layer_b_history_episode_id uuid`
-  - `layer_b_history_applied_at timestamptz`, `layer_b_history_application_status text`, `layer_b_history_application_error text`
-  - `history_episode_ownership_unverified bool default true` (historical rows) — new rows set false.
-- New RPC `get_or_mint_aas96_layer_b_episode(p_artifact_fit_id text)` — advisory-locked, mirrors the existing a96 fit-episode pattern.
-- New RPC `apply_aas96_layer_b_history(p_prediction_id, p_history_episode_id, p_actual_direction)` — verifies ownership + resolved + not already applied + valid direction, updates episode payload once, sets audit fields on the shadow row.
+Old `model8_v3_*` tables are left untouched.
 
-**Code**
-- `src/lib/model7/aas96/fitStore.ts` — episode getter/persister; `updateActiveExpertHistory` becomes `updateEpisodeExpertHistory(episodeId, ...)`.
-- `src/lib/model7/aas96/orchestrator.ts`:
-  - Prediction path: after loading artifact, get_or_mint episode for `artifact.fitId`; use `episode.history_payload` for Layer B horizon scoring; persist `artifact_fit_id_at_prediction` and `layer_b_history_episode_id` on the row.
-  - Resolution path: read the row’s stored `layer_b_history_episode_id`; call the atomic apply RPC; never look up the currently-active fit.
-- Fit-boundary: when a new artifact activates (existing training/activation code path), call `get_or_mint` for the new fit → new episode. Do not migrate or backfill.
+## Retraining cadence
 
-**Tests** — new `src/lib/model7/aas96/__tests__/layerBHistory.test.ts`: prediction under fit A + activate fit B + resolve; assert episode A updated, episode B untouched; idempotency; ownership mismatch rejected.
+Retrain a new fit after every 96 resolved (non-PUSH) `m3-se-r1` predictions, auto-activated when validation §14 passes (all coefficients finite, feature schema matches, no train/cal overlap, OOF chronological, selector on OOF only, non-constant probabilities, estimated coverage ∈ [0.20, 0.75]). No manual review (matches earlier user directive).
 
-## Deliverables at end
+## UI
 
-- 3 migrations (Selector column, TD1 promotion schema + RPCs, AAS96 episode table + RPCs)
-- New files: `td1/promotion.ts`, `td1/__tests__/promotion.test.ts`, `aas96/__tests__/layerBHistory.test.ts`
-- Edited: aas96 `orchestrator.ts`, `fitStore.ts`; td1 `orchestrator.ts`, `retrain.ts`, `decision.ts`; stats page card sections; CSV exporters for AAS96 + TD1
-- No historical rows modified; no active behavior change beyond the three items above.
+`src/routes/_authenticated/stats.tsx`: the Model 3 FWD hero card is repointed at the new model — same visual card, updated title ("Model 3 — Selective Edge R1"), same abstain-reason surface (`abstain_reason: invalid_data | below_correctness_rank`). Adds a small "coverage: X / 96 last block" subline.
 
-Approve to implement.
+`src/routes/_authenticated/history.tsx`: the "Model 3 FWD CSV" button becomes three buttons — `model3_predictions.csv`, `model3_fits.csv`, `model3_blocks.csv`. Universal CSV merger continues to include a m3-se-r1 published-direction column keyed by `target_candle_ts` (spec §22.9).
+
+## Webhooks
+
+Not wired. TD1-RC + a96 remain the only outbound webhooks. (Consistent with earlier "do not send webhooks to bot" directives when introducing new models.)
+
+## Tests (spec §21)
+
+`src/lib/model3_selective_edge/__tests__/`:
+- `noLeakage.test.ts` — target row absent from own feature/history; OOF trained only on earlier rows
+- `oofUsage.test.ts` — stacker/selector fit only on OOF outputs
+- `calibrationHoldout.test.ts` — cal rows not in coefficient fits
+- `artifactRoundtrip.test.ts` — serialize/reload reproduces identical probabilities
+- `alignedSymmetry.test.ts` — GREEN vs RED aligned features are sign-flipped mirrors
+- `selectionThreshold.test.ts` — uses 50/96 quantile and never drops below 0.50
+- `abstainKeepsRaw.test.ts` — raw_prediction retained during ABSTAIN
+- `blockReconciliation.test.ts` — 96-row block export sums back to prediction rows
+
+## Out of scope
+
+- Old `v3.0.2` fits/predictions untouched
+- Universal CSV columns for old Model 3 FWD stay under their existing headers
+- No webhook changes
+- No stats-page redesign beyond swapping which model backs the "Model 3" card
+
+## Sequence
+
+1. Migration (tables + grants + RLS)
+2. Config / types / features / preprocess / logistic / oof
+3. Direction experts + stacker + selector + calibration + train
+4. Predict + resolve + orchestrator wrapper
+5. CSV export + server-fn wrapper
+6. Replace model8_v3 call site in shadow trigger with m3-se-r1 call
+7. Stats card + history CSV buttons repointed
+8. Tests

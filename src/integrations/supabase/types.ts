@@ -744,6 +744,466 @@ export type Database = {
         }
         Relationships: []
       }
+      model3_se_blocks: {
+        Row: {
+          abstain_count: number
+          abstained_losers: number
+          abstained_winners: number
+          block_end_ts: string
+          block_id: string
+          block_start_ts: string
+          coverage: number
+          created_at: string
+          eligible_candles: number
+          fit_id: string
+          model_version: string
+          published_count: number
+          published_losses: number
+          published_pushes: number
+          published_win_rate: number | null
+          published_wins: number
+          raw_losses: number
+          raw_pushes: number
+          raw_win_rate: number | null
+          raw_wins: number
+          selector_net_effect_sum: number
+        }
+        Insert: {
+          abstain_count: number
+          abstained_losers: number
+          abstained_winners: number
+          block_end_ts: string
+          block_id?: string
+          block_start_ts: string
+          coverage: number
+          created_at?: string
+          eligible_candles: number
+          fit_id: string
+          model_version: string
+          published_count: number
+          published_losses: number
+          published_pushes: number
+          published_win_rate?: number | null
+          published_wins: number
+          raw_losses: number
+          raw_pushes: number
+          raw_win_rate?: number | null
+          raw_wins: number
+          selector_net_effect_sum: number
+        }
+        Update: {
+          abstain_count?: number
+          abstained_losers?: number
+          abstained_winners?: number
+          block_end_ts?: string
+          block_id?: string
+          block_start_ts?: string
+          coverage?: number
+          created_at?: string
+          eligible_candles?: number
+          fit_id?: string
+          model_version?: string
+          published_count?: number
+          published_losses?: number
+          published_pushes?: number
+          published_win_rate?: number | null
+          published_wins?: number
+          raw_losses?: number
+          raw_pushes?: number
+          raw_win_rate?: number | null
+          raw_wins?: number
+          selector_net_effect_sum?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model3_se_blocks_fit_id_fkey"
+            columns: ["fit_id"]
+            isOneToOne: false
+            referencedRelation: "model3_se_fits"
+            referencedColumns: ["fit_id"]
+          },
+        ]
+      }
+      model3_se_fits: {
+        Row: {
+          activated_at: string | null
+          artifact: Json
+          artifact_hash: string
+          calibration_direction_accuracy: number | null
+          calibration_direction_brier: number | null
+          calibration_direction_log_loss: number | null
+          calibration_end: string | null
+          calibration_rows: number | null
+          calibration_start: string | null
+          created_at: string
+          estimated_coverage: number | null
+          failure_reason: string | null
+          fast_lambda: number | null
+          fast_training_end: string | null
+          fast_training_rows: number | null
+          fast_training_start: string | null
+          feature_schema_hash: string
+          feature_schema_version: string
+          fit_id: string
+          fitted_at: string
+          model_version: string
+          oof_block_size: number | null
+          oof_direction_accuracy: number | null
+          oof_direction_brier: number | null
+          oof_direction_log_loss: number | null
+          oof_end: string | null
+          oof_rows: number | null
+          oof_start: string | null
+          retired_at: string | null
+          selection_threshold: number | null
+          selector_brier: number | null
+          selector_lambda: number | null
+          selector_log_loss: number | null
+          selector_pr_auc: number | null
+          selector_roc_auc: number | null
+          slow_lambda: number | null
+          slow_training_end: string | null
+          slow_training_rows: number | null
+          slow_training_start: string | null
+          stacker_lambda: number | null
+          status: string
+          target_coverage: number | null
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          artifact: Json
+          artifact_hash: string
+          calibration_direction_accuracy?: number | null
+          calibration_direction_brier?: number | null
+          calibration_direction_log_loss?: number | null
+          calibration_end?: string | null
+          calibration_rows?: number | null
+          calibration_start?: string | null
+          created_at?: string
+          estimated_coverage?: number | null
+          failure_reason?: string | null
+          fast_lambda?: number | null
+          fast_training_end?: string | null
+          fast_training_rows?: number | null
+          fast_training_start?: string | null
+          feature_schema_hash: string
+          feature_schema_version: string
+          fit_id: string
+          fitted_at?: string
+          model_version: string
+          oof_block_size?: number | null
+          oof_direction_accuracy?: number | null
+          oof_direction_brier?: number | null
+          oof_direction_log_loss?: number | null
+          oof_end?: string | null
+          oof_rows?: number | null
+          oof_start?: string | null
+          retired_at?: string | null
+          selection_threshold?: number | null
+          selector_brier?: number | null
+          selector_lambda?: number | null
+          selector_log_loss?: number | null
+          selector_pr_auc?: number | null
+          selector_roc_auc?: number | null
+          slow_lambda?: number | null
+          slow_training_end?: string | null
+          slow_training_rows?: number | null
+          slow_training_start?: string | null
+          stacker_lambda?: number | null
+          status?: string
+          target_coverage?: number | null
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          artifact?: Json
+          artifact_hash?: string
+          calibration_direction_accuracy?: number | null
+          calibration_direction_brier?: number | null
+          calibration_direction_log_loss?: number | null
+          calibration_end?: string | null
+          calibration_rows?: number | null
+          calibration_start?: string | null
+          created_at?: string
+          estimated_coverage?: number | null
+          failure_reason?: string | null
+          fast_lambda?: number | null
+          fast_training_end?: string | null
+          fast_training_rows?: number | null
+          fast_training_start?: string | null
+          feature_schema_hash?: string
+          feature_schema_version?: string
+          fit_id?: string
+          fitted_at?: string
+          model_version?: string
+          oof_block_size?: number | null
+          oof_direction_accuracy?: number | null
+          oof_direction_brier?: number | null
+          oof_direction_log_loss?: number | null
+          oof_end?: string | null
+          oof_rows?: number | null
+          oof_start?: string | null
+          retired_at?: string | null
+          selection_threshold?: number | null
+          selector_brier?: number | null
+          selector_lambda?: number | null
+          selector_log_loss?: number | null
+          selector_pr_auc?: number | null
+          selector_roc_auc?: number | null
+          slow_lambda?: number | null
+          slow_training_end?: string | null
+          slow_training_rows?: number | null
+          slow_training_start?: string | null
+          stacker_lambda?: number | null
+          status?: string
+          target_coverage?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      model3_se_predictions: {
+        Row: {
+          abstain_reason: string | null
+          abstained_loser: boolean | null
+          abstained_winner: boolean | null
+          actual_close: number | null
+          actual_direction: string | null
+          actual_high: number | null
+          actual_low: number | null
+          actual_open: number | null
+          actual_volume: number | null
+          aligned_body_to_atr: number | null
+          aligned_ema21_minus_ema50_to_atr: number | null
+          aligned_ema9_minus_ema21_to_atr: number | null
+          aligned_realized_volatility_8_to_32: number | null
+          aligned_ret_log_1: number | null
+          aligned_ret_log_2: number | null
+          aligned_ret_log_4: number | null
+          aligned_ret_log_8: number | null
+          aligned_rsi14_centered: number | null
+          aligned_trend_efficiency_32: number | null
+          atr_percentile_256: number | null
+          body_to_atr: number | null
+          close_location_in_range: number | null
+          created_at: string
+          data_quality_reasons: string[] | null
+          data_quality_valid: boolean
+          ema21_minus_ema50_to_atr: number | null
+          ema9_minus_ema21_to_atr: number | null
+          fast_logit: number | null
+          feature_schema_version: string
+          fit_id: string
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          model_version: string
+          p_correct_calibrated: number | null
+          p_correct_raw: number | null
+          p_green_fast: number | null
+          p_green_slow: number | null
+          p_green_stacked_calibrated: number | null
+          p_green_stacked_raw: number | null
+          prediction_created_at: string
+          prediction_id: string
+          price_minus_ema21_to_atr: number | null
+          provider: string
+          published_net: number | null
+          published_prediction: string
+          published_result: string | null
+          range_percentile_256: number | null
+          range_to_atr: number | null
+          raw_confidence: number | null
+          raw_net: number | null
+          raw_prediction: string | null
+          raw_result: string | null
+          raw_would_win: boolean | null
+          realized_volatility_8_to_32: number | null
+          resolved_at: string | null
+          ret_log_1: number | null
+          ret_log_16: number | null
+          ret_log_2: number | null
+          ret_log_4: number | null
+          ret_log_8: number | null
+          rolling_position_16: number | null
+          rolling_position_32: number | null
+          rsi14_centered: number | null
+          selection_threshold: number | null
+          selector_net_effect: number | null
+          slow_logit: number | null
+          symbol: string
+          target_candle_ts: string
+          target_open: number | null
+          timeframe: string
+          trend_efficiency_32: number | null
+          trend_efficiency_8: number | null
+          updated_at: string
+          volume_zscore_32: number | null
+          wick_imbalance: number | null
+        }
+        Insert: {
+          abstain_reason?: string | null
+          abstained_loser?: boolean | null
+          abstained_winner?: boolean | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          aligned_body_to_atr?: number | null
+          aligned_ema21_minus_ema50_to_atr?: number | null
+          aligned_ema9_minus_ema21_to_atr?: number | null
+          aligned_realized_volatility_8_to_32?: number | null
+          aligned_ret_log_1?: number | null
+          aligned_ret_log_2?: number | null
+          aligned_ret_log_4?: number | null
+          aligned_ret_log_8?: number | null
+          aligned_rsi14_centered?: number | null
+          aligned_trend_efficiency_32?: number | null
+          atr_percentile_256?: number | null
+          body_to_atr?: number | null
+          close_location_in_range?: number | null
+          created_at?: string
+          data_quality_reasons?: string[] | null
+          data_quality_valid?: boolean
+          ema21_minus_ema50_to_atr?: number | null
+          ema9_minus_ema21_to_atr?: number | null
+          fast_logit?: number | null
+          feature_schema_version: string
+          fit_id: string
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          model_version: string
+          p_correct_calibrated?: number | null
+          p_correct_raw?: number | null
+          p_green_fast?: number | null
+          p_green_slow?: number | null
+          p_green_stacked_calibrated?: number | null
+          p_green_stacked_raw?: number | null
+          prediction_created_at?: string
+          prediction_id?: string
+          price_minus_ema21_to_atr?: number | null
+          provider: string
+          published_net?: number | null
+          published_prediction: string
+          published_result?: string | null
+          range_percentile_256?: number | null
+          range_to_atr?: number | null
+          raw_confidence?: number | null
+          raw_net?: number | null
+          raw_prediction?: string | null
+          raw_result?: string | null
+          raw_would_win?: boolean | null
+          realized_volatility_8_to_32?: number | null
+          resolved_at?: string | null
+          ret_log_1?: number | null
+          ret_log_16?: number | null
+          ret_log_2?: number | null
+          ret_log_4?: number | null
+          ret_log_8?: number | null
+          rolling_position_16?: number | null
+          rolling_position_32?: number | null
+          rsi14_centered?: number | null
+          selection_threshold?: number | null
+          selector_net_effect?: number | null
+          slow_logit?: number | null
+          symbol: string
+          target_candle_ts: string
+          target_open?: number | null
+          timeframe: string
+          trend_efficiency_32?: number | null
+          trend_efficiency_8?: number | null
+          updated_at?: string
+          volume_zscore_32?: number | null
+          wick_imbalance?: number | null
+        }
+        Update: {
+          abstain_reason?: string | null
+          abstained_loser?: boolean | null
+          abstained_winner?: boolean | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          aligned_body_to_atr?: number | null
+          aligned_ema21_minus_ema50_to_atr?: number | null
+          aligned_ema9_minus_ema21_to_atr?: number | null
+          aligned_realized_volatility_8_to_32?: number | null
+          aligned_ret_log_1?: number | null
+          aligned_ret_log_2?: number | null
+          aligned_ret_log_4?: number | null
+          aligned_ret_log_8?: number | null
+          aligned_rsi14_centered?: number | null
+          aligned_trend_efficiency_32?: number | null
+          atr_percentile_256?: number | null
+          body_to_atr?: number | null
+          close_location_in_range?: number | null
+          created_at?: string
+          data_quality_reasons?: string[] | null
+          data_quality_valid?: boolean
+          ema21_minus_ema50_to_atr?: number | null
+          ema9_minus_ema21_to_atr?: number | null
+          fast_logit?: number | null
+          feature_schema_version?: string
+          fit_id?: string
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          model_version?: string
+          p_correct_calibrated?: number | null
+          p_correct_raw?: number | null
+          p_green_fast?: number | null
+          p_green_slow?: number | null
+          p_green_stacked_calibrated?: number | null
+          p_green_stacked_raw?: number | null
+          prediction_created_at?: string
+          prediction_id?: string
+          price_minus_ema21_to_atr?: number | null
+          provider?: string
+          published_net?: number | null
+          published_prediction?: string
+          published_result?: string | null
+          range_percentile_256?: number | null
+          range_to_atr?: number | null
+          raw_confidence?: number | null
+          raw_net?: number | null
+          raw_prediction?: string | null
+          raw_result?: string | null
+          raw_would_win?: boolean | null
+          realized_volatility_8_to_32?: number | null
+          resolved_at?: string | null
+          ret_log_1?: number | null
+          ret_log_16?: number | null
+          ret_log_2?: number | null
+          ret_log_4?: number | null
+          ret_log_8?: number | null
+          rolling_position_16?: number | null
+          rolling_position_32?: number | null
+          rsi14_centered?: number | null
+          selection_threshold?: number | null
+          selector_net_effect?: number | null
+          slow_logit?: number | null
+          symbol?: string
+          target_candle_ts?: string
+          target_open?: number | null
+          timeframe?: string
+          trend_efficiency_32?: number | null
+          trend_efficiency_8?: number | null
+          updated_at?: string
+          volume_zscore_32?: number | null
+          wick_imbalance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model3_se_predictions_fit_id_fkey"
+            columns: ["fit_id"]
+            isOneToOne: false
+            referencedRelation: "model3_se_fits"
+            referencedColumns: ["fit_id"]
+          },
+        ]
+      }
       model7_aas96_fits: {
         Row: {
           active: boolean

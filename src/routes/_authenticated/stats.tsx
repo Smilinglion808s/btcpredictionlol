@@ -20,13 +20,11 @@ import {
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import {
-  getModel8V3Stats,
-  getModel8V3Pending,
-  exportModel8V3Csv,
-  getModel8V3PendingCandidate,
-  approveModel8V3Candidate,
-  rejectModel8V3Candidate,
-} from "@/lib/model8_v3.functions";
+  getM3SeStats,
+  getM3SePending,
+  exportM3SePredictionsCsv,
+  exportM3SeFitsCsv,
+} from "@/lib/model3_selective_edge.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -77,50 +75,39 @@ function StatsPage() {
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const m8v3StatsFn = useServerFn(getModel8V3Stats);
-  const m8v3PendingFn = useServerFn(getModel8V3Pending);
-  const exportM8v3Fn = useServerFn(exportModel8V3Csv);
-  const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m8v3CandidateFn = useServerFn(getModel8V3PendingCandidate);
-  const approveM8v3Fn = useServerFn(approveModel8V3Candidate);
-  const rejectM8v3Fn = useServerFn(rejectModel8V3Candidate);
-  const [m8v3ReviewNotes, setM8v3ReviewNotes] = useState("");
-  const [m8v3ReviewBusy, setM8v3ReviewBusy] = useState(false);
-  const runM8v3Review = async (decision: "approve" | "reject" | "continue") => {
-    const fitId = (m8v3CandidateQ.data as { fit_id?: string } | null)?.fit_id;
-    if (!fitId) return;
-    setM8v3ReviewBusy(true);
-    try {
-      if (decision === "approve") await approveM8v3Fn({ data: { fit_id: fitId, notes: m8v3ReviewNotes } });
-      else await rejectM8v3Fn({ data: { fit_id: fitId, decision, notes: m8v3ReviewNotes } });
-      setM8v3ReviewNotes("");
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["model8-v3-candidate"] }),
-        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] }),
-      ]);
-    } catch (e) {
-      alert(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setM8v3ReviewBusy(false);
-    }
-  };
-  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const [exportingM8v3, setExportingM8v3] = useState(false);
+  const m3seStatsFn = useServerFn(getM3SeStats);
+  const m3sePendingFn = useServerFn(getM3SePending);
+  const exportM3sePredsFn = useServerFn(exportM3SePredictionsCsv);
+  const exportM3seFitsFn = useServerFn(exportM3SeFitsCsv);
+  const m3seStatsQ = useQuery({ queryKey: ["m3se-stats"], queryFn: () => m3seStatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const m3sePendingQ = useQuery({ queryKey: ["m3se-pending"], queryFn: () => m3sePendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const [exportingM3se, setExportingM3se] = useState(false);
+  const [exportingM3seFits, setExportingM3seFits] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
-  async function downloadM8v3Csv() {
+  async function downloadM3sePredsCsv() {
     try {
-      setExportingM8v3(true);
-      const rows = await exportM8v3Fn();
-      if (!rows || rows.length === 0) { alert("No Model 3 FWD rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-fwd-${stamp()}.csv`);
+      setExportingM3se(true);
+      const rows = await exportM3sePredsFn();
+      if (!rows || rows.length === 0) { alert("No m3-se-r1 predictions to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-predictions-${stamp()}.csv`);
     } finally {
-      setExportingM8v3(false);
+      setExportingM3se(false);
+    }
+  }
+
+  async function downloadM3seFitsCsv() {
+    try {
+      setExportingM3seFits(true);
+      const rows = await exportM3seFitsFn();
+      if (!rows || rows.length === 0) { alert("No m3-se-r1 fits to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-fits-${stamp()}.csv`);
+    } finally {
+      setExportingM3seFits(false);
     }
   }
 
@@ -253,9 +240,9 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["a96-stats"] });
         qc.invalidateQueries({ queryKey: ["a96-pending"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model8_v3_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] });
-        qc.invalidateQueries({ queryKey: ["model8-v3-pending"] });
+      .on("postgres_changes", { event: "*", schema: "public", table: "model3_se_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["m3se-stats"] });
+        qc.invalidateQueries({ queryKey: ["m3se-pending"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -307,10 +294,10 @@ function StatsPage() {
   const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
   const a96WinRate = Number(a96Stats.win_rate ?? 0);
 
-  const m8v3Stats = (m8v3StatsQ.data ?? {}) as Record<string, any>;
-  const m8v3Qualified = (m8v3Stats.qualified ?? {}) as Record<string, any>;
-  const m8v3Pending = m8v3PendingQ.data as Record<string, any> | null;
-  const m8v3Q = m8v3Pending?.qualified_prediction ?? null;
+  const m3seStats = (m3seStatsQ.data ?? {}) as Record<string, any>;
+  const m3sePublished = (m3seStats.published ?? {}) as Record<string, any>;
+  const m3sePending = m3sePendingQ.data as Record<string, any> | null;
+  const m3seCurrent = m3sePending?.published_prediction ?? null;
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
@@ -456,86 +443,41 @@ function StatsPage() {
         </ModelCard>
 
         <ModelCard
-          title="Model 3 FWD"
-          subtitle="v3.0.2 Shadow"
-          status={m8v3CandidateQ.data ? "Review" : "Auto"}
+          title="Model 3 — Selective Edge"
+          subtitle="m3-se-r1"
+          status="Auto"
           tone="violet"
-          winRate={Number(m8v3Qualified.win_rate ?? 0)}
-          wins={Number(m8v3Qualified.wins ?? 0)}
-          losses={Number(m8v3Qualified.losses ?? 0)}
-          pushes={Number(m8v3Qualified.pushes ?? 0)}
-          pending={Number(m8v3Stats.pending ?? 0)}
+          winRate={Number(m3sePublished.win_rate ?? 0)}
+          wins={Number(m3sePublished.wins ?? 0)}
+          losses={Number(m3sePublished.losses ?? 0)}
+          pushes={Number(m3sePublished.pushes ?? 0)}
+          pending={0}
           predictionLabel="Current Prediction"
-          predictionTs={m8v3Pending?.target_candle_ts}
-          predictionValue={m8v3Q ?? "—"}
-          abstainReason={(m8v3Pending as any)?.abstain_reason ?? null}
+          predictionTs={m3sePending?.target_candle_ts}
+          predictionValue={m3seCurrent ?? "—"}
+          abstainReason={(m3sePending as any)?.abstain_reason ?? null}
           actions={(
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
-              {exportingM8v3 ? "…" : "CSV"}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3sePredsCsv} disabled={exportingM3se}>
+                {exportingM3se ? "…" : "CSV"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3seFitsCsv} disabled={exportingM3seFits}>
+                {exportingM3seFits ? "…" : "Fits"}
+              </Button>
+            </div>
           )}
         >
-          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-200/90">
-            <span className="font-semibold text-amber-100">v3.0.1 note:</span> the prior fit produced valid raw direction
-            predictions, but its qualified track permanently abstained because the 15 bps movement label was too rare
-            (~27% base rate) for the calibrated movement head to ever cross the 0.55 gate. v3.0.2 lowers the movement
-            label to 8 bps (~52% base rate) and refuses to activate any fit whose training/calibration positive rate
-            falls outside 30–70% or whose p95 calibrated movement probability doesn't exceed 0.55.
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label="Resolved" value={Number(m3seStats.resolved_count ?? 0)} />
+            <MiniStat label="Abstains" value={Number(m3seStats.abstains ?? 0)} />
+            <MiniStat label="Coverage" value={`${Math.round(Number(m3seStats.coverage ?? 0) * 100)}%`} />
+            <MiniStat label="Raw win rate" value={`${Number(m3seStats.raw?.win_rate ?? 0)}%`} />
           </div>
-
-          {(() => {
-            const cand = m8v3CandidateQ.data as Record<string, any> | null;
-            if (!cand) {
-              return (
-                <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-                  No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
-                </div>
-              );
-            }
-            const rep = (cand.review_report ?? {}) as Record<string, any>;
-            const w = rep.windows ?? {};
-            const line = (label: string, win: any) => {
-              const a = win?.active?.qualified ?? {};
-              const c = win?.candidate_counterfactual?.qualified ?? {};
-              return (
-                <div key={label} className="flex items-center justify-between text-[11px] font-mono tabular-nums">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
-                </div>
-              );
-            };
-            return (
-              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium text-amber-400">Candidate awaiting manual approval</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
-                </div>
-                <div className="space-y-1">
-                  {line("Last 96 qualified", w.last_96)}
-                  {line("Last 384 qualified", w.last_384)}
-                  {line("Cumulative qualified", w.cumulative)}
-                </div>
-                <textarea
-                  value={m8v3ReviewNotes}
-                  onChange={(e) => setM8v3ReviewNotes(e.target.value)}
-                  placeholder="Review notes (optional)"
-                  className="w-full text-xs rounded border border-border bg-background p-2"
-                  rows={2}
-                />
-                <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
-                    {m8v3ReviewBusy ? "Working…" : "Approve"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
-                    Reject
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
-                    Continue
-                  </Button>
-                </div>
-              </div>
-            );
-          })()}
+          <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">Selective Edge R1:</span> two direction experts feed a stacker; a
+            correctness selector abstains on low-confidence signals to target ~50 of every 96 valid candles. Threshold =
+            max(0.50, Q<sub>1&minus;50/96</sub>) on calibration. Retrains every 96 resolved rows.
+          </div>
         </ModelCard>
       </div>
 
