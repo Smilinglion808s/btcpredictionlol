@@ -530,6 +530,22 @@ export async function runModel8V3(
     target_open_at_prediction: targetOpenAtPrediction,
     official_forward_test_row: createdBeforeTarget,
     prediction_latency_ms: Date.now() - startMs,
+    // Regime monitoring — persisted alongside every prediction. Not used
+    // to alter the prediction itself in v3.0.1.
+    atr_14_to_price: regime.atr_14_to_price,
+    realized_volatility_8: regime.realized_volatility_8,
+    realized_volatility_32: regime.realized_volatility_32,
+    volatility_ratio_8_32: regime.volatility_ratio_8_32,
+    trend_efficiency_8: regime.trend_efficiency_8,
+    trend_efficiency_32: regime.trend_efficiency_32,
+    ema9_minus_ema21_to_atr: regime.ema9_minus_ema21_to_atr,
+    volume_zscore_32: regime.volume_zscore_32,
+    volatility_percentile_256: regime.volatility_percentile_256,
+    trend_percentile_256: regime.trend_percentile_256,
+    volume_percentile_256: regime.volume_percentile_256,
+    regime_label: regime.regime_label,
+    regime_transition_score: regime.regime_transition_score,
+    regime_alerts: regime.regime_alerts,
   }).select("prediction_id").maybeSingle();
 
   if (error) return { ok: false, skipped: `insert_failed:${error.message}` };
