@@ -501,12 +501,15 @@ function CsvDataPage() {
         return d.toISOString();
       };
 
-      // Base rows come from `predictions` (model 6+ core CSV).
+      // Base rows come from `predictions` (Model 6+ core CSV). Enrich each so
+      // every historical Model 6 data point is present per candle.
       const merged = new Map<string, Record<string, unknown>>();
       for (const p of predRows as PredRow[]) {
         const e = enrich(p);
         const key = bucket(e.candle_ts);
         if (!key) continue;
+        // Normalize candle_ts to bucketed ISO so downstream sorts/labels agree.
+        e.candle_ts = key;
         merged.set(key, { ...e });
       }
 
@@ -537,14 +540,33 @@ function CsvDataPage() {
       });
       if (rows.length === 0) { alert("No data to export."); return; }
 
-      const headerSet = new Set<string>();
-      // Preserve base column order first, then any extra keys discovered.
+      // Build headers: preserve the exact Model 6 column ORDER and friendly
+      // LABELS from BASE_COLUMNS + dynamic indicator breakdown, then append
+      // any additional keys (td1_/aas96_/a96_ prefixed, or straggler fields).
       const baseCols = columnsForRows(rows as PredRow[]);
-      for (const c of baseCols) headerSet.add(c.key);
-      for (const r of rows) for (const k of Object.keys(r)) headerSet.add(k);
-      const headers = Array.from(headerSet);
-      const header = headers.join(",");
-      const body = rows.map((r) => headers.map((h) => csvEscape((r as Record<string, unknown>)[h])).join(",")).join("\n");
+      const orderedHeaders: { key: string; label: string }[] = [];
+      const seenKeys = new Set<string>();
+      for (const c of baseCols) {
+        if (seenKeys.has(c.key)) continue;
+        seenKeys.add(c.key);
+        orderedHeaders.push(c);
+      }
+      // Add every extra key discovered on merged rows, in a stable order.
+      const extraKeys: string[] = [];
+      for (const r of rows) {
+        for (const k of Object.keys(r)) {
+          if (seenKeys.has(k)) continue;
+          seenKeys.add(k);
+          extraKeys.push(k);
+        }
+      }
+      extraKeys.sort();
+      for (const k of extraKeys) orderedHeaders.push({ key: k, label: k });
+
+      const header = orderedHeaders.map((c) => c.label).join(",");
+      const body = rows
+        .map((r) => orderedHeaders.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
+        .join("\n");
       const csv = `${header}\n${body}\n`;
 
       const times = rows.map((r) => new Date(String(r.candle_ts)).getTime()).filter(Number.isFinite);
