@@ -59,6 +59,30 @@ function StatsPage() {
   const exportM8v3Fn = useServerFn(exportModel8V3Csv);
   const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const m8v3CandidateFn = useServerFn(getModel8V3PendingCandidate);
+  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const approveM8v3Fn = useServerFn(approveModel8V3Candidate);
+  const rejectM8v3Fn = useServerFn(rejectModel8V3Candidate);
+  const [m8v3ReviewNotes, setM8v3ReviewNotes] = useState("");
+  const [m8v3ReviewBusy, setM8v3ReviewBusy] = useState(false);
+  const runM8v3Review = async (decision: "approve" | "reject" | "continue") => {
+    const fitId = (m8v3CandidateQ.data as { fit_id?: string } | null)?.fit_id;
+    if (!fitId) return;
+    setM8v3ReviewBusy(true);
+    try {
+      if (decision === "approve") await approveM8v3Fn({ data: { fit_id: fitId, notes: m8v3ReviewNotes } });
+      else await rejectM8v3Fn({ data: { fit_id: fitId, decision, notes: m8v3ReviewNotes } });
+      setM8v3ReviewNotes("");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["model8-v3-candidate"] }),
+        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] }),
+      ]);
+    } catch (e) {
+      alert(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setM8v3ReviewBusy(false);
+    }
+  };
   const [exportingM8v3, setExportingM8v3] = useState(false);
   async function downloadM8v3Csv() {
     try {
