@@ -287,6 +287,23 @@ async function trainNewFit(
   const calibratedDir = rawCalDir.map((p) => applyPlatt(p, platt_dir.a, platt_dir.b));
   const calibratedMove = rawCalMove.map((p) => applyPlatt(p, platt_move.a, platt_move.b));
 
+  // ------ Preflight diagnostics (v3.0.2) --------------------------------
+  const preflight = computePreflight({
+    trainYMove,
+    calYDir,
+    calYMove,
+    calibratedDir,
+    calibratedMove,
+    dirWeights: dir.w, dirIntercept: dir.b,
+    movWeights: mov.w, movIntercept: mov.b,
+    means: dir.means, scales: dir.scales,
+    plattDir: platt_dir, plattMove: platt_move,
+  });
+
+  if (!preflight.ok) {
+    return { ok: false, reason: `preflight_rejected:${preflight.reasons.join(",")}` };
+  }
+
   const isCandidate = opts.intent === "candidate";
   const status = isCandidate ? "pending_review" : "active";
   const fitRow: Record<string, unknown> = {
@@ -320,12 +337,27 @@ async function trainNewFit(
       retrain_every_resolved_rows: M8V3_RETRAIN_EVERY_RESOLVED_ROWS,
       l2_lambda: M8V3_L2_LAMBDA,
     },
-    training_metrics: { n_train: trainX.length, n_calibration: calX.length },
+    training_metrics: {
+      n_train: trainX.length, n_calibration: calX.length,
+      movement_positive_rate_train: preflight.movementPosRateTrain,
+      movement_positive_rate_calibration: preflight.movementPosRateCal,
+    },
     calibration_metrics: {
       brier_direction: brier(calibratedDir, calYDir),
       acc_direction: acc(calibratedDir, calYDir),
-      brier_movement: brier(calibratedMove, calYMove),
+      brier_movement: preflight.movementBrier,
+      log_loss_movement: preflight.movementLogLoss,
       acc_movement: acc(calibratedMove, calYMove),
+      movement_probability_min: preflight.movementProbMin,
+      movement_probability_median: preflight.movementProbMedian,
+      movement_probability_p90: preflight.movementProbP90,
+      movement_probability_p95: preflight.movementProbP95,
+      movement_probability_max: preflight.movementProbMax,
+      estimated_qualified_coverage: preflight.qualifiedCoverage,
+      movement_precision: preflight.movementPrecision,
+      movement_recall: preflight.movementRecall,
+      movement_balanced_accuracy: preflight.movementBalancedAcc,
+      movement_pr_auc: preflight.movementPrAuc,
     },
     fitted_at: new Date().toISOString(),
     activated_at: new Date().toISOString(),
@@ -337,6 +369,7 @@ async function trainNewFit(
   if (error && !String(error.message).includes("duplicate")) {
     return { ok: false, reason: `fit_insert_failed:${error.message}` };
   }
+
 
   return {
     ok: true,
