@@ -10,6 +10,7 @@ import {
   exportAas96Shadow,
   exportA96Csv,
 } from "@/lib/predictions.functions";
+import { exportModel8V3Csv } from "@/lib/model8_v3.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
 
