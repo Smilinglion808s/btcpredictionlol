@@ -38,11 +38,11 @@ export const approveModel8V3Candidate = createServerFn({ method: "POST" })
     const sb = await admin();
     const { data: res, error } = await sb.rpc("activate_model8_v3_fit", {
       p_fit_id: data.fit_id,
-      p_reviewed_by: context.userId,
-      p_notes: data.notes ?? null,
+      p_reviewed_by: context.userId ?? "unknown",
+      p_notes: data.notes ?? "",
     });
     if (error) throw new Error(error.message);
-    return res as Record<string, unknown>;
+    return { ok: true, result: JSON.stringify(res ?? {}) };
   });
 
 /** Reject a candidate, or explicitly continue the current active fit. */
@@ -53,12 +53,12 @@ export const rejectModel8V3Candidate = createServerFn({ method: "POST" })
     const sb = await admin();
     const { data: res, error } = await sb.rpc("reject_model8_v3_fit", {
       p_fit_id: data.fit_id,
-      p_reviewed_by: context.userId,
-      p_notes: data.notes ?? null,
+      p_reviewed_by: context.userId ?? "unknown",
+      p_notes: data.notes ?? "",
       p_decision: data.decision ?? "reject",
     });
     if (error) throw new Error(error.message);
-    return res as Record<string, unknown>;
+    return { ok: true, result: JSON.stringify(res ?? {}) };
   });
 
 
