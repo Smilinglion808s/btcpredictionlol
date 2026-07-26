@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listAllPredictionsForHistory } from "@/lib/predictions.functions";
+import {
+  listAllPredictionsForHistory,
+  exportTd1RcShadow,
+  exportAas96Shadow,
+  exportA96Csv,
+} from "@/lib/predictions.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
 
