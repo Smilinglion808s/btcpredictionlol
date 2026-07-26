@@ -89,14 +89,25 @@ function StatsPage() {
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
-  async function downloadM8v3Csv() {
+  async function downloadM3sePredsCsv() {
     try {
-      setExportingM8v3(true);
-      const rows = await exportM8v3Fn();
-      if (!rows || rows.length === 0) { alert("No Model 3 FWD rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-fwd-${stamp()}.csv`);
+      setExportingM3se(true);
+      const rows = await exportM3sePredsFn();
+      if (!rows || rows.length === 0) { alert("No m3-se-r1 predictions to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-predictions-${stamp()}.csv`);
     } finally {
-      setExportingM8v3(false);
+      setExportingM3se(false);
+    }
+  }
+
+  async function downloadM3seFitsCsv() {
+    try {
+      setExportingM3seFits(true);
+      const rows = await exportM3seFitsFn();
+      if (!rows || rows.length === 0) { alert("No m3-se-r1 fits to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-fits-${stamp()}.csv`);
+    } finally {
+      setExportingM3seFits(false);
     }
   }
 
