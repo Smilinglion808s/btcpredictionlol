@@ -481,10 +481,14 @@ export async function runModel8V3(
   const priorIso = new Date(targetTs.getTime() - TF_MS).toISOString();
   if (!ready) return abstainInsert("prior_candle_not_finalized");
 
-  // Data-quality checks: contiguous history + prior boundary.
-  let contiguous = true;
-  for (let i = 1; i < candles.length; i++) {
-    const dt = new Date(candles[i].ts).getTime() - new Date(candles[i - 1].ts).getTime();
+  // Data-quality checks: contiguous FEATURE window (last M8V3_FEATURE_LOOKBACK+1
+  // candles ending at prior boundary). Older training-window gaps are tolerated
+  // — the trainer handles those separately when building supervised rows.
+  const featureWindowLen = M8V3_FEATURE_LOOKBACK + 1;
+  const featureWindow = candles.slice(-featureWindowLen);
+  let contiguous = featureWindow.length === featureWindowLen;
+  for (let i = 1; contiguous && i < featureWindow.length; i++) {
+    const dt = new Date(featureWindow[i].ts).getTime() - new Date(featureWindow[i - 1].ts).getTime();
     if (dt !== TF_MS) { contiguous = false; break; }
   }
   const lastCandle = candles[candles.length - 1];
