@@ -190,9 +190,60 @@ export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInp
 }
 
 // a96-r1 — SECOND active outbound webhook source (alongside TD1-RC).
-// Deterministic engine: GREEN → YES, RED → NO. ABSTAIN never emits.
+// Deterministic engine: GREEN → YES, RED → NO. Native ABSTAIN never emits,
+// but AAS96 upstream skips are surfaced via buildA96SkipWebhookPayload below.
 export const A96_DECISION_POLICY_VERSION = "a96-r1";
 export const A96_MODEL_ID = "a96";
+
+export interface A96SkipWebhookInputs {
+  predictionId: string;
+  candleTs: string;                        // ISO string of target candle start
+  btcPriceAtPrediction: number | null;
+  skipReason: string;                      // e.g. "AAS96_UPSTREAM_SKIP:no_partial_snapshot"
+}
+
+/** SKIP webhook emitted when a96 cannot run because its AAS96 upstream did
+ *  not produce a usable Layer A/B directional decision for this candle. */
+export function buildA96SkipWebhookPayload({
+  predictionId,
+  candleTs,
+  btcPriceAtPrediction,
+  skipReason,
+}: A96SkipWebhookInputs) {
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+  return {
+    model: A96_MODEL_ID,
+    model_version: "a96-r1",
+    decision_policy_version: A96_DECISION_POLICY_VERSION,
+
+    prediction: "SKIP" as const,
+    confidence: 0,
+    trade: false,
+
+    final_prediction: "ABSTAIN",
+    decision_reason: skipReason,
+    skip_reason: skipReason,
+    upstream_skipped: true,
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: endsAt,
+
+    dedupe_key: `a96-BTC-USDT-15m-${startsAt}`,
+    prediction_id: predictionId,
+
+    btc_price_at_prediction: btcPriceAtPrediction,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
 
 export interface A96WebhookInputs {
   a96Row: Record<string, any>;     // a96_predictions row
