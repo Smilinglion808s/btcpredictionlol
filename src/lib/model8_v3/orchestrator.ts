@@ -419,6 +419,7 @@ export async function runModel8V3(
       .maybeSingle();
     if (existing.data) {
       const e = existing.data as Record<string, unknown>;
+      await heartbeat(true, { stage: "already_predicted", qualified_prediction: e.qualified_prediction });
       return {
         ok: true,
         skipped: "already_predicted",
@@ -429,6 +430,7 @@ export async function runModel8V3(
       };
     }
   } catch { /* fall through */ }
+
 
   const insertBase: Record<string, unknown> = {
     model_version: M8V3_MODEL_VERSION,
