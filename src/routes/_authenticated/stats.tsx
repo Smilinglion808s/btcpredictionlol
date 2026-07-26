@@ -421,6 +421,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={a96Pending?.target_candle_ts}
           predictionValue={a96Pending?.final_prediction ?? "—"}
+          abstainReason={(a96Pending as any)?.decision_reason ?? null}
           actions={(
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetA96Stats} disabled={resettingA96}>
