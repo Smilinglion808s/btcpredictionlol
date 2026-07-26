@@ -528,12 +528,6 @@ function StatsPage() {
         </ModelCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
-        <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
-        <BreakdownCard title="By Market Condition" data={s.by_market_condition as Record<string, BucketStat> | undefined} />
-      </div>
-
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2 font-heading">
@@ -577,8 +571,6 @@ function StatsPage() {
     </div>
   );
 }
-
-interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -672,29 +664,6 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
           </div>
         )}
       </div>
-    </Card>
-  );
-}
-
-function BreakdownCard({ title, data }: { title: string; data?: Record<string, BucketStat> }) {
-  const entries = Object.entries(data ?? {});
-  return (
-    <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base font-heading">{title}</CardTitle></CardHeader>
-      <CardContent>
-        {entries.length === 0 ? <p className="text-sm text-muted-foreground">No data yet.</p> : (
-          <ul className="space-y-2 text-sm">
-            {entries.sort((a, b) => (b[1]?.total ?? 0) - (a[1]?.total ?? 0)).map(([k, v]) => (
-              <li key={k} className="flex justify-between gap-2 items-baseline">
-                <span className="truncate text-xs">{k}</span>
-                <span className="font-mono text-xs whitespace-nowrap">
-                  {v.win_rate}% · {v.wins}W/{v.losses}L · n={v.total}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
     </Card>
   );
 }
