@@ -459,7 +459,11 @@ export async function runModel8V3(
     };
     const { data: ins, error } = await sb.from("model8_v3_predictions")
       .insert(row).select("prediction_id").maybeSingle();
-    if (error) return { ok: false, skipped: `insert_failed:${error.message}` } as const;
+    if (error) {
+      await heartbeat(false, { stage: "abstain_insert", abstain_reason: reason }, error.message);
+      return { ok: false, skipped: `insert_failed:${error.message}` } as const;
+    }
+    await heartbeat(true, { stage: "abstain", abstain_reason: reason });
     return {
       ok: true,
       skipped: reason,
@@ -468,6 +472,7 @@ export async function runModel8V3(
       qualified_prediction: "ABSTAIN",
     } as const;
   };
+
 
   const { candles, ready } = await waitForFinalizedHistory(sb, targetTs);
   const priorIso = new Date(targetTs.getTime() - TF_MS).toISOString();
