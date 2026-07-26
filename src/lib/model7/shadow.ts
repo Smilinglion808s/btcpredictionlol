@@ -536,6 +536,13 @@ export async function runShadowForPrediction(
       await runA96(supabase, predictionRow.id);
     } catch { /* never block */ }
 
+    // Model 3 FWD (model8_v3) — standalone shadow. Fully independent of every
+    // other model above; failures never affect webhook or peer shadows.
+    try {
+      const { runModel8V3 } = await import("@/lib/model8_v3/orchestrator");
+      await runModel8V3(supabase);
+    } catch { /* never block */ }
+
 
 
 
