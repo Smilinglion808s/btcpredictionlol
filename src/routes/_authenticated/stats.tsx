@@ -368,6 +368,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={td1PendingQ.data?.candle_ts}
           predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
+          abstainReason={(td1PendingQ.data as any)?.skip_reason ?? null}
           actions={(
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetTd1Stats} disabled={resettingTd1}>
