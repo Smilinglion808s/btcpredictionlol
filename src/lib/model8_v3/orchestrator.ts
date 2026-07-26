@@ -519,45 +519,62 @@ export async function runModel8V3(
     }
   }
 
-  // Fit selection — v3.0.1 manual-approval flow.
-  // Bootstrap only trains an ACTIVE fit when no active fit exists yet.
-  // Every 96 resolved non-PUSH rows we train a CANDIDATE fit with status
-  // 'pending_review' and persist a candidate-vs-active review report.
-  // The candidate NEVER auto-activates; the active fit keeps serving.
+  // Fit selection — auto-approval flow (manual review removed).
+  // Every 96 resolved non-PUSH rows we train a new fit and immediately
+  // activate it. Any lingering pending_review candidate is also auto-activated.
   let fit: DualFit | null = null;
   const active = await loadActiveFit(sb);
   if (active) {
     fit = active;
     try {
-      const sinceCount = await resolvedRowsSinceFit(sb, active.fit_id);
+      // Auto-activate any lingering pending candidate first.
+      const { data: pending } = await sb
+        .from("model8_v3_fits")
+        .select("fit_id")
+        .eq("model_version", M8V3_MODEL_VERSION)
+        .eq("status", "pending_review")
+        .order("review_requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (pending?.fit_id) {
+        await sb.rpc("activate_model8_v3_fit", {
+          p_fit_id: pending.fit_id,
+          p_reviewed_by: "auto",
+          p_notes: "auto-approved (manual review disabled)",
+        });
+        const refreshed = await loadActiveFit(sb);
+        if (refreshed) fit = refreshed;
+      }
+
+      const currentActive = fit;
+      const sinceCount = await resolvedRowsSinceFit(sb, currentActive.fit_id);
       if (sinceCount >= M8V3_RETRAIN_EVERY_RESOLVED_ROWS) {
-        // Only train a new candidate when none is currently awaiting review.
-        const { data: pending } = await sb
-          .from("model8_v3_fits")
-          .select("fit_id")
-          .eq("model_version", M8V3_MODEL_VERSION)
-          .eq("status", "pending_review")
-          .limit(1)
-          .maybeSingle();
-        if (!pending) {
-          const trained = await trainNewFit(sb, candles, { intent: "candidate", priorActiveFitId: active.fit_id });
-          if (trained.ok) {
-            try {
-              const report = await buildCandidateReviewReportFromDb(sb, trained.fit, active);
-              await sb.from("model8_v3_fits")
-                .update({ review_report: report })
-                .eq("fit_id", trained.fit.fit_id);
-              await sb.from("model8_v3_fit_reviews").insert({
-                model_version: M8V3_MODEL_VERSION,
-                candidate_fit_id: trained.fit.fit_id,
-                active_fit_id: active.fit_id,
-                report,
-              });
-            } catch { /* best-effort audit */ }
-          }
+        const trained = await trainNewFit(sb, candles, { intent: "candidate", priorActiveFitId: currentActive.fit_id });
+        if (trained.ok) {
+          try {
+            const report = await buildCandidateReviewReportFromDb(sb, trained.fit, currentActive);
+            await sb.from("model8_v3_fits")
+              .update({ review_report: report })
+              .eq("fit_id", trained.fit.fit_id);
+            await sb.from("model8_v3_fit_reviews").insert({
+              model_version: M8V3_MODEL_VERSION,
+              candidate_fit_id: trained.fit.fit_id,
+              active_fit_id: currentActive.fit_id,
+              report,
+            });
+          } catch { /* best-effort audit */ }
+          try {
+            await sb.rpc("activate_model8_v3_fit", {
+              p_fit_id: trained.fit.fit_id,
+              p_reviewed_by: "auto",
+              p_notes: "auto-approved (manual review disabled)",
+            });
+            const refreshed = await loadActiveFit(sb);
+            if (refreshed) fit = refreshed;
+          } catch { /* activation best-effort; keep serving prior active */ }
         }
       }
-    } catch { /* candidate training never blocks live prediction */ }
+    } catch { /* retrain never blocks live prediction */ }
   } else {
     const trained = await trainNewFit(sb, candles, { intent: "bootstrap" });
     if (!trained.ok) {
