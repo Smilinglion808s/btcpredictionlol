@@ -289,7 +289,7 @@ async function trainNewFit(
       acc_movement: acc(calibratedMove, calYMove),
     },
     fitted_at: new Date().toISOString(),
-    activated_at: isCandidate ? null : new Date().toISOString(),
+    activated_at: new Date().toISOString(),
     status,
     review_requested_at: isCandidate ? new Date().toISOString() : null,
     prior_active_fit_id: opts.priorActiveFitId ?? null,
