@@ -38,6 +38,8 @@ import {
 } from "./config";
 import { buildTrainingMatrix, M8V3_FEATURE_NAMES, type Candle } from "./features";
 import { trainLogistic, predictProb, fitPlatt, applyPlatt } from "./logistic";
+import { computeRegimeSnapshot } from "./regime";
+import { buildCandidateReviewReport } from "./review";
 
 const TF_MS = M8V3_TIMEFRAME_SEC * 1000;
 // Total labeled rows to load. Add lookback + slack for the target row.
