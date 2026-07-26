@@ -48,6 +48,10 @@ const HISTORY_LOAD =
 
 function nextCandleBoundary(nowMs: number): Date {
   const rem = nowMs % TF_MS;
+  // If we're within the first 3 minutes past a boundary, the just-opened
+  // candle is the one we should be predicting (its prior is finalized).
+  // Otherwise target the upcoming boundary.
+  if (rem > 0 && rem <= 180_000) return new Date(nowMs - rem);
   return new Date(nowMs + (TF_MS - rem));
 }
 
