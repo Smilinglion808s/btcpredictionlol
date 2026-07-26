@@ -9,7 +9,9 @@ import {
 import { applyScaler } from "./preprocess";
 import { predictProb } from "./logistic";
 import { computeLayerB, type Dir } from "./layerB";
-import { loadActiveAas96Fit } from "./fitStore";
+import {
+  loadActiveAas96Fit, getOrMintLayerBEpisode, loadLayerBEpisodeById, applyLayerBHistory,
+} from "./fitStore";
 import { AAS96_MIN_TRAINING_ROWS, AAS96_SELECTOR_LOOKBACK } from "./config";
 import { inferActualDir } from "./train";
 
