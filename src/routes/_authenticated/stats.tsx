@@ -764,7 +764,7 @@ function StatsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">v3.0.0 · standalone shadow · not trading</span></span>
+            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">v3.0.1 · standalone shadow · manual approval</span></span>
             <Button size="sm" variant="outline" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
               {exportingM8v3 ? "Exporting…" : "CSV (Model 3 FWD)"}
             </Button>
