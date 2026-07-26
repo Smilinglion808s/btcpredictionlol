@@ -68,15 +68,20 @@ function safeLogRet(a: number, b: number): number {
 }
 
 /**
- * Build feature matrix and labels from `candles` (chronological).
- * Label at index i is direction of candle i+1 vs candle i's close (via next open→close).
- * We follow "GREEN if next.close > next.open, RED if <, PUSH if =".
- * Rows with label=PUSH are dropped from training.
+ * Build feature matrix and dual labels from `candles` (chronological).
+ * For index i, features use ONLY candles[0..i] and labels come from candle i+1:
+ *   yDir[i]   = 1 if next.close > next.open, 0 if <, drop if =
+ *   yMove[i]  = 1 if |next.close-next.open|/next.open*10_000 >= movementBps, else 0
+ * Rows where next candle is PUSH are dropped from BOTH tracks.
  */
-export function buildTrainingMatrix(candles: Candle[]): {
-  X: number[][]; // n_samples x n_features
-  y: number[]; // 1 = GREEN, 0 = RED
-  targetFeatureRow: number[]; // features for the newest candle (label unknown)
+export function buildTrainingMatrix(
+  candles: Candle[],
+  movementBps: number,
+): {
+  X: number[][];
+  yDir: number[];
+  yMove: number[];
+  targetFeatureRow: number[];
 } {
   const n = candles.length;
   const closes = candles.map((c) => c.close);
@@ -117,14 +122,17 @@ export function buildTrainingMatrix(candles: Candle[]): {
   };
 
   const X: number[][] = [];
-  const y: number[] = [];
-  // Only train on candle indices where i>=24 (lag stable) and i+1 exists with directional label.
+  const yDir: number[] = [];
+  const yMove: number[] = [];
   for (let i = 24; i < n - 1; i++) {
     const nxt = candles[i + 1];
     if (nxt.close === nxt.open) continue; // PUSH → drop
     X.push(featRow(i));
-    y.push(nxt.close > nxt.open ? 1 : 0);
+    yDir.push(nxt.close > nxt.open ? 1 : 0);
+    const bodyBps = nxt.open > 0 ? Math.abs(nxt.close - nxt.open) / nxt.open * 10_000 : 0;
+    yMove.push(bodyBps >= movementBps ? 1 : 0);
   }
   const targetFeatureRow = featRow(n - 1);
-  return { X, y, targetFeatureRow };
+  return { X, yDir, yMove, targetFeatureRow };
 }
+
