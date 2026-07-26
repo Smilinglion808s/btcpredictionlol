@@ -152,9 +152,7 @@ function TopNav() {
         <nav className="flex items-center gap-1">
           <Link to="/" className={navItem} activeOptions={{ exact: true }} activeProps={{ className: `${navItem} ${active}` }}>Home</Link>
           <Link to="/stats" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Stats</Link>
-          <Link to="/daily" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>24H Data</Link>
-          <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>History</Link>
-          <Link to="/models" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Models</Link>
+          <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>CSV Data</Link>
           <Link to="/settings/model" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Settings</Link>
         </nav>
       </div>
