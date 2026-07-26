@@ -751,67 +751,17 @@ function StatsPage() {
             const m = (m8v3StatsQ.data ?? {}) as Record<string, any>;
             const p = m8v3PendingQ.data as Record<string, any> | null;
             const q = p?.qualified_prediction ?? null;
-            const rp = p?.raw_prediction ?? null;
-            const probG = typeof p?.calibrated_probability_green === "number" ? (p.calibrated_probability_green * 100).toFixed(1) : null;
-            const probM = typeof p?.calibrated_probability_movement === "number" ? (p.calibrated_probability_movement * 100).toFixed(1) : null;
+            const qual = m.qualified ?? {};
             const decisionCls = q === "GREEN" ? "text-bull border-bull/40 bg-bull/10"
               : q === "RED" ? "text-bear border-bear/40 bg-bear/10"
               : "text-muted-foreground border-border";
-            const raw = m.raw ?? {}; const qual = m.qualified ?? {}; const absRaw = m.abstained_raw ?? {};
-            const gr = m.qualified_green_red ?? {}; const rgr = m.raw_green_red ?? {};
-            const bl = m.raw_brier_logloss ?? {}; const dd = m.drawdown ?? {};
-            const cal = (m.calibration ?? {}) as Record<string, { n: number; avg_pred: number; empirical: number }>;
             return (
               <>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Official forward-test · fit <span className="font-mono text-foreground">{m.active_fit_id ?? "—"}</span> · {m.active_model_version ?? "—"} · {m.official_rows ?? 0} official / {m.shakedown_rows ?? 0} shakedown
-                </div>
-
-                <div>
-                  <div className="text-xs font-medium mb-1">Qualified track</div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <Stat label="Win rate" value={`${qual.win_rate ?? 0}%`} />
-                    <Stat label="Coverage" value={`${m.coverage_pct ?? 0}%`} />
-                    <Stat label="Trades" value={String(qual.trades ?? 0)} />
-                    <Stat label="Abstains" value={String(qual.abstains ?? 0)} />
-                    <Stat label="Pushes" value={String(qual.pushes ?? 0)} />
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
-                    <Stat label="GREEN acc" value={`${gr.green_win_rate ?? 0}% (${gr.green_total ?? 0})`} />
-                    <Stat label="RED acc" value={`${gr.red_win_rate ?? 0}% (${gr.red_total ?? 0})`} />
-                    <Stat label="Max drawdown" value={String(dd.max_drawdown ?? 0)} />
-                    <Stat label="Longest loss streak" value={String(dd.longest_losing_streak ?? 0)} />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs font-medium mb-1">Raw track (every graded row)</div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <Stat label="Raw win rate" value={`${raw.win_rate ?? 0}%`} />
-                    <Stat label="Raw trades" value={String(raw.trades ?? 0)} />
-                    <Stat label="GREEN acc" value={`${rgr.green_win_rate ?? 0}% (${rgr.green_total ?? 0})`} />
-                    <Stat label="RED acc" value={`${rgr.red_win_rate ?? 0}% (${rgr.red_total ?? 0})`} />
-                    <Stat label="Abstained-raw WR" value={`${absRaw.win_rate ?? 0}% (${absRaw.trades ?? 0})`} />
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
-                    <Stat label="Brier score" value={String(bl.brier ?? 0)} />
-                    <Stat label="Log loss" value={String(bl.log_loss ?? 0)} />
-                    <Stat label="Scored" value={String(bl.scored ?? 0)} />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs font-medium mb-1">Calibration (P(GREEN) buckets)</div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px] font-mono">
-                    {Object.entries(cal).map(([bucket, v]) => (
-                      <div key={bucket} className="rounded border p-2">
-                        <div className="text-muted-foreground">{bucket}</div>
-                        <div>n={v.n}</div>
-                        <div>pred={v.avg_pred.toFixed(2)}</div>
-                        <div>emp={v.empirical.toFixed(2)}</div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Win rate" value={`${qual.win_rate ?? 0}%`} />
+                  <Stat label="Wins" value={String(qual.wins ?? 0)} />
+                  <Stat label="Losses" value={String(qual.losses ?? 0)} />
+                  <Stat label="Pushes" value={String(qual.pushes ?? 0)} />
                 </div>
 
                 <div className="rounded-md border p-3">
@@ -822,19 +772,13 @@ function StatsPage() {
                     </div>
                   </div>
                   {p && q ? (
-                    <div className="flex items-center justify-between gap-2 font-mono text-xs flex-wrap">
+                    <div className="font-mono text-xs">
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                        Qualified: {q}
+                        {q}
                         {q === "ABSTAIN" && p.abstain_reason ? (
                           <span className="text-[9px] text-muted-foreground ml-1">({String(p.abstain_reason)})</span>
                         ) : null}
                       </span>
-                      <span className="text-muted-foreground">Raw: <span className="text-foreground">{rp ?? "—"}</span></span>
-                      <span className="text-muted-foreground">P(green): <span className="text-foreground">{probG ?? "—"}%</span></span>
-                      <span className="text-muted-foreground">P(move): <span className="text-foreground">{probM ?? "—"}%</span></span>
-                      {p.official_forward_test_row === false ? (
-                        <span className="text-[9px] uppercase tracking-wider text-amber-500">unofficial</span>
-                      ) : null}
                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground/70 italic font-mono">no prediction yet</div>
