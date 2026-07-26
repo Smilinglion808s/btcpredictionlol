@@ -38,6 +38,8 @@ import {
 } from "./config";
 import { buildTrainingMatrix, M8V3_FEATURE_NAMES, type Candle } from "./features";
 import { trainLogistic, predictProb, fitPlatt, applyPlatt } from "./logistic";
+import { computeRegimeSnapshot } from "./regime";
+import { buildCandidateReviewReport } from "./review";
 
 const TF_MS = M8V3_TIMEFRAME_SEC * 1000;
 // Total labeled rows to load. Add lookback + slack for the target row.
@@ -159,6 +161,7 @@ async function loadActiveFit(sb: SupabaseClient): Promise<null | {
     .from("model8_v3_fits")
     .select("*")
     .eq("model_version", M8V3_MODEL_VERSION)
+    .eq("status", "active")
     .order("activated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -189,8 +192,12 @@ interface DualFit {
   n_train: number;
 }
 
-async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
-  | { ok: true; fit: DualFit }
+async function trainNewFit(
+  sb: SupabaseClient,
+  candles: Candle[],
+  opts: { intent: "bootstrap" | "candidate"; priorActiveFitId?: string | null } = { intent: "bootstrap" },
+): Promise<
+  | { ok: true; fit: DualFit; status: "active" | "pending_review" }
   | { ok: false; reason: string }
 > {
   const { X, yDir, yMove } = buildTrainingMatrix(candles, M8V3_MOVEMENT_THRESHOLD_BPS);
@@ -241,7 +248,9 @@ async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
   const calibratedDir = rawCalDir.map((p) => applyPlatt(p, platt_dir.a, platt_dir.b));
   const calibratedMove = rawCalMove.map((p) => applyPlatt(p, platt_move.a, platt_move.b));
 
-  const fitRow = {
+  const isCandidate = opts.intent === "candidate";
+  const status = isCandidate ? "pending_review" : "active";
+  const fitRow: Record<string, unknown> = {
     fit_id,
     model_version: M8V3_MODEL_VERSION,
     feature_schema_version: M8V3_FEATURE_SCHEMA_VERSION,
@@ -281,6 +290,9 @@ async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
     },
     fitted_at: new Date().toISOString(),
     activated_at: new Date().toISOString(),
+    status,
+    review_requested_at: isCandidate ? new Date().toISOString() : null,
+    prior_active_fit_id: opts.priorActiveFitId ?? null,
   };
   const { error } = await sb.from("model8_v3_fits").insert(fitRow);
   if (error && !String(error.message).includes("duplicate")) {
@@ -289,6 +301,7 @@ async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
 
   return {
     ok: true,
+    status,
     fit: {
       fit_id,
       weights_dir: dir.w, intercept_dir: dir.b,
@@ -298,6 +311,33 @@ async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
       n_train: trainX.length,
     },
   };
+}
+
+/** Fetch recent official rows for the active fit and build a candidate-vs-active review report. */
+async function buildCandidateReviewReportFromDb(
+  sb: SupabaseClient,
+  candidateFit: DualFit,
+  activeFit: DualFit,
+): Promise<Record<string, unknown>> {
+  const { data } = await sb
+    .from("model8_v3_predictions")
+    .select("target_candle_ts, actual_direction, raw_result, qualified_result, raw_prediction, qualified_prediction, calibrated_probability_green, feature_values, regime_label, regime_transition_score")
+    .eq("model_version", M8V3_MODEL_VERSION)
+    .eq("episode_type", "official_v3_forward_test")
+    .eq("official_forward_test_row", true)
+    .eq("fit_id", activeFit.fit_id)
+    .not("resolved_at", "is", null)
+    .order("target_candle_ts", { ascending: false })
+    .limit(2000);
+  const activeRows = (data ?? []) as Array<Record<string, unknown>>;
+  return buildCandidateReviewReport({
+    candidateFit,
+    activeFit,
+    activeRows,
+    featureOrder: M8V3_FEATURE_NAMES as unknown as string[],
+    edge: M8V3_MIN_DIRECTION_EDGE,
+    movementProb: M8V3_MIN_MOVEMENT_PROBABILITY,
+  }) as unknown as Record<string, unknown>;
 }
 
 /** Run one prediction for the given (or next) target candle. Idempotent. */
@@ -408,17 +448,47 @@ export async function runModel8V3(
     }
   }
 
-  // Load or retrain fit.
+  // Fit selection — v3.0.1 manual-approval flow.
+  // Bootstrap only trains an ACTIVE fit when no active fit exists yet.
+  // Every 96 resolved non-PUSH rows we train a CANDIDATE fit with status
+  // 'pending_review' and persist a candidate-vs-active review report.
+  // The candidate NEVER auto-activates; the active fit keeps serving.
   let fit: DualFit | null = null;
   const active = await loadActiveFit(sb);
   if (active) {
-    const sinceCount = await resolvedRowsSinceFit(sb, active.fit_id);
-    if (sinceCount < M8V3_RETRAIN_EVERY_RESOLVED_ROWS) {
-      fit = active;
-    }
-  }
-  if (!fit) {
-    const trained = await trainNewFit(sb, candles);
+    fit = active;
+    try {
+      const sinceCount = await resolvedRowsSinceFit(sb, active.fit_id);
+      if (sinceCount >= M8V3_RETRAIN_EVERY_RESOLVED_ROWS) {
+        // Only train a new candidate when none is currently awaiting review.
+        const { data: pending } = await sb
+          .from("model8_v3_fits")
+          .select("fit_id")
+          .eq("model_version", M8V3_MODEL_VERSION)
+          .eq("status", "pending_review")
+          .limit(1)
+          .maybeSingle();
+        if (!pending) {
+          const trained = await trainNewFit(sb, candles, { intent: "candidate", priorActiveFitId: active.fit_id });
+          if (trained.ok) {
+            try {
+              const report = await buildCandidateReviewReportFromDb(sb, trained.fit, active);
+              await sb.from("model8_v3_fits")
+                .update({ review_report: report })
+                .eq("fit_id", trained.fit.fit_id);
+              await sb.from("model8_v3_fit_reviews").insert({
+                model_version: M8V3_MODEL_VERSION,
+                candidate_fit_id: trained.fit.fit_id,
+                active_fit_id: active.fit_id,
+                report,
+              });
+            } catch { /* best-effort audit */ }
+          }
+        }
+      }
+    } catch { /* candidate training never blocks live prediction */ }
+  } else {
+    const trained = await trainNewFit(sb, candles, { intent: "bootstrap" });
     if (!trained.ok) {
       return abstainInsert(trained.reason, {
         feature_history_valid: true,
@@ -428,9 +498,20 @@ export async function runModel8V3(
     }
     fit = trained.fit;
   }
+  if (!fit) {
+    return abstainInsert("no_active_fit", {
+      feature_history_valid: true,
+      data_quality_valid: true,
+      target_open_at_prediction: targetOpenAtPrediction,
+    });
+  }
 
   // Build target feature row from same candle window (last-index features).
   const { targetFeatureRow } = buildTrainingMatrix(candles, M8V3_MOVEMENT_THRESHOLD_BPS);
+
+  // Regime snapshot — MONITORING ONLY. Not used to select fit, alter
+  // thresholds, feed the model, or trigger retraining.
+  const regime = computeRegimeSnapshot(candles);
 
   const rawDirGreen = predictProb(targetFeatureRow, fit.weights_dir, fit.intercept_dir, fit.means, fit.scales);
   const rawMove = predictProb(targetFeatureRow, fit.weights_move, fit.intercept_move, fit.means, fit.scales);
@@ -476,6 +557,22 @@ export async function runModel8V3(
     target_open_at_prediction: targetOpenAtPrediction,
     official_forward_test_row: createdBeforeTarget,
     prediction_latency_ms: Date.now() - startMs,
+    // Regime monitoring — persisted alongside every prediction. Not used
+    // to alter the prediction itself in v3.0.1.
+    atr_14_to_price: regime.atr_14_to_price,
+    realized_volatility_8: regime.realized_volatility_8,
+    realized_volatility_32: regime.realized_volatility_32,
+    volatility_ratio_8_32: regime.volatility_ratio_8_32,
+    trend_efficiency_8: regime.trend_efficiency_8,
+    trend_efficiency_32: regime.trend_efficiency_32,
+    ema9_minus_ema21_to_atr: regime.ema9_minus_ema21_to_atr,
+    volume_zscore_32: regime.volume_zscore_32,
+    volatility_percentile_256: regime.volatility_percentile_256,
+    trend_percentile_256: regime.trend_percentile_256,
+    volume_percentile_256: regime.volume_percentile_256,
+    regime_label: regime.regime_label,
+    regime_transition_score: regime.regime_transition_score,
+    regime_alerts: regime.regime_alerts,
   }).select("prediction_id").maybeSingle();
 
   if (error) return { ok: false, skipped: `insert_failed:${error.message}` };

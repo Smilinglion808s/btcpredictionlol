@@ -1720,9 +1720,60 @@ export type Database = {
         }
         Relationships: []
       }
+      model8_v3_fit_reviews: {
+        Row: {
+          active_fit_id: string | null
+          candidate_fit_id: string
+          created_at: string
+          decision: string | null
+          model_version: string
+          notes: string | null
+          report: Json
+          requested_at: string
+          review_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+        }
+        Insert: {
+          active_fit_id?: string | null
+          candidate_fit_id: string
+          created_at?: string
+          decision?: string | null
+          model_version: string
+          notes?: string | null
+          report: Json
+          requested_at?: string
+          review_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Update: {
+          active_fit_id?: string | null
+          candidate_fit_id?: string
+          created_at?: string
+          decision?: string | null
+          model_version?: string
+          notes?: string | null
+          report?: Json
+          requested_at?: string
+          review_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model8_v3_fit_reviews_candidate_fit_id_fkey"
+            columns: ["candidate_fit_id"]
+            isOneToOne: false
+            referencedRelation: "model8_v3_fits"
+            referencedColumns: ["fit_id"]
+          },
+        ]
+      }
       model8_v3_fits: {
         Row: {
           activated_at: string
+          activation_target_candle_ts: string | null
           calibration_end_ts: string
           calibration_metrics: Json
           calibration_start_ts: string
@@ -1741,6 +1792,14 @@ export type Database = {
           platt_direction: Json
           platt_movement: Json
           preprocess: Json
+          prior_active_fit_id: string | null
+          review_decision: string | null
+          review_notes: string | null
+          review_report: Json | null
+          review_requested_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
           symbol: string
           timeframe: string
           training_end_ts: string
@@ -1749,6 +1808,7 @@ export type Database = {
         }
         Insert: {
           activated_at?: string
+          activation_target_candle_ts?: string | null
           calibration_end_ts: string
           calibration_metrics: Json
           calibration_start_ts: string
@@ -1767,6 +1827,14 @@ export type Database = {
           platt_direction: Json
           platt_movement: Json
           preprocess: Json
+          prior_active_fit_id?: string | null
+          review_decision?: string | null
+          review_notes?: string | null
+          review_report?: Json | null
+          review_requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
           symbol: string
           timeframe: string
           training_end_ts: string
@@ -1775,6 +1843,7 @@ export type Database = {
         }
         Update: {
           activated_at?: string
+          activation_target_candle_ts?: string | null
           calibration_end_ts?: string
           calibration_metrics?: Json
           calibration_start_ts?: string
@@ -1793,6 +1862,14 @@ export type Database = {
           platt_direction?: Json
           platt_movement?: Json
           preprocess?: Json
+          prior_active_fit_id?: string | null
+          review_decision?: string | null
+          review_notes?: string | null
+          review_report?: Json | null
+          review_requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
           symbol?: string
           timeframe?: string
           training_end_ts?: string
@@ -1812,12 +1889,14 @@ export type Database = {
           actual_movement_hit: boolean | null
           actual_open: number | null
           actual_volume: number | null
+          atr_14_to_price: number | null
           calibrated_probability_green: number | null
           calibrated_probability_movement: number | null
           code_version: string | null
           created_at: string
           data_quality_invalid_reason: string | null
           data_quality_valid: boolean
+          ema9_minus_ema21_to_atr: number | null
           episode_type: string
           feature_cutoff_ts: string
           feature_history_valid: boolean
@@ -1842,12 +1921,24 @@ export type Database = {
           raw_probability_green: number | null
           raw_probability_movement: number | null
           raw_result: string | null
+          realized_volatility_32: number | null
+          realized_volatility_8: number | null
+          regime_alerts: Json | null
+          regime_label: string | null
+          regime_transition_score: number | null
           resolved_at: string | null
           symbol: string
           target_candle_ts: string
           target_open_at_prediction: number | null
           timeframe: string
+          trend_efficiency_32: number | null
+          trend_efficiency_8: number | null
+          trend_percentile_256: number | null
           updated_at: string
+          volatility_percentile_256: number | null
+          volatility_ratio_8_32: number | null
+          volume_percentile_256: number | null
+          volume_zscore_32: number | null
         }
         Insert: {
           abstain_reason?: string | null
@@ -1859,12 +1950,14 @@ export type Database = {
           actual_movement_hit?: boolean | null
           actual_open?: number | null
           actual_volume?: number | null
+          atr_14_to_price?: number | null
           calibrated_probability_green?: number | null
           calibrated_probability_movement?: number | null
           code_version?: string | null
           created_at?: string
           data_quality_invalid_reason?: string | null
           data_quality_valid: boolean
+          ema9_minus_ema21_to_atr?: number | null
           episode_type?: string
           feature_cutoff_ts: string
           feature_history_valid: boolean
@@ -1889,12 +1982,24 @@ export type Database = {
           raw_probability_green?: number | null
           raw_probability_movement?: number | null
           raw_result?: string | null
+          realized_volatility_32?: number | null
+          realized_volatility_8?: number | null
+          regime_alerts?: Json | null
+          regime_label?: string | null
+          regime_transition_score?: number | null
           resolved_at?: string | null
           symbol?: string
           target_candle_ts: string
           target_open_at_prediction?: number | null
           timeframe?: string
+          trend_efficiency_32?: number | null
+          trend_efficiency_8?: number | null
+          trend_percentile_256?: number | null
           updated_at?: string
+          volatility_percentile_256?: number | null
+          volatility_ratio_8_32?: number | null
+          volume_percentile_256?: number | null
+          volume_zscore_32?: number | null
         }
         Update: {
           abstain_reason?: string | null
@@ -1906,12 +2011,14 @@ export type Database = {
           actual_movement_hit?: boolean | null
           actual_open?: number | null
           actual_volume?: number | null
+          atr_14_to_price?: number | null
           calibrated_probability_green?: number | null
           calibrated_probability_movement?: number | null
           code_version?: string | null
           created_at?: string
           data_quality_invalid_reason?: string | null
           data_quality_valid?: boolean
+          ema9_minus_ema21_to_atr?: number | null
           episode_type?: string
           feature_cutoff_ts?: string
           feature_history_valid?: boolean
@@ -1936,12 +2043,24 @@ export type Database = {
           raw_probability_green?: number | null
           raw_probability_movement?: number | null
           raw_result?: string | null
+          realized_volatility_32?: number | null
+          realized_volatility_8?: number | null
+          regime_alerts?: Json | null
+          regime_label?: string | null
+          regime_transition_score?: number | null
           resolved_at?: string | null
           symbol?: string
           target_candle_ts?: string
           target_open_at_prediction?: number | null
           timeframe?: string
+          trend_efficiency_32?: number | null
+          trend_efficiency_8?: number | null
+          trend_percentile_256?: number | null
           updated_at?: string
+          volatility_percentile_256?: number | null
+          volatility_ratio_8_32?: number | null
+          volume_percentile_256?: number | null
+          volume_zscore_32?: number | null
         }
         Relationships: []
       }
@@ -2544,6 +2663,10 @@ export type Database = {
       }
     }
     Functions: {
+      activate_model8_v3_fit: {
+        Args: { p_fit_id: string; p_notes: string; p_reviewed_by: string }
+        Returns: Json
+      }
       apply_b4_2_resolution: {
         Args: {
           p_b2_final_decision: string
@@ -2601,6 +2724,15 @@ export type Database = {
       prediction_stats: { Args: never; Returns: Json }
       prediction_stats_filtered: {
         Args: { model_version_filter?: string }
+        Returns: Json
+      }
+      reject_model8_v3_fit: {
+        Args: {
+          p_decision: string
+          p_fit_id: string
+          p_notes: string
+          p_reviewed_by: string
+        }
         Returns: Json
       }
       resolve_a96_prediction: {

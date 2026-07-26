@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, exportA96CombinedCsv, resetA96VisualStats, resetTd1RcVisualStats } from "@/lib/predictions.functions";
-import { getModel8V3Stats, getModel8V3Pending, exportModel8V3Csv } from "@/lib/model8_v3.functions";
+import { getModel8V3Stats, getModel8V3Pending, exportModel8V3Csv, getModel8V3PendingCandidate, approveModel8V3Candidate, rejectModel8V3Candidate } from "@/lib/model8_v3.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -59,6 +59,30 @@ function StatsPage() {
   const exportM8v3Fn = useServerFn(exportModel8V3Csv);
   const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const m8v3CandidateFn = useServerFn(getModel8V3PendingCandidate);
+  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const approveM8v3Fn = useServerFn(approveModel8V3Candidate);
+  const rejectM8v3Fn = useServerFn(rejectModel8V3Candidate);
+  const [m8v3ReviewNotes, setM8v3ReviewNotes] = useState("");
+  const [m8v3ReviewBusy, setM8v3ReviewBusy] = useState(false);
+  const runM8v3Review = async (decision: "approve" | "reject" | "continue") => {
+    const fitId = (m8v3CandidateQ.data as { fit_id?: string } | null)?.fit_id;
+    if (!fitId) return;
+    setM8v3ReviewBusy(true);
+    try {
+      if (decision === "approve") await approveM8v3Fn({ data: { fit_id: fitId, notes: m8v3ReviewNotes } });
+      else await rejectM8v3Fn({ data: { fit_id: fitId, decision, notes: m8v3ReviewNotes } });
+      setM8v3ReviewNotes("");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["model8-v3-candidate"] }),
+        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] }),
+      ]);
+    } catch (e) {
+      alert(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setM8v3ReviewBusy(false);
+    }
+  };
   const [exportingM8v3, setExportingM8v3] = useState(false);
   async function downloadM8v3Csv() {
     try {
@@ -740,7 +764,7 @@ function StatsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">v3.0.0 · standalone shadow · not trading</span></span>
+            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">v3.0.1 · standalone shadow · manual approval</span></span>
             <Button size="sm" variant="outline" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
               {exportingM8v3 ? "Exporting…" : "CSV (Model 3 FWD)"}
             </Button>
@@ -784,6 +808,63 @@ function StatsPage() {
                     <div className="text-xs text-muted-foreground/70 italic font-mono">no prediction yet</div>
                   )}
                 </div>
+
+                {(() => {
+                  const cand = m8v3CandidateQ.data as Record<string, any> | null;
+                  if (!cand) {
+                    return (
+                      <div className="rounded-md border p-3 text-xs text-muted-foreground">
+                        No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
+                      </div>
+                    );
+                  }
+                  const rep = (cand.review_report ?? {}) as Record<string, any>;
+                  const w = rep.windows ?? {};
+                  const line = (label: string, w: any) => {
+                    const a = w?.active?.qualified ?? {};
+                    const c = w?.candidate_counterfactual?.qualified ?? {};
+                    return (
+                      <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
+                      </div>
+                    );
+                  };
+                  return (
+                    <div className="rounded-md border p-3 space-y-2 bg-amber-500/5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium">Candidate awaiting manual approval</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
+                      </div>
+                      <div className="space-y-1">
+                        {line("Last 96 qualified", w.last_96)}
+                        {line("Last 384 qualified", w.last_384)}
+                        {line("Cumulative qualified", w.cumulative)}
+                      </div>
+                      <textarea
+                        value={m8v3ReviewNotes}
+                        onChange={(e) => setM8v3ReviewNotes(e.target.value)}
+                        placeholder="Review notes (optional)"
+                        className="w-full text-xs rounded border bg-background p-2"
+                        rows={2}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
+                          {m8v3ReviewBusy ? "Working…" : "Approve candidate"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
+                          Reject
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
+                          Continue current fit
+                        </Button>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Activation is atomic — the approved fit starts serving on the next unopened candle. All decisions are stored in <span className="font-mono">model8_v3_fit_reviews</span> and included in the CSV audit trail.
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
