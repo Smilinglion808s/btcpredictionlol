@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, exportA96CombinedCsv, resetA96VisualStats, resetTd1RcVisualStats } from "@/lib/predictions.functions";
-import { getModel8V3Stats, getModel8V3Pending, exportModel8V3Csv } from "@/lib/model8_v3.functions";
+import { getModel8V3Stats, getModel8V3Pending, exportModel8V3Csv, getModel8V3PendingCandidate, approveModel8V3Candidate, rejectModel8V3Candidate } from "@/lib/model8_v3.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
