@@ -1,76 +1,87 @@
-## Model 3 FWD — build plan
 
-Standalone shadow model. **Nothing in AAS96, a96, TD1-RC, A2, B2, B4.2, Model 6, or Model C is touched.** New tables, new code folder, new UI card, new CSV export.
+# AAS96 + TD1 Governance Update
 
-Internal id: `model8_v3` (per handoff). Display name: **Model 3 FWD**.
+Three coordinated changes. No touches to a96-r1, Cleanup Veto v1.1.0, TD1 feature definitions, TD1 tree-training params, Layer A training, or Layer B expert-calculation math.
 
-### 1. Database (one migration)
+## 1. Selector B Confirmation V1 → Shadow only
 
-New tables, all with `GRANT ... TO authenticated, service_role`, RLS enabled, deny-all default policies (matching every other model's tables):
+**Files**
+- `src/lib/model7/aas96/orchestrator.ts` — re-order decision pipeline:
+  1. Layer A + Layer B
+  2. Layer C selector → `preOverrideSelected` / `preOverrideDir`
+  3. **Active baseline = Layer C** (`selectedLayer = preOverrideSelected`, `baselineDir = preOverrideDir`)
+  4. Evaluate Selector B Confirmation V1 in shadow only; populate `selector_b_confirmation_v1_*` counterfactual fields.
+  5. Cleanup Veto v1.1 runs on the Layer C baseline (unchanged rule, new upstream input).
+  6. Publish.
+- `selector_b_confirmation_v1_applied = false` on all new rows.
+- New column `selector_b_confirmation_v1_mode` set to `SHADOW` for new rows; historical rows keep whatever value they had (or NULL).
+- Rule (`selectorBConfirmationV1.ts`), version `1.0.0`, threshold `0.0001`, reason string: unchanged.
 
-- `model8_v3_fits` — immutable fit artifacts (feature_order, means, scales, coefficients, intercept, calibration params, training window, active flag, artifact hash).
-- `model8_v3_fit_episodes` — one row per activation; started_at / ended_at.
-- `model8_v3_predictions` — one row per target candle. Columns cover the full handoff contract:
-  - identity: `prediction_id`, `fit_id`, `fit_episode_id`, `model_version`, `feature_schema_version`
-  - timing: `created_at`, `feature_cutoff_ts`, `target_candle_ts`, `prediction_latency_ms`, `prediction_created_before_target`
-  - inputs: `feature_history_valid`, `data_quality_valid`, `abstain_reason`, `feature_values` (jsonb)
-  - outputs: `raw_probability_green`, `calibrated_probability_green`, `raw_prediction` (GREEN/RED), `qualified_prediction` (GREEN/RED/ABSTAIN)
-  - resolution: `actual_open/high/low/close/volume`, `actual_direction`, `raw_result` (WIN/LOSS/PUSH), `qualified_result` (WIN/LOSS/PUSH/ABSTAIN), `resolved_at`, `last_resolution_error`
-  - forward-test: `official_forward_eligible` boolean
+**Migration**
+- Add column `selector_b_confirmation_v1_mode TEXT` on `model7_aas96_shadow` (nullable, no backfill).
 
-RPCs:
-- `get_or_mint_model8_v3_fit_episode()`
-- `resolve_model8_v3_prediction(p_prediction_id, p_actual_*)` — idempotent, grades raw+qualified against canonical OHLC.
+**Resolution**
+- Grading logic in `resolveAas96Row` already compares pre-override vs shadow-final and stores `selector_b_confirmation_v1_net_effect` (+2 / −2 / 0) — keep as-is; add explicit direction-change flag if missing.
 
-### 2. Model code — `src/lib/model8_v3/`
+**Stats UI (`src/routes/_authenticated/stats.tsx`, AAS96 card)**
+- Rename block to “Selector B Confirmation V1 — Shadow”.
+- Show evaluable, triggered, direction-change count, counterfactual W/L/net; add group-by-fit and group-by-day/week subpanels. Filter to `mode = SHADOW` OR `deployed_at >= <shadow cutover ts>` to prevent mixing.
 
-Independent folder. Files:
-- `config.ts` — thresholds (qualified band 0.45–0.55 ABSTAIN by default), min training rows, retrain cadence, feature-schema version.
-- `types.ts`
-- `labels.ts` — GREEN/RED/PUSH from canonical OHLC only.
-- `features.ts` — feature vector built from prior confirmed OKX BTC-USDT 15m candles only. Deliberately simple v1 set: returns over last {1,2,4,8} candles, ATR14, body-to-range mean, EMA9−EMA21 slope, RSI14, hour_sin/cos, day_of_week_sin/cos, plus a `*__missing` flag per numeric feature. Contiguity + validity gates from handoff §5.
-- `preprocess.ts` — median impute + standardize using training stats only.
-- `logistic.ts` — regularized binary logistic regression trainer (reuse the math already in `src/lib/model7/aas96/logistic.ts` internally via copy, not import, to keep separation).
-- `calibration.ts` — Platt scaling on held-out calibration slice.
-- `train.ts` — chronological split, fit, calibrate, persist to `model8_v3_fits`, close previous episode, mint new episode.
-- `predict.ts` — load active fit, build features, gate on data quality, produce raw + calibrated + qualified.
-- `resolve.ts` — call resolve RPC using canonical OKX candle.
-- `orchestrator.ts` — `runModel8V3(sb, targetTs)` scheduled from the existing 15m cron (added as an independent try/catch block; failure never blocks other models). Retrain trigger: every N=50 resolved non-PUSH predictions, or when no active fit exists (initial cold start once ≥300 rows of history are available).
+**CSV**: no removals — every existing `selector_b_confirmation_v1_*` column continues to export, plus new `selector_b_confirmation_v1_mode`.
 
-Independence guard: same "forbidden external-model tokens" check the a96 orchestrator uses, adapted to reject any AAS96/a96/TD1/A2/router key from entering features.
+## 2. TD1 incumbent vs candidate promotion
 
-### 3. Server functions & CSV — `src/lib/model8_v3.functions.ts`
+**Schema (new migration)**
+- Extend `model7_td1_fits` with: `status` (`training|pending_forward_review|active|rejected|superseded`), `trained_through_candle_ts`, `training_row_count`, `artifact_sha256`, `incumbent_fit_id`, `forward_review_started_at`, `forward_review_completed_at`, `forward_review_resolved_count`, `review_decision`, `review_reason`, `review_report jsonb`, `activated_at`, `rejected_at`.
+- Partial unique index: `UNIQUE (base_variant) WHERE status='active'` — enforces single active fit.
+- Extend `model7_td1_rc_shadow` with candidate/incumbent columns:
+  - `td1_incumbent_fit_id`, `td1_incumbent_loss_probability`, `td1_incumbent_veto_fired`, `td1_incumbent_final_decision`
+  - `td1_candidate_fit_id`, `td1_candidate_loss_probability`, `td1_candidate_veto_fired`, `td1_candidate_final_decision`
+  - `td1_candidate_evaluable`, `td1_candidate_shadow_only`
+  - Post-resolution: `td1_incumbent_would_win/lose/net_score`, `td1_candidate_would_win/lose/net_score`, `td1_candidate_net_effect_vs_incumbent`
+  - Tree audit (both incumbent & candidate): `..._tree_leaf_id`, `..._tree_path`, `..._leaf_training_sample_count`, `..._leaf_training_loss_count`, `..._leaf_training_loss_rate`
+- New RPC `promote_td1_candidate(p_candidate_fit_id, p_expected_incumbent_fit_id, p_report jsonb)` — verifies status, atomically supersedes active + promotes candidate.
+- New RPC `reject_td1_candidate(p_candidate_fit_id, p_reason, p_report jsonb)`.
 
-- `getModel8V3Status()` → active fit meta, episode id, resolved count, next-retrain-at, current pending prediction.
-- `getModel8V3Stats()` → totals: wins, losses, pushes, unresolved, win-rate (qualified), plus raw-track totals.
-- `getModel8V3Latest(n)` → recent rows for UI.
-- `exportModel8V3Csv()` → all rows, all columns, plain object array (uses the existing `rowsToCsv` helper on the stats page).
+**Code**
+- `src/lib/model7/td1/retrain.ts` — cadence unchanged; new fit persists as `pending_forward_review` with `incumbent_fit_id = <current active>`. Skip retrain when a candidate is already pending.
+- `src/lib/model7/td1/decision.ts` — scorer returns leaf audit metadata (leaf id, path, training sample/loss counts).
+- `src/lib/model7/td1/orchestrator.ts` — during pending review, score both incumbent and candidate on same feature snapshot; live decision = incumbent only; persist candidate shadow fields.
+- New `src/lib/model7/td1/promotion.ts` — resolution-side updater that computes candidate/incumbent per-row net scores; when review window is met, evaluates promotion criteria (net > incumbent; net delta ≥ +3; YES-net delta ≥ −2; NO-net delta ≥ −2; candidate veto net effect > 0; leakage clean; artifact/feature-order integrity). On pass → calls promote RPC; on any mandatory fail → reject RPC.
+- Review window: ≥96 resolved evaluable rows AND ≥12 candidate veto triggers, else continue until either condition or hard cap 192.
 
-### 4. Cron wiring
+**Stats UI (TD1 card)**
+- New “TD1 Fit Review” section: incumbent id, candidate id, forward resolved count, candidate trigger count, candidate/incumbent net + delta, YES/NO split, veto effect, review status, per-requirement pass/fail badges.
 
-`src/routes/api/public/hooks/scheduled-15m-run.ts` gets one additional block, isolated in its own try/catch:
+**Tests** — new `src/lib/model7/td1/__tests__/promotion.test.ts` covering the ~19 required assertions using in-memory fits and synthetic prediction rows (pure functions; no DB).
 
-```text
-try { await runModel8V3(supabase, targetTs); }
-catch (e) { results.model8_v3_error = String(e); }
-```
+## 3. AAS96 Layer B history bound to original fit
 
-No changes to any existing block.
+**Schema (new migration)**
+- New table `model7_aas96_layer_b_history_episodes`: `history_episode_id uuid PK`, `artifact_fit_id text UNIQUE NOT NULL`, `is_active bool`, `created_at`, `updated_at`, `resolved_count int`, `history_payload jsonb` (h32/h64/h96/h192 arrays).
+- Partial unique index: `UNIQUE (is_active) WHERE is_active` — one active episode.
+- Extend `model7_aas96_shadow`:
+  - `artifact_fit_id_at_prediction text` (nullable; we already store `fit_id` — reuse if it already unambiguously identifies the artifact; add new column only if the existing one is ambiguous).
+  - `layer_b_history_episode_id uuid`
+  - `layer_b_history_applied_at timestamptz`, `layer_b_history_application_status text`, `layer_b_history_application_error text`
+  - `history_episode_ownership_unverified bool default true` (historical rows) — new rows set false.
+- New RPC `get_or_mint_aas96_layer_b_episode(p_artifact_fit_id text)` — advisory-locked, mirrors the existing a96 fit-episode pattern.
+- New RPC `apply_aas96_layer_b_history(p_prediction_id, p_history_episode_id, p_actual_direction)` — verifies ownership + resolved + not already applied + valid direction, updates episode payload once, sets audit fields on the shadow row.
 
-### 5. Stats page UI — `src/routes/_authenticated/stats.tsx`
+**Code**
+- `src/lib/model7/aas96/fitStore.ts` — episode getter/persister; `updateActiveExpertHistory` becomes `updateEpisodeExpertHistory(episodeId, ...)`.
+- `src/lib/model7/aas96/orchestrator.ts`:
+  - Prediction path: after loading artifact, get_or_mint episode for `artifact.fitId`; use `episode.history_payload` for Layer B horizon scoring; persist `artifact_fit_id_at_prediction` and `layer_b_history_episode_id` on the row.
+  - Resolution path: read the row’s stored `layer_b_history_episode_id`; call the atomic apply RPC; never look up the currently-active fit.
+- Fit-boundary: when a new artifact activates (existing training/activation code path), call `get_or_mint` for the new fit → new episode. Do not migrate or backfill.
 
-New card **"Model 3 FWD (model8_v3)"** placed below the existing a96 card. Deliberately simple, as requested:
-- Current pending prediction (qualified + calibrated probability, or "ABSTAIN — reason").
-- Counters: **Wins / Losses / Pushes**, plus qualified win-rate and total resolved.
-- Buttons: **CSV (Model 3 FWD)** and **CSV (All Models)** stays as-is (unchanged; will just keep pulling from existing sources — Model 3 FWD gets its own dedicated button).
+**Tests** — new `src/lib/model7/aas96/__tests__/layerBHistory.test.ts`: prediction under fit A + activate fit B + resolve; assert episode A updated, episode B untouched; idempotency; ownership mismatch rejected.
 
-No changes to Home, no changes to webhook emission, no changes to any other card.
+## Deliverables at end
 
-### 6. Explicitly NOT in this build (per "simple" scope + change-nothing rule)
+- 3 migrations (Selector column, TD1 promotion schema + RPCs, AAS96 episode table + RPCs)
+- New files: `td1/promotion.ts`, `td1/__tests__/promotion.test.ts`, `aas96/__tests__/layerBHistory.test.ts`
+- Edited: aas96 `orchestrator.ts`, `fitStore.ts`; td1 `orchestrator.ts`, `retrain.ts`, `decision.ts`; stats page card sections; CSV exporters for AAS96 + TD1
+- No historical rows modified; no active behavior change beyond the three items above.
 
-- No Home-page hero swap.
-- No outbound webhook for model8_v3.
-- No comparator report vs AAS96/a96.
-- No calibration bucket chart, no drawdown chart, no per-week metrics table.
-- No promotion logic to production.
-- No changes to A96, AAS96, TD1-RC, A2 Conflict/Combined, B2, B4.2, Model 6, Model C.
+Approve to implement.

@@ -792,12 +792,43 @@ export type Database = {
         }
         Relationships: []
       }
+      model7_aas96_layer_b_history_episodes: {
+        Row: {
+          artifact_fit_id: string
+          created_at: string
+          history_episode_id: string
+          history_payload: Json
+          is_active: boolean
+          resolved_count: number
+          updated_at: string
+        }
+        Insert: {
+          artifact_fit_id: string
+          created_at?: string
+          history_episode_id?: string
+          history_payload?: Json
+          is_active?: boolean
+          resolved_count?: number
+          updated_at?: string
+        }
+        Update: {
+          artifact_fit_id?: string
+          created_at?: string
+          history_episode_id?: string
+          history_payload?: Json
+          is_active?: boolean
+          resolved_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       model7_aas96_shadow: {
         Row: {
           active_abstain_rule: string | null
           actual_direction: string | null
           armor_override_fired: boolean | null
           armor_override_reason: string | null
+          artifact_fit_id_at_prediction: string | null
           baseline_abstain_reason: string | null
           baseline_prediction: string | null
           baseline_would_lose: boolean | null
@@ -815,6 +846,7 @@ export type Database = {
           feature_schema_hash: string | null
           final_prediction: string | null
           fit_id: string | null
+          history_episode_ownership_unverified: boolean
           id: string
           input_candle_age_seconds: number | null
           input_candle_ts: string | null
@@ -835,6 +867,10 @@ export type Database = {
           layer_b_h64_score: number | null
           layer_b_h96_direction: string | null
           layer_b_h96_score: number | null
+          layer_b_history_application_error: string | null
+          layer_b_history_application_status: string | null
+          layer_b_history_applied_at: string | null
+          layer_b_history_episode_id: string | null
           layer_b_horizon_pattern: string | null
           layer_b_last96_net: number | null
           next_retrain_at_count: number | null
@@ -854,6 +890,7 @@ export type Database = {
           selector_b_confirmation_v1_final_prediction: string | null
           selector_b_confirmation_v1_final_selected_layer: string | null
           selector_b_confirmation_v1_master_prediction: string | null
+          selector_b_confirmation_v1_mode: string | null
           selector_b_confirmation_v1_net_effect: number | null
           selector_b_confirmation_v1_reason: string | null
           selector_b_confirmation_v1_threshold: number | null
@@ -882,6 +919,7 @@ export type Database = {
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
+          artifact_fit_id_at_prediction?: string | null
           baseline_abstain_reason?: string | null
           baseline_prediction?: string | null
           baseline_would_lose?: boolean | null
@@ -899,6 +937,7 @@ export type Database = {
           feature_schema_hash?: string | null
           final_prediction?: string | null
           fit_id?: string | null
+          history_episode_ownership_unverified?: boolean
           id?: string
           input_candle_age_seconds?: number | null
           input_candle_ts?: string | null
@@ -919,6 +958,10 @@ export type Database = {
           layer_b_h64_score?: number | null
           layer_b_h96_direction?: string | null
           layer_b_h96_score?: number | null
+          layer_b_history_application_error?: string | null
+          layer_b_history_application_status?: string | null
+          layer_b_history_applied_at?: string | null
+          layer_b_history_episode_id?: string | null
           layer_b_horizon_pattern?: string | null
           layer_b_last96_net?: number | null
           next_retrain_at_count?: number | null
@@ -938,6 +981,7 @@ export type Database = {
           selector_b_confirmation_v1_final_prediction?: string | null
           selector_b_confirmation_v1_final_selected_layer?: string | null
           selector_b_confirmation_v1_master_prediction?: string | null
+          selector_b_confirmation_v1_mode?: string | null
           selector_b_confirmation_v1_net_effect?: number | null
           selector_b_confirmation_v1_reason?: string | null
           selector_b_confirmation_v1_threshold?: number | null
@@ -966,6 +1010,7 @@ export type Database = {
           actual_direction?: string | null
           armor_override_fired?: boolean | null
           armor_override_reason?: string | null
+          artifact_fit_id_at_prediction?: string | null
           baseline_abstain_reason?: string | null
           baseline_prediction?: string | null
           baseline_would_lose?: boolean | null
@@ -983,6 +1028,7 @@ export type Database = {
           feature_schema_hash?: string | null
           final_prediction?: string | null
           fit_id?: string | null
+          history_episode_ownership_unverified?: boolean
           id?: string
           input_candle_age_seconds?: number | null
           input_candle_ts?: string | null
@@ -1003,6 +1049,10 @@ export type Database = {
           layer_b_h64_score?: number | null
           layer_b_h96_direction?: string | null
           layer_b_h96_score?: number | null
+          layer_b_history_application_error?: string | null
+          layer_b_history_application_status?: string | null
+          layer_b_history_applied_at?: string | null
+          layer_b_history_episode_id?: string | null
           layer_b_horizon_pattern?: string | null
           layer_b_last96_net?: number | null
           next_retrain_at_count?: number | null
@@ -1022,6 +1072,7 @@ export type Database = {
           selector_b_confirmation_v1_final_prediction?: string | null
           selector_b_confirmation_v1_final_selected_layer?: string | null
           selector_b_confirmation_v1_master_prediction?: string | null
+          selector_b_confirmation_v1_mode?: string | null
           selector_b_confirmation_v1_net_effect?: number | null
           selector_b_confirmation_v1_reason?: string | null
           selector_b_confirmation_v1_threshold?: number | null
@@ -1416,42 +1467,72 @@ export type Database = {
       }
       model7_td1_fits: {
         Row: {
+          activated_at: string | null
           active: boolean
           artifact_sha256: string
           base_variant: string
           created_at: string
           feature_order_json: Json
           fit_id: string
+          forward_review_completed_at: string | null
+          forward_review_resolved_count: number
+          forward_review_started_at: string | null
           id: string
+          incumbent_fit_id: string | null
           promoted_at: string | null
+          rejected_at: string | null
+          review_decision: string | null
+          review_reason: string | null
+          review_report: Json | null
+          status: string
           trained_through_candle_ts: string
           trainer_version: string
           training_row_count: number
           tree_artifact_json: Json
         }
         Insert: {
+          activated_at?: string | null
           active?: boolean
           artifact_sha256: string
           base_variant: string
           created_at?: string
           feature_order_json: Json
           fit_id: string
+          forward_review_completed_at?: string | null
+          forward_review_resolved_count?: number
+          forward_review_started_at?: string | null
           id?: string
+          incumbent_fit_id?: string | null
           promoted_at?: string | null
+          rejected_at?: string | null
+          review_decision?: string | null
+          review_reason?: string | null
+          review_report?: Json | null
+          status?: string
           trained_through_candle_ts: string
           trainer_version: string
           training_row_count: number
           tree_artifact_json: Json
         }
         Update: {
+          activated_at?: string | null
           active?: boolean
           artifact_sha256?: string
           base_variant?: string
           created_at?: string
           feature_order_json?: Json
           fit_id?: string
+          forward_review_completed_at?: string | null
+          forward_review_resolved_count?: number
+          forward_review_started_at?: string | null
           id?: string
+          incumbent_fit_id?: string | null
           promoted_at?: string | null
+          rejected_at?: string | null
+          review_decision?: string | null
+          review_reason?: string | null
+          review_report?: Json | null
+          status?: string
           trained_through_candle_ts?: string
           trainer_version?: string
           training_row_count?: number
@@ -1524,9 +1605,36 @@ export type Database = {
           shadow_error: string | null
           skip_reason: string | null
           td1_artifact_sha256: string | null
+          td1_candidate_evaluable: boolean | null
+          td1_candidate_final_decision: string | null
+          td1_candidate_fit_id: string | null
+          td1_candidate_leaf_training_loss_count: number | null
+          td1_candidate_leaf_training_loss_rate: number | null
+          td1_candidate_leaf_training_sample_count: number | null
+          td1_candidate_loss_probability: number | null
+          td1_candidate_net_effect_vs_incumbent: number | null
+          td1_candidate_net_score: number | null
+          td1_candidate_shadow_only: boolean | null
+          td1_candidate_tree_leaf_id: string | null
+          td1_candidate_tree_path: string | null
+          td1_candidate_veto_fired: boolean | null
+          td1_candidate_would_lose: boolean | null
+          td1_candidate_would_win: boolean | null
           td1_feature_cutoff_ts: string | null
           td1_feature_vector_sha256: string | null
           td1_fit_id: string | null
+          td1_incumbent_final_decision: string | null
+          td1_incumbent_fit_id: string | null
+          td1_incumbent_leaf_training_loss_count: number | null
+          td1_incumbent_leaf_training_loss_rate: number | null
+          td1_incumbent_leaf_training_sample_count: number | null
+          td1_incumbent_loss_probability: number | null
+          td1_incumbent_net_score: number | null
+          td1_incumbent_tree_leaf_id: string | null
+          td1_incumbent_tree_path: string | null
+          td1_incumbent_veto_fired: boolean | null
+          td1_incumbent_would_lose: boolean | null
+          td1_incumbent_would_win: boolean | null
           td1_latest_source_candle_ts: string | null
           td1_predicted_loss_probability: number | null
           td1_threshold: number
@@ -1564,9 +1672,36 @@ export type Database = {
           shadow_error?: string | null
           skip_reason?: string | null
           td1_artifact_sha256?: string | null
+          td1_candidate_evaluable?: boolean | null
+          td1_candidate_final_decision?: string | null
+          td1_candidate_fit_id?: string | null
+          td1_candidate_leaf_training_loss_count?: number | null
+          td1_candidate_leaf_training_loss_rate?: number | null
+          td1_candidate_leaf_training_sample_count?: number | null
+          td1_candidate_loss_probability?: number | null
+          td1_candidate_net_effect_vs_incumbent?: number | null
+          td1_candidate_net_score?: number | null
+          td1_candidate_shadow_only?: boolean | null
+          td1_candidate_tree_leaf_id?: string | null
+          td1_candidate_tree_path?: string | null
+          td1_candidate_veto_fired?: boolean | null
+          td1_candidate_would_lose?: boolean | null
+          td1_candidate_would_win?: boolean | null
           td1_feature_cutoff_ts?: string | null
           td1_feature_vector_sha256?: string | null
           td1_fit_id?: string | null
+          td1_incumbent_final_decision?: string | null
+          td1_incumbent_fit_id?: string | null
+          td1_incumbent_leaf_training_loss_count?: number | null
+          td1_incumbent_leaf_training_loss_rate?: number | null
+          td1_incumbent_leaf_training_sample_count?: number | null
+          td1_incumbent_loss_probability?: number | null
+          td1_incumbent_net_score?: number | null
+          td1_incumbent_tree_leaf_id?: string | null
+          td1_incumbent_tree_path?: string | null
+          td1_incumbent_veto_fired?: boolean | null
+          td1_incumbent_would_lose?: boolean | null
+          td1_incumbent_would_win?: boolean | null
           td1_latest_source_candle_ts?: string | null
           td1_predicted_loss_probability?: number | null
           td1_threshold?: number
@@ -1604,9 +1739,36 @@ export type Database = {
           shadow_error?: string | null
           skip_reason?: string | null
           td1_artifact_sha256?: string | null
+          td1_candidate_evaluable?: boolean | null
+          td1_candidate_final_decision?: string | null
+          td1_candidate_fit_id?: string | null
+          td1_candidate_leaf_training_loss_count?: number | null
+          td1_candidate_leaf_training_loss_rate?: number | null
+          td1_candidate_leaf_training_sample_count?: number | null
+          td1_candidate_loss_probability?: number | null
+          td1_candidate_net_effect_vs_incumbent?: number | null
+          td1_candidate_net_score?: number | null
+          td1_candidate_shadow_only?: boolean | null
+          td1_candidate_tree_leaf_id?: string | null
+          td1_candidate_tree_path?: string | null
+          td1_candidate_veto_fired?: boolean | null
+          td1_candidate_would_lose?: boolean | null
+          td1_candidate_would_win?: boolean | null
           td1_feature_cutoff_ts?: string | null
           td1_feature_vector_sha256?: string | null
           td1_fit_id?: string | null
+          td1_incumbent_final_decision?: string | null
+          td1_incumbent_fit_id?: string | null
+          td1_incumbent_leaf_training_loss_count?: number | null
+          td1_incumbent_leaf_training_loss_rate?: number | null
+          td1_incumbent_leaf_training_sample_count?: number | null
+          td1_incumbent_loss_probability?: number | null
+          td1_incumbent_net_score?: number | null
+          td1_incumbent_tree_leaf_id?: string | null
+          td1_incumbent_tree_path?: string | null
+          td1_incumbent_veto_fired?: boolean | null
+          td1_incumbent_would_lose?: boolean | null
+          td1_incumbent_would_win?: boolean | null
           td1_latest_source_candle_ts?: string | null
           td1_predicted_loss_probability?: number | null
           td1_threshold?: number
@@ -2667,6 +2829,15 @@ export type Database = {
         Args: { p_fit_id: string; p_notes: string; p_reviewed_by: string }
         Returns: Json
       }
+      apply_aas96_layer_b_history: {
+        Args: {
+          p_actual_direction: string
+          p_history_episode_id: string
+          p_new_history_payload: Json
+          p_prediction_id: string
+        }
+        Returns: Json
+      }
       apply_b4_2_resolution: {
         Args: {
           p_b2_final_decision: string
@@ -2721,9 +2892,35 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_or_mint_aas96_layer_b_episode: {
+        Args: { p_artifact_fit_id: string }
+        Returns: {
+          artifact_fit_id: string
+          created_at: string
+          history_episode_id: string
+          history_payload: Json
+          is_active: boolean
+          resolved_count: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "model7_aas96_layer_b_history_episodes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       prediction_stats: { Args: never; Returns: Json }
       prediction_stats_filtered: {
         Args: { model_version_filter?: string }
+        Returns: Json
+      }
+      promote_td1_candidate: {
+        Args: {
+          p_candidate_fit_id: string
+          p_expected_incumbent_fit_id: string
+          p_report: Json
+        }
         Returns: Json
       }
       reject_model8_v3_fit: {
@@ -2733,6 +2930,10 @@ export type Database = {
           p_notes: string
           p_reviewed_by: string
         }
+        Returns: Json
+      }
+      reject_td1_candidate: {
+        Args: { p_candidate_fit_id: string; p_reason: string; p_report: Json }
         Returns: Json
       }
       resolve_a96_prediction: {

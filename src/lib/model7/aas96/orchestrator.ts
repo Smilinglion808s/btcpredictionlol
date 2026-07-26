@@ -9,7 +9,9 @@ import {
 import { applyScaler } from "./preprocess";
 import { predictProb } from "./logistic";
 import { computeLayerB, type Dir } from "./layerB";
-import { loadActiveAas96Fit } from "./fitStore";
+import {
+  loadActiveAas96Fit, getOrMintLayerBEpisode, loadLayerBEpisodeById, applyLayerBHistory,
+} from "./fitStore";
 import { AAS96_MIN_TRAINING_ROWS, AAS96_SELECTOR_LOOKBACK } from "./config";
 import { inferActualDir } from "./train";
 
@@ -103,7 +105,23 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       return;
     }
     base.fit_id = artifact.fitId;
+    base.artifact_fit_id_at_prediction = artifact.fitId;
     base.feature_schema_hash = artifact.featureSchemaHash;
+    base.history_episode_ownership_unverified = false;
+
+    // Get-or-mint the Layer B history episode for THIS artifact fit id.
+    // Layer B scoring must read from the episode payload, never from whatever
+    // artifact happens to be active later during resolution.
+    const episode = await getOrMintLayerBEpisode(sb, artifact.fitId);
+    if (!episode) {
+      await writeRow(sb, {
+        ...base,
+        final_prediction: "SKIP",
+        skip_reason: "LAYER_B_EPISODE_UNAVAILABLE",
+      });
+      return;
+    }
+    base.layer_b_history_episode_id = episode.historyEpisodeId;
 
     // Eligibility gate (mirrors spec conditions we can enforce today).
     const eligibilityFailures: string[] = [];
@@ -149,10 +167,10 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       p.trend as string | null | undefined,
     );
 
-    // Layer B.
+    // Layer B — uses the ORIGINAL fit's history episode, not the active fit's.
     const inputs = extractExpertInputs(p);
     const fallback: Dir = (Number(p.bullish_score ?? 0) >= Number(p.bearish_score ?? 0)) ? "GREEN" : "RED";
-    const layerB = computeLayerB(artifact.expertHistory, inputs, fallback);
+    const layerB = computeLayerB(episode.historyPayload, inputs, fallback);
 
     // Layer C selector: last 96 counterfactual net.
     const { data: lastRows } = await sb
@@ -173,7 +191,12 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
     const preOverrideSelected: "A" | "B" = netA >= netB ? "A" : "B";
     const preOverrideDir: Dir = preOverrideSelected === "A" ? armor.final : layerB.final;
 
-    // Selector B Confirmation V1 — active override (never abstains).
+    // ACTIVE baseline is Layer C — Selector B Confirmation V1 is SHADOW only.
+    const selectedLayer: "A" | "B" = preOverrideSelected;
+    const baselineDir: Dir = preOverrideDir;
+
+    // Selector B Confirmation V1 — SHADOW EVALUATION ONLY.
+    // Rule, version, threshold, reason string: UNCHANGED. Never alters active decision.
     const { evaluateSelectorBConfirmationV1, masterPredictionToDir,
       SELECTOR_B_CONFIRMATION_V1_VERSION, SELECTOR_B_CONFIRMATION_V1_THRESHOLD } =
       await import("./selectorBConfirmationV1");
@@ -188,10 +211,11 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       masterPrediction: masterDir,
       ema9, ema21, btcPrice,
     });
-    const selectedLayer: "A" | "B" = selectorBResult.triggered ? "B" : preOverrideSelected;
-    const baselineDir: Dir = selectorBResult.triggered ? layerB.final : preOverrideDir;
+    // Shadow-final: what the selector WOULD have chosen if still active.
+    const shadowFinalLayer: "A" | "B" = selectorBResult.triggered ? "B" : preOverrideSelected;
+    const shadowFinalDir: Dir = selectorBResult.triggered ? layerB.final : preOverrideDir;
 
-    // Cleanup Veto V1 — narrow post-model abstention overlay. Never reverses.
+    // Cleanup Veto V1 — evaluates the ACTIVE Layer C baseline (unchanged rule).
     const { evaluateCleanupVetoV1 } = await import("./cleanupVetoV1");
     const veto = evaluateCleanupVetoV1({
       baselinePrediction: baselineDir,
@@ -224,15 +248,15 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       layer_a_last96_net: netA,
       layer_b_last96_net: netB,
       selected_layer: selectedLayer,
-      // Preserve original Layer C selection for override auditing.
       selector_pre_override_selected_layer: preOverrideSelected,
       selector_pre_override_prediction: preOverrideDir,
-      // Selector B Confirmation V1 audit fields.
+      // Selector B Confirmation V1 — SHADOW audit fields (never applied).
+      selector_b_confirmation_v1_mode: "SHADOW",
       selector_b_confirmation_v1_version: SELECTOR_B_CONFIRMATION_V1_VERSION,
       selector_b_confirmation_v1_threshold: SELECTOR_B_CONFIRMATION_V1_THRESHOLD,
       selector_b_confirmation_v1_evaluable: selectorBResult.evaluable,
       selector_b_confirmation_v1_triggered: selectorBResult.triggered,
-      selector_b_confirmation_v1_applied: selectorBResult.triggered,
+      selector_b_confirmation_v1_applied: false,
       selector_b_confirmation_v1_reason: selectorBResult.reason,
       selector_b_confirmation_v1_master_prediction: masterDir,
       selector_b_confirmation_v1_ema9: ema9 == null ? null : Number(ema9),
@@ -240,16 +264,12 @@ export async function runAas96Shadow(sb: SupabaseClient, ctx: Context): Promise<
       selector_b_confirmation_v1_btc_price: btcPrice == null ? null : Number(btcPrice),
       selector_b_confirmation_v1_ema_separation: selectorBResult.emaSeparation,
       selector_b_confirmation_v1_ema_separation_ratio: selectorBResult.emaSeparationRatio,
-      selector_b_confirmation_v1_final_selected_layer: selectedLayer,
-      selector_b_confirmation_v1_final_prediction: baselineDir,
-      // Preserve baseline (pre-veto) prediction for independent grading.
+      selector_b_confirmation_v1_final_selected_layer: shadowFinalLayer,
+      selector_b_confirmation_v1_final_prediction: shadowFinalDir,
       baseline_prediction: baselineDir,
       baseline_abstain_reason: null,
-      // Published = what AAS96 actually emits after the veto overlay.
       published_prediction: veto.publishedPrediction,
       published_abstain_reason: veto.publishedAbstainReason,
-      // final_prediction stays the source of truth for the shadow row's
-      // published outcome so existing grading + UI keep working.
       final_prediction: veto.publishedPrediction,
       skip_reason: veto.fired ? veto.reason : null,
       cleanup_veto_v1_version: veto.version,
@@ -286,7 +306,7 @@ export async function resolveAas96Row(
   try {
     const { data: row } = await sb
       .from("model7_aas96_shadow")
-      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction")
+      .select("id, final_prediction, baseline_prediction, published_prediction, cleanup_veto_v1_fired, layer_a_final_direction, layer_b_final_direction, status, eligibility_passed, skip_reason, usable_training_row, selector_pre_override_prediction, selector_b_confirmation_v1_final_prediction, layer_b_history_episode_id, artifact_fit_id_at_prediction, fit_id")
       .eq("prediction_id", predictionId)
       .maybeSingle();
     if (!row) return;
@@ -369,25 +389,54 @@ export async function resolveAas96Row(
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
 
-    // Update Layer B expert history (needs the original inputs — fetch prediction).
+    // Update Layer B expert history — bound to the ORIGINAL prediction's fit
+    // episode, not whichever fit is active at resolution time. Idempotent RPC.
     try {
-      const { data: p } = await sb.from("predictions").select("*").eq("id", predictionId).maybeSingle();
-      if (p) {
-        const { loadActiveAas96Fit, updateActiveExpertHistory } = await import("./fitStore");
-        const { extractExpertInputs } = await import("./featurize");
-        const { updateExpertHistory } = await import("./layerB");
-        const artifact = await loadActiveAas96Fit(sb);
-        if (artifact) {
-          const inputs = extractExpertInputs(p as Record<string, unknown>);
-          // Layer B fallback: M6 bullish/bearish scores (bullish_score /
-          // bearish_score on predictions ARE the Model 6 module aggregates).
-          const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
-            >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
-          updateExpertHistory(artifact.expertHistory, inputs, actualDirection, fallback);
-          await updateActiveExpertHistory(sb, artifact.expertHistory);
+      const episodeId = row.layer_b_history_episode_id as string | null;
+      if (episodeId) {
+        const { data: p } = await sb.from("predictions").select("*").eq("id", predictionId).maybeSingle();
+        if (p) {
+          const { extractExpertInputs } = await import("./featurize");
+          const { updateExpertHistory } = await import("./layerB");
+          const episode = await loadLayerBEpisodeById(sb, episodeId);
+          if (episode) {
+            const inputs = extractExpertInputs(p as Record<string, unknown>);
+            const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
+              >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
+            const nextPayload = episode.historyPayload;
+            updateExpertHistory(nextPayload, inputs, actualDirection, fallback);
+            const applied = await applyLayerBHistory(sb, predictionId, episodeId, actualDirection, nextPayload);
+            if (!applied.ok) {
+              await sb.from("model7_aas96_shadow").update({
+                layer_b_history_application_status: "error",
+                layer_b_history_application_error: applied.error ?? "unknown",
+                updated_at: new Date().toISOString(),
+              } as never).eq("id", row.id as string);
+            }
+          } else {
+            await sb.from("model7_aas96_shadow").update({
+              layer_b_history_application_status: "missing_episode",
+              layer_b_history_application_error: `episode ${episodeId} not found`,
+              updated_at: new Date().toISOString(),
+            } as never).eq("id", row.id as string);
+          }
         }
+      } else {
+        // Historical row without stored episode — leave as ownership_unverified.
+        await sb.from("model7_aas96_shadow").update({
+          layer_b_history_application_status: "skipped_no_episode",
+          updated_at: new Date().toISOString(),
+        } as never).eq("id", row.id as string);
       }
-    } catch { /* never block */ }
+    } catch (e) {
+      try {
+        await sb.from("model7_aas96_shadow").update({
+          layer_b_history_application_status: "error",
+          layer_b_history_application_error: e instanceof Error ? e.message : String(e),
+          updated_at: new Date().toISOString(),
+        } as never).eq("id", row.id as string);
+      } catch { /* ignore */ }
+    }
 
     // Advance counters: market count always +1; retrain cadence only when
     // the row was usable (features extractable / warmup).
