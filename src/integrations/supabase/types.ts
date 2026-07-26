@@ -1720,18 +1720,105 @@ export type Database = {
         }
         Relationships: []
       }
+      model8_v3_fits: {
+        Row: {
+          activated_at: string
+          calibration_end_ts: string
+          calibration_metrics: Json
+          calibration_start_ts: string
+          code_version: string
+          config_snapshot: Json
+          direction_coefficients: Json
+          direction_intercept: number
+          feature_order: Json
+          feature_schema_version: string
+          fit_id: string
+          fitted_at: string
+          l2_penalty: number
+          model_version: string
+          movement_coefficients: Json
+          movement_intercept: number
+          platt_direction: Json
+          platt_movement: Json
+          preprocess: Json
+          symbol: string
+          timeframe: string
+          training_end_ts: string
+          training_metrics: Json
+          training_start_ts: string
+        }
+        Insert: {
+          activated_at?: string
+          calibration_end_ts: string
+          calibration_metrics: Json
+          calibration_start_ts: string
+          code_version: string
+          config_snapshot: Json
+          direction_coefficients: Json
+          direction_intercept: number
+          feature_order: Json
+          feature_schema_version: string
+          fit_id: string
+          fitted_at?: string
+          l2_penalty: number
+          model_version: string
+          movement_coefficients: Json
+          movement_intercept: number
+          platt_direction: Json
+          platt_movement: Json
+          preprocess: Json
+          symbol: string
+          timeframe: string
+          training_end_ts: string
+          training_metrics: Json
+          training_start_ts: string
+        }
+        Update: {
+          activated_at?: string
+          calibration_end_ts?: string
+          calibration_metrics?: Json
+          calibration_start_ts?: string
+          code_version?: string
+          config_snapshot?: Json
+          direction_coefficients?: Json
+          direction_intercept?: number
+          feature_order?: Json
+          feature_schema_version?: string
+          fit_id?: string
+          fitted_at?: string
+          l2_penalty?: number
+          model_version?: string
+          movement_coefficients?: Json
+          movement_intercept?: number
+          platt_direction?: Json
+          platt_movement?: Json
+          preprocess?: Json
+          symbol?: string
+          timeframe?: string
+          training_end_ts?: string
+          training_metrics?: Json
+          training_start_ts?: string
+        }
+        Relationships: []
+      }
       model8_v3_predictions: {
         Row: {
           abstain_reason: string | null
+          actual_body_bps: number | null
           actual_close: number | null
           actual_direction: string | null
           actual_high: number | null
           actual_low: number | null
+          actual_movement_hit: boolean | null
           actual_open: number | null
           actual_volume: number | null
           calibrated_probability_green: number | null
+          calibrated_probability_movement: number | null
+          code_version: string | null
           created_at: string
+          data_quality_invalid_reason: string | null
           data_quality_valid: boolean
+          episode_type: string
           feature_cutoff_ts: string
           feature_history_valid: boolean
           feature_schema_version: string
@@ -1740,8 +1827,12 @@ export type Database = {
           fit_snapshot: Json | null
           last_resolution_attempt_at: string | null
           last_resolution_error: string | null
+          minimum_direction_edge: number | null
+          minimum_movement_probability: number | null
           model_version: string
+          movement_threshold_bps: number | null
           official_forward_eligible: boolean
+          official_forward_test_row: boolean
           prediction_created_before_target: boolean
           prediction_id: string
           prediction_latency_ms: number | null
@@ -1749,23 +1840,32 @@ export type Database = {
           qualified_result: string | null
           raw_prediction: string | null
           raw_probability_green: number | null
+          raw_probability_movement: number | null
           raw_result: string | null
           resolved_at: string | null
+          symbol: string
           target_candle_ts: string
           target_open_at_prediction: number | null
+          timeframe: string
           updated_at: string
         }
         Insert: {
           abstain_reason?: string | null
+          actual_body_bps?: number | null
           actual_close?: number | null
           actual_direction?: string | null
           actual_high?: number | null
           actual_low?: number | null
+          actual_movement_hit?: boolean | null
           actual_open?: number | null
           actual_volume?: number | null
           calibrated_probability_green?: number | null
+          calibrated_probability_movement?: number | null
+          code_version?: string | null
           created_at?: string
+          data_quality_invalid_reason?: string | null
           data_quality_valid: boolean
+          episode_type?: string
           feature_cutoff_ts: string
           feature_history_valid: boolean
           feature_schema_version?: string
@@ -1774,8 +1874,12 @@ export type Database = {
           fit_snapshot?: Json | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
+          minimum_direction_edge?: number | null
+          minimum_movement_probability?: number | null
           model_version?: string
+          movement_threshold_bps?: number | null
           official_forward_eligible?: boolean
+          official_forward_test_row?: boolean
           prediction_created_before_target: boolean
           prediction_id?: string
           prediction_latency_ms?: number | null
@@ -1783,23 +1887,32 @@ export type Database = {
           qualified_result?: string | null
           raw_prediction?: string | null
           raw_probability_green?: number | null
+          raw_probability_movement?: number | null
           raw_result?: string | null
           resolved_at?: string | null
+          symbol?: string
           target_candle_ts: string
           target_open_at_prediction?: number | null
+          timeframe?: string
           updated_at?: string
         }
         Update: {
           abstain_reason?: string | null
+          actual_body_bps?: number | null
           actual_close?: number | null
           actual_direction?: string | null
           actual_high?: number | null
           actual_low?: number | null
+          actual_movement_hit?: boolean | null
           actual_open?: number | null
           actual_volume?: number | null
           calibrated_probability_green?: number | null
+          calibrated_probability_movement?: number | null
+          code_version?: string | null
           created_at?: string
+          data_quality_invalid_reason?: string | null
           data_quality_valid?: boolean
+          episode_type?: string
           feature_cutoff_ts?: string
           feature_history_valid?: boolean
           feature_schema_version?: string
@@ -1808,8 +1921,12 @@ export type Database = {
           fit_snapshot?: Json | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
+          minimum_direction_edge?: number | null
+          minimum_movement_probability?: number | null
           model_version?: string
+          movement_threshold_bps?: number | null
           official_forward_eligible?: boolean
+          official_forward_test_row?: boolean
           prediction_created_before_target?: boolean
           prediction_id?: string
           prediction_latency_ms?: number | null
@@ -1817,10 +1934,13 @@ export type Database = {
           qualified_result?: string | null
           raw_prediction?: string | null
           raw_probability_green?: number | null
+          raw_probability_movement?: number | null
           raw_result?: string | null
           resolved_at?: string | null
+          symbol?: string
           target_candle_ts?: string
           target_open_at_prediction?: number | null
+          timeframe?: string
           updated_at?: string
         }
         Relationships: []
