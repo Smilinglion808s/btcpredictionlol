@@ -368,6 +368,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={td1PendingQ.data?.candle_ts}
           predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
+          abstainReason={(td1PendingQ.data as any)?.skip_reason ?? null}
           actions={(
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetTd1Stats} disabled={resettingTd1}>
@@ -420,6 +421,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={a96Pending?.target_candle_ts}
           predictionValue={a96Pending?.final_prediction ?? "—"}
+          abstainReason={(a96Pending as any)?.decision_reason ?? null}
           actions={(
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetA96Stats} disabled={resettingA96}>
@@ -466,6 +468,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={m8v3Pending?.target_candle_ts}
           predictionValue={m8v3Q ?? "—"}
+          abstainReason={(m8v3Pending as any)?.abstain_reason ?? null}
           actions={(
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
               {exportingM8v3 ? "…" : "CSV"}
@@ -594,11 +597,12 @@ interface ModelCardProps {
   predictionLabel?: string;
   predictionTs?: string | null;
   predictionValue?: string | null;
+  abstainReason?: string | null;
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }
 
-function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushes, pending, predictionLabel, predictionTs, predictionValue, actions, children }: ModelCardProps) {
+function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushes, pending, predictionLabel, predictionTs, predictionValue, abstainReason, actions, children }: ModelCardProps) {
   const toneMap: Record<string, { border: string; hover: string; bg: string; text: string; badge: string }> = {
     cyan: { border: "border-cyan/30", hover: "hover:border-cyan/60", bg: "bg-cyan/10", text: "text-cyan-400", badge: "bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]" },
     emerald: { border: "border-emerald-500/30", hover: "hover:border-emerald-500/60", bg: "bg-emerald-500/10", text: "text-emerald-400", badge: "bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]" },
@@ -658,6 +662,16 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
             {new Date(predictionTs).toLocaleString()}
           </div>
         )}
+        {(() => {
+          const isAbstain = ["ABSTAIN", "SKIP", "—", ""].includes(String(predictionValue ?? "").toUpperCase());
+          if (!isAbstain || !abstainReason) return null;
+          return (
+            <div className="mt-2 rounded-md border border-amber/20 bg-amber/5 px-2.5 py-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-amber-400 font-semibold">Abstain reason</span>
+              <div className="text-[11px] text-muted-foreground font-mono break-words leading-snug mt-0.5">{abstainReason}</div>
+            </div>
+          );
+        })()}
         {(pending ?? 0) > 0 && (
           <div className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">
             {pending} pending
