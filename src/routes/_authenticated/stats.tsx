@@ -808,6 +808,63 @@ function StatsPage() {
                     <div className="text-xs text-muted-foreground/70 italic font-mono">no prediction yet</div>
                   )}
                 </div>
+
+                {(() => {
+                  const cand = m8v3CandidateQ.data as Record<string, any> | null;
+                  if (!cand) {
+                    return (
+                      <div className="rounded-md border p-3 text-xs text-muted-foreground">
+                        No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
+                      </div>
+                    );
+                  }
+                  const rep = (cand.review_report ?? {}) as Record<string, any>;
+                  const w = rep.windows ?? {};
+                  const line = (label: string, w: any) => {
+                    const a = w?.active?.qualified ?? {};
+                    const c = w?.candidate_counterfactual?.qualified ?? {};
+                    return (
+                      <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
+                      </div>
+                    );
+                  };
+                  return (
+                    <div className="rounded-md border p-3 space-y-2 bg-amber-500/5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium">Candidate awaiting manual approval</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
+                      </div>
+                      <div className="space-y-1">
+                        {line("Last 96 qualified", w.last_96)}
+                        {line("Last 384 qualified", w.last_384)}
+                        {line("Cumulative qualified", w.cumulative)}
+                      </div>
+                      <textarea
+                        value={m8v3ReviewNotes}
+                        onChange={(e) => setM8v3ReviewNotes(e.target.value)}
+                        placeholder="Review notes (optional)"
+                        className="w-full text-xs rounded border bg-background p-2"
+                        rows={2}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
+                          {m8v3ReviewBusy ? "Working…" : "Approve candidate"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
+                          Reject
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
+                          Continue current fit
+                        </Button>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Activation is atomic — the approved fit starts serving on the next unopened candle. All decisions are stored in <span className="font-mono">model8_v3_fit_reviews</span> and included in the CSV audit trail.
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
