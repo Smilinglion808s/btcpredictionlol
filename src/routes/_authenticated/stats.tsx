@@ -659,6 +659,16 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
             {new Date(predictionTs).toLocaleString()}
           </div>
         )}
+        {(() => {
+          const isAbstain = ["ABSTAIN", "SKIP", "—", ""].includes(String(predictionValue ?? "").toUpperCase());
+          if (!isAbstain || !abstainReason) return null;
+          return (
+            <div className="mt-2 rounded-md border border-amber/20 bg-amber/5 px-2.5 py-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-amber-400 font-semibold">Abstain reason</span>
+              <div className="text-[11px] text-muted-foreground font-mono break-words leading-snug mt-0.5">{abstainReason}</div>
+            </div>
+          );
+        })()}
         {(pending ?? 0) > 0 && (
           <div className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">
             {pending} pending
