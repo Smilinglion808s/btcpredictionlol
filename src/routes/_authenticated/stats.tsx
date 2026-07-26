@@ -468,6 +468,7 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={m8v3Pending?.target_candle_ts}
           predictionValue={m8v3Q ?? "—"}
+          abstainReason={(m8v3Pending as any)?.abstain_reason ?? null}
           actions={(
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
               {exportingM8v3 ? "…" : "CSV"}
