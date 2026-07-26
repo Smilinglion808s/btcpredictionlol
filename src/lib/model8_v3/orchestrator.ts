@@ -377,10 +377,36 @@ async function buildCandidateReviewReportFromDb(
 export async function runModel8V3(
   sb: SupabaseClient,
   opts: { targetCandleTs?: Date } = {},
-): Promise<{ ok: boolean; skipped?: string; prediction_id?: string; target_candle_ts?: string; qualified_prediction?: string; raw_prediction?: string }> {
+): Promise<{ ok: boolean; skipped?: string; prediction_id?: string; target_candle_ts?: string; qualified_prediction?: string; raw_prediction?: string; error?: string }> {
   const startMs = Date.now();
   const targetTs = opts.targetCandleTs ?? nextCandleBoundary(startMs);
   const createdBeforeTarget = Date.now() < targetTs.getTime();
+  let heartbeatResult: Record<string, unknown> = { target_candle_ts: targetTs.toISOString() };
+  const heartbeat = async (success: boolean, extra: Record<string, unknown>, errorMsg?: string) => {
+    try {
+      await sb.from("api_runs").insert({
+        run_type: "model8_v3_run",
+        response_payload: { ...heartbeatResult, ...extra, duration_ms: Date.now() - startMs },
+        success,
+        error_message: errorMsg ?? null,
+      });
+    } catch { /* ignore */ }
+  };
+
+  try {
+    // Step 1: resolve any due predictions BEFORE generating the next one so
+    // retrain cadence sees the freshest resolved-row count.
+    try { await resolveDueModel8V3(sb); } catch { /* never block predict */ }
+
+    // Step 2: bootstrap an ACTIVE fit if none exists (first eligible fit
+    // auto-activates — only replacement fits are manual-review).
+    let activePre = await loadActiveFit(sb);
+    if (!activePre) {
+      try { await bootstrapModel8V3ActiveFit(sb); } catch { /* logged in heartbeat */ }
+      activePre = await loadActiveFit(sb);
+    }
+    heartbeatResult.active_fit_id = activePre?.fit_id ?? null;
+
 
   try {
     const existing = await sb
