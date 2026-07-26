@@ -389,25 +389,54 @@ export async function resolveAas96Row(
       updated_at: new Date().toISOString(),
     } as never).eq("id", row.id as string);
 
-    // Update Layer B expert history (needs the original inputs — fetch prediction).
+    // Update Layer B expert history — bound to the ORIGINAL prediction's fit
+    // episode, not whichever fit is active at resolution time. Idempotent RPC.
     try {
-      const { data: p } = await sb.from("predictions").select("*").eq("id", predictionId).maybeSingle();
-      if (p) {
-        const { loadActiveAas96Fit, updateActiveExpertHistory } = await import("./fitStore");
-        const { extractExpertInputs } = await import("./featurize");
-        const { updateExpertHistory } = await import("./layerB");
-        const artifact = await loadActiveAas96Fit(sb);
-        if (artifact) {
-          const inputs = extractExpertInputs(p as Record<string, unknown>);
-          // Layer B fallback: M6 bullish/bearish scores (bullish_score /
-          // bearish_score on predictions ARE the Model 6 module aggregates).
-          const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
-            >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
-          updateExpertHistory(artifact.expertHistory, inputs, actualDirection, fallback);
-          await updateActiveExpertHistory(sb, artifact.expertHistory);
+      const episodeId = row.layer_b_history_episode_id as string | null;
+      if (episodeId) {
+        const { data: p } = await sb.from("predictions").select("*").eq("id", predictionId).maybeSingle();
+        if (p) {
+          const { extractExpertInputs } = await import("./featurize");
+          const { updateExpertHistory } = await import("./layerB");
+          const episode = await loadLayerBEpisodeById(sb, episodeId);
+          if (episode) {
+            const inputs = extractExpertInputs(p as Record<string, unknown>);
+            const fallback: Dir = (Number((p as Record<string, unknown>).bullish_score ?? 0)
+              >= Number((p as Record<string, unknown>).bearish_score ?? 0)) ? "GREEN" : "RED";
+            const nextPayload = episode.historyPayload;
+            updateExpertHistory(nextPayload, inputs, actualDirection, fallback);
+            const applied = await applyLayerBHistory(sb, predictionId, episodeId, actualDirection, nextPayload);
+            if (!applied.ok) {
+              await sb.from("model7_aas96_shadow").update({
+                layer_b_history_application_status: "error",
+                layer_b_history_application_error: applied.error ?? "unknown",
+                updated_at: new Date().toISOString(),
+              } as never).eq("id", row.id as string);
+            }
+          } else {
+            await sb.from("model7_aas96_shadow").update({
+              layer_b_history_application_status: "missing_episode",
+              layer_b_history_application_error: `episode ${episodeId} not found`,
+              updated_at: new Date().toISOString(),
+            } as never).eq("id", row.id as string);
+          }
         }
+      } else {
+        // Historical row without stored episode — leave as ownership_unverified.
+        await sb.from("model7_aas96_shadow").update({
+          layer_b_history_application_status: "skipped_no_episode",
+          updated_at: new Date().toISOString(),
+        } as never).eq("id", row.id as string);
       }
-    } catch { /* never block */ }
+    } catch (e) {
+      try {
+        await sb.from("model7_aas96_shadow").update({
+          layer_b_history_application_status: "error",
+          layer_b_history_application_error: e instanceof Error ? e.message : String(e),
+          updated_at: new Date().toISOString(),
+        } as never).eq("id", row.id as string);
+      } catch { /* ignore */ }
+    }
 
     // Advance counters: market count always +1; retrain cadence only when
     // the row was usable (features extractable / warmup).
