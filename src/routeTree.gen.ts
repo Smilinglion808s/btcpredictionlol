@@ -22,6 +22,7 @@ import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/pub
 import { Route as ApiPublicHooksTd1RcRetrainRouteImport } from './routes/api/public/hooks/td1-rc-retrain'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
 import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
+import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksAas96PreloadRouteImport } from './routes/api/public/hooks/aas96-preload'
@@ -96,6 +97,12 @@ const ApiPublicHooksPrewarmB4_2Route =
     path: '/api/public/hooks/prewarm-b4_2',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksModel8V3BootstrapRoute =
+  ApiPublicHooksModel8V3BootstrapRouteImport.update({
+    id: '/api/public/hooks/model8-v3-bootstrap',
+    path: '/api/public/hooks/model8-v3-bootstrap',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksModel7NightlyAuditRoute =
   ApiPublicHooksModel7NightlyAuditRouteImport.update({
     id: '/api/public/hooks/model7-nightly-audit',
@@ -125,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
@@ -142,6 +150,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
@@ -161,6 +170,7 @@ export interface FileRoutesById {
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
+  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
   '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/hooks/td1-rc-retrain'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/hooks/td1-rc-retrain'
@@ -215,6 +227,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
+    | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
     | '/api/public/hooks/td1-rc-retrain'
@@ -228,6 +241,7 @@ export interface RootRouteChildren {
   ApiPublicHooksAas96PreloadRoute: typeof ApiPublicHooksAas96PreloadRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
+  ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
   ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
   ApiPublicHooksTd1RcRetrainRoute: typeof ApiPublicHooksTd1RcRetrainRoute
@@ -329,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksPrewarmB4_2RouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/model8-v3-bootstrap': {
+      id: '/api/public/hooks/model8-v3-bootstrap'
+      path: '/api/public/hooks/model8-v3-bootstrap'
+      fullPath: '/api/public/hooks/model8-v3-bootstrap'
+      preLoaderRoute: typeof ApiPublicHooksModel8V3BootstrapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/model7-nightly-audit': {
       id: '/api/public/hooks/model7-nightly-audit'
       path: '/api/public/hooks/model7-nightly-audit'
@@ -379,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksAas96PreloadRoute: ApiPublicHooksAas96PreloadRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
+  ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
   ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
   ApiPublicHooksTd1RcRetrainRoute: ApiPublicHooksTd1RcRetrainRoute,
