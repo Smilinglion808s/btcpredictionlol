@@ -3,9 +3,9 @@
 // Canonical BTC-USDT 15m OKX candles only.
 
 export const M8V3_MODEL_NAME = "model8_v3";
-export const M8V3_MODEL_VERSION = "v3.0.0";
+export const M8V3_MODEL_VERSION = "v3.0.1";
 export const M8V3_FEATURE_SCHEMA_VERSION = "v1";
-export const M8V3_CODE_VERSION = "v3.0.0-2026-07-26";
+export const M8V3_CODE_VERSION = "v3.0.1-2026-07-26";
 
 export const M8V3_STREAM = {
   symbol: "BTC-USDT",
@@ -16,11 +16,11 @@ export const M8V3_STREAM = {
 export const M8V3_TIMEFRAME_SEC = 900;
 export const M8V3_FEATURE_LOOKBACK = 24;
 
-// Training-window contract (per v3.0.0 spec).
-export const M8V3_MIN_TRAINING_ROWS = 1536;
+// Training-window contract (v3.0.1 — faster launch, unchanged retrain cadence).
+export const M8V3_MIN_TRAINING_ROWS = 1024;
 export const M8V3_PREFERRED_TRAINING_ROWS = 4096;
 export const M8V3_MAX_TRAINING_ROWS = 8192;
-export const M8V3_CALIBRATION_ROWS = 384;
+export const M8V3_CALIBRATION_ROWS = 256;
 export const M8V3_RETRAIN_EVERY_RESOLVED_ROWS = 96;
 
 // Regularization + optimizer.
