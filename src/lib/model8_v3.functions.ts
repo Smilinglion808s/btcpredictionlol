@@ -24,32 +24,133 @@ async function fetchAllModel8V3Rows() {
   return rows;
 }
 
-/** Simple stats: win / loss / push / pending / abstain / current pending row. */
-export const getModel8V3Stats = createServerFn({ method: "GET" }).handler(async () => {
-  const rows = await fetchAllModel8V3Rows();
-  let wins = 0, losses = 0, pushes = 0, pending = 0, abstains = 0;
-  const recent: Array<{ status: string; ts: string }> = [];
+function scoreTrack(rows: Array<Record<string, unknown>>, key: "raw_result" | "qualified_result") {
+  let wins = 0, losses = 0, pushes = 0, abstains = 0, pending = 0;
   for (const r of rows) {
-    const q = r.qualified_result as string | null;
-    const ts = String(r.resolved_at ?? r.target_candle_ts ?? "");
-    if (q === "WIN") { wins++; recent.push({ status: "win", ts }); }
-    else if (q === "LOSS") { losses++; recent.push({ status: "loss", ts }); }
-    else if (q === "PUSH") { pushes++; recent.push({ status: "push", ts }); }
-    else if (q === "ABSTAIN") { abstains++; }
-    else if (r.resolved_at == null) { pending++; }
+    const v = r[key] as string | null;
+    if (v === "WIN") wins++;
+    else if (v === "LOSS") losses++;
+    else if (v === "PUSH") pushes++;
+    else if (v === "ABSTAIN") abstains++;
+    else if (r.resolved_at == null) pending++;
   }
   const decided = wins + losses;
-  const win_rate = decided === 0 ? 0 : Math.round((wins / decided) * 10000) / 100;
-  const last10 = recent.sort((a, b) => (b.ts > a.ts ? 1 : -1)).slice(0, 10);
-  const l10w = last10.filter((r) => r.status === "win").length;
-  const l10l = last10.filter((r) => r.status === "loss").length;
-  const last_10_win_rate = l10w + l10l === 0 ? 0 : Math.round((l10w / (l10w + l10l)) * 10000) / 100;
+  const winRate = decided === 0 ? 0 : Math.round((wins / decided) * 10000) / 100;
+  return { wins, losses, pushes, abstains, pending, trades: decided, win_rate: winRate };
+}
+
+function brierAndLogLoss(rows: Array<Record<string, unknown>>) {
+  let brierSum = 0, llSum = 0, n = 0;
+  for (const r of rows) {
+    const p = r.calibrated_probability_green as number | null;
+    const dir = r.actual_direction as string | null;
+    if (p == null || (dir !== "GREEN" && dir !== "RED")) continue;
+    const y = dir === "GREEN" ? 1 : 0;
+    brierSum += (p - y) ** 2;
+    const clamped = Math.min(0.9999, Math.max(0.0001, p));
+    llSum += -(y * Math.log(clamped) + (1 - y) * Math.log(1 - clamped));
+    n++;
+  }
+  return {
+    brier: n ? Math.round((brierSum / n) * 10000) / 10000 : 0,
+    log_loss: n ? Math.round((llSum / n) * 10000) / 10000 : 0,
+    scored: n,
+  };
+}
+
+function greenRedAccuracy(rows: Array<Record<string, unknown>>, track: "raw_prediction" | "qualified_prediction", resultKey: "raw_result" | "qualified_result") {
+  let gW = 0, gT = 0, rW = 0, rT = 0;
+  for (const r of rows) {
+    const pred = r[track] as string | null;
+    const res = r[resultKey] as string | null;
+    if (res !== "WIN" && res !== "LOSS") continue;
+    if (pred === "GREEN") { gT++; if (res === "WIN") gW++; }
+    else if (pred === "RED") { rT++; if (res === "WIN") rW++; }
+  }
+  return {
+    green_win_rate: gT === 0 ? 0 : Math.round((gW / gT) * 10000) / 100,
+    green_total: gT,
+    red_win_rate: rT === 0 ? 0 : Math.round((rW / rT) * 10000) / 100,
+    red_total: rT,
+  };
+}
+
+function calibrationBuckets(rows: Array<Record<string, unknown>>) {
+  const buckets = ["0.00-0.20", "0.20-0.40", "0.40-0.60", "0.60-0.80", "0.80-1.00"];
+  const out: Record<string, { n: number; avg_pred: number; empirical: number }> = {};
+  for (const b of buckets) out[b] = { n: 0, avg_pred: 0, empirical: 0 };
+  const totals: Record<string, { sumP: number; wins: number; n: number }> = {};
+  for (const b of buckets) totals[b] = { sumP: 0, wins: 0, n: 0 };
+  for (const r of rows) {
+    const p = r.calibrated_probability_green as number | null;
+    const dir = r.actual_direction as string | null;
+    if (p == null || (dir !== "GREEN" && dir !== "RED")) continue;
+    const b = p < 0.2 ? buckets[0] : p < 0.4 ? buckets[1] : p < 0.6 ? buckets[2] : p < 0.8 ? buckets[3] : buckets[4];
+    totals[b].sumP += p;
+    totals[b].wins += dir === "GREEN" ? 1 : 0;
+    totals[b].n++;
+  }
+  for (const b of buckets) {
+    const t = totals[b];
+    out[b] = {
+      n: t.n,
+      avg_pred: t.n ? Math.round((t.sumP / t.n) * 10000) / 10000 : 0,
+      empirical: t.n ? Math.round((t.wins / t.n) * 10000) / 10000 : 0,
+    };
+  }
+  return out;
+}
+
+function drawdownAndStreak(rows: Array<Record<string, unknown>>, resultKey: "raw_result" | "qualified_result") {
+  // Chronological ascending
+  const ordered = rows
+    .filter((r) => r[resultKey] === "WIN" || r[resultKey] === "LOSS")
+    .sort((a, b) => String(a.resolved_at).localeCompare(String(b.resolved_at)));
+  let running = 0, peak = 0, maxDD = 0, streak = 0, worstStreak = 0;
+  for (const r of ordered) {
+    if (r[resultKey] === "WIN") { running += 1; streak = 0; }
+    else { running -= 1; streak += 1; if (streak > worstStreak) worstStreak = streak; }
+    if (running > peak) peak = running;
+    if (peak - running > maxDD) maxDD = peak - running;
+  }
+  return { max_drawdown: maxDD, longest_losing_streak: worstStreak };
+}
+
+/** Rich v3.0.0 stats split by episode + dual-track. */
+export const getModel8V3Stats = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await fetchAllModel8V3Rows();
+  const official = rows.filter((r) => r.official_forward_test_row === true && r.episode_type === "official_v3_forward_test");
+  const shakedown = rows.filter((r) => r.episode_type === "engineering_shakedown");
+
+  const rawOfficial = scoreTrack(official, "raw_result");
+  const qualOfficial = scoreTrack(official, "qualified_result");
+  const totalDecided = qualOfficial.trades + qualOfficial.abstains;
+  const coverage = totalDecided === 0 ? 0 : Math.round((qualOfficial.trades / totalDecided) * 10000) / 100;
+
+  // Abstained-raw accuracy: raw graded on rows where qualified was ABSTAIN.
+  const abstainedRows = official.filter((r) => r.qualified_result === "ABSTAIN" && (r.raw_result === "WIN" || r.raw_result === "LOSS"));
+  const abstainedRaw = scoreTrack(abstainedRows, "raw_result");
+
+  // Active fit id/version — take newest resolved or predicted row.
+  const newest = official[0] ?? shakedown[0];
+  const active_fit_id = (newest?.fit_id as string) ?? null;
+  const active_model_version = (newest?.model_version as string) ?? null;
+
   return {
     total_rows: rows.length,
-    wins, losses, pushes, pending, abstains,
-    trades: wins + losses,
-    win_rate,
-    last_10_win_rate,
+    official_rows: official.length,
+    shakedown_rows: shakedown.length,
+    active_model_version,
+    active_fit_id,
+    coverage_pct: coverage,
+    raw: rawOfficial,
+    qualified: qualOfficial,
+    abstained_raw: abstainedRaw,
+    raw_brier_logloss: brierAndLogLoss(official),
+    raw_green_red: greenRedAccuracy(official, "raw_prediction", "raw_result"),
+    qualified_green_red: greenRedAccuracy(official, "qualified_prediction", "qualified_result"),
+    calibration: calibrationBuckets(official),
+    drawdown: drawdownAndStreak(official, "qualified_result"),
   };
 });
 
@@ -58,7 +159,7 @@ export const getModel8V3Pending = createServerFn({ method: "GET" }).handler(asyn
   const sb = await admin();
   const { data, error } = await sb
     .from("model8_v3_predictions")
-    .select("prediction_id, target_candle_ts, qualified_prediction, raw_prediction, calibrated_probability_green, raw_probability_green, abstain_reason, resolved_at, qualified_result, actual_direction, data_quality_valid, feature_history_valid")
+    .select("prediction_id, target_candle_ts, qualified_prediction, raw_prediction, calibrated_probability_green, raw_probability_green, calibrated_probability_movement, abstain_reason, resolved_at, qualified_result, raw_result, actual_direction, data_quality_valid, feature_history_valid, official_forward_test_row, fit_id, model_version, episode_type")
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -66,7 +167,7 @@ export const getModel8V3Pending = createServerFn({ method: "GET" }).handler(asyn
   return data ?? null;
 });
 
-/** CSV export — every column. */
+/** CSV export — every column, JSON blobs stringified. */
 export const exportModel8V3Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await fetchAllModel8V3Rows();
   return rows.map((r) => ({
