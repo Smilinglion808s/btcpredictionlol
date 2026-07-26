@@ -646,6 +646,17 @@ function CsvDataPage() {
           >
             <Download className="size-4" /> a96 CSV
           </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const rows = (await exportM3().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_model3_fwd");
+            }}
+          >
+            <Download className="size-4" /> Model 3 FWD CSV
+          </Button>
         </div>
       </div>
 
