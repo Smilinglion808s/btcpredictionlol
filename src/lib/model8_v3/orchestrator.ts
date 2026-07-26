@@ -192,8 +192,12 @@ interface DualFit {
   n_train: number;
 }
 
-async function trainNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
-  | { ok: true; fit: DualFit }
+async function trainNewFit(
+  sb: SupabaseClient,
+  candles: Candle[],
+  opts: { intent: "bootstrap" | "candidate"; priorActiveFitId?: string | null } = { intent: "bootstrap" },
+): Promise<
+  | { ok: true; fit: DualFit; status: "active" | "pending_review" }
   | { ok: false; reason: string }
 > {
   const { X, yDir, yMove } = buildTrainingMatrix(candles, M8V3_MOVEMENT_THRESHOLD_BPS);
