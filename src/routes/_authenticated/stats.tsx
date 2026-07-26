@@ -443,86 +443,41 @@ function StatsPage() {
         </ModelCard>
 
         <ModelCard
-          title="Model 3 FWD"
-          subtitle="v3.0.2 Shadow"
-          status={m8v3CandidateQ.data ? "Review" : "Auto"}
+          title="Model 3 — Selective Edge"
+          subtitle="m3-se-r1"
+          status="Auto"
           tone="violet"
-          winRate={Number(m8v3Qualified.win_rate ?? 0)}
-          wins={Number(m8v3Qualified.wins ?? 0)}
-          losses={Number(m8v3Qualified.losses ?? 0)}
-          pushes={Number(m8v3Qualified.pushes ?? 0)}
-          pending={Number(m8v3Stats.pending ?? 0)}
+          winRate={Number(m3sePublished.win_rate ?? 0)}
+          wins={Number(m3sePublished.wins ?? 0)}
+          losses={Number(m3sePublished.losses ?? 0)}
+          pushes={Number(m3sePublished.pushes ?? 0)}
+          pending={0}
           predictionLabel="Current Prediction"
-          predictionTs={m8v3Pending?.target_candle_ts}
-          predictionValue={m8v3Q ?? "—"}
-          abstainReason={(m8v3Pending as any)?.abstain_reason ?? null}
+          predictionTs={m3sePending?.target_candle_ts}
+          predictionValue={m3seCurrent ?? "—"}
+          abstainReason={(m3sePending as any)?.abstain_reason ?? null}
           actions={(
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
-              {exportingM8v3 ? "…" : "CSV"}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3sePredsCsv} disabled={exportingM3se}>
+                {exportingM3se ? "…" : "CSV"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3seFitsCsv} disabled={exportingM3seFits}>
+                {exportingM3seFits ? "…" : "Fits"}
+              </Button>
+            </div>
           )}
         >
-          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-200/90">
-            <span className="font-semibold text-amber-100">v3.0.1 note:</span> the prior fit produced valid raw direction
-            predictions, but its qualified track permanently abstained because the 15 bps movement label was too rare
-            (~27% base rate) for the calibrated movement head to ever cross the 0.55 gate. v3.0.2 lowers the movement
-            label to 8 bps (~52% base rate) and refuses to activate any fit whose training/calibration positive rate
-            falls outside 30–70% or whose p95 calibrated movement probability doesn't exceed 0.55.
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label="Resolved" value={Number(m3seStats.resolved_count ?? 0)} />
+            <MiniStat label="Abstains" value={Number(m3seStats.abstains ?? 0)} />
+            <MiniStat label="Coverage" value={`${Math.round(Number(m3seStats.coverage ?? 0) * 100)}%`} />
+            <MiniStat label="Raw win rate" value={`${Number(m3seStats.raw?.win_rate ?? 0)}%`} />
           </div>
-
-          {(() => {
-            const cand = m8v3CandidateQ.data as Record<string, any> | null;
-            if (!cand) {
-              return (
-                <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-                  No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
-                </div>
-              );
-            }
-            const rep = (cand.review_report ?? {}) as Record<string, any>;
-            const w = rep.windows ?? {};
-            const line = (label: string, win: any) => {
-              const a = win?.active?.qualified ?? {};
-              const c = win?.candidate_counterfactual?.qualified ?? {};
-              return (
-                <div key={label} className="flex items-center justify-between text-[11px] font-mono tabular-nums">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
-                </div>
-              );
-            };
-            return (
-              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium text-amber-400">Candidate awaiting manual approval</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
-                </div>
-                <div className="space-y-1">
-                  {line("Last 96 qualified", w.last_96)}
-                  {line("Last 384 qualified", w.last_384)}
-                  {line("Cumulative qualified", w.cumulative)}
-                </div>
-                <textarea
-                  value={m8v3ReviewNotes}
-                  onChange={(e) => setM8v3ReviewNotes(e.target.value)}
-                  placeholder="Review notes (optional)"
-                  className="w-full text-xs rounded border border-border bg-background p-2"
-                  rows={2}
-                />
-                <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
-                    {m8v3ReviewBusy ? "Working…" : "Approve"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
-                    Reject
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
-                    Continue
-                  </Button>
-                </div>
-              </div>
-            );
-          })()}
+          <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">Selective Edge R1:</span> two direction experts feed a stacker; a
+            correctness selector abstains on low-confidence signals to target ~50 of every 96 valid candles. Threshold =
+            max(0.50, Q<sub>1&minus;50/96</sub>) on calibration. Retrains every 96 resolved rows.
+          </div>
         </ModelCard>
       </div>
 
