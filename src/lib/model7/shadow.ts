@@ -529,16 +529,16 @@ export async function runShadowForPrediction(
 
     // AAS96 shadow — deferred, never blocks webhook. Own storage table.
     // a96-r1 runs after and consumes AAS96 Layer A/B + base selector only.
+    // Model 3 FWD (model8_v3) runs alongside them off the same prediction row
+    // so all three share one target-candle derivation path.
     try {
       const { runAas96Shadow } = await import("./aas96/orchestrator");
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
       const { runA96 } = await import("@/lib/a96/orchestrator");
       await runA96(supabase, predictionRow.id);
+      const { runModel8V3 } = await import("@/lib/model8_v3/orchestrator");
+      await runModel8V3(supabase, { targetCandleTs: new Date(String(predictionRow.candle_ts)) });
     } catch { /* never block */ }
-
-    // Model 3 FWD (model8_v3) — no longer invoked here. It runs directly from
-    // the scheduled 15m cron AFTER the resolve phase, so the just-closed prior
-    // candle is guaranteed to be finalized. See scheduled-15m-run.ts.
 
 
 
