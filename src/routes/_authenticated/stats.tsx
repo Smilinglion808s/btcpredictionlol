@@ -3,8 +3,30 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPredictionStats, listPredictions, listModelVersions, getModel7ShadowStats, getModel7ShadowPending, exportModel7Shadow, listVariantA2ConflictRecent, listAllPredictionsForHistory, getTd1RcShadowStats, getTd1RcShadowPending, exportTd1RcShadow, getTd1RcTrainingProgress, listTd1RcRecent, getAas96ShadowStats, getAas96ShadowPending, exportAas96Shadow, exportModel6Predictions, getA96Stats, getA96Pending, exportA96Csv, exportA96CombinedCsv, resetA96VisualStats, resetTd1RcVisualStats } from "@/lib/predictions.functions";
-import { getModel8V3Stats, getModel8V3Pending, exportModel8V3Csv, getModel8V3PendingCandidate, approveModel8V3Candidate, rejectModel8V3Candidate } from "@/lib/model8_v3.functions";
+import {
+  getPredictionStats,
+  listPredictions,
+  listModelVersions,
+  getTd1RcShadowStats,
+  getTd1RcShadowPending,
+  exportTd1RcShadow,
+  getTd1RcTrainingProgress,
+  listTd1RcRecent,
+  getA96Stats,
+  getA96Pending,
+  exportA96Csv,
+  exportA96CombinedCsv,
+  resetA96VisualStats,
+  resetTd1RcVisualStats,
+} from "@/lib/predictions.functions";
+import {
+  getModel8V3Stats,
+  getModel8V3Pending,
+  exportModel8V3Csv,
+  getModel8V3PendingCandidate,
+  approveModel8V3Candidate,
+  rejectModel8V3Candidate,
+} from "@/lib/model8_v3.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -12,7 +34,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/stats")({
-  head: () => ({ meta: [{ title: "Stats — BTC 15m" }] }),
+  head: () => ({
+    meta: [
+      { title: "Stats — BTC 15m" },
+      { name: "description", content: "Model performance stats for BTC 15-minute predictions." },
+      { property: "og:title", content: "Stats — BTC 15m" },
+      { name: "twitter:title", content: "Stats — BTC 15m" },
+      { property: "og:description", content: "Model performance stats for BTC 15-minute predictions." },
+      { name: "twitter:description", content: "Model performance stats for BTC 15-minute predictions." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: StatsPage,
 });
 
@@ -21,18 +54,12 @@ const ALL_VERSIONS = "__all__";
 function StatsPage() {
   const qc = useQueryClient();
   const statsFn = useServerFn(getPredictionStats);
-  const listFn = useServerFn(listPredictions);
   const settingsFn = useServerFn(getActiveSettings);
   const versionsFn = useServerFn(listModelVersions);
 
   const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
   const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
-  const m7Fn = useServerFn(getModel7ShadowStats);
-  const m7Q = useQuery({ queryKey: ["model7-shadow-stats"], queryFn: () => m7Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m7PendingFn = useServerFn(getModel7ShadowPending);
-  const m7PendingQ = useQuery({ queryKey: ["model7-shadow-pending"], queryFn: () => m7PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const exportM7Fn = useServerFn(exportModel7Shadow);
-  const exportAllPredsFn = useServerFn(listAllPredictionsForHistory);
+
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const td1PendingFn = useServerFn(getTd1RcShadowPending);
@@ -40,12 +67,7 @@ function StatsPage() {
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const aas96Fn = useServerFn(getAas96ShadowStats);
-  const aas96Q = useQuery({ queryKey: ["aas96-shadow-stats"], queryFn: () => aas96Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const aas96PendingFn = useServerFn(getAas96ShadowPending);
-  const aas96PendingQ = useQuery({ queryKey: ["aas96-shadow-pending"], queryFn: () => aas96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const exportAas96Fn = useServerFn(exportAas96Shadow);
-  const exportM6Fn = useServerFn(exportModel6Predictions);
+
   const a96Fn = useServerFn(getA96Stats);
   const a96Q = useQuery({ queryKey: ["a96-stats"], queryFn: () => a96Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const a96PendingFn = useServerFn(getA96Pending);
@@ -54,13 +76,13 @@ function StatsPage() {
   const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
+
   const m8v3StatsFn = useServerFn(getModel8V3Stats);
   const m8v3PendingFn = useServerFn(getModel8V3Pending);
   const exportM8v3Fn = useServerFn(exportModel8V3Csv);
   const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const m8v3CandidateFn = useServerFn(getModel8V3PendingCandidate);
-  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
   const approveM8v3Fn = useServerFn(approveModel8V3Candidate);
   const rejectM8v3Fn = useServerFn(rejectModel8V3Candidate);
   const [m8v3ReviewNotes, setM8v3ReviewNotes] = useState("");
@@ -83,7 +105,14 @@ function StatsPage() {
       setM8v3ReviewBusy(false);
     }
   };
+  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
   const [exportingM8v3, setExportingM8v3] = useState(false);
+  const [exportingA96, setExportingA96] = useState(false);
+  const [exportingA96Combined, setExportingA96Combined] = useState(false);
+  const [resettingA96, setResettingA96] = useState(false);
+  const [resettingTd1, setResettingTd1] = useState(false);
+  const [exportingTd1, setExportingTd1] = useState(false);
+
   async function downloadM8v3Csv() {
     try {
       setExportingM8v3(true);
@@ -94,17 +123,6 @@ function StatsPage() {
       setExportingM8v3(false);
     }
   }
-
-  const [exportingAas96, setExportingAas96] = useState(false);
-  const [exportingA96, setExportingA96] = useState(false);
-  const [exportingA96Combined, setExportingA96Combined] = useState(false);
-  const [resettingA96, setResettingA96] = useState(false);
-  const [resettingTd1, setResettingTd1] = useState(false);
-  type ExportScope = "all" | "A" | "B" | "B2" | "B4_2" | "A2_Conflict" | "A2_MidBand" | "A2_Combined";
-  const [exporting, setExporting] = useState<null | ExportScope>(null);
-  const [exportingTd1, setExportingTd1] = useState(false);
-  const [exportingAll, setExportingAll] = useState(false);
-  const [exportingM6, setExportingM6] = useState(false);
 
   async function downloadA96Csv() {
     try {
@@ -151,23 +169,19 @@ function StatsPage() {
     }
   }
 
-
-  async function downloadAas96Csv() {
+  async function downloadTd1Csv() {
     try {
-      setExportingAas96(true);
-      const rows = await exportAas96Fn();
-      if (rows.length === 0) { alert("No AAS96 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `aas96-shadow-${stamp()}.csv`);
+      setExportingTd1(true);
+      const rows = await exportTd1Fn();
+      if (rows.length === 0) { alert("No TD1-RC shadow rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `td1-rc-shadow-${stamp()}.csv`);
     } finally {
-      setExportingAas96(false);
+      setExportingTd1(false);
     }
   }
 
-
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
-    // Union of keys across all rows so columns that are null/undefined in
-    // the first row (e.g. veto fields on non-vetoed rows) still appear.
     const headerSet = new Set<string>();
     for (const r of rows) {
       if (r && typeof r === "object") for (const k of Object.keys(r)) headerSet.add(k);
@@ -194,71 +208,11 @@ function StatsPage() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }
 
-
-  async function downloadTd1Csv() {
-    try {
-      setExportingTd1(true);
-      const rows = await exportTd1Fn();
-      if (rows.length === 0) { alert("No TD1-RC shadow rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `td1-rc-shadow-${stamp()}.csv`);
-    } finally {
-      setExportingTd1(false);
-    }
-  }
-
-  async function downloadM7Csv(scope: ExportScope) {
-    try {
-      setExporting(scope);
-      const rows = await exportM7Fn();
-      const filtered = scope === "all" ? rows : rows.filter((r: any) => r.variant === scope);
-      if (filtered.length === 0) { alert("No shadow rows to export."); return; }
-      const name = scope === "all" ? `model7-shadow-all-${stamp()}.csv` : `model7-shadow-variant${scope}-${stamp()}.csv`;
-      triggerDownload(rowsToCsv(filtered as any[]), name);
-    } finally {
-      setExporting(null);
-    }
-  }
-
-  async function downloadModel6Csv() {
-    try {
-      setExportingM6(true);
-      const rows = await exportM6Fn();
-      if (!rows || rows.length === 0) { alert("No Model 6 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model6-predictions-${stamp()}.csv`);
-    } finally {
-      setExportingM6(false);
-    }
-  }
-
-  async function downloadAllModelsCsv() {
-    try {
-      setExportingAll(true);
-      const [m7, td1, preds, m6] = await Promise.all([
-        exportM7Fn(),
-        exportTd1Fn(),
-        exportAllPredsFn(),
-        exportM6Fn(),
-      ]);
-      const s = stamp();
-      if ((m7 ?? []).length) triggerDownload(rowsToCsv(m7 as any[]), `all-models-${s}-model7-shadow.csv`);
-      if ((td1 ?? []).length) triggerDownload(rowsToCsv(td1 as any[]), `all-models-${s}-td1-rc-shadow.csv`);
-      if ((preds ?? []).length) triggerDownload(rowsToCsv(preds as any[]), `all-models-${s}-predictions.csv`);
-      if ((m6 ?? []).length) triggerDownload(rowsToCsv(m6 as any[]), `all-models-${s}-model6.csv`);
-      if (!(m7 ?? []).length && !(td1 ?? []).length && !(preds ?? []).length && !(m6 ?? []).length) {
-        alert("No rows to export.");
-      }
-    } finally {
-      setExportingAll(false);
-    }
-  }
-
   const activeVersion = settingsQ.data?.model_version ?? null;
   const [selected, setSelected] = useState<string>(ALL_VERSIONS);
 
-  // Default the selector to the active model version once we know it.
   useEffect(() => {
     if (activeVersion && selected === ALL_VERSIONS) setSelected(activeVersion);
-    // only run when activeVersion first arrives
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeVersion]);
 
@@ -295,13 +249,19 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "a96_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["a96-stats"] });
+        qc.invalidateQueries({ queryKey: ["a96-pending"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "model8_v3_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] });
+        qc.invalidateQueries({ queryKey: ["model8-v3-pending"] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
   const s = (statsQ.data ?? {}) as Record<string, unknown>;
-  const num = (k: string) => Number(s[k] ?? 0);
-
   const modelVersion = activeVersion ?? "—";
   const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
   const b2Hero = {
@@ -323,6 +283,11 @@ function StatsPage() {
     avg_confidence: Number(td1Stats.avg_confidence ?? 0),
     avg_confidence_wins: Number(td1Stats.avg_confidence_wins ?? 0),
     avg_confidence_losses: Number(td1Stats.avg_confidence_losses ?? 0),
+    td1_vetoes: Number(td1Stats.td1_vetoes ?? 0),
+    containment_vetoes: Number(td1Stats.containment_vetoes ?? 0),
+    a2_baseline_win_rate: Number(td1Stats.a2_baseline_win_rate ?? 0),
+    a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
+    a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
   };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
@@ -334,546 +299,236 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const badge = "TD1";
+  const a96Stats = (a96Q.data ?? {}) as Record<string, any>;
+  const a96Episode = (a96Stats.active_episode ?? {}) as Record<string, any>;
+  const a96Pending = a96PendingQ.data as Record<string, any> | null;
+  const a96Wins = Number(a96Stats.wins ?? 0);
+  const a96Losses = Number(a96Stats.losses ?? 0);
+  const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
+  const a96WinRate = Number(a96Stats.win_rate ?? 0);
 
-  const scopeLabel = versionFilter ? `Model ${versionFilter}` : "All models";
+  const m8v3Stats = (m8v3StatsQ.data ?? {}) as Record<string, any>;
+  const m8v3Qualified = (m8v3Stats.qualified ?? {}) as Record<string, any>;
+  const m8v3Pending = m8v3PendingQ.data as Record<string, any> | null;
+  const m8v3Q = m8v3Pending?.qualified_prediction ?? null;
 
   return (
-    <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1600px] mx-auto">
+    <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 italic">
         Actual candle outcomes are determined by the Kalshi KXBTC15M 15-minute prediction market (CF Benchmarks BRTI settlement).
       </p>
-      <Card className="border-bull/40 bg-gradient-to-br from-bull/10 via-card to-card">
-        <CardContent className="py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="size-12 rounded-md bg-bull/20 border border-bull/40 flex items-center justify-center font-mono font-bold text-bull">
-              {badge}
+
+      <Card className="border-cyan/20 bg-cyan/5">
+        <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-lg bg-cyan/10 border border-cyan/30 flex items-center justify-center font-mono font-bold text-cyan-400">
+              TD1
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
-              <div className="font-mono text-lg font-semibold flex items-center gap-2">
+              <div className="text-base font-semibold flex items-center gap-2 font-heading">
                 TD1-RC (A2 Combined Layer) · BTCUSDT 15m
-                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-bull/40 text-bull bg-bull/10" : "border-border text-muted-foreground"}`}>
-                  <span className={`size-1.5 rounded-full ${isLive ? "bg-bull animate-pulse" : "bg-muted-foreground"}`} />
+                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-cyan/30 text-cyan-400 bg-cyan/10" : "border-border text-muted-foreground"}`}>
+                  <span className={`size-1.5 rounded-full ${isLive ? "bg-cyan-400 animate-pulse" : "bg-muted-foreground"}`} />
                   {isLive ? "AUTO LIVE" : "MANUAL"}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {scopeLabel}
+                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {versionFilter ? `Model ${versionFilter}` : "All models"}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="w-44">
-              <Select value={selected} onValueChange={setSelected}>
-                <SelectTrigger className="h-9 text-xs font-mono">
-                  <SelectValue placeholder="Filter version" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_VERSIONS}>All versions</SelectItem>
-                  {versionOptions.map((v) => (
-                    <SelectItem key={v} value={v}>Model {v}{v === activeVersion ? " (active)" : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Win Rate</div>
-                <div className="font-mono text-2xl font-bold text-bull">{b2Hero.win_rate}%</div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Resolved</div>
-                <div className="font-mono text-2xl font-bold">{b2Resolved}</div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">TD1 Trades</div>
-                <div className="font-mono text-2xl font-bold">{b2Hero.total}</div>
-              </div>
-            </div>
+          <div className="w-44">
+            <Select value={selected} onValueChange={setSelected}>
+              <SelectTrigger className="h-9 text-xs font-mono">
+                <SelectValue placeholder="Filter version" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_VERSIONS}>All versions</SelectItem>
+                {versionOptions.map((v) => (
+                  <SelectItem key={v} value={v}>Model {v}{v === activeVersion ? " (active)" : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-
         </CardContent>
       </Card>
 
-      <h2 className="text-xl font-semibold">Performance Stats <span className="text-xs font-normal text-muted-foreground">— TD1-RC (autobet)</span></h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <ModelCard
+          title="TD1-RC"
+          subtitle="Active Layer"
+          status="Live"
+          tone="cyan"
+          winRate={b2Hero.win_rate}
+          wins={b2Hero.wins}
+          losses={b2Hero.losses}
+          pushes={b2Hero.pushes}
+          pending={b2Hero.pending}
+          predictionLabel="Current Prediction"
+          predictionTs={td1PendingQ.data?.target_candle_ts}
+          predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
+          actions={(
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetTd1Stats} disabled={resettingTd1}>
+                {resettingTd1 ? "…" : "Reset"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadTd1Csv} disabled={exportingTd1}>
+                {exportingTd1 ? "…" : "CSV"}
+              </Button>
+            </div>
+          )}
+        >
+          {(() => {
+            const prog = td1ProgressQ.data as null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
+            if (!prog || prog.phase === "ready") return null;
+            return (
+              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <div className="font-medium text-amber-400">{prog.label}</div>
+                  <div className="text-muted-foreground tabular-nums">
+                    {prog.current} / {prog.target} <span className="ml-1">({prog.remaining} left)</span>
+                  </div>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, Math.min(100, prog.percent))}%` }} />
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-1">
+                  Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes.
+                </div>
+              </div>
+            );
+          })()}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label="Resolved" value={b2Resolved} />
+            <MiniStat label="Pending" value={b2Hero.pending} />
+            <MiniStat label="TD1 Vetoes" value={b2Hero.td1_vetoes} />
+            <MiniStat label="Containment" value={b2Hero.containment_vetoes} />
+          </div>
+        </ModelCard>
 
+        <ModelCard
+          title="a96"
+          subtitle="a96-r1"
+          status="Stable"
+          tone="emerald"
+          winRate={a96WinRate}
+          wins={a96Wins}
+          losses={a96Losses}
+          pushes={Number(a96Stats.pushes ?? 0)}
+          pending={Number(a96Stats.pending ?? 0)}
+          predictionLabel="Current Prediction"
+          predictionTs={a96Pending?.target_candle_ts}
+          predictionValue={a96Pending?.final_prediction ?? "—"}
+          actions={(
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetA96Stats} disabled={resettingA96}>
+                {resettingA96 ? "…" : "Reset"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadA96Csv} disabled={exportingA96}>
+                {exportingA96 ? "…" : "CSV"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadA96CombinedCsv} disabled={exportingA96Combined}>
+                {exportingA96Combined ? "…" : "CSV+"}
+              </Button>
+            </div>
+          )}
+        >
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label="Total rows" value={Number(a96Stats.total ?? 0)} />
+            <MiniStat label="Abstains" value={Number(a96Stats.abstains ?? 0)} />
+            <MiniStat label="Fit overrides" value={Number(a96Stats.overrides ?? 0)} />
+            <MiniStat label="Agreement vetoes" value={Number(a96Stats.agreement_vetoes ?? 0)} />
+          </div>
+          {a96Episode && (a96Episode.comparable_resolved_count ?? 0) > 0 && (
+            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Active fit episode</div>
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="Comparable" value={a96Episode.comparable_resolved_count ?? 0} />
+                <MiniStat label="Layer A net" value={a96Episode.layer_a_net ?? 0} />
+                <MiniStat label="Layer B net" value={a96Episode.layer_b_net ?? 0} />
+                <MiniStat label="Activated" value={a96Episode.activated_at ? new Date(a96Episode.activated_at).toLocaleDateString() : "—"} />
+              </div>
+            </div>
+          )}
+        </ModelCard>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
-        <Kpi label="Overall WR" value={`${b2Hero.win_rate}%`} tone="bull" />
-        <Kpi label="Last 10 WR" value={`${b2Hero.last_10_win_rate ?? 0}%`} />
-        <Kpi label="Last 25 WR" value={`${b2Hero.last_25_win_rate ?? 0}%`} />
-        <Kpi label="Last 50 WR" value={`${b2Hero.last_50_win_rate ?? 0}%`} />
-        <Kpi label="Total" value={`${b2Hero.total}`} />
-        <Kpi label="Pending" value={`${b2Hero.pending}`} tone="warn" />
-        <Kpi label="Wins" value={`${b2Hero.wins}`} tone="bull" />
-        <Kpi label="Losses" value={`${b2Hero.losses}`} tone="bear" />
-        <Kpi label="Pushes" value={`${b2Hero.pushes}`} />
-        <Kpi label="YES WR" value={`${b2Hero.yes_win_rate ?? 0}%`} />
-        <Kpi label="NO WR" value={`${b2Hero.no_win_rate ?? 0}%`} />
-        <Kpi label="Avg Conf" value={`${b2Hero.avg_confidence ?? 0}%`} />
-        <Kpi label="Avg Conf Wins" value={`${b2Hero.avg_confidence_wins ?? 0}%`} tone="bull" />
-        <Kpi label="Avg Conf Losses" value={`${b2Hero.avg_confidence_losses ?? 0}%`} tone="bear" />
+        <ModelCard
+          title="Model 3 FWD"
+          subtitle="v3.0.1 Shadow"
+          status={m8v3CandidateQ.data ? "Review" : "Auto"}
+          tone="violet"
+          winRate={Number(m8v3Qualified.win_rate ?? 0)}
+          wins={Number(m8v3Qualified.wins ?? 0)}
+          losses={Number(m8v3Qualified.losses ?? 0)}
+          pushes={Number(m8v3Qualified.pushes ?? 0)}
+          pending={Number(m8v3Stats.pending ?? 0)}
+          predictionLabel="Current Prediction"
+          predictionTs={m8v3Pending?.target_candle_ts}
+          predictionValue={m8v3Q ?? "—"}
+          actions={(
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
+              {exportingM8v3 ? "…" : "CSV"}
+            </Button>
+          )}
+        >
+          {(() => {
+            const cand = m8v3CandidateQ.data as Record<string, any> | null;
+            if (!cand) {
+              return (
+                <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                  No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
+                </div>
+              );
+            }
+            const rep = (cand.review_report ?? {}) as Record<string, any>;
+            const w = rep.windows ?? {};
+            const line = (label: string, win: any) => {
+              const a = win?.active?.qualified ?? {};
+              const c = win?.candidate_counterfactual?.qualified ?? {};
+              return (
+                <div key={label} className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
+                </div>
+              );
+            };
+            return (
+              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium text-amber-400">Candidate awaiting manual approval</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
+                </div>
+                <div className="space-y-1">
+                  {line("Last 96 qualified", w.last_96)}
+                  {line("Last 384 qualified", w.last_384)}
+                  {line("Cumulative qualified", w.cumulative)}
+                </div>
+                <textarea
+                  value={m8v3ReviewNotes}
+                  onChange={(e) => setM8v3ReviewNotes(e.target.value)}
+                  placeholder="Review notes (optional)"
+                  className="w-full text-xs rounded border border-border bg-background p-2"
+                  rows={2}
+                />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
+                    {m8v3ReviewBusy ? "Working…" : "Approve"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
+                    Reject
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </ModelCard>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <CardTitle className="text-base flex items-center gap-2">
-              Model 7 Shadow
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-                tracking-only · not trading
-              </span>
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
-                {exporting === "all" ? "Exporting…" : "CSV (All)"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingAll} onClick={downloadAllModelsCsv}>
-                {exportingAll ? "Exporting…" : "CSV (All Models)"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exportingM6} onClick={downloadModel6Csv}>
-                {exportingM6 ? "Exporting…" : "CSV (Model 6)"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("all")}>
-                {exporting === "all" ? "Exporting…" : "CSV (All)"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A")}>
-                {exporting === "A" ? "…" : "Variant A"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("B2")}>
-                {exporting === "B2" ? "…" : "Variant B2"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting !== null} onClick={() => downloadM7Csv("A2_Combined")}>
-                {exporting === "A2_Combined" ? "…" : "A2 Combined"}
-              </Button>
-
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A", "B2", "M6"] as const).map((k) => {
-              const isM6 = k === "M6";
-              const b = isM6
-                ? {
-                    total: num("total"),
-                    wins: num("wins"),
-                    losses: num("losses"),
-                    pushes: num("pushes"),
-                    pending: num("pending"),
-                    win_rate: num("overall_win_rate"),
-                  }
-                : (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
-              const label = k === "A"
-                ? "Variant A (frozen v1.1)"
-                : k === "B2"
-                ? "Variant B2 (B minus NCE override)"
-                : "Model 6";
-              const pending = !isM6 ? (m7PendingQ.data as any)?.[k] ?? null : null;
-
-              const prob = pending?.probability_green;
-              const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
-              const decision = pending?.decision ?? null;
-              const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
-                : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
-                : "text-muted-foreground border-border";
-              return (
-                <div key={k} className="rounded-md border border-border bg-card/50 p-4">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{label}</div>
-                  <div className="flex items-baseline justify-between mb-3">
-                    <span className="text-xs text-muted-foreground">Win Rate</span>
-                    <span className="font-mono text-2xl font-bold text-bull">{b.win_rate}%</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <M7Stat label="Trades" value={b.total} />
-                    <M7Stat label="Wins" value={b.wins} tone="bull" />
-                    <M7Stat label="Losses" value={b.losses} tone="bear" />
-                    <M7Stat label="Pushes" value={b.pushes} />
-                  </div>
-                  {!isM6 && (
-                    <div className="mt-3 pt-3 border-t border-border/60">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-                        Current pending candle
-                      </div>
-                      {pending && decision ? (
-                        <div className="flex items-center justify-between gap-2 font-mono text-xs">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                            {decision}
-                            {pending.would_trade === false && (
-                              <span className="text-[9px] text-muted-foreground ml-1">(no trade)</span>
-                            )}
-                          </span>
-                          <span className="text-muted-foreground">
-                            P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
-                      )}
-                    </div>
-                  )}
-                  {b.pending > 0 && (
-                    <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
-                      {b.pending} pending
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            Variant A2 — Three-Policy Shadow
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              post-decision filter on Variant A · tracking-only · not trading
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(["A2_Combined"] as const).map((k) => {
-              const b = (m7Q.data as any)?.[k] ?? { total: 0, wins: 0, losses: 0, pushes: 0, pending: 0, win_rate: 0 };
-              const pending = (m7PendingQ.data as any)?.[k] ?? null;
-              const label = "A2 Combined (union of both)";
-              const decision = pending?.decision ?? null;
-              const prob = pending?.probability_green;
-              const probPct = typeof prob === "number" ? (prob * 100).toFixed(1) : null;
-              const decisionCls = decision === "YES" ? "text-bull border-bull/40 bg-bull/10"
-                : decision === "NO" ? "text-bear border-bear/40 bg-bear/10"
-                : "text-muted-foreground border-border";
-              return (
-                <div key={k} className="rounded-md border border-border bg-card/50 p-4">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{label}</div>
-                  <div className="flex items-baseline justify-between mb-3">
-                    <span className="text-xs text-muted-foreground">Win Rate</span>
-                    <span className="font-mono text-2xl font-bold text-bull">{b.win_rate}%</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <M7Stat label="Trades" value={b.total} />
-                    <M7Stat label="Wins" value={b.wins} tone="bull" />
-                    <M7Stat label="Losses" value={b.losses} tone="bear" />
-                    <M7Stat label="Pushes" value={b.pushes} />
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-border/60">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Current pending candle
-                    </div>
-                    {pending && decision ? (
-                      <div className="flex items-center justify-between gap-2 font-mono text-xs">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                          {decision}
-                          {pending.would_trade === false && (
-                            <span className="text-[9px] text-muted-foreground ml-1">(skipped)</span>
-                          )}
-                        </span>
-                        <span className="text-muted-foreground">
-                          P(green): <span className="text-foreground">{probPct ?? "—"}%</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/70 italic font-mono">no pending shadow row</div>
-                    )}
-                  </div>
-                  {b.pending > 0 && (
-                    <div className="mt-2 text-[10px] text-muted-foreground text-right font-mono">
-                      {b.pending} pending
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-
-
-      {/* TD1-RC Shadow (Model 8 layer) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>TD1-RC Shadow (A2 Combined + TD1 Veto & Containment)</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" className="h-8 text-muted-foreground hover:text-foreground" onClick={doResetTd1Stats} disabled={resettingTd1}>
-                {resettingTd1 ? "Resetting…" : "Reset Visual"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={downloadTd1Csv} disabled={exportingTd1}>
-                {exportingTd1 ? "Exporting…" : "CSV (TD1-RC)"}
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(() => {
-            const t = (td1Q.data ?? {}) as Record<string, any>;
-            const p = (td1PendingQ.data ?? null) as Record<string, any> | null;
-            const prog = (td1ProgressQ.data ?? null) as null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
-            return (
-              <>
-                {prog ? (
-                  prog.phase !== "ready" ? (
-                    <div className="rounded-md border p-3">
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <div className="font-medium">{prog.label}</div>
-                        <div className="text-muted-foreground tabular-nums">
-                          {prog.current} / {prog.target}
-                          <span className="ml-2">({prog.remaining} candles left)</span>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full transition-all bg-amber-500"
-                          style={{ width: `${Math.max(2, Math.min(100, prog.percent))}%` }}
-                        />
-                      </div>
-                      <div className="text-[11px] text-muted-foreground mt-1">
-                        Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes.
-                      </div>
-                    </div>
-                  ) : null
-                ) : null}
-
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <Stat label="Win rate" value={`${(t.win_rate ?? 0)}%`} />
-                  <Stat label="Trades" value={String(t.total ?? 0)} />
-                  <Stat label="Wins" value={String(t.wins ?? 0)} />
-                  <Stat label="Losses" value={String(t.losses ?? 0)} />
-                  <Stat label="Pending" value={String(t.pending ?? 0)} />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Stat label="Last 10" value={`${(t.last_10_win_rate ?? 0)}%`} />
-                  <Stat label="Last 25" value={`${(t.last_25_win_rate ?? 0)}%`} />
-                  <Stat label="TD1 vetoes" value={String(t.td1_vetoes ?? 0)} />
-                  <Stat label="Containment vetoes" value={String(t.containment_vetoes ?? 0)} />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <Stat label="A2 baseline WR" value={`${(t.a2_baseline_win_rate ?? 0)}%`} />
-                  <Stat label="A2 baseline W" value={String(t.a2_baseline_wins ?? 0)} />
-                  <Stat label="A2 baseline L" value={String(t.a2_baseline_losses ?? 0)} />
-                </div>
-                <div className="rounded-md border p-3 text-sm">
-                  <div className="font-medium mb-1">Current pending candle</div>
-                  {p ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div><span className="text-muted-foreground">Decision:</span> {String(p.external_final_decision ?? "—")}</div>
-                      <div><span className="text-muted-foreground">A2 orig:</span> {String(p.a2_original_decision ?? "—")}</div>
-                      <div><span className="text-muted-foreground">p(loss):</span> {p.td1_predicted_loss_probability != null ? Number(p.td1_predicted_loss_probability).toFixed(4) : "—"}</div>
-                      <div><span className="text-muted-foreground">Skip reason:</span> {String(p.skip_reason ?? "—")}</div>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">No pending row.</div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* a96 (a96-r1) — deterministic post-AAS decision engine, non-webhook */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>a96 (a96-r1)</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={downloadA96Csv} disabled={exportingA96}>
-                {exportingA96 ? "Exporting…" : "CSV (a96)"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={downloadA96CombinedCsv} disabled={exportingA96Combined}>
-                {exportingA96Combined ? "Exporting…" : "CSV (a96 + AAS96)"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={doResetA96Stats} disabled={resettingA96}>
-                {resettingA96 ? "Resetting…" : "Reset stats"}
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(() => {
-            const a = (a96Q.data ?? {}) as Record<string, any>;
-            const ep = (a.active_episode ?? {}) as Record<string, any>;
-            return (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <Stat label="Win rate" value={`${a.win_rate ?? 0}%`} />
-                  <Stat label="Trades (W+L)" value={String((Number(a.wins ?? 0) + Number(a.losses ?? 0)))} />
-                  <Stat label="Wins" value={String(a.wins ?? 0)} />
-                  <Stat label="Losses" value={String(a.losses ?? 0)} />
-                  <Stat label="Pending" value={String(a.pending ?? 0)} />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <Stat label="Abstains" value={String(a.abstains ?? 0)} />
-                  <Stat label="Pushes" value={String(a.pushes ?? 0)} />
-                  <Stat label="Fit overrides" value={String(a.overrides ?? 0)} />
-                  <Stat label="Agreement vetoes" value={String(a.agreement_vetoes ?? 0)} />
-                  <Stat label="Total rows" value={String(a.total ?? 0)} />
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs font-medium mb-2">Active fit episode</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <Stat label="Comparable resolved" value={String(ep.comparable_resolved_count ?? 0)} />
-                    <Stat label="Layer A net" value={String(ep.layer_a_net ?? 0)} />
-                    <Stat label="Layer B net" value={String(ep.layer_b_net ?? 0)} />
-                    <Stat label="Activated" value={ep.activated_at ? new Date(ep.activated_at).toLocaleString() : "—"} />
-                  </div>
-                </div>
-                {(() => {
-                  const p = a96PendingQ.data as Record<string, any> | null;
-                  if (!p) return null;
-                  return (
-                    <div className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-medium">Current pending candle</div>
-                        <div className="text-[11px] text-muted-foreground tabular-nums">
-                          {p.target_candle_ts ? new Date(p.target_candle_ts).toLocaleString() : "—"}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Final" value={String(p.final_prediction ?? "—")} />
-                        <Stat label="Selected layer" value={String(p.selected_layer ?? "—")} />
-                        <Stat label="Base layer" value={String(p.base_selected_layer ?? "—")} />
-                        <Stat label="Reason" value={String(p.decision_reason ?? "—")} />
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Layer A" value={String(p.layer_a_direction ?? "—")} />
-                        <Stat label="Layer B" value={String(p.layer_b_direction ?? "—")} />
-                        <Stat label="Fit override" value={p.fit_selector_override_fired ? "YES" : "no"} />
-                        <Stat label="Agreement veto" value={p.agreement_veto_fired ? "YES" : "no"} />
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <Stat label="Dist 4-low (bps)" value={p.distance_from_4_candle_low_bps != null ? Number(p.distance_from_4_candle_low_bps).toFixed(2) : "—"} />
-                        <Stat label="Mean body/range (2)" value={p.mean_2_candle_body_to_range != null ? Number(p.mean_2_candle_body_to_range).toFixed(3) : "—"} />
-                        <Stat label="Fit resolved @ pred" value={String(p.fit_resolved_count_at_prediction ?? 0)} />
-                        <Stat label="A/B net @ pred" value={`${p.layer_a_net_at_prediction ?? 0} / ${p.layer_b_net_at_prediction ?? 0}`} />
-                      </div>
-                    </div>
-                  );
-                })()}
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* Model 3 FWD — standalone v3.0.0 shadow model. Dual-track (raw + qualified). */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">v3.0.1 · standalone shadow · manual approval</span></span>
-            <Button size="sm" variant="outline" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
-              {exportingM8v3 ? "Exporting…" : "CSV (Model 3 FWD)"}
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(() => {
-            const m = (m8v3StatsQ.data ?? {}) as Record<string, any>;
-            const p = m8v3PendingQ.data as Record<string, any> | null;
-            const q = p?.qualified_prediction ?? null;
-            const qual = m.qualified ?? {};
-            const decisionCls = q === "GREEN" ? "text-bull border-bull/40 bg-bull/10"
-              : q === "RED" ? "text-bear border-bear/40 bg-bear/10"
-              : "text-muted-foreground border-border";
-            return (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Stat label="Win rate" value={`${qual.win_rate ?? 0}%`} />
-                  <Stat label="Wins" value={String(qual.wins ?? 0)} />
-                  <Stat label="Losses" value={String(qual.losses ?? 0)} />
-                  <Stat label="Pushes" value={String(qual.pushes ?? 0)} />
-                </div>
-
-                <div className="rounded-md border p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs font-medium">Current prediction</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums">
-                      {p?.target_candle_ts ? new Date(p.target_candle_ts).toLocaleString() : "—"}
-                    </div>
-                  </div>
-                  {p && q ? (
-                    <div className="font-mono text-xs">
-                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
-                        {q}
-                        {q === "ABSTAIN" && p.abstain_reason ? (
-                          <span className="text-[9px] text-muted-foreground ml-1">({String(p.abstain_reason)})</span>
-                        ) : null}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground/70 italic font-mono">no prediction yet</div>
-                  )}
-                </div>
-
-                {(() => {
-                  const cand = m8v3CandidateQ.data as Record<string, any> | null;
-                  if (!cand) {
-                    return (
-                      <div className="rounded-md border p-3 text-xs text-muted-foreground">
-                        No candidate awaiting review. A candidate is trained after every 96 resolved non-PUSH official predictions and must be manually approved.
-                      </div>
-                    );
-                  }
-                  const rep = (cand.review_report ?? {}) as Record<string, any>;
-                  const w = rep.windows ?? {};
-                  const line = (label: string, w: any) => {
-                    const a = w?.active?.qualified ?? {};
-                    const c = w?.candidate_counterfactual?.qualified ?? {};
-                    return (
-                      <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span>active {a.win_rate ?? 0}% ({a.wins ?? 0}-{a.losses ?? 0}) · cand {c.win_rate ?? 0}% ({c.wins ?? 0}-{c.losses ?? 0})</span>
-                      </div>
-                    );
-                  };
-                  return (
-                    <div className="rounded-md border p-3 space-y-2 bg-amber-500/5">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-medium">Candidate awaiting manual approval</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{cand.fit_id}</div>
-                      </div>
-                      <div className="space-y-1">
-                        {line("Last 96 qualified", w.last_96)}
-                        {line("Last 384 qualified", w.last_384)}
-                        {line("Cumulative qualified", w.cumulative)}
-                      </div>
-                      <textarea
-                        value={m8v3ReviewNotes}
-                        onChange={(e) => setM8v3ReviewNotes(e.target.value)}
-                        placeholder="Review notes (optional)"
-                        className="w-full text-xs rounded border bg-background p-2"
-                        rows={2}
-                      />
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" onClick={() => runM8v3Review("approve")} disabled={m8v3ReviewBusy}>
-                          {m8v3ReviewBusy ? "Working…" : "Approve candidate"}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => runM8v3Review("reject")} disabled={m8v3ReviewBusy}>
-                          Reject
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => runM8v3Review("continue")} disabled={m8v3ReviewBusy}>
-                          Continue current fit
-                        </Button>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        Activation is atomic — the approved fit starts serving on the next unopened candle. All decisions are stored in <span className="font-mono">model8_v3_fit_reviews</span> and included in the CSV audit trail.
-                      </div>
-                    </div>
-                  );
-                })()}
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Market Condition" data={s.by_market_condition as Record<string, BucketStat> | undefined} />
@@ -881,7 +536,7 @@ function StatsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2 font-heading">
             Recent History
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
               TD1-RC · Outcome follows TD1-RC
@@ -919,31 +574,104 @@ function StatsPage() {
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }
 
 interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
 
-function M7Stat({ label, value, tone }: { label: string; value: number | string; tone?: "bull" | "bear" }) {
-  const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "";
+function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
+    <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`font-mono text-lg font-semibold ${cls}`}>{value}</div>
+      <div className="font-mono text-sm font-semibold mt-0.5">{value}</div>
     </div>
   );
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: "bull" | "bear" | "warn" }) {
-  const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "warn" ? "text-warn" : "";
+interface ModelCardProps {
+  title: string;
+  subtitle: string;
+  status: string;
+  tone: "cyan" | "emerald" | "rose" | "violet" | "amber";
+  winRate: number;
+  wins: number;
+  losses: number;
+  pushes?: number;
+  pending?: number;
+  predictionLabel?: string;
+  predictionTs?: string | null;
+  predictionValue?: string | null;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushes, pending, predictionLabel, predictionTs, predictionValue, actions, children }: ModelCardProps) {
+  const toneMap: Record<string, { border: string; hover: string; bg: string; text: string; badge: string }> = {
+    cyan: { border: "border-cyan/30", hover: "hover:border-cyan/60", bg: "bg-cyan/10", text: "text-cyan-400", badge: "bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]" },
+    emerald: { border: "border-emerald-500/30", hover: "hover:border-emerald-500/60", bg: "bg-emerald-500/10", text: "text-emerald-400", badge: "bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]" },
+    rose: { border: "border-rose-500/30", hover: "hover:border-rose-500/60", bg: "bg-rose-500/10", text: "text-rose-400", badge: "bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.3)]" },
+    violet: { border: "border-violet/30", hover: "hover:border-violet/60", bg: "bg-violet/10", text: "text-violet-400", badge: "bg-violet-600 text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]" },
+    amber: { border: "border-amber/30", hover: "hover:border-amber/60", bg: "bg-amber/10", text: "text-amber-400", badge: "bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.3)]" },
+  };
+  const t = toneMap[tone];
+  const upper = String(predictionValue ?? "—").toUpperCase();
+  const predTone = upper === "YES" || upper === "GREEN" || upper.includes("LONG") ? "bg-bull border-bull/40 text-white shadow-[0_0_15px_rgba(var(--bull),0.3)]"
+    : upper === "NO" || upper === "RED" || upper.includes("SHORT") ? "bg-bear border-bear/40 text-white shadow-[0_0_15px_rgba(var(--bear),0.3)]"
+    : t.badge;
   return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div className={`font-mono text-2xl font-semibold mt-1 ${cls}`}>{value}</div>
-      </CardContent>
+    <Card className={`relative group overflow-hidden rounded-2xl border bg-card/50 p-6 transition-all ${t.border} ${t.hover}`}>
+      <div className="flex justify-between items-start mb-8">
+        <div className="min-w-0">
+          <h3 className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">{subtitle}</h3>
+          <p className="text-xl font-bold text-foreground tracking-tight font-heading truncate">{title}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {actions}
+          <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${t.bg} ${t.text} ${t.border}`}>
+            {status}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <span className="text-muted-foreground text-sm block mb-1">Win Rate</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-5xl font-bold text-foreground tracking-tighter font-mono">{winRate}%</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
+          <span className="text-muted-foreground text-[10px] uppercase font-bold block mb-1">Wins</span>
+          <span className="text-lg font-bold text-bull font-mono">{wins}</span>
+        </div>
+        <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
+          <span className="text-muted-foreground text-[10px] uppercase font-bold block mb-1">Losses</span>
+          <span className="text-lg font-bold text-bear font-mono">{losses}</span>
+        </div>
+      </div>
+
+      {children}
+
+      <div className="pt-4 border-t border-border/60">
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground text-xs">{predictionLabel ?? "Current Prediction"}</span>
+          <span className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest ${predTone}`}>
+            {upper}
+          </span>
+        </div>
+        {predictionTs && (
+          <div className="text-[10px] text-muted-foreground mt-1.5 text-right tabular-nums">
+            {new Date(predictionTs).toLocaleString()}
+          </div>
+        )}
+        {(pending ?? 0) > 0 && (
+          <div className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">
+            {pending} pending
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -952,7 +680,7 @@ function BreakdownCard({ title, data }: { title: string; data?: Record<string, B
   const entries = Object.entries(data ?? {});
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-base font-heading">{title}</CardTitle></CardHeader>
       <CardContent>
         {entries.length === 0 ? <p className="text-sm text-muted-foreground">No data yet.</p> : (
           <ul className="space-y-2 text-sm">
@@ -968,14 +696,5 @@ function BreakdownCard({ title, data }: { title: string; data?: Record<string, B
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border p-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="font-mono text-sm mt-0.5">{value}</div>
-    </div>
   );
 }
