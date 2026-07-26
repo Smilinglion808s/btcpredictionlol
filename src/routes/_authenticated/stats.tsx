@@ -20,13 +20,11 @@ import {
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import {
-  getModel8V3Stats,
-  getModel8V3Pending,
-  exportModel8V3Csv,
-  getModel8V3PendingCandidate,
-  approveModel8V3Candidate,
-  rejectModel8V3Candidate,
-} from "@/lib/model8_v3.functions";
+  getM3SeStats,
+  getM3SePending,
+  exportM3SePredictionsCsv,
+  exportM3SeFitsCsv,
+} from "@/lib/model3_selective_edge.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -77,36 +75,14 @@ function StatsPage() {
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const m8v3StatsFn = useServerFn(getModel8V3Stats);
-  const m8v3PendingFn = useServerFn(getModel8V3Pending);
-  const exportM8v3Fn = useServerFn(exportModel8V3Csv);
-  const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m8v3CandidateFn = useServerFn(getModel8V3PendingCandidate);
-  const approveM8v3Fn = useServerFn(approveModel8V3Candidate);
-  const rejectM8v3Fn = useServerFn(rejectModel8V3Candidate);
-  const [m8v3ReviewNotes, setM8v3ReviewNotes] = useState("");
-  const [m8v3ReviewBusy, setM8v3ReviewBusy] = useState(false);
-  const runM8v3Review = async (decision: "approve" | "reject" | "continue") => {
-    const fitId = (m8v3CandidateQ.data as { fit_id?: string } | null)?.fit_id;
-    if (!fitId) return;
-    setM8v3ReviewBusy(true);
-    try {
-      if (decision === "approve") await approveM8v3Fn({ data: { fit_id: fitId, notes: m8v3ReviewNotes } });
-      else await rejectM8v3Fn({ data: { fit_id: fitId, decision, notes: m8v3ReviewNotes } });
-      setM8v3ReviewNotes("");
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["model8-v3-candidate"] }),
-        qc.invalidateQueries({ queryKey: ["model8-v3-stats"] }),
-      ]);
-    } catch (e) {
-      alert(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setM8v3ReviewBusy(false);
-    }
-  };
-  const m8v3CandidateQ = useQuery({ queryKey: ["model8-v3-candidate"], queryFn: () => m8v3CandidateFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const [exportingM8v3, setExportingM8v3] = useState(false);
+  const m3seStatsFn = useServerFn(getM3SeStats);
+  const m3sePendingFn = useServerFn(getM3SePending);
+  const exportM3sePredsFn = useServerFn(exportM3SePredictionsCsv);
+  const exportM3seFitsFn = useServerFn(exportM3SeFitsCsv);
+  const m3seStatsQ = useQuery({ queryKey: ["m3se-stats"], queryFn: () => m3seStatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const m3sePendingQ = useQuery({ queryKey: ["m3se-pending"], queryFn: () => m3sePendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const [exportingM3se, setExportingM3se] = useState(false);
+  const [exportingM3seFits, setExportingM3seFits] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
