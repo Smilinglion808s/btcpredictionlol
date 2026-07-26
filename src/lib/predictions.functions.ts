@@ -1526,7 +1526,7 @@ export const getA96Pending = createServerFn({ method: "GET" }).handler(async () 
             final_prediction: "SKIP",
             decision_reason: `AAS96 upstream SKIP: ${reason}`,
             resolved_at: null,
-          } as Record<string, unknown>;
+          } as unknown as typeof data;
         }
       }
     }
