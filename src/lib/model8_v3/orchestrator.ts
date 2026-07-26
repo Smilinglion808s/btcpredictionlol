@@ -161,6 +161,7 @@ async function loadActiveFit(sb: SupabaseClient): Promise<null | {
     .from("model8_v3_fits")
     .select("*")
     .eq("model_version", M8V3_MODEL_VERSION)
+    .eq("status", "active")
     .order("activated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
