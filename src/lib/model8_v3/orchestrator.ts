@@ -313,6 +313,33 @@ async function trainNewFit(
   };
 }
 
+/** Fetch recent official rows for the active fit and build a candidate-vs-active review report. */
+async function buildCandidateReviewReportFromDb(
+  sb: SupabaseClient,
+  candidateFit: DualFit,
+  activeFit: DualFit,
+): Promise<Record<string, unknown>> {
+  const { data } = await sb
+    .from("model8_v3_predictions")
+    .select("target_candle_ts, actual_direction, raw_result, qualified_result, raw_prediction, qualified_prediction, calibrated_probability_green, feature_values, regime_label, regime_transition_score")
+    .eq("model_version", M8V3_MODEL_VERSION)
+    .eq("episode_type", "official_v3_forward_test")
+    .eq("official_forward_test_row", true)
+    .eq("fit_id", activeFit.fit_id)
+    .not("resolved_at", "is", null)
+    .order("target_candle_ts", { ascending: false })
+    .limit(2000);
+  const activeRows = (data ?? []) as Array<Record<string, unknown>>;
+  return buildCandidateReviewReport({
+    candidateFit,
+    activeFit,
+    activeRows,
+    featureOrder: M8V3_FEATURE_NAMES as unknown as string[],
+    edge: M8V3_MIN_DIRECTION_EDGE,
+    movementProb: M8V3_MIN_MOVEMENT_PROBABILITY,
+  }) as unknown as Record<string, unknown>;
+}
+
 /** Run one prediction for the given (or next) target candle. Idempotent. */
 export async function runModel8V3(
   sb: SupabaseClient,
