@@ -18,6 +18,14 @@ export interface AAS96Artifact {
   fittedAt: string;
 }
 
+export interface LayerBHistoryEpisode {
+  historyEpisodeId: string;
+  artifactFitId: string;
+  isActive: boolean;
+  resolvedCount: number;
+  historyPayload: ExpertHistory;
+}
+
 export async function loadActiveAas96Fit(sb: SupabaseClient): Promise<AAS96Artifact | null> {
   const { data } = await sb
     .from("model7_aas96_fits")
@@ -74,11 +82,104 @@ export async function saveAas96Fit(
     active: true,
   } as never).select("fit_id").single();
   if (error) throw error;
-  return (data as { fit_id: string }).fit_id;
+  const fitId = (data as { fit_id: string }).fit_id;
+  // Seed the Layer B history episode for this fit with the trained history.
+  try {
+    await ensureLayerBEpisodeSeeded(sb, fitId, artifact.expertHistory);
+  } catch { /* non-fatal */ }
+  return fitId;
 }
 
-export async function updateActiveExpertHistory(sb: SupabaseClient, history: ExpertHistory): Promise<void> {
-  await sb.from("model7_aas96_fits")
-    .update({ layer_b_expert_history_json: history as unknown } as never)
-    .eq("active", true);
+/** Get or mint the Layer B history episode for a specific artifact fit id. */
+export async function getOrMintLayerBEpisode(
+  sb: SupabaseClient,
+  artifactFitId: string,
+): Promise<LayerBHistoryEpisode | null> {
+  const { data, error } = await sb.rpc("get_or_mint_aas96_layer_b_episode", {
+    p_artifact_fit_id: artifactFitId,
+  });
+  if (error || !data) return null;
+  const rows = data as Array<{
+    history_episode_id: string;
+    artifact_fit_id: string;
+    is_active: boolean;
+    resolved_count: number;
+    history_payload: ExpertHistory | null;
+  }>;
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row) return null;
+  return {
+    historyEpisodeId: row.history_episode_id,
+    artifactFitId: row.artifact_fit_id,
+    isActive: row.is_active,
+    resolvedCount: row.resolved_count,
+    historyPayload: (row.history_payload && Object.keys(row.history_payload).length > 0)
+      ? row.history_payload
+      : emptyExpertHistory(),
+  };
+}
+
+/** After first minting, if payload is empty, seed with trained history. */
+async function ensureLayerBEpisodeSeeded(
+  sb: SupabaseClient,
+  artifactFitId: string,
+  seed: ExpertHistory,
+): Promise<void> {
+  const ep = await getOrMintLayerBEpisode(sb, artifactFitId);
+  if (!ep) return;
+  const isEmpty = Object.keys(ep.historyPayload ?? {}).length === 0;
+  if (isEmpty) {
+    await sb
+      .from("model7_aas96_layer_b_history_episodes")
+      .update({ history_payload: seed as unknown, updated_at: new Date().toISOString() } as never)
+      .eq("history_episode_id", ep.historyEpisodeId);
+  }
+}
+
+/** Fetch an episode by id (for resolution path). */
+export async function loadLayerBEpisodeById(
+  sb: SupabaseClient,
+  historyEpisodeId: string,
+): Promise<LayerBHistoryEpisode | null> {
+  const { data } = await sb
+    .from("model7_aas96_layer_b_history_episodes")
+    .select("history_episode_id, artifact_fit_id, is_active, resolved_count, history_payload")
+    .eq("history_episode_id", historyEpisodeId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    historyEpisodeId: data.history_episode_id as string,
+    artifactFitId: data.artifact_fit_id as string,
+    isActive: data.is_active as boolean,
+    resolvedCount: data.resolved_count as number,
+    historyPayload: (data.history_payload as ExpertHistory | null) ?? emptyExpertHistory(),
+  };
+}
+
+/** Idempotently apply an outcome to the prediction's owning episode. */
+export async function applyLayerBHistory(
+  sb: SupabaseClient,
+  predictionId: string,
+  historyEpisodeId: string,
+  actual: "GREEN" | "RED",
+  newHistoryPayload: ExpertHistory,
+): Promise<{ ok: boolean; idempotent?: boolean; error?: string }> {
+  const { data, error } = await sb.rpc("apply_aas96_layer_b_history", {
+    p_prediction_id: predictionId,
+    p_history_episode_id: historyEpisodeId,
+    p_actual_direction: actual,
+    p_new_history_payload: newHistoryPayload as unknown,
+  });
+  if (error) return { ok: false, error: error.message };
+  const r = data as { ok: boolean; idempotent?: boolean } | null;
+  return { ok: !!r?.ok, idempotent: r?.idempotent };
+}
+
+/**
+ * Legacy helper — retained for back-compat but should NOT be used for
+ * per-prediction history updates. Episode-based updates are the correct path.
+ * Kept only so callers importing the symbol keep compiling.
+ */
+export async function updateActiveExpertHistory(_sb: SupabaseClient, _history: ExpertHistory): Promise<void> {
+  // Intentional no-op: history now lives on per-fit episodes.
 }
