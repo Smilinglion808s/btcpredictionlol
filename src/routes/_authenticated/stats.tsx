@@ -528,7 +528,6 @@ function StatsPage() {
         </ModelCard>
       </div>
 
-
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2 font-heading">
