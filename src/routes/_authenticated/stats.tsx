@@ -736,13 +736,71 @@ function StatsPage() {
         </CardContent>
       </Card>
 
-
-
-
-
-
+      {/* Model 3 FWD — standalone shadow model (model8_v3). No webhook. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Model 3 FWD <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal ml-2">standalone shadow · not trading</span></span>
+            <Button size="sm" variant="outline" onClick={downloadM8v3Csv} disabled={exportingM8v3}>
+              {exportingM8v3 ? "Exporting…" : "CSV (Model 3 FWD)"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const m = (m8v3StatsQ.data ?? {}) as Record<string, any>;
+            const p = m8v3PendingQ.data as Record<string, any> | null;
+            const q = p?.qualified_prediction ?? null;
+            const prob = typeof p?.calibrated_probability_green === "number" ? (p.calibrated_probability_green * 100).toFixed(1) : null;
+            const decisionCls = q === "GREEN" ? "text-bull border-bull/40 bg-bull/10"
+              : q === "RED" ? "text-bear border-bear/40 bg-bear/10"
+              : "text-muted-foreground border-border";
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Stat label="Win rate" value={`${m.win_rate ?? 0}%`} />
+                  <Stat label="Trades (W+L)" value={String(m.trades ?? 0)} />
+                  <Stat label="Wins" value={String(m.wins ?? 0)} />
+                  <Stat label="Losses" value={String(m.losses ?? 0)} />
+                  <Stat label="Pushes" value={String(m.pushes ?? 0)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Stat label="Pending" value={String(m.pending ?? 0)} />
+                  <Stat label="Abstains" value={String(m.abstains ?? 0)} />
+                  <Stat label="Last 10 WR" value={`${m.last_10_win_rate ?? 0}%`} />
+                  <Stat label="Total rows" value={String(m.total_rows ?? 0)} />
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium">Current prediction</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      {p?.target_candle_ts ? new Date(p.target_candle_ts).toLocaleString() : "—"}
+                    </div>
+                  </div>
+                  {p && q ? (
+                    <div className="flex items-center justify-between gap-2 font-mono text-xs">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${decisionCls}`}>
+                        {q}
+                        {q === "ABSTAIN" && p.abstain_reason ? (
+                          <span className="text-[9px] text-muted-foreground ml-1">({String(p.abstain_reason)})</span>
+                        ) : null}
+                      </span>
+                      <span className="text-muted-foreground">
+                        P(green): <span className="text-foreground">{prob ?? "—"}%</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground/70 italic font-mono">no prediction yet</div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
         <BreakdownCard title="By Setup Type" data={s.by_setup as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Confidence" data={s.by_confidence_bucket as Record<string, BucketStat> | undefined} />
         <BreakdownCard title="By Market Condition" data={s.by_market_condition as Record<string, BucketStat> | undefined} />
