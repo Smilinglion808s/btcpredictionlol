@@ -421,17 +421,47 @@ export async function runModel8V3(
     }
   }
 
-  // Load or retrain fit.
+  // Fit selection — v3.0.1 manual-approval flow.
+  // Bootstrap only trains an ACTIVE fit when no active fit exists yet.
+  // Every 96 resolved non-PUSH rows we train a CANDIDATE fit with status
+  // 'pending_review' and persist a candidate-vs-active review report.
+  // The candidate NEVER auto-activates; the active fit keeps serving.
   let fit: DualFit | null = null;
   const active = await loadActiveFit(sb);
   if (active) {
-    const sinceCount = await resolvedRowsSinceFit(sb, active.fit_id);
-    if (sinceCount < M8V3_RETRAIN_EVERY_RESOLVED_ROWS) {
-      fit = active;
-    }
-  }
-  if (!fit) {
-    const trained = await trainNewFit(sb, candles);
+    fit = active;
+    try {
+      const sinceCount = await resolvedRowsSinceFit(sb, active.fit_id);
+      if (sinceCount >= M8V3_RETRAIN_EVERY_RESOLVED_ROWS) {
+        // Only train a new candidate when none is currently awaiting review.
+        const { data: pending } = await sb
+          .from("model8_v3_fits")
+          .select("fit_id")
+          .eq("model_version", M8V3_MODEL_VERSION)
+          .eq("status", "pending_review")
+          .limit(1)
+          .maybeSingle();
+        if (!pending) {
+          const trained = await trainNewFit(sb, candles, { intent: "candidate", priorActiveFitId: active.fit_id });
+          if (trained.ok) {
+            try {
+              const report = await buildCandidateReviewReportFromDb(sb, trained.fit, active);
+              await sb.from("model8_v3_fits")
+                .update({ review_report: report })
+                .eq("fit_id", trained.fit.fit_id);
+              await sb.from("model8_v3_fit_reviews").insert({
+                model_version: M8V3_MODEL_VERSION,
+                candidate_fit_id: trained.fit.fit_id,
+                active_fit_id: active.fit_id,
+                report,
+              });
+            } catch { /* best-effort audit */ }
+          }
+        }
+      }
+    } catch { /* candidate training never blocks live prediction */ }
+  } else {
+    const trained = await trainNewFit(sb, candles, { intent: "bootstrap" });
     if (!trained.ok) {
       return abstainInsert(trained.reason, {
         feature_history_valid: true,
@@ -441,9 +471,20 @@ export async function runModel8V3(
     }
     fit = trained.fit;
   }
+  if (!fit) {
+    return abstainInsert("no_active_fit", {
+      feature_history_valid: true,
+      data_quality_valid: true,
+      target_open_at_prediction: targetOpenAtPrediction,
+    });
+  }
 
   // Build target feature row from same candle window (last-index features).
   const { targetFeatureRow } = buildTrainingMatrix(candles, M8V3_MOVEMENT_THRESHOLD_BPS);
+
+  // Regime snapshot — MONITORING ONLY. Not used to select fit, alter
+  // thresholds, feed the model, or trigger retraining.
+  const regime = computeRegimeSnapshot(candles);
 
   const rawDirGreen = predictProb(targetFeatureRow, fit.weights_dir, fit.intercept_dir, fit.means, fit.scales);
   const rawMove = predictProb(targetFeatureRow, fit.weights_move, fit.intercept_move, fit.means, fit.scales);
