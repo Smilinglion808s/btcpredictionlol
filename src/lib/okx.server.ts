@@ -423,9 +423,18 @@ export async function fetchAndUpsertCandles(supabase: SupabaseClient): Promise<{
 
   let upsertErrorMessage: string | null = null;
   if (normalized.length) {
+    // When OKX served the batch, upsert normally (OKX is canonical and may
+    // refine open/high/low/close/confirm on the currently-forming candle).
+    // When Coinbase is the fallback, DO NOT overwrite existing rows — that
+    // would demote already-ingested `fetch_source='okx'` rows to 'coinbase'
+    // and break every downstream model that requires the canonical OKX
+    // stream (Model 3 FWD, a96, TD1-RC, etc.).
     const { error: upsertErr } = await supabase
       .from("candles")
-      .upsert(normalized, { onConflict: "symbol,timeframe,candle_ts" });
+      .upsert(normalized, {
+        onConflict: "symbol,timeframe,candle_ts",
+        ignoreDuplicates: primary === "coinbase",
+      });
     if (upsertErr) upsertErrorMessage = upsertErr.message;
   }
 
