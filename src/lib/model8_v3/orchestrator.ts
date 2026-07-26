@@ -48,10 +48,11 @@ const HISTORY_LOAD =
 
 function nextCandleBoundary(nowMs: number): Date {
   const rem = nowMs % TF_MS;
-  // If we're within the first 3 minutes past a boundary, the just-opened
-  // candle is the one we should be predicting (its prior is finalized).
-  // Otherwise target the upcoming boundary.
-  if (rem > 0 && rem <= 180_000) return new Date(nowMs - rem);
+  // Target the just-opened candle whenever we're inside the first ~5 minutes
+  // of it (this includes rem === 0, i.e. cron firing exactly on the boundary
+  // — the just-closed prior is what we predict against). Otherwise target the
+  // upcoming boundary. Prior candle finalization is handled by the poll loop.
+  if (rem <= 300_000) return new Date(nowMs - rem);
   return new Date(nowMs + (TF_MS - rem));
 }
 
