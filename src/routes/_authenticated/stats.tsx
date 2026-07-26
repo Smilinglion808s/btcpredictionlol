@@ -457,7 +457,7 @@ function StatsPage() {
 
         <ModelCard
           title="Model 3 FWD"
-          subtitle="v3.0.1 Shadow"
+          subtitle="v3.0.2 Shadow"
           status={m8v3CandidateQ.data ? "Review" : "Auto"}
           tone="violet"
           winRate={Number(m8v3Qualified.win_rate ?? 0)}
@@ -475,6 +475,14 @@ function StatsPage() {
             </Button>
           )}
         >
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-200/90">
+            <span className="font-semibold text-amber-100">v3.0.1 note:</span> the prior fit produced valid raw direction
+            predictions, but its qualified track permanently abstained because the 15 bps movement label was too rare
+            (~27% base rate) for the calibrated movement head to ever cross the 0.55 gate. v3.0.2 lowers the movement
+            label to 8 bps (~52% base rate) and refuses to activate any fit whose training/calibration positive rate
+            falls outside 30–70% or whose p95 calibrated movement probability doesn't exceed 0.55.
+          </div>
+
           {(() => {
             const cand = m8v3CandidateQ.data as Record<string, any> | null;
             if (!cand) {

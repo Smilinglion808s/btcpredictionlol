@@ -31,10 +31,15 @@ import {
   M8V3_MIN_DIRECTION_EDGE,
   M8V3_MIN_MOVEMENT_PROBABILITY,
   M8V3_MOVEMENT_THRESHOLD_BPS,
+  M8V3_PREFLIGHT_MIN_POS_RATE,
+  M8V3_PREFLIGHT_MAX_POS_RATE,
+  M8V3_PREFLIGHT_MIN_P95_MOVEMENT,
+  M8V3_PREFLIGHT_MIN_QUALIFIED_COVERAGE,
   M8V3_TARGET_OPEN_TOLERANCE_BPS,
   M8V3_PRIOR_POLL_ATTEMPTS,
   M8V3_PRIOR_POLL_INTERVAL_MS,
   M8V3_FEATURE_LOOKBACK,
+
 } from "./config";
 import { buildTrainingMatrix, M8V3_FEATURE_NAMES, type Candle } from "./features";
 import { trainLogistic, predictProb, fitPlatt, applyPlatt } from "./logistic";
@@ -45,6 +50,150 @@ const TF_MS = M8V3_TIMEFRAME_SEC * 1000;
 // Total labeled rows to load. Add lookback + slack for the target row.
 const HISTORY_LOAD =
   M8V3_MAX_TRAINING_ROWS + M8V3_CALIBRATION_ROWS + M8V3_FEATURE_LOOKBACK + 8;
+
+function percentile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(q * (sorted.length - 1))));
+  return sorted[idx];
+}
+
+function isAllFinite(...arrs: Array<number[] | number | { a: number; b: number }>): boolean {
+  for (const a of arrs) {
+    if (typeof a === "number") { if (!Number.isFinite(a)) return false; }
+    else if (Array.isArray(a)) { for (const v of a) if (!Number.isFinite(v)) return false; }
+    else { if (!Number.isFinite(a.a) || !Number.isFinite(a.b)) return false; }
+  }
+  return true;
+}
+
+interface PreflightResult {
+  ok: boolean;
+  reasons: string[];
+  movementPosRateTrain: number;
+  movementPosRateCal: number;
+  movementProbMin: number;
+  movementProbMedian: number;
+  movementProbP90: number;
+  movementProbP95: number;
+  movementProbMax: number;
+  qualifiedCoverage: number;
+  movementPrecision: number;
+  movementRecall: number;
+  movementBalancedAcc: number;
+  movementPrAuc: number;
+  movementBrier: number;
+  movementLogLoss: number;
+}
+
+function computePreflight(inp: {
+  trainYMove: number[];
+  calYDir: number[];
+  calYMove: number[];
+  calibratedDir: number[];
+  calibratedMove: number[];
+  dirWeights: number[]; dirIntercept: number;
+  movWeights: number[]; movIntercept: number;
+  means: number[]; scales: number[];
+  plattDir: { a: number; b: number };
+  plattMove: { a: number; b: number };
+}): PreflightResult {
+  const reasons: string[] = [];
+  const posRateTrain = inp.trainYMove.reduce((s, v) => s + v, 0) / Math.max(1, inp.trainYMove.length);
+  const posRateCal = inp.calYMove.reduce((s, v) => s + v, 0) / Math.max(1, inp.calYMove.length);
+
+  const sorted = [...inp.calibratedMove].sort((a, b) => a - b);
+  const pMin = sorted[0] ?? 0;
+  const pMax = sorted[sorted.length - 1] ?? 0;
+  const pMed = percentile(sorted, 0.5);
+  const p90 = percentile(sorted, 0.9);
+  const p95 = percentile(sorted, 0.95);
+
+  // Estimated qualified coverage on calibration set (mirrors live gating).
+  let qualifiedHits = 0;
+  for (let i = 0; i < inp.calibratedMove.length; i++) {
+    const edge = Math.abs(inp.calibratedDir[i] - 0.5);
+    if (inp.calibratedMove[i] >= M8V3_MIN_MOVEMENT_PROBABILITY && edge >= M8V3_MIN_DIRECTION_EDGE) qualifiedHits++;
+  }
+  const coverage = qualifiedHits / Math.max(1, inp.calibratedMove.length);
+
+  // Movement precision/recall/balanced acc at the live threshold.
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  for (let i = 0; i < inp.calibratedMove.length; i++) {
+    const pred = inp.calibratedMove[i] >= M8V3_MIN_MOVEMENT_PROBABILITY ? 1 : 0;
+    const y = inp.calYMove[i];
+    if (pred === 1 && y === 1) tp++;
+    else if (pred === 1 && y === 0) fp++;
+    else if (pred === 0 && y === 1) fn++;
+    else tn++;
+  }
+  const precision = tp + fp ? tp / (tp + fp) : 0;
+  const recall = tp + fn ? tp / (tp + fn) : 0;
+  const specificity = tn + fp ? tn / (tn + fp) : 0;
+  const balanced = (recall + specificity) / 2;
+
+  // PR-AUC via trapezoidal integration over sorted thresholds.
+  const paired = inp.calibratedMove.map((p, i) => ({ p, y: inp.calYMove[i] }))
+    .sort((a, b) => b.p - a.p);
+  const totalPos = paired.reduce((s, x) => s + x.y, 0);
+  let prAuc = 0;
+  if (totalPos > 0) {
+    let cumTp = 0, cumFp = 0, prevRecall = 0, prevPrecision = 1;
+    for (const { y } of paired) {
+      if (y === 1) cumTp++; else cumFp++;
+      const rec = cumTp / totalPos;
+      const prec = cumTp / (cumTp + cumFp);
+      prAuc += (rec - prevRecall) * (prec + prevPrecision) / 2;
+      prevRecall = rec; prevPrecision = prec;
+    }
+  }
+
+  // Movement Brier / log-loss.
+  let bs = 0, ll = 0;
+  for (let i = 0; i < inp.calibratedMove.length; i++) {
+    const p = Math.min(0.9999, Math.max(0.0001, inp.calibratedMove[i]));
+    const y = inp.calYMove[i];
+    bs += (p - y) ** 2;
+    ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+  }
+  const n = Math.max(1, inp.calibratedMove.length);
+  const brier = bs / n;
+  const logLoss = ll / n;
+
+  // Gates.
+  if (posRateTrain < M8V3_PREFLIGHT_MIN_POS_RATE || posRateTrain > M8V3_PREFLIGHT_MAX_POS_RATE)
+    reasons.push(`train_pos_rate_${posRateTrain.toFixed(3)}_outside_[${M8V3_PREFLIGHT_MIN_POS_RATE},${M8V3_PREFLIGHT_MAX_POS_RATE}]`);
+  if (posRateCal < M8V3_PREFLIGHT_MIN_POS_RATE || posRateCal > M8V3_PREFLIGHT_MAX_POS_RATE)
+    reasons.push(`cal_pos_rate_${posRateCal.toFixed(3)}_outside_[${M8V3_PREFLIGHT_MIN_POS_RATE},${M8V3_PREFLIGHT_MAX_POS_RATE}]`);
+  if (!(p95 > M8V3_PREFLIGHT_MIN_P95_MOVEMENT))
+    reasons.push(`p95_movement_${p95.toFixed(3)}_not>${M8V3_PREFLIGHT_MIN_P95_MOVEMENT}`);
+  if (coverage < M8V3_PREFLIGHT_MIN_QUALIFIED_COVERAGE)
+    reasons.push(`qualified_coverage_${coverage.toFixed(3)}<${M8V3_PREFLIGHT_MIN_QUALIFIED_COVERAGE}`);
+  if (!isAllFinite(inp.dirWeights, inp.dirIntercept, inp.movWeights, inp.movIntercept,
+                   inp.means, inp.scales, inp.plattDir, inp.plattMove,
+                   inp.calibratedMove, inp.calibratedDir))
+    reasons.push("non_finite_artifact");
+
+  return {
+    ok: reasons.length === 0,
+    reasons,
+    movementPosRateTrain: posRateTrain,
+    movementPosRateCal: posRateCal,
+    movementProbMin: pMin,
+    movementProbMedian: pMed,
+    movementProbP90: p90,
+    movementProbP95: p95,
+    movementProbMax: pMax,
+    qualifiedCoverage: coverage,
+    movementPrecision: precision,
+    movementRecall: recall,
+    movementBalancedAcc: balanced,
+    movementPrAuc: prAuc,
+    movementBrier: brier,
+    movementLogLoss: logLoss,
+  };
+}
+
+
 
 function nextCandleBoundary(nowMs: number): Date {
   const rem = nowMs % TF_MS;
@@ -282,6 +431,23 @@ async function trainNewFit(
   const calibratedDir = rawCalDir.map((p) => applyPlatt(p, platt_dir.a, platt_dir.b));
   const calibratedMove = rawCalMove.map((p) => applyPlatt(p, platt_move.a, platt_move.b));
 
+  // ------ Preflight diagnostics (v3.0.2) --------------------------------
+  const preflight = computePreflight({
+    trainYMove,
+    calYDir,
+    calYMove,
+    calibratedDir,
+    calibratedMove,
+    dirWeights: dir.w, dirIntercept: dir.b,
+    movWeights: mov.w, movIntercept: mov.b,
+    means: dir.means, scales: dir.scales,
+    plattDir: platt_dir, plattMove: platt_move,
+  });
+
+  if (!preflight.ok) {
+    return { ok: false, reason: `preflight_rejected:${preflight.reasons.join(",")}` };
+  }
+
   const isCandidate = opts.intent === "candidate";
   const status = isCandidate ? "pending_review" : "active";
   const fitRow: Record<string, unknown> = {
@@ -315,12 +481,27 @@ async function trainNewFit(
       retrain_every_resolved_rows: M8V3_RETRAIN_EVERY_RESOLVED_ROWS,
       l2_lambda: M8V3_L2_LAMBDA,
     },
-    training_metrics: { n_train: trainX.length, n_calibration: calX.length },
+    training_metrics: {
+      n_train: trainX.length, n_calibration: calX.length,
+      movement_positive_rate_train: preflight.movementPosRateTrain,
+      movement_positive_rate_calibration: preflight.movementPosRateCal,
+    },
     calibration_metrics: {
       brier_direction: brier(calibratedDir, calYDir),
       acc_direction: acc(calibratedDir, calYDir),
-      brier_movement: brier(calibratedMove, calYMove),
+      brier_movement: preflight.movementBrier,
+      log_loss_movement: preflight.movementLogLoss,
       acc_movement: acc(calibratedMove, calYMove),
+      movement_probability_min: preflight.movementProbMin,
+      movement_probability_median: preflight.movementProbMedian,
+      movement_probability_p90: preflight.movementProbP90,
+      movement_probability_p95: preflight.movementProbP95,
+      movement_probability_max: preflight.movementProbMax,
+      estimated_qualified_coverage: preflight.qualifiedCoverage,
+      movement_precision: preflight.movementPrecision,
+      movement_recall: preflight.movementRecall,
+      movement_balanced_accuracy: preflight.movementBalancedAcc,
+      movement_pr_auc: preflight.movementPrAuc,
     },
     fitted_at: new Date().toISOString(),
     activated_at: new Date().toISOString(),
@@ -332,6 +513,7 @@ async function trainNewFit(
   if (error && !String(error.message).includes("duplicate")) {
     return { ok: false, reason: `fit_insert_failed:${error.message}` };
   }
+
 
   return {
     ok: true,
