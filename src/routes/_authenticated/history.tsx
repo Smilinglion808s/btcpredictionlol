@@ -454,6 +454,7 @@ function CsvDataPage() {
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportAas96 = useServerFn(exportAas96Shadow);
   const exportA96 = useServerFn(exportA96Csv);
+  const exportM3 = useServerFn(exportModel8V3Csv);
   const [buildingUniversal, setBuildingUniversal] = useState(false);
 
   useEffect(() => {
