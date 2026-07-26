@@ -448,6 +448,8 @@ function CsvDataPage() {
     const map = new Map<string, PredRow[]>();
     (listQ.data ?? []).forEach((p: PredRow) => {
       const key = (p.model_version as string) || "unknown";
+      // Keep only Model 6 variants; TD1-RC / a96 have dedicated buttons below.
+      if (!/^6/i.test(key) && !/model[_\s-]?6/i.test(key)) return;
       const arr = map.get(key) ?? [];
       arr.push(enrich(p as PredRow));
       map.set(key, arr);
