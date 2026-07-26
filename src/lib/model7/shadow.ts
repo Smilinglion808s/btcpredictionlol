@@ -744,6 +744,8 @@ export async function resolveShadowRowsFor(
     await resolveAas96Row(supabase, predictionId, actualDirection);
     const { resolveA96 } = await import("@/lib/a96/orchestrator");
     await resolveA96(supabase, predictionId);
+    const { resolveDueModel8V3 } = await import("@/lib/model8_v3/orchestrator");
+    await resolveDueModel8V3(supabase);
   } catch { /* never block */ }
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
 
