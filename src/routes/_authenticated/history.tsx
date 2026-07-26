@@ -425,6 +425,27 @@ type ModelGroup = {
 };
 
 
+function downloadJsonRowsAsCsv(rows: Array<Record<string, unknown>>, baseName: string) {
+  if (!rows || rows.length === 0) { alert("No data to export."); return; }
+  const headerSet = new Set<string>();
+  for (const r of rows) for (const k of Object.keys(r)) headerSet.add(k);
+  const headers = Array.from(headerSet);
+  const escape = (v: unknown) => {
+    if (v === null || v === undefined) return "";
+    const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = `${headers.join(",")}\n${rows.map((r) => headers.map((h) => escape((r as Record<string, unknown>)[h])).join(",")).join("\n")}\n`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `${baseName}_${stamp}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function CsvDataPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listAllPredictionsForHistory);
