@@ -573,8 +573,6 @@ function StatsPage() {
   );
 }
 
-interface BucketStat { total: number; wins: number; losses: number; win_rate: number }
-
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
@@ -667,29 +665,6 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
           </div>
         )}
       </div>
-    </Card>
-  );
-}
-
-function BreakdownCard({ title, data }: { title: string; data?: Record<string, BucketStat> }) {
-  const entries = Object.entries(data ?? {});
-  return (
-    <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base font-heading">{title}</CardTitle></CardHeader>
-      <CardContent>
-        {entries.length === 0 ? <p className="text-sm text-muted-foreground">No data yet.</p> : (
-          <ul className="space-y-2 text-sm">
-            {entries.sort((a, b) => (b[1]?.total ?? 0) - (a[1]?.total ?? 0)).map(([k, v]) => (
-              <li key={k} className="flex justify-between gap-2 items-baseline">
-                <span className="truncate text-xs">{k}</span>
-                <span className="font-mono text-xs whitespace-nowrap">
-                  {v.win_rate}% · {v.wins}W/{v.losses}L · n={v.total}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
     </Card>
   );
 }
