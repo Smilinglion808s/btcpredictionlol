@@ -1720,6 +1720,111 @@ export type Database = {
         }
         Relationships: []
       }
+      model8_v3_predictions: {
+        Row: {
+          abstain_reason: string | null
+          actual_close: number | null
+          actual_direction: string | null
+          actual_high: number | null
+          actual_low: number | null
+          actual_open: number | null
+          actual_volume: number | null
+          calibrated_probability_green: number | null
+          created_at: string
+          data_quality_valid: boolean
+          feature_cutoff_ts: string
+          feature_history_valid: boolean
+          feature_schema_version: string
+          feature_values: Json | null
+          fit_id: string | null
+          fit_snapshot: Json | null
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          model_version: string
+          official_forward_eligible: boolean
+          prediction_created_before_target: boolean
+          prediction_id: string
+          prediction_latency_ms: number | null
+          qualified_prediction: string
+          qualified_result: string | null
+          raw_prediction: string | null
+          raw_probability_green: number | null
+          raw_result: string | null
+          resolved_at: string | null
+          target_candle_ts: string
+          target_open_at_prediction: number | null
+          updated_at: string
+        }
+        Insert: {
+          abstain_reason?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          calibrated_probability_green?: number | null
+          created_at?: string
+          data_quality_valid: boolean
+          feature_cutoff_ts: string
+          feature_history_valid: boolean
+          feature_schema_version?: string
+          feature_values?: Json | null
+          fit_id?: string | null
+          fit_snapshot?: Json | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          model_version?: string
+          official_forward_eligible?: boolean
+          prediction_created_before_target: boolean
+          prediction_id?: string
+          prediction_latency_ms?: number | null
+          qualified_prediction: string
+          qualified_result?: string | null
+          raw_prediction?: string | null
+          raw_probability_green?: number | null
+          raw_result?: string | null
+          resolved_at?: string | null
+          target_candle_ts: string
+          target_open_at_prediction?: number | null
+          updated_at?: string
+        }
+        Update: {
+          abstain_reason?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          calibrated_probability_green?: number | null
+          created_at?: string
+          data_quality_valid?: boolean
+          feature_cutoff_ts?: string
+          feature_history_valid?: boolean
+          feature_schema_version?: string
+          feature_values?: Json | null
+          fit_id?: string | null
+          fit_snapshot?: Json | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          model_version?: string
+          official_forward_eligible?: boolean
+          prediction_created_before_target?: boolean
+          prediction_id?: string
+          prediction_latency_ms?: number | null
+          qualified_prediction?: string
+          qualified_result?: string | null
+          raw_prediction?: string | null
+          raw_probability_green?: number | null
+          raw_result?: string | null
+          resolved_at?: string | null
+          target_candle_ts?: string
+          target_open_at_prediction?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           actual_direction: string | null
@@ -2383,6 +2488,17 @@ export type Database = {
           p_actual_close: number
           p_actual_high?: number
           p_actual_low?: number
+          p_actual_open: number
+          p_actual_volume?: number
+          p_prediction_id: string
+        }
+        Returns: Json
+      }
+      resolve_model8_v3_prediction: {
+        Args: {
+          p_actual_close: number
+          p_actual_high: number
+          p_actual_low: number
           p_actual_open: number
           p_actual_volume?: number
           p_prediction_id: string
