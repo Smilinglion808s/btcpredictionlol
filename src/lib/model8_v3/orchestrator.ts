@@ -248,7 +248,9 @@ async function trainNewFit(
   const calibratedDir = rawCalDir.map((p) => applyPlatt(p, platt_dir.a, platt_dir.b));
   const calibratedMove = rawCalMove.map((p) => applyPlatt(p, platt_move.a, platt_move.b));
 
-  const fitRow = {
+  const isCandidate = opts.intent === "candidate";
+  const status = isCandidate ? "pending_review" : "active";
+  const fitRow: Record<string, unknown> = {
     fit_id,
     model_version: M8V3_MODEL_VERSION,
     feature_schema_version: M8V3_FEATURE_SCHEMA_VERSION,
@@ -287,7 +289,10 @@ async function trainNewFit(
       acc_movement: acc(calibratedMove, calYMove),
     },
     fitted_at: new Date().toISOString(),
-    activated_at: new Date().toISOString(),
+    activated_at: isCandidate ? null : new Date().toISOString(),
+    status,
+    review_requested_at: isCandidate ? new Date().toISOString() : null,
+    prior_active_fit_id: opts.priorActiveFitId ?? null,
   };
   const { error } = await sb.from("model8_v3_fits").insert(fitRow);
   if (error && !String(error.message).includes("duplicate")) {
@@ -296,6 +301,7 @@ async function trainNewFit(
 
   return {
     ok: true,
+    status,
     fit: {
       fit_id,
       weights_dir: dir.w, intercept_dir: dir.b,
