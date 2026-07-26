@@ -634,7 +634,11 @@ export async function runModel8V3(
     regime_alerts: regime.regime_alerts,
   }).select("prediction_id").maybeSingle();
 
-  if (error) return { ok: false, skipped: `insert_failed:${error.message}` };
+  if (error) {
+    await heartbeat(false, { stage: "predict_insert" }, error.message);
+    return { ok: false, skipped: `insert_failed:${error.message}` };
+  }
+  await heartbeat(true, { stage: "predict", qualified_prediction: qualified, abstain_reason: abstainReason });
   return {
     ok: true,
     prediction_id: (ins as { prediction_id?: string } | null)?.prediction_id,
@@ -642,7 +646,13 @@ export async function runModel8V3(
     qualified_prediction: qualified,
     raw_prediction: rawPrediction,
   };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await heartbeat(false, { stage: "outer" }, msg);
+    return { ok: false, skipped: `runtime_error:${msg}`, error: msg, target_candle_ts: targetTs.toISOString() };
+  }
 }
+
 
 /** Resolve every unresolved prediction whose target candle is at least 15m old. */
 export async function resolveDueModel8V3(sb: SupabaseClient): Promise<{ attempted: number; resolved: number; failed: number }> {
