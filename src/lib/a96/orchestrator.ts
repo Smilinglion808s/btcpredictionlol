@@ -388,21 +388,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     // snapshot we persist reflects reality.
     try { await resolveDueA96Predictions(sb); } catch (e) { await logApiError(sb, "a96-catchup-error", {}, e); }
 
-    // Load AAS shadow row for this prediction (Layer A/B directions + base selector).
-    const { data: shadow } = await sb
-      .from("model7_aas96_shadow")
-      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed")
-      .eq("prediction_id", predictionId)
-      .maybeSingle();
-    if (!shadow) return;
-    const s = shadow as Record<string, unknown>;
-    const a = s.layer_a_final_direction as string | null;
-    const b = s.layer_b_final_direction as string | null;
-    const base = s.selector_pre_override_selected_layer as string | null;
-    if ((a !== "GREEN" && a !== "RED") || (b !== "GREEN" && b !== "RED")) return;
-    if (base !== "A" && base !== "B") return;
-
-    // Load prediction (for target ts + target_open proxy).
+    // Load prediction first — need candle_ts + btc price for a potential SKIP webhook.
     const { data: pred } = await sb
       .from("predictions")
       .select("id, candle_ts, btc_price_at_prediction")
@@ -411,6 +397,47 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     if (!pred) return;
     const targetTs = new Date(String((pred as Record<string, unknown>).candle_ts));
     const targetOpen = Number((pred as Record<string, unknown>).btc_price_at_prediction);
+
+    // Emit a SKIP webhook whenever a96 cannot run because its upstream
+    // (AAS96) input is missing/ineligible. We can't insert an a96_predictions
+    // row in that case (layer_a/b_direction have NOT NULL + GREEN/RED CHECK
+    // constraints), so the UI reads AAS96 shadow directly to display SKIP.
+    const emitUpstreamSkip = async (reason: string) => {
+      try {
+        const { deliverWebhook, buildA96SkipWebhookPayload } = await import("../webhooks.server");
+        const payload = buildA96SkipWebhookPayload({
+          predictionId,
+          candleTs: targetTs.toISOString(),
+          btcPriceAtPrediction: isFinite(targetOpen) && targetOpen > 0 ? targetOpen : null,
+          skipReason: reason,
+        });
+        await deliverWebhook(sb, "prediction.created", payload);
+      } catch (whErr) {
+        await logApiError(sb, "a96-webhook-skip-error", { prediction_id: predictionId, reason }, whErr);
+      }
+    };
+
+    // Load AAS shadow row for this prediction (Layer A/B directions + base selector).
+    const { data: shadow } = await sb
+      .from("model7_aas96_shadow")
+      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed, skip_reason")
+      .eq("prediction_id", predictionId)
+      .maybeSingle();
+    if (!shadow) { await emitUpstreamSkip("AAS96_UPSTREAM_SKIP:shadow_row_missing"); return; }
+    const s = shadow as Record<string, unknown>;
+    const a = s.layer_a_final_direction as string | null;
+    const b = s.layer_b_final_direction as string | null;
+    const base = s.selector_pre_override_selected_layer as string | null;
+    const aasSkipReason = (s.skip_reason as string | null) ?? "upstream_ineligible";
+    if ((a !== "GREEN" && a !== "RED") || (b !== "GREEN" && b !== "RED")) {
+      await emitUpstreamSkip(`AAS96_UPSTREAM_SKIP:${aasSkipReason}`);
+      return;
+    }
+    if (base !== "A" && base !== "B") {
+      await emitUpstreamSkip(`AAS96_UPSTREAM_SKIP:${aasSkipReason}`);
+      return;
+    }
+
     if (!isFinite(targetOpen) || targetOpen <= 0) return;
 
     // Active AAS fit id.

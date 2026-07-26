@@ -1489,6 +1489,49 @@ export const getA96Pending = createServerFn({ method: "GET" }).handler(async () 
     .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at, feature_history_valid, feature_history_error, base_prediction, actual_direction, actual_open, actual_close, actual_high, actual_low, layer_a_result_score, layer_b_result_score, base_result_score, resolution_attempt_count, last_resolution_error")
     .order("target_candle_ts", { ascending: false })
     .limit(1).maybeSingle();
+
+  // If the latest predictions row does not have an a96 row (because AAS96
+  // upstream skipped and a96 could not insert due to NOT NULL / GREEN|RED
+  // check constraints on layer_a/b_direction), surface a synthetic SKIP so
+  // the UI can display "AAS96 chose to skip" for the pending candle.
+  const { data: latestPred } = await sb
+    .from("predictions")
+    .select("id, candle_ts")
+    .order("candle_ts", { ascending: false })
+    .limit(1).maybeSingle();
+  if (latestPred) {
+    const latestTs = new Date(String((latestPred as any).candle_ts)).getTime();
+    const a96Ts = data?.target_candle_ts
+      ? new Date(String((data as any).target_candle_ts)).getTime()
+      : 0;
+    if (latestTs > a96Ts) {
+      const { data: aas } = await sb
+        .from("model7_aas96_shadow")
+        .select("eligibility_passed, skip_reason, layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer")
+        .eq("prediction_id", (latestPred as any).id)
+        .maybeSingle();
+      if (aas) {
+        const a = (aas as any).layer_a_final_direction;
+        const b = (aas as any).layer_b_final_direction;
+        const base = (aas as any).selector_pre_override_selected_layer;
+        const upstreamBad =
+          (aas as any).eligibility_passed === false ||
+          (a !== "GREEN" && a !== "RED") ||
+          (b !== "GREEN" && b !== "RED") ||
+          (base !== "A" && base !== "B");
+        if (upstreamBad) {
+          const reason = (aas as any).skip_reason ?? "upstream_ineligible";
+          return {
+            target_candle_ts: (latestPred as any).candle_ts,
+            final_prediction: "SKIP",
+            decision_reason: `AAS96 upstream SKIP: ${reason}`,
+            resolved_at: null,
+          } as unknown as typeof data;
+        }
+      }
+    }
+  }
+
   return data ?? null;
 });
 
