@@ -366,7 +366,7 @@ function StatsPage() {
           pushes={b2Hero.pushes}
           pending={b2Hero.pending}
           predictionLabel="Current Prediction"
-          predictionTs={td1PendingQ.data?.target_candle_ts}
+          predictionTs={td1PendingQ.data?.candle_ts}
           predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
           actions={(
             <div className="flex items-center gap-1.5">
