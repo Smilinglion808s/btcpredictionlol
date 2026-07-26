@@ -54,6 +54,22 @@ function StatsPage() {
   const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
+  const m8v3StatsFn = useServerFn(getModel8V3Stats);
+  const m8v3PendingFn = useServerFn(getModel8V3Pending);
+  const exportM8v3Fn = useServerFn(exportModel8V3Csv);
+  const m8v3StatsQ = useQuery({ queryKey: ["model8-v3-stats"], queryFn: () => m8v3StatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const m8v3PendingQ = useQuery({ queryKey: ["model8-v3-pending"], queryFn: () => m8v3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const [exportingM8v3, setExportingM8v3] = useState(false);
+  async function downloadM8v3Csv() {
+    try {
+      setExportingM8v3(true);
+      const rows = await exportM8v3Fn();
+      if (!rows || rows.length === 0) { alert("No Model 3 FWD rows to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-fwd-${stamp()}.csv`);
+    } finally {
+      setExportingM8v3(false);
+    }
+  }
 
   const [exportingAas96, setExportingAas96] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
