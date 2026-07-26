@@ -106,6 +106,23 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           timings.predict_ms = Date.now() - t0;
         }
 
+        // Model 3 FWD (model8_v3) — invoked directly by the scheduler in its
+        // own try/catch so it cannot be gated by (or take down) any peer model.
+        // Runs AFTER the resolve phase so the just-closed prior candle is
+        // finalized in the local candle store.
+        if (phase === "predict" || phase === "both" || phase === "resolve") {
+          const t0 = Date.now();
+          try {
+            const { runModel8V3 } = await import("@/lib/model8_v3/orchestrator");
+            const m8 = await runModel8V3(supabase);
+            results.model8_v3 = m8;
+          } catch (e) {
+            results.model8_v3_error = e instanceof Error ? e.message : String(e);
+          }
+          timings.model8_v3_ms = Date.now() - t0;
+
+        }
+
         timings.total_ms = Date.now() - overallStart;
         results.timings = timings;
 

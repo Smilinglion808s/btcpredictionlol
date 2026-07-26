@@ -377,10 +377,36 @@ async function buildCandidateReviewReportFromDb(
 export async function runModel8V3(
   sb: SupabaseClient,
   opts: { targetCandleTs?: Date } = {},
-): Promise<{ ok: boolean; skipped?: string; prediction_id?: string; target_candle_ts?: string; qualified_prediction?: string; raw_prediction?: string }> {
+): Promise<{ ok: boolean; skipped?: string; prediction_id?: string; target_candle_ts?: string; qualified_prediction?: string; raw_prediction?: string; error?: string }> {
   const startMs = Date.now();
   const targetTs = opts.targetCandleTs ?? nextCandleBoundary(startMs);
   const createdBeforeTarget = Date.now() < targetTs.getTime();
+  let heartbeatResult: Record<string, unknown> = { target_candle_ts: targetTs.toISOString() };
+  const heartbeat = async (success: boolean, extra: Record<string, unknown>, errorMsg?: string) => {
+    try {
+      await sb.from("api_runs").insert({
+        run_type: "model8_v3_run",
+        response_payload: { ...heartbeatResult, ...extra, duration_ms: Date.now() - startMs },
+        success,
+        error_message: errorMsg ?? null,
+      });
+    } catch { /* ignore */ }
+  };
+
+  try {
+    // Step 1: resolve any due predictions BEFORE generating the next one so
+    // retrain cadence sees the freshest resolved-row count.
+    try { await resolveDueModel8V3(sb); } catch { /* never block predict */ }
+
+    // Step 2: bootstrap an ACTIVE fit if none exists (first eligible fit
+    // auto-activates — only replacement fits are manual-review).
+    let activePre = await loadActiveFit(sb);
+    if (!activePre) {
+      try { await bootstrapModel8V3ActiveFit(sb); } catch { /* logged in heartbeat */ }
+      activePre = await loadActiveFit(sb);
+    }
+    heartbeatResult.active_fit_id = activePre?.fit_id ?? null;
+
 
   try {
     const existing = await sb
@@ -393,6 +419,7 @@ export async function runModel8V3(
       .maybeSingle();
     if (existing.data) {
       const e = existing.data as Record<string, unknown>;
+      await heartbeat(true, { stage: "already_predicted", qualified_prediction: e.qualified_prediction });
       return {
         ok: true,
         skipped: "already_predicted",
@@ -403,6 +430,7 @@ export async function runModel8V3(
       };
     }
   } catch { /* fall through */ }
+
 
   const insertBase: Record<string, unknown> = {
     model_version: M8V3_MODEL_VERSION,
@@ -433,7 +461,11 @@ export async function runModel8V3(
     };
     const { data: ins, error } = await sb.from("model8_v3_predictions")
       .insert(row).select("prediction_id").maybeSingle();
-    if (error) return { ok: false, skipped: `insert_failed:${error.message}` } as const;
+    if (error) {
+      await heartbeat(false, { stage: "abstain_insert", abstain_reason: reason }, error.message);
+      return { ok: false, skipped: `insert_failed:${error.message}` } as const;
+    }
+    await heartbeat(true, { stage: "abstain", abstain_reason: reason });
     return {
       ok: true,
       skipped: reason,
@@ -442,6 +474,7 @@ export async function runModel8V3(
       qualified_prediction: "ABSTAIN",
     } as const;
   };
+
 
   const { candles, ready } = await waitForFinalizedHistory(sb, targetTs);
   const priorIso = new Date(targetTs.getTime() - TF_MS).toISOString();
@@ -608,7 +641,11 @@ export async function runModel8V3(
     regime_alerts: regime.regime_alerts,
   }).select("prediction_id").maybeSingle();
 
-  if (error) return { ok: false, skipped: `insert_failed:${error.message}` };
+  if (error) {
+    await heartbeat(false, { stage: "predict_insert" }, error.message);
+    return { ok: false, skipped: `insert_failed:${error.message}` };
+  }
+  await heartbeat(true, { stage: "predict", qualified_prediction: qualified, abstain_reason: abstainReason });
   return {
     ok: true,
     prediction_id: (ins as { prediction_id?: string } | null)?.prediction_id,
@@ -616,7 +653,13 @@ export async function runModel8V3(
     qualified_prediction: qualified,
     raw_prediction: rawPrediction,
   };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await heartbeat(false, { stage: "outer" }, msg);
+    return { ok: false, skipped: `runtime_error:${msg}`, error: msg, target_candle_ts: targetTs.toISOString() };
+  }
 }
+
 
 /** Resolve every unresolved prediction whose target candle is at least 15m old. */
 export async function resolveDueModel8V3(sb: SupabaseClient): Promise<{ attempted: number; resolved: number; failed: number }> {
