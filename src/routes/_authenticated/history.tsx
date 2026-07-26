@@ -593,13 +593,37 @@ function CsvDataPage() {
         <div>
           <h1 className="text-xl font-semibold">CSV Training Data</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Universal CSV merges every tracked field across the core engine, TD1-RC, AAS96, and a96 — one row per candle. Per-model exports remain below.
+            Universal CSV merges every tracked field across the core engine, TD1-RC, AAS96, and a96 — one row per candle. Model 6, TD1-RC, and a96 per-model exports are available below.
           </p>
         </div>
-        <Button size="lg" className="gap-2" onClick={downloadUniversal} disabled={buildingUniversal || listQ.isLoading}>
-          <Download className="size-4" />
-          {buildingUniversal ? "Building…" : "Download Universal CSV"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="lg" className="gap-2" onClick={downloadUniversal} disabled={buildingUniversal || listQ.isLoading}>
+            <Download className="size-4" />
+            {buildingUniversal ? "Building…" : "Download Universal CSV"}
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const rows = (await exportTd1().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_td1_rc");
+            }}
+          >
+            <Download className="size-4" /> TD1-RC CSV
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const rows = (await exportA96().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_a96");
+            }}
+          >
+            <Download className="size-4" /> a96 CSV
+          </Button>
+        </div>
       </div>
 
 
