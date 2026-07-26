@@ -536,8 +536,8 @@ export async function runShadowForPrediction(
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
       const { runA96 } = await import("@/lib/a96/orchestrator");
       await runA96(supabase, predictionRow.id);
-      const { runModel8V3 } = await import("@/lib/model8_v3/orchestrator");
-      await runModel8V3(supabase, { targetCandleTs: new Date(String(predictionRow.candle_ts)) });
+      const { runM3SeR1 } = await import("@/lib/model3_selective_edge/orchestrator");
+      await runM3SeR1(supabase, { targetCandleTs: new Date(String(predictionRow.candle_ts)) });
     } catch { /* never block */ }
 
 
@@ -742,8 +742,8 @@ export async function resolveShadowRowsFor(
     await resolveAas96Row(supabase, predictionId, actualDirection);
     const { resolveA96 } = await import("@/lib/a96/orchestrator");
     await resolveA96(supabase, predictionId);
-    const { resolveDueModel8V3 } = await import("@/lib/model8_v3/orchestrator");
-    await resolveDueModel8V3(supabase);
+    const { resolveDueM3SeR1 } = await import("@/lib/model3_selective_edge/orchestrator");
+    await resolveDueM3SeR1(supabase);
   } catch { /* never block */ }
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
 
