@@ -224,6 +224,62 @@ export const getModel8V3Pending = createServerFn({ method: "GET" }).handler(asyn
   return data ?? null;
 });
 
+/** Operational diagnostics for the Model 3 FWD scheduler. */
+export const getModel8V3Diagnostics = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const TF_MS = 15 * 60 * 1000;
+  const nowMs = Date.now();
+  const rem = nowMs % TF_MS;
+  const nextExpectedTarget = new Date(rem > 0 && rem <= 180_000 ? nowMs - rem : nowMs + (TF_MS - rem));
+
+  const [{ data: fit }, { data: latestPred }, { data: runs }] = await Promise.all([
+    sb.from("model8_v3_fits").select("fit_id, status, activated_at, training_metrics, calibration_metrics")
+      .eq("status", "active").order("activated_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("model8_v3_predictions").select("target_candle_ts, abstain_reason, qualified_prediction, fit_id, resolved_at")
+      .order("target_candle_ts", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("api_runs").select("created_at, success, error_message, response_payload")
+      .eq("run_type", "model8_v3_run").order("created_at", { ascending: false }).limit(1),
+  ]);
+  const lastRun = (runs ?? [])[0] as Record<string, unknown> | undefined;
+  const activeFit = fit as Record<string, unknown> | null;
+  return {
+    last_invocation_ts: (lastRun?.created_at as string | undefined) ?? null,
+    last_execution_error: (lastRun?.error_message as string | null | undefined) ?? null,
+    last_prediction_target_ts: (latestPred as { target_candle_ts?: string } | null)?.target_candle_ts ?? null,
+    last_abstain_reason: (latestPred as { abstain_reason?: string | null } | null)?.abstain_reason ?? null,
+    next_expected_target_ts: nextExpectedTarget.toISOString(),
+    active_fit_id: (activeFit?.fit_id as string | undefined) ?? null,
+    active_fit_status: (activeFit?.status as string | undefined) ?? null,
+    active_fit_activated_at: (activeFit?.activated_at as string | undefined) ?? null,
+    training_metrics: activeFit?.training_metrics ?? null,
+    calibration_metrics: activeFit?.calibration_metrics ?? null,
+  };
+});
+
+/** Verification bundle for the audit: active fit + latest 20 preds + latest 20 runs. */
+export const getModel8V3Verification = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const [{ data: fit }, { data: preds }, { data: runs }] = await Promise.all([
+    sb.from("model8_v3_fits").select("fit_id, status, activated_at, training_metrics, calibration_metrics, config_snapshot")
+      .eq("status", "active").order("activated_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("model8_v3_predictions")
+      .select("target_candle_ts, qualified_prediction, abstain_reason, fit_id, resolved_at, prediction_created_before_target")
+      .order("target_candle_ts", { ascending: false }).limit(20),
+    sb.from("api_runs").select("created_at, success, error_message, response_payload")
+      .eq("run_type", "model8_v3_run").order("created_at", { ascending: false }).limit(20),
+  ]);
+  const targets = (preds ?? []).map((p) => new Date((p as { target_candle_ts: string }).target_candle_ts).getTime()).sort((a, b) => a - b);
+  let contiguous = targets.length > 1;
+  for (let i = 1; i < targets.length; i++) if (targets[i] - targets[i - 1] !== 15 * 60 * 1000) { contiguous = false; break; }
+  return {
+    active_fit: fit ?? null,
+    latest_predictions: preds ?? [],
+    latest_api_runs: runs ?? [],
+    targets_advance_15m: contiguous,
+    initial_fit_auto_activated: !!fit && (fit as { status?: string }).status === "active",
+  };
+});
+
 /** CSV export — every column, JSON blobs stringified. */
 export const exportModel8V3Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await fetchAllModel8V3Rows();
@@ -233,3 +289,4 @@ export const exportModel8V3Csv = createServerFn({ method: "GET" }).handler(async
     fit_snapshot: r.fit_snapshot ? JSON.stringify(r.fit_snapshot) : "",
   }));
 });
+
