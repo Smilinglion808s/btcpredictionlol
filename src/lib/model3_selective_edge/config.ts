@@ -3,7 +3,7 @@
 
 export const M3SE_MODEL_VERSION = "m3-se-r1";
 export const M3SE_FEATURE_SCHEMA_VERSION = "m3-se-features-v1";
-export const M3SE_CODE_VERSION = "m3-se-r1-2026-07-26";
+export const M3SE_CODE_VERSION = "m3-se-r1-2026-07-27-coverage-threshold";
 
 export const M3SE_STREAM = {
   symbol: "BTC-USDT",
@@ -39,7 +39,9 @@ export const M3SE_TOL = 1e-6;
 
 // Selection: publish ~50 of every 96 valid candles.
 export const M3SE_TARGET_COVERAGE = 50 / 96;
-export const M3SE_MIN_SELECTION_THRESHOLD = 0.5;
+// The selector is a ranker for prospective coverage. Do not hard-floor at 0.50;
+// that can collapse coverage when calibration is conservative.
+export const M3SE_MIN_SELECTION_THRESHOLD = 0;
 
 // Coverage sanity gate on calibration set.
 export const M3SE_MIN_ESTIMATED_COVERAGE = 0.2;
