@@ -14,16 +14,16 @@ export const M3SE_STREAM = {
 export const M3SE_TIMEFRAME_SEC = 900;
 
 // Windows.
-export const M3SE_SLOW_ROWS = 1024;
-export const M3SE_FAST_ROWS = 384;
-export const M3SE_CAL_ROWS = 256;
-export const M3SE_OOF_WARMUP_ROWS = 512;
+export const M3SE_SLOW_ROWS = 768;
+export const M3SE_FAST_ROWS = 320;
+export const M3SE_CAL_ROWS = 192;
+export const M3SE_OOF_WARMUP_ROWS = 384;
 export const M3SE_OOF_BLOCK_SIZE = 32;
 
 // Minimum labeled rows in the historical pool before we're allowed to fit.
 // SLOW + OOF pool + CAL, with a small buffer.
 export const M3SE_MIN_LABELED_ROWS =
-  M3SE_SLOW_ROWS + M3SE_OOF_WARMUP_ROWS + M3SE_OOF_BLOCK_SIZE * 4 + M3SE_CAL_ROWS;
+  M3SE_SLOW_ROWS + M3SE_OOF_WARMUP_ROWS + M3SE_OOF_BLOCK_SIZE * 3 + M3SE_CAL_ROWS;
 
 // Max candle history to hydrate (features need ~32 lookback + 256 percentile window).
 export const M3SE_FEATURE_LOOKBACK = 256;
