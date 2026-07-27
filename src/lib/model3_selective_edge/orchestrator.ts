@@ -11,6 +11,7 @@ import {
   M3SE_PRIOR_POLL_ATTEMPTS,
   M3SE_PRIOR_POLL_INTERVAL_MS,
   M3SE_RETRAIN_EVERY_RESOLVED_ROWS,
+  M3SE_TARGET_COVERAGE,
 } from "./config";
 import { buildTrainingMatrix, M3SE_FEATURE_NAMES, type Candle } from "./features";
 import { trainM3SE, scoreM3SE, type M3SEArtifact } from "./train";
@@ -71,11 +72,11 @@ async function waitForFinalizedHistory(sb: SupabaseClient, targetTs: Date): Prom
 }
 
 async function loadActiveFit(sb: SupabaseClient): Promise<
-  { fit_id: string; artifact: M3SEArtifact; activated_at: string | null } | null
+  { fit_id: string; artifact: M3SEArtifact; activated_at: string | null; estimated_coverage: number | null } | null
 > {
   const { data } = await sb
     .from("model3_se_fits")
-    .select("fit_id, artifact, activated_at")
+    .select("fit_id, artifact, activated_at, estimated_coverage")
     .eq("model_version", M3SE_MODEL_VERSION)
     .eq("status", "active")
     .order("activated_at", { ascending: false })
@@ -87,6 +88,7 @@ async function loadActiveFit(sb: SupabaseClient): Promise<
     fit_id: String(d.fit_id),
     artifact: d.artifact as M3SEArtifact,
     activated_at: (d.activated_at as string | null) ?? null,
+    estimated_coverage: typeof d.estimated_coverage === "number" ? d.estimated_coverage : d.estimated_coverage == null ? null : Number(d.estimated_coverage),
   };
 }
 
@@ -204,7 +206,8 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
 
     if (active) {
       const resolved = await resolvedRowsSince(sb, active.fit_id, active.activated_at);
-      if (resolved >= M3SE_RETRAIN_EVERY_RESOLVED_ROWS) {
+      const coverageTooLow = (active.estimated_coverage ?? M3SE_TARGET_COVERAGE) < M3SE_TARGET_COVERAGE * 0.8;
+      if (resolved >= M3SE_RETRAIN_EVERY_RESOLVED_ROWS || coverageTooLow) {
         const t = await trainAndStoreNewFit(sb, candles);
         if (t.ok) active = await loadActiveFit(sb);
       }

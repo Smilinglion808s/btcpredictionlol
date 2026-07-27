@@ -338,7 +338,8 @@ export function trainM3SE(
     applyPlatt(Math.log(p / (1 - p)), platt_correctness.a, platt_correctness.b),
   );
 
-  // Threshold = Q_{1-targetCoverage}(pCorrectCalibration), floored at 0.50.
+  // Threshold = Q_{1-targetCoverage}(pCorrectCalibration). This is a coverage
+  // rank threshold, not a hard 50% correctness probability gate.
   const sortedCal = [...calSelectorCalibrated].sort((a, b) => a - b);
   const q = quantile(sortedCal, 1 - M3SE_TARGET_COVERAGE);
   const selection_threshold = Math.max(M3SE_MIN_SELECTION_THRESHOLD, q);
