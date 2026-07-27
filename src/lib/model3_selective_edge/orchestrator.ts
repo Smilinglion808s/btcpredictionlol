@@ -215,7 +215,9 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     if (existing) return;
 
     // Ensure history includes the immediately-prior confirmed candle.
-    const { candles, ready } = await waitForFinalizedHistory(sb, targetTs);
+    const historyResult = await waitForFinalizedHistory(sb, targetTs);
+    const { candles, ready } = historyResult;
+    const priorAttempts = historyResult.attempts;
 
     // Load or (re)train fit.
     let active = await loadActiveFit(sb);
@@ -223,16 +225,30 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     const dqReasons: string[] = [];
     if (!ready) dqReasons.push("prior_candle_missing");
     if (candles.length < 100) dqReasons.push(`insufficient_history:${candles.length}`);
+    if (candles.length < M3SE_MIN_LABELED_ROWS) dqReasons.push(`below_min_labeled_rows:${candles.length}/${M3SE_MIN_LABELED_ROWS}`);
+
+    let retrainedThisRun = false;
+    let retrainReason: string | null = null;
+    let resolvedSince: number | null = null;
 
     if (active) {
-      const resolved = await resolvedRowsSince(sb, active.fit_id, active.activated_at);
+      resolvedSince = await resolvedRowsSince(sb, active.fit_id, active.activated_at);
       const coverageTooLow = (active.estimated_coverage ?? M3SE_TARGET_COVERAGE) < M3SE_TARGET_COVERAGE * 0.8;
-      if (resolved >= M3SE_RETRAIN_EVERY_RESOLVED_ROWS || coverageTooLow) {
+      const cadence = resolvedSince >= M3SE_RETRAIN_EVERY_RESOLVED_ROWS;
+      if (cadence || coverageTooLow) {
+        retrainReason = cadence
+          ? `cadence:${resolvedSince}>=${M3SE_RETRAIN_EVERY_RESOLVED_ROWS}`
+          : `coverage_low:${active.estimated_coverage}<${M3SE_TARGET_COVERAGE * 0.8}`;
         const t = await trainAndStoreNewFit(sb, candles);
+        retrainedThisRun = t.ok;
+        if (!t.ok) retrainReason += `|train_failed:${t.reason}`;
         if (t.ok) active = await loadActiveFit(sb);
       }
     } else {
+      retrainReason = "bootstrap";
       const t = await trainAndStoreNewFit(sb, candles);
+      retrainedThisRun = t.ok;
+      if (!t.ok) retrainReason += `|train_failed:${t.reason}`;
       if (t.ok) active = await loadActiveFit(sb);
     }
 
@@ -242,15 +258,32 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
         fit_id: null,
         model_version: M3SE_MODEL_VERSION,
         feature_schema_version: M3SE_FEATURE_SCHEMA_VERSION,
+        code_version: M3SE_CODE_VERSION,
         symbol: M3SE_STREAM.symbol,
         timeframe: M3SE_STREAM.timeframe,
         provider: M3SE_STREAM.provider,
         target_candle_ts: targetIso,
         data_quality_valid: false,
-        data_quality_reasons: ["no_active_fit"],
+        data_quality_reasons: [...dqReasons, "no_active_fit"],
         published_prediction: "ABSTAIN",
-        abstain_reason: "invalid_data",
-      }).select(); // will fail FK-wise; ignore.
+        abstain_reason: "no_active_fit",
+        abstain_category: "no_active_fit",
+        abstain_detail: retrainReason ?? "no fit available and (re)train did not produce one",
+        prior_candle_ready: ready,
+        prior_candle_poll_attempts: priorAttempts,
+        history_rows_used: candles.length,
+        min_labeled_rows_required: M3SE_MIN_LABELED_ROWS,
+        retrained_this_run: retrainedThisRun,
+        retrain_reason: retrainReason,
+        resolved_rows_since_fit: resolvedSince,
+        publish_gates: {
+          data_quality_valid: false,
+          dq_reasons: dqReasons,
+          has_active_fit: false,
+          retrain_attempted: true,
+          retrain_reason: retrainReason,
+        },
+      });
       return;
     }
 
@@ -258,15 +291,61 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     const targetOpen = candles.length ? candles[candles.length - 1].close : null;
     const scored = scoreM3SE(targetFeatureRow, active.artifact);
 
+    const featureNanCount = targetFeatureRow.reduce((n, v) => n + (Number.isFinite(v) ? 0 : 1), 0);
+    const featureRowValid = featureNanCount === 0;
+
+    const selectorMargin = scored.pCorrectCalibrated - active.artifact.selection_threshold;
+    const directionConfidenceGap = Math.abs(scored.pStackedCalibrated - 0.5);
+
     let published: "GREEN" | "RED" | "ABSTAIN" = scored.rawDir;
     let abstainReason: string | null = null;
+    let abstainCategory: string | null = null;
+    let abstainDetail: string | null = null;
     if (!dataQualityValid) {
       published = "ABSTAIN";
       abstainReason = "invalid_data";
+      abstainCategory = "invalid_data";
+      abstainDetail = `data quality invalid: ${dqReasons.join(", ") || "unspecified"}`;
+    } else if (!featureRowValid) {
+      published = "ABSTAIN";
+      abstainReason = "invalid_data";
+      abstainCategory = "invalid_features";
+      abstainDetail = `feature row has ${featureNanCount} non-finite value(s)`;
     } else if (scored.pCorrectCalibrated < active.artifact.selection_threshold) {
       published = "ABSTAIN";
       abstainReason = "below_correctness_rank";
+      abstainCategory = "below_correctness_rank";
+      abstainDetail =
+        `p_correct_calibrated=${scored.pCorrectCalibrated.toFixed(4)} < ` +
+        `selection_threshold=${active.artifact.selection_threshold.toFixed(4)} ` +
+        `(margin=${selectorMargin.toFixed(4)}; raw_dir=${scored.rawDir}; ` +
+        `p_green_cal=${scored.pStackedCalibrated.toFixed(4)}; ` +
+        `dir_gap=${directionConfidenceGap.toFixed(4)}; ` +
+        `fit_est_coverage=${active.estimated_coverage ?? "n/a"}; ` +
+        `fit_target_coverage=${active.target_coverage ?? M3SE_TARGET_COVERAGE})`;
     }
+
+    const publishGates = {
+      data_quality_valid: dataQualityValid,
+      dq_reasons: dqReasons,
+      feature_row_valid: featureRowValid,
+      feature_nan_count: featureNanCount,
+      selector_pass: scored.pCorrectCalibrated >= active.artifact.selection_threshold,
+      selector_margin: selectorMargin,
+      selection_threshold: active.artifact.selection_threshold,
+      p_correct_calibrated: scored.pCorrectCalibrated,
+      p_correct_raw: scored.pCorrectRaw,
+      p_green_stacked_calibrated: scored.pStackedCalibrated,
+      direction_confidence_gap: directionConfidenceGap,
+      raw_dir: scored.rawDir,
+      raw_confidence: scored.rawConfidence,
+      fit_id: active.fit_id,
+      fit_activated_at: active.activated_at,
+      fit_estimated_coverage: active.estimated_coverage,
+      fit_target_coverage: active.target_coverage,
+      retrained_this_run: retrainedThisRun,
+      retrain_reason: retrainReason,
+    };
 
     const featCols: Record<string, number> = {};
     for (let i = 0; i < M3SE_FEATURE_NAMES.length; i++) {
@@ -281,6 +360,7 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       fit_id: active.fit_id,
       model_version: M3SE_MODEL_VERSION,
       feature_schema_version: M3SE_FEATURE_SCHEMA_VERSION,
+      code_version: M3SE_CODE_VERSION,
       symbol: M3SE_STREAM.symbol,
       timeframe: M3SE_STREAM.timeframe,
       provider: M3SE_STREAM.provider,
@@ -312,11 +392,34 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       selection_threshold: active.artifact.selection_threshold,
       published_prediction: published,
       abstain_reason: abstainReason,
+      abstain_category: abstainCategory,
+      abstain_detail: abstainDetail,
+      selector_margin: selectorMargin,
+      direction_confidence_gap: directionConfidenceGap,
+      publish_gates: publishGates,
+      fit_estimated_coverage: active.estimated_coverage,
+      fit_target_coverage: active.target_coverage,
+      fit_calibration_direction_accuracy: active.calibration_direction_accuracy,
+      fit_oof_direction_accuracy: active.oof_direction_accuracy,
+      fit_selector_roc_auc: active.selector_roc_auc,
+      fit_selector_pr_auc: active.selector_pr_auc,
+      fit_selector_brier: active.selector_brier,
+      fit_activated_at: active.activated_at,
+      prior_candle_ready: ready,
+      prior_candle_poll_attempts: priorAttempts,
+      history_rows_used: candles.length,
+      min_labeled_rows_required: M3SE_MIN_LABELED_ROWS,
+      retrained_this_run: retrainedThisRun,
+      retrain_reason: retrainReason,
+      resolved_rows_since_fit: resolvedSince,
+      feature_row_valid: featureRowValid,
+      feature_nan_count: featureNanCount,
     });
   } catch {
     /* swallow: never block sibling models */
   }
 }
+
 
 /** Resolve any m3-se-r1 predictions whose target candle has since closed. */
 export async function resolveDueM3SeR1(sb: SupabaseClient): Promise<void> {
