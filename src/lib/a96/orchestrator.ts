@@ -615,6 +615,11 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       } catch (whErr) {
         await logApiError(sb, "a96-webhook-created-error", { prediction_id: predictionId }, whErr);
       }
+    } else if (decision.prediction === "ABSTAIN") {
+      // Emit abstain webhook so downstream consumers see the SKIP for this candle.
+      await emitUpstreamSkip(`A96_ABSTAIN:${decision.reason ?? "abstain"}`);
+    } else if (!prospectiveValid) {
+      await emitUpstreamSkip(`A96_ABSTAIN:prospective_invalid:${prospectiveInvalidReason ?? "unknown"}`);
     }
 
   } catch (e) {
