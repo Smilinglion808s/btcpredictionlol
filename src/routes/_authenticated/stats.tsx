@@ -455,7 +455,13 @@ function StatsPage() {
           predictionLabel="Current Prediction"
           predictionTs={m3sePending?.target_candle_ts}
           predictionValue={m3seCurrent ?? "—"}
-          abstainReason={(m3sePending as any)?.abstain_reason ?? null}
+          abstainReason={
+            (m3sePending as any)?.abstain_detail
+            ?? ((m3sePending as any)?.abstain_category && (m3sePending as any)?.abstain_reason
+                  ? `${(m3sePending as any).abstain_category}: ${(m3sePending as any).abstain_reason}`
+                  : (m3sePending as any)?.abstain_reason)
+            ?? null
+          }
           actions={(
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3sePredsCsv} disabled={exportingM3se}>
