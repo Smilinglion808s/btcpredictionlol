@@ -57,7 +57,7 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
 export const getM3SePending = createServerFn({ method: "GET" }).handler(async () => {
   const { data } = await supabase
     .from("model3_se_predictions")
-    .select("target_candle_ts, published_prediction, raw_prediction, abstain_reason, p_correct_calibrated, p_green_stacked_calibrated, selection_threshold")
+    .select("target_candle_ts, published_prediction, raw_prediction, abstain_reason, abstain_category, abstain_detail, selector_margin, p_correct_calibrated, p_green_stacked_calibrated, selection_threshold")
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
