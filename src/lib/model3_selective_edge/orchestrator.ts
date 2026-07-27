@@ -12,6 +12,8 @@ import {
   M3SE_PRIOR_POLL_INTERVAL_MS,
   M3SE_RETRAIN_EVERY_RESOLVED_ROWS,
   M3SE_TARGET_COVERAGE,
+  M3SE_MIN_LABELED_ROWS,
+  M3SE_CODE_VERSION,
 } from "./config";
 import { buildTrainingMatrix, M3SE_FEATURE_NAMES, type Candle } from "./features";
 import { trainM3SE, scoreM3SE, type M3SEArtifact } from "./train";
