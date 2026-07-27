@@ -1,6 +1,10 @@
 // Server functions for Model 3 — Selective Edge R1.
 import { createServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+
+async function getAdmin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
 
 type Row = Record<string, string | number | boolean | null>;
 
