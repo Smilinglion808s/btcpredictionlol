@@ -22,6 +22,7 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
     .limit(5000);
   const r = (rows ?? []) as Array<Record<string, unknown>>;
   const resolved = r.filter((x) => x.resolved_at);
+  const pending = r.length - resolved.length;
   const pub = resolved.filter((x) => x.published_prediction !== "ABSTAIN");
   const pubWins = pub.filter((x) => x.published_result === "WIN").length;
   const pubLoss = pub.filter((x) => x.published_result === "LOSS").length;
@@ -36,6 +37,7 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
   const abstainedLosers = resolved.filter((x) => x.abstained_loser === true).length;
   return {
     resolved_count: resolved.length,
+    pending,
     published: {
       wins: pubWins, losses: pubLoss, pushes: pubPush, total: pub.length,
       win_rate: totalPub > 0 ? +(pubWins / totalPub * 100).toFixed(2) : 0,

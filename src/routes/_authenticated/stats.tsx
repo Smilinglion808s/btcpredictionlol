@@ -451,7 +451,7 @@ function StatsPage() {
           wins={Number(m3sePublished.wins ?? 0)}
           losses={Number(m3sePublished.losses ?? 0)}
           pushes={Number(m3sePublished.pushes ?? 0)}
-          pending={0}
+          pending={Number(m3seStats.pending ?? 0)}
           predictionLabel="Current Prediction"
           predictionTs={m3sePending?.target_candle_ts}
           predictionValue={m3seCurrent ?? "—"}
