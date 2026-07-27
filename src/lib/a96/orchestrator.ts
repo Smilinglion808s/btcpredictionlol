@@ -529,6 +529,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         ...streamAudit,
       } as never, { onConflict: "prediction_id" });
       if (absErr) throw absErr;
+      await emitUpstreamSkip(`A96_ABSTAIN:${reason}`);
       return;
     }
 
