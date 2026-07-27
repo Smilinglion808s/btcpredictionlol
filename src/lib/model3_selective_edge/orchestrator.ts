@@ -73,12 +73,23 @@ async function waitForFinalizedHistory(sb: SupabaseClient, targetTs: Date): Prom
   return { candles, ready: false, attempts };
 }
 
-async function loadActiveFit(sb: SupabaseClient): Promise<
-  { fit_id: string; artifact: M3SEArtifact; activated_at: string | null; estimated_coverage: number | null } | null
-> {
+type ActiveFit = {
+  fit_id: string;
+  artifact: M3SEArtifact;
+  activated_at: string | null;
+  estimated_coverage: number | null;
+  target_coverage: number | null;
+  calibration_direction_accuracy: number | null;
+  oof_direction_accuracy: number | null;
+  selector_roc_auc: number | null;
+  selector_pr_auc: number | null;
+  selector_brier: number | null;
+};
+
+async function loadActiveFit(sb: SupabaseClient): Promise<ActiveFit | null> {
   const { data } = await sb
     .from("model3_se_fits")
-    .select("fit_id, artifact, activated_at, estimated_coverage")
+    .select("fit_id, artifact, activated_at, estimated_coverage, target_coverage, calibration_direction_accuracy, oof_direction_accuracy, selector_roc_auc, selector_pr_auc, selector_brier")
     .eq("model_version", M3SE_MODEL_VERSION)
     .eq("status", "active")
     .order("activated_at", { ascending: false })
@@ -86,11 +97,18 @@ async function loadActiveFit(sb: SupabaseClient): Promise<
     .maybeSingle();
   if (!data) return null;
   const d = data as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v));
   return {
     fit_id: String(d.fit_id),
     artifact: d.artifact as M3SEArtifact,
     activated_at: (d.activated_at as string | null) ?? null,
-    estimated_coverage: typeof d.estimated_coverage === "number" ? d.estimated_coverage : d.estimated_coverage == null ? null : Number(d.estimated_coverage),
+    estimated_coverage: num(d.estimated_coverage),
+    target_coverage: num(d.target_coverage),
+    calibration_direction_accuracy: num(d.calibration_direction_accuracy),
+    oof_direction_accuracy: num(d.oof_direction_accuracy),
+    selector_roc_auc: num(d.selector_roc_auc),
+    selector_pr_auc: num(d.selector_pr_auc),
+    selector_brier: num(d.selector_brier),
   };
 }
 
