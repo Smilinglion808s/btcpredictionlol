@@ -1,6 +1,10 @@
 // Server functions for Model 3 — Selective Edge R1.
 import { createServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+
+async function getAdmin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
 
 type Row = Record<string, string | number | boolean | null>;
 
@@ -15,7 +19,7 @@ function toSerializable(r: Record<string, unknown>): Row {
 }
 
 export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () => {
-  const { data: rows } = await supabase
+  const { data: rows } = await (await getAdmin())
     .from("model3_se_predictions")
     .select("published_prediction, published_result, raw_result, resolved_at, selector_net_effect, raw_would_win, abstained_winner, abstained_loser")
     .order("target_candle_ts", { ascending: false })
@@ -55,7 +59,7 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getM3SePending = createServerFn({ method: "GET" }).handler(async () => {
-  const { data } = await supabase
+  const { data } = await (await getAdmin())
     .from("model3_se_predictions")
     .select("target_candle_ts, published_prediction, raw_prediction, abstain_reason, abstain_category, abstain_detail, selector_margin, p_correct_calibrated, p_green_stacked_calibrated, selection_threshold")
     .order("target_candle_ts", { ascending: false })
@@ -68,7 +72,7 @@ export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handle
   const PAGE = 1000;
   const all: Row[] = [];
   for (let off = 0; off < 25_000; off += PAGE) {
-    const { data, error } = await supabase
+    const { data, error } = await (await getAdmin())
       .from("model3_se_predictions")
       .select("*")
       .order("target_candle_ts", { ascending: false })
@@ -82,7 +86,7 @@ export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handle
 });
 
 export const exportM3SeFitsCsv = createServerFn({ method: "GET" }).handler(async (): Promise<Row[]> => {
-  const { data } = await supabase
+  const { data } = await (await getAdmin())
     .from("model3_se_fits")
     .select("fit_id, model_version, feature_schema_version, feature_schema_hash, artifact_hash, status, failure_reason, fitted_at, activated_at, retired_at, slow_training_start, slow_training_end, slow_training_rows, fast_training_start, fast_training_end, fast_training_rows, oof_start, oof_end, oof_rows, oof_block_size, calibration_start, calibration_end, calibration_rows, slow_lambda, fast_lambda, stacker_lambda, selector_lambda, selection_threshold, target_coverage, estimated_coverage, oof_direction_accuracy, oof_direction_brier, oof_direction_log_loss, calibration_direction_accuracy, calibration_direction_brier, calibration_direction_log_loss, selector_roc_auc, selector_pr_auc, selector_brier, selector_log_loss")
     .order("fitted_at", { ascending: false });
@@ -90,7 +94,7 @@ export const exportM3SeFitsCsv = createServerFn({ method: "GET" }).handler(async
 });
 
 export const exportM3SeBlocksCsv = createServerFn({ method: "GET" }).handler(async (): Promise<Row[]> => {
-  const { data } = await supabase
+  const { data } = await (await getAdmin())
     .from("model3_se_blocks")
     .select("*")
     .order("block_end_ts", { ascending: false });
