@@ -480,7 +480,9 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       resolved_rows_since_fit: resolvedSince,
       feature_row_valid: featureRowValid,
       feature_nan_count: featureNanCount,
-    });
+    };
+    await sb.from("model3_se_predictions").insert(predRow);
+    await emitM3SeWebhook(sb, predRow);
   } catch {
     /* swallow: never block sibling models */
   }
