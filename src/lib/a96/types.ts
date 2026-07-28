@@ -27,6 +27,12 @@ export interface Decision {
   reason: string;
   fit_selector_override_fired: boolean;
   agreement_veto_fired: boolean;
+  // r2 margin-band audit
+  margin_veto_fired: boolean;
+  layer_a_prob_mean: number | null;
+  layer_a_prob_margin: number | null;
+  layer_a_probability_valid: boolean;
+  margin_band_eligible: boolean;
   feature_values: {
     distance_from_4_candle_low_bps: number | null;
     mean_2_candle_body_to_range: number | null;

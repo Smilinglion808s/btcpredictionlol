@@ -94,10 +94,17 @@ export type Database = {
           last_resolution_error: string | null
           layer_a_direction: string
           layer_a_net_at_prediction: number
+          layer_a_prob_margin: number | null
+          layer_a_prob_mean: number | null
+          layer_a_probability_valid: boolean | null
           layer_a_result_score: number | null
           layer_b_direction: string
           layer_b_net_at_prediction: number
           layer_b_result_score: number | null
+          margin_band_eligible: boolean | null
+          margin_band_max: number | null
+          margin_band_min: number | null
+          margin_veto_fired: boolean | null
           mean_2_candle_body_to_range: number | null
           model_name: string
           model_version: string
@@ -150,10 +157,17 @@ export type Database = {
           last_resolution_error?: string | null
           layer_a_direction: string
           layer_a_net_at_prediction: number
+          layer_a_prob_margin?: number | null
+          layer_a_prob_mean?: number | null
+          layer_a_probability_valid?: boolean | null
           layer_a_result_score?: number | null
           layer_b_direction: string
           layer_b_net_at_prediction: number
           layer_b_result_score?: number | null
+          margin_band_eligible?: boolean | null
+          margin_band_max?: number | null
+          margin_band_min?: number | null
+          margin_veto_fired?: boolean | null
           mean_2_candle_body_to_range?: number | null
           model_name?: string
           model_version?: string
@@ -206,10 +220,17 @@ export type Database = {
           last_resolution_error?: string | null
           layer_a_direction?: string
           layer_a_net_at_prediction?: number
+          layer_a_prob_margin?: number | null
+          layer_a_prob_mean?: number | null
+          layer_a_probability_valid?: boolean | null
           layer_a_result_score?: number | null
           layer_b_direction?: string
           layer_b_net_at_prediction?: number
           layer_b_result_score?: number | null
+          margin_band_eligible?: boolean | null
+          margin_band_max?: number | null
+          margin_band_min?: number | null
+          margin_veto_fired?: boolean | null
           mean_2_candle_body_to_range?: number | null
           model_name?: string
           model_version?: string

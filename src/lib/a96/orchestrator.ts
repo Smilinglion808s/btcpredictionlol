@@ -420,15 +420,22 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     // Load AAS shadow row for this prediction (Layer A/B directions + base selector).
     const { data: shadow } = await sb
       .from("model7_aas96_shadow")
-      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed, skip_reason")
+      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed, skip_reason, layer_a_prob_mean")
       .eq("prediction_id", predictionId)
       .maybeSingle();
+
     if (!shadow) { await emitUpstreamSkip("AAS96_UPSTREAM_SKIP:shadow_row_missing"); return; }
     const s = shadow as Record<string, unknown>;
     const a = s.layer_a_final_direction as string | null;
     const b = s.layer_b_final_direction as string | null;
     const base = s.selector_pre_override_selected_layer as string | null;
     const aasSkipReason = (s.skip_reason as string | null) ?? "upstream_ineligible";
+    const rawLayerAProb = s.layer_a_prob_mean;
+    const layerAProbMean =
+      typeof rawLayerAProb === "number" ? rawLayerAProb
+      : rawLayerAProb == null ? null
+      : Number(rawLayerAProb);
+
     if ((a !== "GREEN" && a !== "RED") || (b !== "GREEN" && b !== "RED")) {
       await emitUpstreamSkip(`AAS96_UPSTREAM_SKIP:${aasSkipReason}`);
       return;
@@ -516,6 +523,14 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         decision_reason: reason,
         fit_selector_override_fired: false,
         agreement_veto_fired: false,
+        // r2 margin-band audit — not evaluated when candle data is invalid.
+        margin_veto_fired: false,
+        layer_a_prob_mean: layerAProbMean,
+        layer_a_prob_margin: layerAProbMean != null ? Math.abs(layerAProbMean - 0.5) : null,
+        layer_a_probability_valid: layerAProbMean != null && Number.isFinite(layerAProbMean) && layerAProbMean >= 0 && layerAProbMean <= 1,
+        margin_band_min: A96_CONFIG.layer_a_margin_min_inclusive,
+        margin_band_max: A96_CONFIG.layer_a_margin_max_exclusive,
+        margin_band_eligible: false,
         distance_from_4_candle_low_bps: null,
         mean_2_candle_body_to_range: null,
         distance_veto_condition: false,
@@ -529,9 +544,10 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         ...streamAudit,
       } as never, { onConflict: "prediction_id" });
       if (absErr) throw absErr;
-      await emitUpstreamSkip(`A96_ABSTAIN:${reason}`);
+      // r2: invalid-candle-data rows must not emit a webhook.
       return;
     }
+
 
     // Compute agreement features from the validated snapshot.
     let feature_history_valid = true;
@@ -547,6 +563,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     const engineInput = {
       layerADirection: a as "GREEN" | "RED",
       layerBDirection: b as "GREEN" | "RED",
+      layerAProbMean,
       baseSelectedLayer: base as Layer,
       fitState,
       targetTimestamp: targetTs,
@@ -577,6 +594,14 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       decision_reason: decision.reason,
       fit_selector_override_fired: decision.fit_selector_override_fired,
       agreement_veto_fired: decision.agreement_veto_fired,
+      // r2 margin-band audit
+      margin_veto_fired: decision.margin_veto_fired,
+      layer_a_prob_mean: decision.layer_a_prob_mean,
+      layer_a_prob_margin: decision.layer_a_prob_margin,
+      layer_a_probability_valid: decision.layer_a_probability_valid,
+      margin_band_min: A96_CONFIG.layer_a_margin_min_inclusive,
+      margin_band_max: A96_CONFIG.layer_a_margin_max_exclusive,
+      margin_band_eligible: decision.margin_band_eligible,
       distance_from_4_candle_low_bps: distanceBps,
       mean_2_candle_body_to_range: meanBody,
       distance_veto_condition: decision.feature_values.distance_veto_condition,
@@ -591,9 +616,10 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
 
-    // Emit a96 prediction webhook — second active outbound source alongside
-    // TD1-RC. Only fire on directional (GREEN/RED) decisions with a valid
-    // prospective row; ABSTAIN and invalid rows do not emit.
+    // r2 webhook policy: emit ONLY on directional (GREEN/RED) decisions with
+    // prospective_valid=true. All abstain outcomes (margin, agreement veto,
+    // invalid probability, invalid candle data, prospective_invalid) are
+    // silent — no webhook.
     if (
       prospectiveValid &&
       (decision.prediction === "GREEN" || decision.prediction === "RED")
@@ -615,12 +641,8 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       } catch (whErr) {
         await logApiError(sb, "a96-webhook-created-error", { prediction_id: predictionId }, whErr);
       }
-    } else if (decision.prediction === "ABSTAIN") {
-      // Emit abstain webhook so downstream consumers see the SKIP for this candle.
-      await emitUpstreamSkip(`A96_ABSTAIN:${decision.reason ?? "abstain"}`);
-    } else if (!prospectiveValid) {
-      await emitUpstreamSkip(`A96_ABSTAIN:prospective_invalid:${prospectiveInvalidReason ?? "unknown"}`);
     }
+
 
   } catch (e) {
     await logApiError(sb, "a96-error", { prediction_id: predictionId }, e);

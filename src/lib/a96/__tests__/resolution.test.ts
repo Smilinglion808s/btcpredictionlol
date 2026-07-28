@@ -36,12 +36,13 @@ describe("a96Decide always populates snapshot from provided fit state", () => {
   it("carries fit_resolved_count and per-layer nets into the decision", () => {
     const fit: FitState = { ...baseFit, comparable_resolved_count: 8, layer_a_net: 3, layer_b_net: -3 };
     const d = a96Decide({
-      layerADirection: "GREEN", layerBDirection: "RED", baseSelectedLayer: "A",
+      layerADirection: "GREEN", layerBDirection: "RED", layerAProbMean: 0.52, baseSelectedLayer: "A",
       fitState: fit,
       targetTimestamp: new Date("2026-07-24T20:45:00Z"),
       targetOpen: 64186.4,
       priorCandles: [],
     });
+
     expect(d.fit_state_snapshot.comparable_resolved_count).toBe(8);
     expect(d.fit_state_snapshot.layer_a_net).toBe(3);
     expect(d.fit_state_snapshot.layer_b_net).toBe(-3);
