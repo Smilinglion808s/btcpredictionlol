@@ -1,98 +1,101 @@
-# Model 3 Selective Edge R2 — Upgrade Patch (replaces R1)
 
-R2 replaces R1 in place. R1 historical prediction rows and fits stay in the DB unchanged (never mutated or relabeled), but from activation forward every new prediction and every new fit is R2. UI hero, CSV, stats — all point at R2 rows going forward, with R1 rows still present in the underlying tables for historical continuity.
+# Universal CSV v2 — Canonical, Auditable, Spine-Complete
 
-## 1. Version identity
+This is strictly an export/data layer upgrade. No model, retraining, threshold, abstention, webhook, or historical-row logic is touched. Legacy columns are preserved 1:1; new canonical/audit sections are appended in grouped order.
 
-- `M3SE_MODEL_VERSION = "m3-se-r2"`
-- `M3SE_FEATURE_SCHEMA_VERSION = "m3-se-features-v2"`
-- Old R1 rows keep their original `model_version = "m3-se-r1"` tag.
-- New rows are tagged `m3-se-r2`. On next scheduled candle, R1 stops emitting; R2 takes over.
+## Scope confirmation (unchanged)
+TD1-RC / AAS96 / a96 / Model 6 / A2 prediction logic, retraining, thresholds, abstention rules, webhooks, automated betting, and all historical model outputs remain untouched. This task only edits export/query code and adds a schema manifest generator.
 
-## 2. Training windows (fixed)
+## Deliverables
 
-- Slow: latest **1024** rows, uniform × class weight
-- Fast: latest **384** rows, `recency = 0.5 ** (age/96)` × class weight
-- Calibration: latest **256** rows, held out from all coefficient fits
-- OOF: warmup **384**, block size **32**, strict past-only
-- Insufficient history → **retain previous active fit** (no shrink-and-activate)
+1. **New server function** `exportUniversalCsv` in `src/lib/predictions.functions.ts` (or new `src/lib/universal_export.functions.ts`) that returns `{ csv, manifest }`. Runs server-side with `supabaseAdmin` so it can page across `predictions`, `predictions_archive`, `candles`, `model7_td1_rc_shadow`, `model7_aas96_shadow`, `a96_predictions`, and `a96_fit_state`.
 
-## 3. Capped class-balance weights
+2. **Rewrite `downloadUniversal`** in `src/routes/_authenticated/history.tsx` to call the server function, download `btc15m_universal.csv` and `btc15m_universal_schema_manifest.json` as a pair (two blob downloads, or a single `.zip` — will use two files, simpler).
 
+3. **New pure module** `src/lib/universal_export/` containing:
+   - `spine.ts` — generate contiguous 15-min boundary list between min/max ts.
+   - `canonical.ts` — canonical lookup + validation from `candles` (BTC-USDT / 15m / okx / confirm=true / exact ts / single row).
+   - `normalize.ts` — YES/NO/SKIP/NO CLEAR EDGE/ABSTAIN → GREEN/RED/ABSTAIN; canonical scoring (+1/-1/0/null).
+   - `abstention.ts` — model-specific STRATEGIC vs OPERATIONAL classifier with normalized reason codes from the spec.
+   - `manifest.ts` — build the JSON manifest from a typed column registry.
+   - `columns.ts` — single source of truth: `{ name, category, source, prediction_time_safe, resolution_time_only, nullable, description, model_dep }[]`.
+
+4. **Tests** under `src/lib/universal_export/__tests__/`:
+   - `canonical.test.ts` — query shape requires all 5 filters; missing/unconfirmed/wrong-provider/wrong-symbol/duplicate/mismatched-ts/nonfinite-ohlc all yield `valid=false` with the correct reason; direction derives only from open/close; no nearest-fallback.
+   - `normalize.test.ts` — YES→GREEN, NO→RED, SKIP/ABSTAIN/NO CLEAR EDGE→ABSTAIN; scoring: correct=+1, wrong=-1, abstain=0, PUSH=null, invalid GT=null, missing pred=null.
+   - `spine.test.ts` — exact 1 row per expected boundary between range; missing predictions produce placeholder rows; two nonadjacent rows never appear contiguous; prior_4/21/30 flags reflect real uninterrupted history.
+   - `abstention.test.ts` — sample reason strings from spec route to correct STRATEGIC/OPERATIONAL bucket.
+   - `manifest.test.ts` — every emitted CSV column exists in the manifest; `prediction_time_safe=false` for every CANONICAL_OUTCOME / LEGACY_OUTCOME / COUNTERFACTUAL / RESOLUTION_METADATA column.
+   - `idempotent.test.ts` — same input rows produce byte-identical CSV twice.
+   - `disagreement.test.ts` — mismatched legacy vs canonical → `canonical_disagrees_with_legacy=true`.
+   - `a96_lineage.test.ts` — `a96_fit_episode_lineage_valid=false` when episode changes under same artifact.
+   - `prospective.test.ts` — a96 row with `prospective_valid=false` yields `a96_canonical_result_score=null` and is flagged `a96_prospective_row_valid=false`.
+
+## Data flow
+
+```text
+range [tsMin, tsMax]
+   │
+   ├── page predictions + archive union (existing helper, already paginated)
+   ├── page candles WHERE symbol='BTC-USDT' AND timeframe='15m' AND fetch_source='okx' AND confirm=true AND candle_ts BETWEEN ...
+   ├── page model7_td1_rc_shadow (candle_ts BETWEEN)
+   ├── page model7_aas96_shadow  (candle_ts BETWEEN)
+   ├── page a96_predictions      (target_candle_ts BETWEEN) + a96_fit_state (lineage)
+   │
+   ▼
+buildSpine(tsMin, tsMax) → boundary[]
+   │
+   ▼
+for each boundary:
+   canonical = lookupCanonical(candlesMap, boundary)   // never nearest, never substitute
+   pred      = predsByCandleTs.get(boundary) ?? null
+   td1, aas96, a96 = respective maps (also keyed by exact boundary)
+   row = mergeLegacy(pred) ⊕ canonicalBlock ⊕ perModelCanonical ⊕ abstentionClass ⊕ lineage ⊕ availabilityFlags ⊕ spineAudit ⊕ timingAudit
+   emit row
+sort by expected_candle_boundary asc
 ```
-green_weight = clamp(N / (2*green_count), 0.85, 1.15)
-red_weight   = clamp(N / (2*red_count),   0.85, 1.15)
-```
-Applied to slow, fast, and stacker fits. Persisted on fit: `training_green_count`, `training_red_count`, `green_class_weight`, `red_class_weight`.
 
-Requires `logistic.ts` sample-weight support.
+## New column groups (appended after existing legacy columns, order preserved)
 
-## 4. Selector rebuild (rank-based)
+- **Canonical outcome**: 14 fields from §1.
+- **Legacy preservation flags**: 4 fields from §2 (`legacy_actual_direction`, `legacy_status`, `legacy_settlement_source`, `canonical_disagrees_with_legacy`).
+- **Canonical per-model scoring**: 8 fields from §3.
+- **Spine**: `expected_candle_boundary`, `prediction_row_present`, `missing_prediction_reason`, `previous_expected_candle_ts`, `gap_from_previous_exported_row_seconds`, `missing_boundaries_since_previous_row`, `prior_4_boundaries_contiguous`, `prior_21_boundaries_contiguous`, `prior_30_boundaries_contiguous`.
+- **Timing**: 7 fields from §5.
+- **Abstention classification (per model × 5 fields)**: `{td1,aas96,a96,base}_output_class`, `_abstain_class`, `_normalized_abstain_reason`, `_prospective_row_valid`, `_prospective_invalid_reason`.
+- **Lineage**: 13 fields from §7 including `a96_fit_episode_lineage_valid` / `_error`.
+- **Availability**: 6 flags from §8.
+- **`universal_schema_version` = `"btc15m-universal-v2"`**.
 
-**Drop** raw_direction_indicator, regime_label, regime_transition_score from selector fitting.
+## Normalization rules (canonical, applied only for canonical_* fields)
 
-**Selector inputs (11):**
-`signed_consensus, consensus_strength, expert_agreement, expert_disagreement, stacker_logit_margin, aligned_trend_strength, aligned_return_8, aligned_stretch, wick_dominance, volatility_ratio, volume_zscore`
+`YES→GREEN`, `NO→RED`, `SKIP|NO CLEAR EDGE|ABSTAIN→ABSTAIN`. Scoring uses only stored prediction-time output vs canonical direction:
 
-Consensus fields derived from logits of slow/fast/stacker per spec §5.
+| canonical_dir | pred    | score |
+|---------------|---------|-------|
+| GREEN/RED     | matches | +1    |
+| GREEN/RED     | opp     | -1    |
+| GREEN/RED     | ABSTAIN | 0     |
+| PUSH          | any     | null  |
+| invalid GT    | any     | null  |
+| any           | missing | null  |
 
-**Rank interpretation:** L2 logistic selector; use `selector_score_raw` (pre-Platt) for the publish gate. Platt-calibrated `p_correct_calibrated` kept for diagnostics only.
+Existing `status`, `correct`, `result_score`, `td1_rc_result`, etc. are **not** used to compute canonical scores and remain untouched.
 
-**Penalty search:** {0.03, 0.10, 0.30, 1.00} — pick highest chronological OOF ROC-AUC, Brier tiebreak.
+## Formatting
 
-## 5. Publication
+ISO-8601 UTC, existing MT columns preserved, booleans as `true`/`false`, numbers as numbers (not quoted), JSON columns via stable `JSON.stringify` with sorted keys helper for object columns, ascending sort by `expected_candle_boundary`, no removal/rename of existing columns.
 
-- `target_coverage = 0.60`
-- `selection_threshold = P40(selector_score_raw)` on calibration segment
-- Publish `raw_prediction` when `selector_score_raw >= threshold`, else ABSTAIN with reason `below_selector_rank`
-- No 0.50 floor. No movement gate. Data-invalid still ABSTAINs.
+## Manifest
 
-Persist on fit: `target_coverage`, `calibration_estimated_coverage`, `selection_threshold`, `selector_score_calibration_{min,median,p40,p60,max}`.
+`btc15m_universal_schema_manifest.json` — array of column descriptors. Any column touching actual OHLC / direction / result / score / resolution timestamp / counterfactual gets `prediction_time_safe:false`.
 
-## 6. Fit diagnostics
+## Non-goals (explicit)
 
-Direction: OOF & calibration raw+balanced accuracy, Brier, log loss, predicted GREEN/RED share.
-Selector: ROC-AUC, PR-AUC, Brier, log loss, top-20/40/60 accuracy, bottom-40 accuracy, top-60 lift vs raw and vs bottom-40.
+- No changes to `prediction.server.ts`, model orchestrators, retraining, or resolution logic.
+- No writes to historical rows, no repair of a96 fit episodes.
+- No new DB migrations (canonical lookup uses existing `candles` table; if any small denormalization is needed, will call it out and revert to pure-read).
 
-Reject only on: non-finite artifact, wrong schema, train/cal overlap, reproduction failure, constant probabilities, insufficient rows.
+## Post-implementation report
 
-## 7. Schema migration
-
-`model3_se_predictions` — add nullable columns:
-`selector_score_raw, selector_score_percentile, p_correct_calibrated, signed_consensus, consensus_strength, expert_agreement, expert_disagreement, minimum_expert_strength, stacker_logit_margin, green_class_weight, red_class_weight, fast_recency_half_life, fit_age_predictions`
-
-`model3_se_fits` — add nullable columns for class-balance stats, calibration score quantiles, estimated coverage, balanced accuracies, predicted shares, selector rank-band accuracies, lifts, and lambda search JSON.
-
-All new columns nullable so existing R1 rows/fits remain valid.
-
-## 8. Code changes
-
-- `config.ts` — R2 constants, window sizes, target coverage 0.60, allowed lambdas, recency half-life 96
-- `logistic.ts` — add optional `sampleWeights: number[]` to `trainLogistic`
-- `features.ts` — new `buildSelectorRowV2` using consensus features; update `M3SE_ALIGNED_FEATURE_NAMES` to R2 set
-- `train.ts` — rewrite pipeline: fixed windows, class + recency weights, rank threshold, lambda search over selector penalty, new diagnostic outputs, retain-prior-fit-on-insufficient-data at caller
-- `orchestrator.ts` — populate every new prediction column, gate on `selector_score_raw`, wire retain-prior-fit path
-- `model3_selective_edge.functions.ts` — stats & pending & CSV all filter to `m3-se-r2` (R1 rows remain in table, out of scope for live stats)
-- `stats.tsx` — hero card labeled "M3-SE-R2"; abstain reason text unchanged
-
-## 9. 96-row summary (R2-only)
-
-Server fn returns coverage, raw/published accuracy, lift, net, GREEN/RED share and accuracy, agreement/disagreement accuracy, top-20/40/60 and bottom-40 score accuracy from the latest 96 resolved R2 rows.
-
-## 10. Out of scope (per spec §10)
-
-No movement gate, hard trend/vol vetoes, direction-specific rules, regime models, auto feature selection, W/L counters, or 96-outcome threshold optimization.
-
-## Execution order
-
-1. Migration (columns on both tables)
-2. `logistic.ts` sample weights
-3. `config.ts` R2 constants
-4. `features.ts` R2 selector builder
-5. `train.ts` R2 pipeline
-6. `orchestrator.ts` wiring
-7. `model3_selective_edge.functions.ts` version filter + summary + CSV
-8. `stats.tsx` label
-9. Smoke on next scheduled candle
-
-Old R1 rows stay in `model3_se_predictions` untouched — they're just no longer the live model.
+I will report files changed, tests added + results, and counts for: total boundaries, missing prediction rows, valid canonical candles, invalid canonical candles, legacy/canonical disagreements, strategic abstentions per model, operational failures per model, and an explicit confirmation that no model / retraining / webhook / betting code was modified.

@@ -89,6 +89,96 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
   return merged;
 });
 
+/**
+ * Universal CSV v2 — canonical, spine-aligned export with abstain
+ * classification, timing audits, lineage, and a JSON schema manifest.
+ * Returns { csv, manifest, stats } as JSON strings the client can save.
+ */
+export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { buildUniversalExport } = await import("./universal_export/build");
+
+  async function pageAll<T = Record<string, unknown>>(
+    table: string,
+    orderCol: string,
+    cap = 40000,
+  ): Promise<T[]> {
+    const PAGE = 1000;
+    const out: T[] = [];
+    for (let from = 0; from < cap; from += PAGE) {
+      const { data, error } = await sb
+        .from(table as never)
+        .select("*")
+        .order(orderCol, { ascending: false })
+        .range(from, Math.min(from + PAGE, cap) - 1);
+      if (error) throw error;
+      const batch = (data ?? []) as T[];
+      out.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    return out;
+  }
+
+  const [live, arch, td1Rows, aas96Rows, a96Rows] = await Promise.all([
+    pageAll<Record<string, unknown>>("predictions", "candle_ts", 10000),
+    pageAll<Record<string, unknown>>("predictions_archive", "candle_ts", 40000),
+    pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000),
+    pageAll<Record<string, unknown>>("model7_aas96_shadow", "target_candle_ts", 20000),
+    pageAll<Record<string, unknown>>("a96_predictions", "target_candle_ts", 20000),
+  ]);
+
+  // Merge live + archive predictions (dedupe by id).
+  const seen = new Set<string>();
+  const predictions: Record<string, unknown>[] = [];
+  for (const r of [...live, ...arch]) {
+    const id = String((r as { id?: unknown }).id ?? "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    predictions.push(r);
+  }
+
+  // Canonical OKX 15m candles across the export range.
+  const tsAll: number[] = [];
+  for (const p of predictions) { const t = Date.parse(String(p.candle_ts ?? "")); if (Number.isFinite(t)) tsAll.push(t); }
+  for (const r of td1Rows) { const t = Date.parse(String((r as Record<string, unknown>).candle_ts ?? "")); if (Number.isFinite(t)) tsAll.push(t); }
+  for (const r of aas96Rows) { const t = Date.parse(String((r as Record<string, unknown>).target_candle_ts ?? "")); if (Number.isFinite(t)) tsAll.push(t); }
+  for (const r of a96Rows) { const t = Date.parse(String((r as Record<string, unknown>).target_candle_ts ?? "")); if (Number.isFinite(t)) tsAll.push(t); }
+
+  let candles: Record<string, unknown>[] = [];
+  if (tsAll.length) {
+    const minIso = new Date(Math.min(...tsAll) - 1000).toISOString();
+    const maxIso = new Date(Math.max(...tsAll) + 1000).toISOString();
+    const PAGE = 1000;
+    for (let from = 0; from < 40000; from += PAGE) {
+      const { data, error } = await sb
+        .from("candles")
+        .select("id, symbol, timeframe, fetch_source, confirm, candle_ts, open, high, low, close, volume")
+        .eq("symbol", "BTC-USDT")
+        .eq("timeframe", "15m")
+        .eq("fetch_source", "okx")
+        .eq("confirm", true)
+        .gte("candle_ts", minIso)
+        .lte("candle_ts", maxIso)
+        .order("candle_ts", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const batch = (data ?? []) as Record<string, unknown>[];
+      candles.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+  }
+
+  const { csv, manifest, stats } = buildUniversalExport({
+    predictions,
+    candles: candles as never,
+    td1Rows,
+    aas96Rows,
+    a96Rows,
+  });
+
+  return { csv, manifest, stats };
+});
+
 export const getLatestPrediction = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
   const { data, error } = await sb
