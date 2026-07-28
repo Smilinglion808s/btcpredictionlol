@@ -249,6 +249,86 @@ export function buildA96SkipWebhookPayload({
   };
 }
 
+// ── Model 3 — Selective Edge R2 (m3-se-r2) ───────────────────────────────
+// Active outbound webhook source alongside TD1-RC. Emits on every scored
+// candle: GREEN → YES, RED → NO, ABSTAIN → NO CLEAR EDGE (trade=false).
+export const M3SE_MODEL_ID = "m3-se";
+export const M3SE_DECISION_POLICY_VERSION = "m3-se-r2";
+
+export interface M3SeWebhookInputs {
+  row: Record<string, any>; // model3_se_predictions row payload
+}
+
+export function buildM3SeWebhookPayload({ row }: M3SeWebhookInputs) {
+  const candleTs = String(row.target_candle_ts);
+  const startMs = new Date(candleTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+
+  const published = String(row.published_prediction ?? "ABSTAIN");
+  const predictionLabel: "YES" | "NO" | "NO CLEAR EDGE" =
+    published === "GREEN" ? "YES" : published === "RED" ? "NO" : "NO CLEAR EDGE";
+  const trade = predictionLabel !== "NO CLEAR EDGE";
+
+  const pGreen = row.p_green_stacked_calibrated != null
+    ? Number(row.p_green_stacked_calibrated) : null;
+  let confidence = 0;
+  if (pGreen != null && Number.isFinite(pGreen)) {
+    confidence = predictionLabel === "YES"
+      ? Math.round(pGreen * 100)
+      : predictionLabel === "NO"
+        ? Math.round((1 - pGreen) * 100)
+        : Math.round(Math.max(pGreen, 1 - pGreen) * 100);
+  }
+
+  return {
+    model: M3SE_MODEL_ID,
+    model_version: String(row.model_version ?? "m3-se-r2"),
+    decision_policy_version: M3SE_DECISION_POLICY_VERSION,
+    feature_schema_version: row.feature_schema_version ?? null,
+    code_version: row.code_version ?? null,
+    model_fit_id: row.fit_id ?? null,
+
+    prediction: predictionLabel,
+    confidence,
+    trade,
+
+    published_prediction: published,
+    raw_prediction: row.raw_prediction ?? null,
+    raw_confidence: row.raw_confidence != null ? Number(row.raw_confidence) : null,
+    probability_green: pGreen,
+    p_correct_calibrated: row.p_correct_calibrated != null ? Number(row.p_correct_calibrated) : null,
+    selector_score_raw: row.selector_score_raw != null ? Number(row.selector_score_raw) : null,
+    selector_score_percentile: row.selector_score_percentile != null
+      ? Number(row.selector_score_percentile) : null,
+    selection_threshold: row.selection_threshold != null ? Number(row.selection_threshold) : null,
+    selector_margin: row.selector_margin != null ? Number(row.selector_margin) : null,
+
+    abstain_reason: row.abstain_reason ?? null,
+    abstain_category: row.abstain_category ?? null,
+    abstain_detail: row.abstain_detail ?? null,
+    data_quality_valid: row.data_quality_valid !== false,
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: endsAt,
+
+    dedupe_key: `m3-se-BTC-USDT-15m-${startsAt}`,
+    prediction_id: null,
+
+    btc_price_at_prediction: row.target_open != null ? Number(row.target_open) : null,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
+
+
+
 export interface A96WebhookInputs {
   a96Row: Record<string, any>;     // a96_predictions row
   prediction: Record<string, any>; // predictions row (for btc price + candle_ts)
