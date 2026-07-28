@@ -324,7 +324,9 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
           retrain_attempted: !belowMin,
           retrain_reason: retrainReason,
         },
-      });
+      };
+      await sb.from("model3_se_predictions").insert(noFitRow);
+      await emitM3SeWebhook(sb, noFitRow);
       return;
     }
 
