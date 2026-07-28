@@ -294,7 +294,7 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     }
 
     if (!active) {
-      await sb.from("model3_se_predictions").insert({
+      const noFitRow = {
         fit_id: null,
         model_version: M3SE_MODEL_VERSION,
         feature_schema_version: M3SE_FEATURE_SCHEMA_VERSION,
