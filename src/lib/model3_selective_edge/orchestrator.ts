@@ -1,5 +1,6 @@
-// Orchestrator for m3-se-r1: called from the shared shadow trigger with a
+// Orchestrator for m3-se-r2: called from the shared shadow trigger with a
 // target candle timestamp. Fully wrapped so failures never break siblings.
+// R1 rows already in the DB are preserved; R2 rows are tagged model_version=m3-se-r2.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -14,6 +15,7 @@ import {
   M3SE_TARGET_COVERAGE,
   M3SE_MIN_LABELED_ROWS,
   M3SE_CODE_VERSION,
+  M3SE_FAST_HALF_LIFE,
 } from "./config";
 import { buildTrainingMatrix, M3SE_FEATURE_NAMES, type Candle } from "./features";
 import { trainM3SE, scoreM3SE, type M3SEArtifact } from "./train";
@@ -84,12 +86,14 @@ type ActiveFit = {
   selector_roc_auc: number | null;
   selector_pr_auc: number | null;
   selector_brier: number | null;
+  green_class_weight: number | null;
+  red_class_weight: number | null;
 };
 
 async function loadActiveFit(sb: SupabaseClient): Promise<ActiveFit | null> {
   const { data } = await sb
     .from("model3_se_fits")
-    .select("fit_id, artifact, activated_at, estimated_coverage, target_coverage, calibration_direction_accuracy, oof_direction_accuracy, selector_roc_auc, selector_pr_auc, selector_brier")
+    .select("fit_id, artifact, activated_at, calibration_estimated_coverage, estimated_coverage, target_coverage, calibration_direction_accuracy, oof_direction_accuracy, selector_roc_auc, selector_pr_auc, selector_brier, green_class_weight, red_class_weight")
     .eq("model_version", M3SE_MODEL_VERSION)
     .eq("status", "active")
     .order("activated_at", { ascending: false })
@@ -102,13 +106,15 @@ async function loadActiveFit(sb: SupabaseClient): Promise<ActiveFit | null> {
     fit_id: String(d.fit_id),
     artifact: d.artifact as M3SEArtifact,
     activated_at: (d.activated_at as string | null) ?? null,
-    estimated_coverage: num(d.estimated_coverage),
+    estimated_coverage: num(d.calibration_estimated_coverage) ?? num(d.estimated_coverage),
     target_coverage: num(d.target_coverage),
     calibration_direction_accuracy: num(d.calibration_direction_accuracy),
     oof_direction_accuracy: num(d.oof_direction_accuracy),
     selector_roc_auc: num(d.selector_roc_auc),
     selector_pr_auc: num(d.selector_pr_auc),
     selector_brier: num(d.selector_brier),
+    green_class_weight: num(d.green_class_weight),
+    red_class_weight: num(d.red_class_weight),
   };
 }
 
@@ -124,13 +130,20 @@ async function resolvedRowsSince(sb: SupabaseClient, fitId: string, activatedAt:
   return count ?? 0;
 }
 
+async function predictionsForFit(sb: SupabaseClient, fitId: string): Promise<number> {
+  const { count } = await sb
+    .from("model3_se_predictions")
+    .select("prediction_id", { count: "exact", head: true })
+    .eq("fit_id", fitId);
+  return count ?? 0;
+}
+
 async function trainAndStoreNewFit(sb: SupabaseClient, candles: Candle[]): Promise<
   { ok: true; fit_id: string } | { ok: false; reason: string }
 > {
   const { X, y, rowTimestamps } = buildTrainingMatrix(candles);
   const trained = trainM3SE(X, y, rowTimestamps);
   if (!trained.ok) {
-    // Log the failure as a rejected fit so it shows up in diagnostics.
     try {
       await sb.from("model3_se_fits").insert({
         fit_id: `rejected_${Date.now()}`,
@@ -146,13 +159,14 @@ async function trainAndStoreNewFit(sb: SupabaseClient, candles: Candle[]): Promi
     return { ok: false, reason: trained.reason };
   }
 
-  // Retire prior active fits (advisory: no locking, but only run from cron).
+  // Retire prior active fits AFTER we know we have a valid replacement.
   await sb.from("model3_se_fits")
     .update({ status: "retired", retired_at: new Date().toISOString() })
     .eq("model_version", M3SE_MODEL_VERSION)
     .eq("status", "active");
 
   const now = new Date().toISOString();
+  const d = trained.diagnostics;
   const { error } = await sb.from("model3_se_fits").insert({
     fit_id: trained.fit_id,
     model_version: M3SE_MODEL_VERSION,
@@ -175,23 +189,45 @@ async function trainAndStoreNewFit(sb: SupabaseClient, candles: Candle[]): Promi
     calibration_start: trained.windows.calibration_start_ts || null,
     calibration_end: trained.windows.calibration_end_ts || null,
     calibration_rows: trained.windows.calibration_rows,
-    slow_lambda: trained.diagnostics.slow_lambda,
-    fast_lambda: trained.diagnostics.fast_lambda,
-    stacker_lambda: trained.diagnostics.stacker_lambda,
-    selector_lambda: trained.diagnostics.selector_lambda,
+    slow_lambda: d.slow_lambda,
+    fast_lambda: d.fast_lambda,
+    stacker_lambda: d.stacker_lambda,
+    selector_lambda: d.selector_lambda,
     selection_threshold: trained.artifact.selection_threshold,
-    target_coverage: trained.diagnostics.target_coverage,
-    estimated_coverage: trained.diagnostics.estimated_coverage,
-    oof_direction_accuracy: trained.diagnostics.oof_direction_accuracy,
-    oof_direction_brier: trained.diagnostics.oof_direction_brier,
-    oof_direction_log_loss: trained.diagnostics.oof_direction_log_loss,
-    calibration_direction_accuracy: trained.diagnostics.calibration_direction_accuracy,
-    calibration_direction_brier: trained.diagnostics.calibration_direction_brier,
-    calibration_direction_log_loss: trained.diagnostics.calibration_direction_log_loss,
-    selector_roc_auc: trained.diagnostics.selector_roc_auc,
-    selector_pr_auc: trained.diagnostics.selector_pr_auc,
-    selector_brier: trained.diagnostics.selector_brier,
-    selector_log_loss: trained.diagnostics.selector_log_loss,
+    target_coverage: d.target_coverage,
+    estimated_coverage: d.calibration_estimated_coverage,
+    calibration_estimated_coverage: d.calibration_estimated_coverage,
+    oof_direction_accuracy: d.oof_direction_accuracy,
+    oof_direction_brier: d.oof_direction_brier,
+    oof_direction_log_loss: d.oof_direction_log_loss,
+    oof_balanced_accuracy: d.oof_direction_balanced_accuracy,
+    calibration_direction_accuracy: d.calibration_direction_accuracy,
+    calibration_direction_brier: d.calibration_direction_brier,
+    calibration_direction_log_loss: d.calibration_direction_log_loss,
+    calibration_balanced_accuracy: d.calibration_direction_balanced_accuracy,
+    predicted_green_share: d.predicted_green_share,
+    predicted_red_share: d.predicted_red_share,
+    selector_roc_auc: d.selector_roc_auc,
+    selector_pr_auc: d.selector_pr_auc,
+    selector_brier: d.selector_brier,
+    selector_log_loss: d.selector_log_loss,
+    selector_top20_accuracy: d.selector_top20_accuracy,
+    selector_top40_accuracy: d.selector_top40_accuracy,
+    selector_top60_accuracy: d.selector_top60_accuracy,
+    selector_bottom40_accuracy: d.selector_bottom40_accuracy,
+    selector_top60_lift_vs_raw: d.selector_top60_lift_vs_raw,
+    selector_top60_lift_vs_bottom40: d.selector_top60_lift_vs_bottom40,
+    selector_lambda_search: d.selector_lambda_search,
+    selector_score_calibration_min: d.selector_score_calibration_min,
+    selector_score_calibration_median: d.selector_score_calibration_median,
+    selector_score_calibration_p40: d.selector_score_calibration_p40,
+    selector_score_calibration_p60: d.selector_score_calibration_p60,
+    selector_score_calibration_max: d.selector_score_calibration_max,
+    training_green_count: d.training_green_count,
+    training_red_count: d.training_red_count,
+    green_class_weight: d.green_class_weight,
+    red_class_weight: d.red_class_weight,
+    fast_recency_half_life: d.fast_half_life,
     artifact: trained.artifact,
   });
   if (error) return { ok: false, reason: `insert_error:${error.message}` };
@@ -214,18 +250,17 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       .maybeSingle();
     if (existing) return;
 
-    // Ensure history includes the immediately-prior confirmed candle.
     const historyResult = await waitForFinalizedHistory(sb, targetTs);
     const { candles, ready } = historyResult;
     const priorAttempts = historyResult.attempts;
 
-    // Load or (re)train fit.
     let active = await loadActiveFit(sb);
-    let dataQualityValid = ready && candles.length >= 100;
     const dqReasons: string[] = [];
     if (!ready) dqReasons.push("prior_candle_missing");
     if (candles.length < 100) dqReasons.push(`insufficient_history:${candles.length}`);
-    if (candles.length < M3SE_MIN_LABELED_ROWS) dqReasons.push(`below_min_labeled_rows:${candles.length}/${M3SE_MIN_LABELED_ROWS}`);
+    const belowMin = candles.length < M3SE_MIN_LABELED_ROWS;
+    if (belowMin) dqReasons.push(`below_min_labeled_rows:${candles.length}/${M3SE_MIN_LABELED_ROWS}`);
+    const dataQualityValid = ready && candles.length >= 100;
 
     let retrainedThisRun = false;
     let retrainReason: string | null = null;
@@ -233,9 +268,11 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
 
     if (active) {
       resolvedSince = await resolvedRowsSince(sb, active.fit_id, active.activated_at);
-      const coverageTooLow = (active.estimated_coverage ?? M3SE_TARGET_COVERAGE) < M3SE_TARGET_COVERAGE * 0.8;
       const cadence = resolvedSince >= M3SE_RETRAIN_EVERY_RESOLVED_ROWS;
-      if (cadence || coverageTooLow) {
+      const coverageTooLow = (active.estimated_coverage ?? M3SE_TARGET_COVERAGE) < M3SE_TARGET_COVERAGE * 0.8;
+      // Retain-prior-fit rule (spec §2): don't try to activate a smaller
+      // replacement if history is insufficient.
+      if ((cadence || coverageTooLow) && !belowMin) {
         retrainReason = cadence
           ? `cadence:${resolvedSince}>=${M3SE_RETRAIN_EVERY_RESOLVED_ROWS}`
           : `coverage_low:${active.estimated_coverage}<${M3SE_TARGET_COVERAGE * 0.8}`;
@@ -243,17 +280,20 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
         retrainedThisRun = t.ok;
         if (!t.ok) retrainReason += `|train_failed:${t.reason}`;
         if (t.ok) active = await loadActiveFit(sb);
+      } else if ((cadence || coverageTooLow) && belowMin) {
+        retrainReason = `retain_prior_fit:below_min_labeled_rows:${candles.length}/${M3SE_MIN_LABELED_ROWS}`;
       }
-    } else {
+    } else if (!belowMin) {
       retrainReason = "bootstrap";
       const t = await trainAndStoreNewFit(sb, candles);
       retrainedThisRun = t.ok;
       if (!t.ok) retrainReason += `|train_failed:${t.reason}`;
       if (t.ok) active = await loadActiveFit(sb);
+    } else {
+      retrainReason = `bootstrap_deferred:below_min_labeled_rows:${candles.length}/${M3SE_MIN_LABELED_ROWS}`;
     }
 
     if (!active) {
-      // Bootstrap failure: still record an ABSTAIN row for auditability.
       await sb.from("model3_se_predictions").insert({
         fit_id: null,
         model_version: M3SE_MODEL_VERSION,
@@ -276,11 +316,12 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
         retrained_this_run: retrainedThisRun,
         retrain_reason: retrainReason,
         resolved_rows_since_fit: resolvedSince,
+        fast_recency_half_life: M3SE_FAST_HALF_LIFE,
         publish_gates: {
           data_quality_valid: false,
           dq_reasons: dqReasons,
           has_active_fit: false,
-          retrain_attempted: true,
+          retrain_attempted: !belowMin,
           retrain_reason: retrainReason,
         },
       });
@@ -294,7 +335,8 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     const featureNanCount = targetFeatureRow.reduce((n, v) => n + (Number.isFinite(v) ? 0 : 1), 0);
     const featureRowValid = featureNanCount === 0;
 
-    const selectorMargin = scored.pCorrectCalibrated - active.artifact.selection_threshold;
+    const threshold = active.artifact.selection_threshold;
+    const selectorMargin = scored.selectorScoreRaw - threshold;
     const directionConfidenceGap = Math.abs(scored.pStackedCalibrated - 0.5);
 
     let published: "GREEN" | "RED" | "ABSTAIN" = scored.rawDir;
@@ -311,34 +353,41 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       abstainReason = "invalid_data";
       abstainCategory = "invalid_features";
       abstainDetail = `feature row has ${featureNanCount} non-finite value(s)`;
-    } else if (scored.pCorrectCalibrated < active.artifact.selection_threshold) {
+    } else if (scored.selectorScoreRaw < threshold) {
       published = "ABSTAIN";
-      abstainReason = "below_correctness_rank";
-      abstainCategory = "below_correctness_rank";
+      abstainReason = "below_selector_rank";
+      abstainCategory = "below_selector_rank";
       abstainDetail =
-        `p_correct_calibrated=${scored.pCorrectCalibrated.toFixed(4)} < ` +
-        `selection_threshold=${active.artifact.selection_threshold.toFixed(4)} ` +
-        `(margin=${selectorMargin.toFixed(4)}; raw_dir=${scored.rawDir}; ` +
-        `p_green_cal=${scored.pStackedCalibrated.toFixed(4)}; ` +
-        `dir_gap=${directionConfidenceGap.toFixed(4)}; ` +
+        `selector_score_raw=${scored.selectorScoreRaw.toFixed(4)} < ` +
+        `selection_threshold=${threshold.toFixed(4)} ` +
+        `(margin=${selectorMargin.toFixed(4)}; pct=${(scored.selectorScorePercentile * 100).toFixed(1)}; ` +
+        `raw_dir=${scored.rawDir}; p_green_cal=${scored.pStackedCalibrated.toFixed(4)}; ` +
+        `agreement=${scored.consensus.expertAgreement}; ` +
+        `signed_consensus=${scored.consensus.signedConsensus.toFixed(3)}; ` +
+        `stacker_margin=${scored.consensus.stackerLogitMargin.toFixed(3)}; ` +
         `fit_est_coverage=${active.estimated_coverage ?? "n/a"}; ` +
         `fit_target_coverage=${active.target_coverage ?? M3SE_TARGET_COVERAGE})`;
     }
+
+    const fitAge = await predictionsForFit(sb, active.fit_id);
 
     const publishGates = {
       data_quality_valid: dataQualityValid,
       dq_reasons: dqReasons,
       feature_row_valid: featureRowValid,
       feature_nan_count: featureNanCount,
-      selector_pass: scored.pCorrectCalibrated >= active.artifact.selection_threshold,
+      selector_pass: scored.selectorScoreRaw >= threshold,
+      selector_score_raw: scored.selectorScoreRaw,
+      selector_score_percentile: scored.selectorScorePercentile,
       selector_margin: selectorMargin,
-      selection_threshold: active.artifact.selection_threshold,
+      selection_threshold: threshold,
       p_correct_calibrated: scored.pCorrectCalibrated,
       p_correct_raw: scored.pCorrectRaw,
       p_green_stacked_calibrated: scored.pStackedCalibrated,
       direction_confidence_gap: directionConfidenceGap,
       raw_dir: scored.rawDir,
       raw_confidence: scored.rawConfidence,
+      consensus: scored.consensus,
       fit_id: active.fit_id,
       fit_activated_at: active.activated_at,
       fit_estimated_coverage: active.estimated_coverage,
@@ -352,9 +401,6 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       const v = targetFeatureRow[i];
       featCols[M3SE_FEATURE_NAMES[i]] = Number.isFinite(v) ? v : 0;
     }
-    const [
-      a_r1, a_r2, a_r4, a_r8, a_body, a_ema9_21, a_ema21_50, a_rsi, a_te32, a_rv,
-    ] = scored.alignedRow;
 
     await sb.from("model3_se_predictions").insert({
       fit_id: active.fit_id,
@@ -377,19 +423,20 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       p_green_stacked_calibrated: scored.pStackedCalibrated,
       raw_prediction: scored.rawDir,
       raw_confidence: scored.rawConfidence,
-      aligned_ret_log_1: a_r1,
-      aligned_ret_log_2: a_r2,
-      aligned_ret_log_4: a_r4,
-      aligned_ret_log_8: a_r8,
-      aligned_body_to_atr: a_body,
-      aligned_ema9_minus_ema21_to_atr: a_ema9_21,
-      aligned_ema21_minus_ema50_to_atr: a_ema21_50,
-      aligned_rsi14_centered: a_rsi,
-      aligned_trend_efficiency_32: a_te32,
-      aligned_realized_volatility_8_to_32: a_rv,
+      // R2 selector fields
+      selector_score_raw: scored.selectorScoreRaw,
+      selector_score_percentile: scored.selectorScorePercentile,
       p_correct_raw: scored.pCorrectRaw,
       p_correct_calibrated: scored.pCorrectCalibrated,
-      selection_threshold: active.artifact.selection_threshold,
+      selection_threshold: threshold,
+      // Consensus features
+      signed_consensus: scored.consensus.signedConsensus,
+      consensus_strength: scored.consensus.consensusStrength,
+      expert_agreement: scored.consensus.expertAgreement,
+      expert_disagreement: scored.consensus.expertDisagreement,
+      minimum_expert_strength: scored.consensus.minimumExpertStrength,
+      stacker_logit_margin: scored.consensus.stackerLogitMargin,
+      // Publication
       published_prediction: published,
       abstain_reason: abstainReason,
       abstain_category: abstainCategory,
@@ -397,6 +444,7 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       selector_margin: selectorMargin,
       direction_confidence_gap: directionConfidenceGap,
       publish_gates: publishGates,
+      // Fit provenance
       fit_estimated_coverage: active.estimated_coverage,
       fit_target_coverage: active.target_coverage,
       fit_calibration_direction_accuracy: active.calibration_direction_accuracy,
@@ -405,6 +453,11 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       fit_selector_pr_auc: active.selector_pr_auc,
       fit_selector_brier: active.selector_brier,
       fit_activated_at: active.activated_at,
+      green_class_weight: active.green_class_weight,
+      red_class_weight: active.red_class_weight,
+      fast_recency_half_life: M3SE_FAST_HALF_LIFE,
+      fit_age_predictions: fitAge,
+      // Pipeline audit
       prior_candle_ready: ready,
       prior_candle_poll_attempts: priorAttempts,
       history_rows_used: candles.length,
@@ -420,13 +473,13 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
   }
 }
 
-
-/** Resolve any m3-se-r1 predictions whose target candle has since closed. */
+/** Resolve any m3-se-r2 predictions whose target candle has since closed. */
 export async function resolveDueM3SeR1(sb: SupabaseClient): Promise<void> {
   try {
     const { data: pending } = await sb
       .from("model3_se_predictions")
       .select("prediction_id, target_candle_ts, published_prediction, raw_prediction")
+      .eq("model_version", M3SE_MODEL_VERSION)
       .is("resolved_at", null)
       .lte("target_candle_ts", new Date(Date.now() - TF_MS).toISOString())
       .order("target_candle_ts", { ascending: true })
