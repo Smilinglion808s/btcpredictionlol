@@ -511,101 +511,31 @@ function CsvDataPage() {
     URL.revokeObjectURL(url);
   };
 
+  const universalFn = useServerFn(exportUniversalV2);
   const downloadUniversal = async () => {
     try {
       setBuildingUniversal(true);
-      const [predRows, td1Rows, aasRows, a96Rows] = await Promise.all([
-        Promise.resolve(listQ.data ?? []),
-        exportTd1().catch(() => [] as any[]),
-        exportAas96().catch(() => [] as any[]),
-        exportA96().catch(() => [] as any[]),
-      ]);
+      const { csv, manifest, stats } = await universalFn();
+      const stamp = new Date().toISOString().slice(0, 10);
 
-      const bucket = (ts: unknown): string => {
-        if (!ts) return "";
-        const d = new Date(String(ts));
-        if (!Number.isFinite(d.getTime())) return "";
-        return d.toISOString();
-      };
+      const csvBlob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const csvUrl = URL.createObjectURL(csvBlob);
+      const a1 = document.createElement("a");
+      a1.href = csvUrl;
+      a1.download = `btc15m_universal_v2_${stamp}.csv`;
+      a1.click();
+      URL.revokeObjectURL(csvUrl);
 
-      // Base rows come from `predictions` (Model 6+ core CSV). Enrich each so
-      // every historical Model 6 data point is present per candle.
-      const merged = new Map<string, Record<string, unknown>>();
-      for (const p of predRows as PredRow[]) {
-        const e = enrich(p);
-        const key = bucket(e.candle_ts);
-        if (!key) continue;
-        // Normalize candle_ts to bucketed ISO so downstream sorts/labels agree.
-        e.candle_ts = key;
-        merged.set(key, { ...e });
-      }
-
-      const attach = (rows: any[], prefix: string, tsKeys: string[]) => {
-        for (const r of rows ?? []) {
-          let key = "";
-          for (const k of tsKeys) { if (r?.[k]) { key = bucket(r[k]); if (key) break; } }
-          if (!key) continue;
-          const base = merged.get(key) ?? { candle_ts: key };
-          for (const [k, v] of Object.entries(r)) {
-            if (v && typeof v === "object") {
-              base[`${prefix}${k}`] = JSON.stringify(v);
-            } else {
-              base[`${prefix}${k}`] = v as unknown;
-            }
-          }
-          merged.set(key, base);
-        }
-      };
-      attach(td1Rows as any[], "td1_", ["candle_ts", "target_candle_ts"]);
-      attach(aasRows as any[], "aas96_", ["target_candle_ts", "candle_ts"]);
-      attach(a96Rows as any[], "a96_", ["target_candle_ts", "candle_ts"]);
-
-      const rows = Array.from(merged.values()).sort((a, b) => {
-        const ta = new Date(String(a.candle_ts)).getTime();
-        const tb = new Date(String(b.candle_ts)).getTime();
-        return tb - ta;
-      });
-      if (rows.length === 0) { alert("No data to export."); return; }
-
-      // Build headers: preserve the exact Model 6 column ORDER and friendly
-      // LABELS from BASE_COLUMNS + dynamic indicator breakdown, then append
-      // any additional keys (td1_/aas96_/a96_ prefixed, or straggler fields).
-      const baseCols = columnsForRows(rows as PredRow[]);
-      const orderedHeaders: { key: string; label: string }[] = [];
-      const seenKeys = new Set<string>();
-      for (const c of baseCols) {
-        if (seenKeys.has(c.key)) continue;
-        seenKeys.add(c.key);
-        orderedHeaders.push(c);
-      }
-      // Add every extra key discovered on merged rows, in a stable order.
-      const extraKeys: string[] = [];
-      for (const r of rows) {
-        for (const k of Object.keys(r)) {
-          if (seenKeys.has(k)) continue;
-          seenKeys.add(k);
-          extraKeys.push(k);
-        }
-      }
-      extraKeys.sort();
-      for (const k of extraKeys) orderedHeaders.push({ key: k, label: k });
-
-      const header = orderedHeaders.map((c) => c.label).join(",");
-      const body = rows
-        .map((r) => orderedHeaders.map((c) => csvEscape((r as Record<string, unknown>)[c.key])).join(","))
-        .join("\n");
-      const csv = `${header}\n${body}\n`;
-
-      const times = rows.map((r) => new Date(String(r.candle_ts)).getTime()).filter(Number.isFinite);
-      const from = fmtDate(Math.min(...times));
-      const to = fmtDate(Math.max(...times));
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `btc15m_universal_${from}_to_${to}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const manifestBlob = new Blob(
+        [JSON.stringify({ schema_version: "btc15m-universal-v2", generated_at: new Date().toISOString(), stats, columns: manifest }, null, 2)],
+        { type: "application/json" },
+      );
+      const mUrl = URL.createObjectURL(manifestBlob);
+      const a2 = document.createElement("a");
+      a2.href = mUrl;
+      a2.download = `btc15m_universal_schema_manifest_${stamp}.json`;
+      a2.click();
+      URL.revokeObjectURL(mUrl);
     } finally {
       setBuildingUniversal(false);
     }
