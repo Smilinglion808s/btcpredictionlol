@@ -397,7 +397,7 @@ function StatsPage() {
 
         <ModelCard
           title="a96"
-          subtitle="a96-r1"
+          subtitle="a96-r2"
           status="Stable"
           tone="emerald"
           winRate={a96WinRate}
