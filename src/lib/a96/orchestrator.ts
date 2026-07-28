@@ -398,24 +398,14 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     const targetTs = new Date(String((pred as Record<string, unknown>).candle_ts));
     const targetOpen = Number((pred as Record<string, unknown>).btc_price_at_prediction);
 
-    // Emit a SKIP webhook whenever a96 cannot run because its upstream
-    // (AAS96) input is missing/ineligible. We can't insert an a96_predictions
-    // row in that case (layer_a/b_direction have NOT NULL + GREEN/RED CHECK
-    // constraints), so the UI reads AAS96 shadow directly to display SKIP.
-    const emitUpstreamSkip = async (reason: string) => {
-      try {
-        const { deliverWebhook, buildA96SkipWebhookPayload } = await import("../webhooks.server");
-        const payload = buildA96SkipWebhookPayload({
-          predictionId,
-          candleTs: targetTs.toISOString(),
-          btcPriceAtPrediction: isFinite(targetOpen) && targetOpen > 0 ? targetOpen : null,
-          skipReason: reason,
-        });
-        await deliverWebhook(sb, "prediction.created", payload);
-      } catch (whErr) {
-        await logApiError(sb, "a96-webhook-skip-error", { prediction_id: predictionId, reason }, whErr);
-      }
+    // a96 webhooks are DISABLED. TD1-RC is the only outbound webhook source.
+    // Upstream AAS96 skips are still surfaced in the UI (which reads the AAS96
+    // shadow row directly); we just no longer notify the bot. Do not re-add a
+    // deliverWebhook call here.
+    const emitUpstreamSkip = async (_reason: string) => {
+      /* no-op: a96 webhooks disabled */
     };
+
 
     // Load AAS shadow row for this prediction (Layer A/B directions + base selector).
     const { data: shadow } = await sb
