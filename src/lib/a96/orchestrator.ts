@@ -563,6 +563,7 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     const engineInput = {
       layerADirection: a as "GREEN" | "RED",
       layerBDirection: b as "GREEN" | "RED",
+      layerAProbMean,
       baseSelectedLayer: base as Layer,
       fitState,
       targetTimestamp: targetTs,
@@ -593,6 +594,14 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       decision_reason: decision.reason,
       fit_selector_override_fired: decision.fit_selector_override_fired,
       agreement_veto_fired: decision.agreement_veto_fired,
+      // r2 margin-band audit
+      margin_veto_fired: decision.margin_veto_fired,
+      layer_a_prob_mean: decision.layer_a_prob_mean,
+      layer_a_prob_margin: decision.layer_a_prob_margin,
+      layer_a_probability_valid: decision.layer_a_probability_valid,
+      margin_band_min: A96_CONFIG.layer_a_margin_min_inclusive,
+      margin_band_max: A96_CONFIG.layer_a_margin_max_exclusive,
+      margin_band_eligible: decision.margin_band_eligible,
       distance_from_4_candle_low_bps: distanceBps,
       mean_2_candle_body_to_range: meanBody,
       distance_veto_condition: decision.feature_values.distance_veto_condition,
@@ -607,9 +616,10 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
 
-    // Emit a96 prediction webhook — second active outbound source alongside
-    // TD1-RC. Only fire on directional (GREEN/RED) decisions with a valid
-    // prospective row; ABSTAIN and invalid rows do not emit.
+    // r2 webhook policy: emit ONLY on directional (GREEN/RED) decisions with
+    // prospective_valid=true. All abstain outcomes (margin, agreement veto,
+    // invalid probability, invalid candle data, prospective_invalid) are
+    // silent — no webhook.
     if (
       prospectiveValid &&
       (decision.prediction === "GREEN" || decision.prediction === "RED")
@@ -631,12 +641,8 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       } catch (whErr) {
         await logApiError(sb, "a96-webhook-created-error", { prediction_id: predictionId }, whErr);
       }
-    } else if (decision.prediction === "ABSTAIN") {
-      // Emit abstain webhook so downstream consumers see the SKIP for this candle.
-      await emitUpstreamSkip(`A96_ABSTAIN:${decision.reason ?? "abstain"}`);
-    } else if (!prospectiveValid) {
-      await emitUpstreamSkip(`A96_ABSTAIN:prospective_invalid:${prospectiveInvalidReason ?? "unknown"}`);
     }
+
 
   } catch (e) {
     await logApiError(sb, "a96-error", { prediction_id: predictionId }, e);
