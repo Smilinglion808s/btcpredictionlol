@@ -131,6 +131,15 @@ export const LINEAGE_COLUMNS: ColumnDef[] = [
   { name: "a96_fit_episode_id", category: "IDENTIFIER", source: "a96_predictions.fit_episode_id", description: "a96 fit episode UUID." },
   { name: "a96_fit_episode_lineage_valid", category: "OPERATIONAL_AUDIT", source: "derived", description: "False when episode ID changes under same artifact ID within the export range." },
   { name: "a96_fit_episode_lineage_error", category: "OPERATIONAL_AUDIT", source: "derived", description: "Explanation when episode lineage is invalid." },
+  // a96-r2 margin-band audit
+  { name: "a96_layer_a_prob_mean", category: "STRATEGIC_AUDIT", source: "a96_predictions.layer_a_prob_mean", description: "AAS96 Layer A ensembled probability of GREEN, as consumed by a96-r2." },
+  { name: "a96_layer_a_prob_margin", category: "STRATEGIC_AUDIT", source: "a96_predictions.layer_a_prob_margin", description: "Absolute margin |layer_a_prob_mean - 0.5|." },
+  { name: "a96_layer_a_probability_valid", category: "STRATEGIC_AUDIT", source: "a96_predictions.layer_a_probability_valid", description: "False when the Layer A probability was missing or out of [0,1]." },
+  { name: "a96_margin_band_min", category: "STRATEGIC_AUDIT", source: "a96_predictions.margin_band_min", description: "Lower inclusive bound of the r2 margin band (frozen 0.01)." },
+  { name: "a96_margin_band_max", category: "STRATEGIC_AUDIT", source: "a96_predictions.margin_band_max", description: "Upper exclusive bound of the r2 margin band (frozen 0.04)." },
+  { name: "a96_margin_band_eligible", category: "STRATEGIC_AUDIT", source: "a96_predictions.margin_band_eligible", description: "True when margin fell in [min, max)." },
+  { name: "a96_margin_veto_fired", category: "STRATEGIC_AUDIT", source: "a96_predictions.margin_veto_fired", description: "True when the r2 margin-band gate produced an ABSTAIN." },
+
 ];
 
 // Availability flags -----------------------------------------------------
