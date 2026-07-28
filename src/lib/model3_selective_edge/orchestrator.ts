@@ -234,6 +234,17 @@ async function trainAndStoreNewFit(sb: SupabaseClient, candles: Candle[]): Promi
   return { ok: true, fit_id: trained.fit_id };
 }
 
+/** Emit the m3-se-r2 outbound webhook. Never throws. */
+async function emitM3SeWebhook(sb: SupabaseClient, row: Record<string, unknown>): Promise<void> {
+  try {
+    const { deliverWebhook, buildM3SeWebhookPayload } = await import("../webhooks.server");
+    await deliverWebhook(sb, "prediction.created", buildM3SeWebhookPayload({ row }));
+  } catch {
+    /* never block the pipeline on webhook failure */
+  }
+}
+
+
 /** Public: run per-candle prediction pipeline. */
 export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date }): Promise<void> {
   const targetTs = opts.targetCandleTs;
@@ -294,7 +305,7 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     }
 
     if (!active) {
-      await sb.from("model3_se_predictions").insert({
+      const noFitRow = {
         fit_id: null,
         model_version: M3SE_MODEL_VERSION,
         feature_schema_version: M3SE_FEATURE_SCHEMA_VERSION,
@@ -324,7 +335,9 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
           retrain_attempted: !belowMin,
           retrain_reason: retrainReason,
         },
-      });
+      };
+      await sb.from("model3_se_predictions").insert(noFitRow);
+      await emitM3SeWebhook(sb, noFitRow);
       return;
     }
 
@@ -402,7 +415,7 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       featCols[M3SE_FEATURE_NAMES[i]] = Number.isFinite(v) ? v : 0;
     }
 
-    await sb.from("model3_se_predictions").insert({
+    const predRow = {
       fit_id: active.fit_id,
       model_version: M3SE_MODEL_VERSION,
       feature_schema_version: M3SE_FEATURE_SCHEMA_VERSION,
@@ -467,7 +480,9 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       resolved_rows_since_fit: resolvedSince,
       feature_row_valid: featureRowValid,
       feature_nan_count: featureNanCount,
-    });
+    };
+    await sb.from("model3_se_predictions").insert(predRow);
+    await emitM3SeWebhook(sb, predRow);
   } catch {
     /* swallow: never block sibling models */
   }
