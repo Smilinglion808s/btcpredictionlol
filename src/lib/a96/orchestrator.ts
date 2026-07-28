@@ -606,32 +606,11 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
 
-    // r2 webhook policy: emit ONLY on directional (GREEN/RED) decisions with
-    // prospective_valid=true. All abstain outcomes (margin, agreement veto,
-    // invalid probability, invalid candle data, prospective_invalid) are
-    // silent — no webhook.
-    if (
-      prospectiveValid &&
-      (decision.prediction === "GREEN" || decision.prediction === "RED")
-    ) {
-      try {
-        const { data: a96Row } = await sb
-          .from("a96_predictions")
-          .select("*")
-          .eq("prediction_id", predictionId)
-          .maybeSingle();
-        if (a96Row) {
-          const { deliverWebhook, buildA96WebhookPayload } = await import("../webhooks.server");
-          const payload = buildA96WebhookPayload({
-            a96Row: a96Row as Record<string, unknown>,
-            prediction: pred as unknown as Record<string, unknown>,
-          });
-          await deliverWebhook(sb, "prediction.created", payload);
-        }
-      } catch (whErr) {
-        await logApiError(sb, "a96-webhook-created-error", { prediction_id: predictionId }, whErr);
-      }
-    }
+    // a96 webhooks are DISABLED — TD1-RC is the only outbound webhook source.
+    // a96 still writes its prediction row and drives the stats UI; it just
+    // never notifies the bot. Do not re-add a deliverWebhook call here.
+
+
 
 
   } catch (e) {
