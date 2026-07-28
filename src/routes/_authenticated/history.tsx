@@ -656,7 +656,7 @@ function CsvDataPage() {
               downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r1_predictions");
             }}
           >
-            <Download className="size-4" /> m3-se-r1 Predictions CSV
+            <Download className="size-4" /> m3-se-r2 Predictions CSV
           </Button>
           <Button
             size="lg"
@@ -667,7 +667,7 @@ function CsvDataPage() {
               downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r1_fits");
             }}
           >
-            <Download className="size-4" /> m3-se-r1 Fits CSV
+            <Download className="size-4" /> m3-se-r2 Fits CSV
           </Button>
         </div>
       </div>

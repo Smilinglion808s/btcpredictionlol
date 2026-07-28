@@ -93,8 +93,8 @@ function StatsPage() {
     try {
       setExportingM3se(true);
       const rows = await exportM3sePredsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r1 predictions to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-predictions-${stamp()}.csv`);
+      if (!rows || rows.length === 0) { alert("No m3-se-r2 predictions to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-predictions-${stamp()}.csv`);
     } finally {
       setExportingM3se(false);
     }
@@ -104,8 +104,8 @@ function StatsPage() {
     try {
       setExportingM3seFits(true);
       const rows = await exportM3seFitsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r1 fits to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r1-fits-${stamp()}.csv`);
+      if (!rows || rows.length === 0) { alert("No m3-se-r2 fits to export."); return; }
+      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-fits-${stamp()}.csv`);
     } finally {
       setExportingM3seFits(false);
     }
@@ -444,7 +444,7 @@ function StatsPage() {
 
         <ModelCard
           title="Model 3 — Selective Edge"
-          subtitle="m3-se-r1"
+          subtitle="m3-se-r2"
           status="Auto"
           tone="violet"
           winRate={Number(m3sePublished.win_rate ?? 0)}
@@ -480,10 +480,11 @@ function StatsPage() {
             <MiniStat label="Raw win rate" value={`${Number(m3seStats.raw?.win_rate ?? 0)}%`} />
           </div>
           <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
-            <span className="font-semibold text-foreground">Selective Edge R1:</span> two direction experts feed a stacker; a
-            correctness selector abstains on low-confidence signals to target ~50 of every 96 valid candles. Threshold =
-            max(0.50, Q<sub>1&minus;50/96</sub>) on calibration. Retrains every 96 resolved rows.
+            <span className="font-semibold text-foreground">Selective Edge R2:</span> slow (1024) + fast (384, recency ½-life 96) direction experts
+            with capped class-balance weights feed a stacker; the selector is a ranker with L2 penalty picked by ROC-AUC. Publish top ~60% by
+            selector_score_raw (threshold = P40 on calibration). Retrains every 96 resolved rows; prior fit retained if history is insufficient.
           </div>
+
         </ModelCard>
       </div>
 

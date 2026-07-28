@@ -36,9 +36,7 @@ export const M3SE_FEATURE_NAMES = [
 export type M3SEFeatureName = (typeof M3SE_FEATURE_NAMES)[number];
 export const M3SE_FEATURE_COUNT = M3SE_FEATURE_NAMES.length;
 
-// Aligned features passed to the correctness selector. Signed features are
-// negated when the raw prediction is RED so that from the selector's point of
-// view "positive value" always means "consistent with the raw direction".
+// R1 aligned features (kept for backwards compatibility with R1 rows).
 export const M3SE_ALIGNED_FEATURE_NAMES = [
   "aligned_ret_log_1",
   "aligned_ret_log_2",
@@ -53,19 +51,33 @@ export const M3SE_ALIGNED_FEATURE_NAMES = [
 ] as const;
 export const M3SE_ALIGNED_FEATURE_COUNT = M3SE_ALIGNED_FEATURE_NAMES.length;
 
-// Signed alignment (multiplied by ±1). Unsigned features (volatility, |body|)
-// are passed through unchanged.
+// R2 selector inputs (§5 of the R2 spec). 5 expert-consensus + 6 aligned/magnitude fields.
+export const M3SE_SELECTOR_V2_FEATURE_NAMES = [
+  "signed_consensus",
+  "consensus_strength",
+  "expert_agreement",
+  "expert_disagreement",
+  "stacker_logit_margin",
+  "aligned_trend_strength",
+  "aligned_return_8",
+  "aligned_stretch",
+  "wick_dominance",
+  "volatility_ratio",
+  "volume_zscore",
+] as const;
+export const M3SE_SELECTOR_V2_FEATURE_COUNT = M3SE_SELECTOR_V2_FEATURE_NAMES.length;
+
 const ALIGNED_SIGN_MAP: Array<{ idx: number; signed: boolean }> = [
-  { idx: 0, signed: true },   // ret_log_1
-  { idx: 1, signed: true },   // ret_log_2
-  { idx: 2, signed: true },   // ret_log_4
-  { idx: 3, signed: true },   // ret_log_8
-  { idx: 5, signed: false },  // body_to_atr (magnitude)
-  { idx: 9, signed: true },   // ema9_minus_ema21_to_atr
-  { idx: 10, signed: true },  // ema21_minus_ema50_to_atr
-  { idx: 14, signed: true },  // rsi14_centered
-  { idx: 19, signed: true },  // trend_efficiency_32 (signed via close diff)
-  { idx: 15, signed: false }, // realized_volatility_8_to_32
+  { idx: 0, signed: true },
+  { idx: 1, signed: true },
+  { idx: 2, signed: true },
+  { idx: 3, signed: true },
+  { idx: 5, signed: false },
+  { idx: 9, signed: true },
+  { idx: 10, signed: true },
+  { idx: 14, signed: true },
+  { idx: 19, signed: true },
+  { idx: 15, signed: false },
 ];
 
 export function buildAlignedFromDirection(
@@ -81,6 +93,58 @@ export function buildAlignedFromDirection(
   }
   return out;
 }
+
+// R2 consensus features derived from expert logits.
+export interface M3SEConsensus {
+  signedConsensus: number;
+  consensusStrength: number;
+  expertAgreement: 0 | 1;
+  expertDisagreement: number;
+  minimumExpertStrength: number;
+  stackerLogitMargin: number;
+}
+
+export function computeM3SEConsensus(
+  rawDir: "GREEN" | "RED",
+  zSlow: number,
+  zFast: number,
+  zStack: number,
+): M3SEConsensus {
+  const dirSign = rawDir === "GREEN" ? 1 : -1;
+  const agreement: 0 | 1 = Math.sign(zSlow) === Math.sign(zFast) ? 1 : 0;
+  const minAbs = Math.min(Math.abs(zSlow), Math.abs(zFast));
+  return {
+    signedConsensus: dirSign * (zSlow + zFast) / 2,
+    consensusStrength: agreement === 1 ? minAbs : -minAbs,
+    expertAgreement: agreement,
+    expertDisagreement: Math.abs(zSlow - zFast),
+    minimumExpertStrength: minAbs,
+    stackerLogitMargin: Math.abs(zStack),
+  };
+}
+
+// R2 selector row builder (§5).
+export function buildSelectorRowV2(
+  rawFeatures: number[],
+  rawDir: "GREEN" | "RED",
+  consensus: M3SEConsensus,
+): number[] {
+  const dirSign = rawDir === "GREEN" ? 1 : -1;
+  return [
+    consensus.signedConsensus,
+    consensus.consensusStrength,
+    consensus.expertAgreement,
+    consensus.expertDisagreement,
+    consensus.stackerLogitMargin,
+    (rawFeatures[19] ?? 0) * dirSign,   // aligned_trend_strength (trend_efficiency_32)
+    (rawFeatures[3] ?? 0) * dirSign,    // aligned_return_8 (ret_log_8)
+    (rawFeatures[11] ?? 0) * dirSign,   // aligned_stretch  (price - ema21) / atr
+    Math.abs(rawFeatures[7] ?? 0),      // wick_dominance
+    rawFeatures[15] ?? 0,               // volatility_ratio (realized_vol_8_to_32)
+    rawFeatures[20] ?? 0,               // volume_zscore
+  ];
+}
+
 
 // ------------ Indicators ------------
 function ema(values: number[], span: number): number[] {

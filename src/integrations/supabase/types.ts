@@ -829,16 +829,19 @@ export type Database = {
           activated_at: string | null
           artifact: Json
           artifact_hash: string
+          calibration_balanced_accuracy: number | null
           calibration_direction_accuracy: number | null
           calibration_direction_brier: number | null
           calibration_direction_log_loss: number | null
           calibration_end: string | null
+          calibration_estimated_coverage: number | null
           calibration_rows: number | null
           calibration_start: string | null
           created_at: string
           estimated_coverage: number | null
           failure_reason: string | null
           fast_lambda: number | null
+          fast_recency_half_life: number | null
           fast_training_end: string | null
           fast_training_rows: number | null
           fast_training_start: string | null
@@ -846,7 +849,9 @@ export type Database = {
           feature_schema_version: string
           fit_id: string
           fitted_at: string
+          green_class_weight: number | null
           model_version: string
+          oof_balanced_accuracy: number | null
           oof_block_size: number | null
           oof_direction_accuracy: number | null
           oof_direction_brier: number | null
@@ -854,13 +859,28 @@ export type Database = {
           oof_end: string | null
           oof_rows: number | null
           oof_start: string | null
+          predicted_green_share: number | null
+          predicted_red_share: number | null
+          red_class_weight: number | null
           retired_at: string | null
           selection_threshold: number | null
+          selector_bottom40_accuracy: number | null
           selector_brier: number | null
           selector_lambda: number | null
+          selector_lambda_search: Json | null
           selector_log_loss: number | null
           selector_pr_auc: number | null
           selector_roc_auc: number | null
+          selector_score_calibration_max: number | null
+          selector_score_calibration_median: number | null
+          selector_score_calibration_min: number | null
+          selector_score_calibration_p40: number | null
+          selector_score_calibration_p60: number | null
+          selector_top20_accuracy: number | null
+          selector_top40_accuracy: number | null
+          selector_top60_accuracy: number | null
+          selector_top60_lift_vs_bottom40: number | null
+          selector_top60_lift_vs_raw: number | null
           slow_lambda: number | null
           slow_training_end: string | null
           slow_training_rows: number | null
@@ -868,22 +888,27 @@ export type Database = {
           stacker_lambda: number | null
           status: string
           target_coverage: number | null
+          training_green_count: number | null
+          training_red_count: number | null
           updated_at: string
         }
         Insert: {
           activated_at?: string | null
           artifact: Json
           artifact_hash: string
+          calibration_balanced_accuracy?: number | null
           calibration_direction_accuracy?: number | null
           calibration_direction_brier?: number | null
           calibration_direction_log_loss?: number | null
           calibration_end?: string | null
+          calibration_estimated_coverage?: number | null
           calibration_rows?: number | null
           calibration_start?: string | null
           created_at?: string
           estimated_coverage?: number | null
           failure_reason?: string | null
           fast_lambda?: number | null
+          fast_recency_half_life?: number | null
           fast_training_end?: string | null
           fast_training_rows?: number | null
           fast_training_start?: string | null
@@ -891,7 +916,9 @@ export type Database = {
           feature_schema_version: string
           fit_id: string
           fitted_at?: string
+          green_class_weight?: number | null
           model_version: string
+          oof_balanced_accuracy?: number | null
           oof_block_size?: number | null
           oof_direction_accuracy?: number | null
           oof_direction_brier?: number | null
@@ -899,13 +926,28 @@ export type Database = {
           oof_end?: string | null
           oof_rows?: number | null
           oof_start?: string | null
+          predicted_green_share?: number | null
+          predicted_red_share?: number | null
+          red_class_weight?: number | null
           retired_at?: string | null
           selection_threshold?: number | null
+          selector_bottom40_accuracy?: number | null
           selector_brier?: number | null
           selector_lambda?: number | null
+          selector_lambda_search?: Json | null
           selector_log_loss?: number | null
           selector_pr_auc?: number | null
           selector_roc_auc?: number | null
+          selector_score_calibration_max?: number | null
+          selector_score_calibration_median?: number | null
+          selector_score_calibration_min?: number | null
+          selector_score_calibration_p40?: number | null
+          selector_score_calibration_p60?: number | null
+          selector_top20_accuracy?: number | null
+          selector_top40_accuracy?: number | null
+          selector_top60_accuracy?: number | null
+          selector_top60_lift_vs_bottom40?: number | null
+          selector_top60_lift_vs_raw?: number | null
           slow_lambda?: number | null
           slow_training_end?: string | null
           slow_training_rows?: number | null
@@ -913,22 +955,27 @@ export type Database = {
           stacker_lambda?: number | null
           status?: string
           target_coverage?: number | null
+          training_green_count?: number | null
+          training_red_count?: number | null
           updated_at?: string
         }
         Update: {
           activated_at?: string | null
           artifact?: Json
           artifact_hash?: string
+          calibration_balanced_accuracy?: number | null
           calibration_direction_accuracy?: number | null
           calibration_direction_brier?: number | null
           calibration_direction_log_loss?: number | null
           calibration_end?: string | null
+          calibration_estimated_coverage?: number | null
           calibration_rows?: number | null
           calibration_start?: string | null
           created_at?: string
           estimated_coverage?: number | null
           failure_reason?: string | null
           fast_lambda?: number | null
+          fast_recency_half_life?: number | null
           fast_training_end?: string | null
           fast_training_rows?: number | null
           fast_training_start?: string | null
@@ -936,7 +983,9 @@ export type Database = {
           feature_schema_version?: string
           fit_id?: string
           fitted_at?: string
+          green_class_weight?: number | null
           model_version?: string
+          oof_balanced_accuracy?: number | null
           oof_block_size?: number | null
           oof_direction_accuracy?: number | null
           oof_direction_brier?: number | null
@@ -944,13 +993,28 @@ export type Database = {
           oof_end?: string | null
           oof_rows?: number | null
           oof_start?: string | null
+          predicted_green_share?: number | null
+          predicted_red_share?: number | null
+          red_class_weight?: number | null
           retired_at?: string | null
           selection_threshold?: number | null
+          selector_bottom40_accuracy?: number | null
           selector_brier?: number | null
           selector_lambda?: number | null
+          selector_lambda_search?: Json | null
           selector_log_loss?: number | null
           selector_pr_auc?: number | null
           selector_roc_auc?: number | null
+          selector_score_calibration_max?: number | null
+          selector_score_calibration_median?: number | null
+          selector_score_calibration_min?: number | null
+          selector_score_calibration_p40?: number | null
+          selector_score_calibration_p60?: number | null
+          selector_top20_accuracy?: number | null
+          selector_top40_accuracy?: number | null
+          selector_top60_accuracy?: number | null
+          selector_top60_lift_vs_bottom40?: number | null
+          selector_top60_lift_vs_raw?: number | null
           slow_lambda?: number | null
           slow_training_end?: string | null
           slow_training_rows?: number | null
@@ -958,6 +1022,8 @@ export type Database = {
           stacker_lambda?: number | null
           status?: string
           target_coverage?: number | null
+          training_green_count?: number | null
+          training_red_count?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -989,17 +1055,22 @@ export type Database = {
           body_to_atr: number | null
           close_location_in_range: number | null
           code_version: string | null
+          consensus_strength: number | null
           created_at: string
           data_quality_reasons: string[] | null
           data_quality_valid: boolean
           direction_confidence_gap: number | null
           ema21_minus_ema50_to_atr: number | null
           ema9_minus_ema21_to_atr: number | null
+          expert_agreement: number | null
+          expert_disagreement: number | null
           fast_logit: number | null
+          fast_recency_half_life: number | null
           feature_nan_count: number | null
           feature_row_valid: boolean | null
           feature_schema_version: string
           fit_activated_at: string | null
+          fit_age_predictions: number | null
           fit_calibration_direction_accuracy: number | null
           fit_estimated_coverage: number | null
           fit_id: string | null
@@ -1008,10 +1079,12 @@ export type Database = {
           fit_selector_pr_auc: number | null
           fit_selector_roc_auc: number | null
           fit_target_coverage: number | null
+          green_class_weight: number | null
           history_rows_used: number | null
           last_resolution_attempt_at: string | null
           last_resolution_error: string | null
           min_labeled_rows_required: number | null
+          minimum_expert_strength: number | null
           model_version: string
           p_correct_calibrated: number | null
           p_correct_raw: number | null
@@ -1037,6 +1110,7 @@ export type Database = {
           raw_result: string | null
           raw_would_win: boolean | null
           realized_volatility_8_to_32: number | null
+          red_class_weight: number | null
           resolved_at: string | null
           resolved_rows_since_fit: number | null
           ret_log_1: number | null
@@ -1052,7 +1126,11 @@ export type Database = {
           selection_threshold: number | null
           selector_margin: number | null
           selector_net_effect: number | null
+          selector_score_percentile: number | null
+          selector_score_raw: number | null
+          signed_consensus: number | null
           slow_logit: number | null
+          stacker_logit_margin: number | null
           symbol: string
           target_candle_ts: string
           target_open: number | null
@@ -1089,17 +1167,22 @@ export type Database = {
           body_to_atr?: number | null
           close_location_in_range?: number | null
           code_version?: string | null
+          consensus_strength?: number | null
           created_at?: string
           data_quality_reasons?: string[] | null
           data_quality_valid?: boolean
           direction_confidence_gap?: number | null
           ema21_minus_ema50_to_atr?: number | null
           ema9_minus_ema21_to_atr?: number | null
+          expert_agreement?: number | null
+          expert_disagreement?: number | null
           fast_logit?: number | null
+          fast_recency_half_life?: number | null
           feature_nan_count?: number | null
           feature_row_valid?: boolean | null
           feature_schema_version: string
           fit_activated_at?: string | null
+          fit_age_predictions?: number | null
           fit_calibration_direction_accuracy?: number | null
           fit_estimated_coverage?: number | null
           fit_id?: string | null
@@ -1108,10 +1191,12 @@ export type Database = {
           fit_selector_pr_auc?: number | null
           fit_selector_roc_auc?: number | null
           fit_target_coverage?: number | null
+          green_class_weight?: number | null
           history_rows_used?: number | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           min_labeled_rows_required?: number | null
+          minimum_expert_strength?: number | null
           model_version: string
           p_correct_calibrated?: number | null
           p_correct_raw?: number | null
@@ -1137,6 +1222,7 @@ export type Database = {
           raw_result?: string | null
           raw_would_win?: boolean | null
           realized_volatility_8_to_32?: number | null
+          red_class_weight?: number | null
           resolved_at?: string | null
           resolved_rows_since_fit?: number | null
           ret_log_1?: number | null
@@ -1152,7 +1238,11 @@ export type Database = {
           selection_threshold?: number | null
           selector_margin?: number | null
           selector_net_effect?: number | null
+          selector_score_percentile?: number | null
+          selector_score_raw?: number | null
+          signed_consensus?: number | null
           slow_logit?: number | null
+          stacker_logit_margin?: number | null
           symbol: string
           target_candle_ts: string
           target_open?: number | null
@@ -1189,17 +1279,22 @@ export type Database = {
           body_to_atr?: number | null
           close_location_in_range?: number | null
           code_version?: string | null
+          consensus_strength?: number | null
           created_at?: string
           data_quality_reasons?: string[] | null
           data_quality_valid?: boolean
           direction_confidence_gap?: number | null
           ema21_minus_ema50_to_atr?: number | null
           ema9_minus_ema21_to_atr?: number | null
+          expert_agreement?: number | null
+          expert_disagreement?: number | null
           fast_logit?: number | null
+          fast_recency_half_life?: number | null
           feature_nan_count?: number | null
           feature_row_valid?: boolean | null
           feature_schema_version?: string
           fit_activated_at?: string | null
+          fit_age_predictions?: number | null
           fit_calibration_direction_accuracy?: number | null
           fit_estimated_coverage?: number | null
           fit_id?: string | null
@@ -1208,10 +1303,12 @@ export type Database = {
           fit_selector_pr_auc?: number | null
           fit_selector_roc_auc?: number | null
           fit_target_coverage?: number | null
+          green_class_weight?: number | null
           history_rows_used?: number | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           min_labeled_rows_required?: number | null
+          minimum_expert_strength?: number | null
           model_version?: string
           p_correct_calibrated?: number | null
           p_correct_raw?: number | null
@@ -1237,6 +1334,7 @@ export type Database = {
           raw_result?: string | null
           raw_would_win?: boolean | null
           realized_volatility_8_to_32?: number | null
+          red_class_weight?: number | null
           resolved_at?: string | null
           resolved_rows_since_fit?: number | null
           ret_log_1?: number | null
@@ -1252,7 +1350,11 @@ export type Database = {
           selection_threshold?: number | null
           selector_margin?: number | null
           selector_net_effect?: number | null
+          selector_score_percentile?: number | null
+          selector_score_raw?: number | null
+          signed_consensus?: number | null
           slow_logit?: number | null
+          stacker_logit_margin?: number | null
           symbol?: string
           target_candle_ts?: string
           target_open?: number | null
