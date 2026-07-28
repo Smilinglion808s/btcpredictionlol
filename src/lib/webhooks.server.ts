@@ -189,11 +189,14 @@ export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInp
   };
 }
 
-// a96-r1 — SECOND active outbound webhook source (alongside TD1-RC).
-// Deterministic engine: GREEN → YES, RED → NO. Native ABSTAIN never emits,
-// but AAS96 upstream skips are surfaced via buildA96SkipWebhookPayload below.
-export const A96_DECISION_POLICY_VERSION = "a96-r1";
+// a96-r2 — SECOND active outbound webhook source (alongside TD1-RC).
+// r2 patch: Layer A is the sole directional source, gated by a fixed
+// probability margin band on layer_a_prob_mean. Directional GREEN → YES,
+// RED → NO. ABSTAIN outcomes (margin, agreement veto, invalid probability,
+// invalid candle data, prospective_invalid) do NOT emit any webhook.
+export const A96_DECISION_POLICY_VERSION = "a96-r2";
 export const A96_MODEL_ID = "a96";
+
 
 export interface A96SkipWebhookInputs {
   predictionId: string;
@@ -216,7 +219,8 @@ export function buildA96SkipWebhookPayload({
   const nowIso = new Date().toISOString();
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r1",
+    model_version: "a96-r2",
+
     decision_policy_version: A96_DECISION_POLICY_VERSION,
 
     prediction: "SKIP" as const,
@@ -262,7 +266,7 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
 
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r1",
+    model_version: "a96-r2",
     decision_policy_version: A96_DECISION_POLICY_VERSION,
     fit_episode_id: a96Row.fit_episode_id ?? null,
     artifact_fit_id: a96Row.artifact_fit_id ?? null,
@@ -278,10 +282,19 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
     decision_reason: a96Row.decision_reason ?? null,
     fit_selector_override_fired: Boolean(a96Row.fit_selector_override_fired),
     agreement_veto_fired: Boolean(a96Row.agreement_veto_fired),
+    // r2 margin-band audit
+    margin_veto_fired: Boolean(a96Row.margin_veto_fired),
+    layer_a_prob_mean: a96Row.layer_a_prob_mean != null ? Number(a96Row.layer_a_prob_mean) : null,
+    layer_a_prob_margin: a96Row.layer_a_prob_margin != null ? Number(a96Row.layer_a_prob_margin) : null,
+    layer_a_probability_valid: Boolean(a96Row.layer_a_probability_valid),
+    margin_band_min: a96Row.margin_band_min != null ? Number(a96Row.margin_band_min) : null,
+    margin_band_max: a96Row.margin_band_max != null ? Number(a96Row.margin_band_max) : null,
+    margin_band_eligible: Boolean(a96Row.margin_band_eligible),
     distance_from_4_candle_low_bps: a96Row.distance_from_4_candle_low_bps ?? null,
     mean_2_candle_body_to_range: a96Row.mean_2_candle_body_to_range ?? null,
     target_open: a96Row.target_open != null ? Number(a96Row.target_open) : null,
     prospective_valid: Boolean(a96Row.prospective_valid),
+
 
     candle_starts_at: startsAt,
     candle_starts_at_mt: formatMountainTime(startsAt),
