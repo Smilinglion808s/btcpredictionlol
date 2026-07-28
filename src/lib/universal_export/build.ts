@@ -396,6 +396,15 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
       row.a96_fit_episode_lineage_error = null;
     }
 
+    // r2 margin-band audit passthrough
+    row.a96_layer_a_prob_mean = a96Row ? ((a96Row as Row).layer_a_prob_mean ?? null) : null;
+    row.a96_layer_a_prob_margin = a96Row ? ((a96Row as Row).layer_a_prob_margin ?? null) : null;
+    row.a96_layer_a_probability_valid = a96Row ? Boolean((a96Row as Row).layer_a_probability_valid) : null;
+    row.a96_margin_band_min = a96Row ? ((a96Row as Row).margin_band_min ?? null) : null;
+    row.a96_margin_band_max = a96Row ? ((a96Row as Row).margin_band_max ?? null) : null;
+    row.a96_margin_band_eligible = a96Row ? Boolean((a96Row as Row).margin_band_eligible) : null;
+    row.a96_margin_veto_fired = a96Row ? Boolean((a96Row as Row).margin_veto_fired) : null;
+
     // ---- Availability ---------------------------------------------------
     row.base_feature_tracking_available =
       pred !== null && (pred.indicators !== null && pred.indicators !== undefined);
