@@ -523,6 +523,14 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         decision_reason: reason,
         fit_selector_override_fired: false,
         agreement_veto_fired: false,
+        // r2 margin-band audit — not evaluated when candle data is invalid.
+        margin_veto_fired: false,
+        layer_a_prob_mean: layerAProbMean,
+        layer_a_prob_margin: layerAProbMean != null ? Math.abs(layerAProbMean - 0.5) : null,
+        layer_a_probability_valid: layerAProbMean != null && Number.isFinite(layerAProbMean) && layerAProbMean >= 0 && layerAProbMean <= 1,
+        margin_band_min: A96_CONFIG.layer_a_margin_min_inclusive,
+        margin_band_max: A96_CONFIG.layer_a_margin_max_exclusive,
+        margin_band_eligible: false,
         distance_from_4_candle_low_bps: null,
         mean_2_candle_body_to_range: null,
         distance_veto_condition: false,
@@ -536,9 +544,10 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
         ...streamAudit,
       } as never, { onConflict: "prediction_id" });
       if (absErr) throw absErr;
-      await emitUpstreamSkip(`A96_ABSTAIN:${reason}`);
+      // r2: invalid-candle-data rows must not emit a webhook.
       return;
     }
+
 
     // Compute agreement features from the validated snapshot.
     let feature_history_valid = true;
