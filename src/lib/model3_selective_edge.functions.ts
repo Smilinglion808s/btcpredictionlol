@@ -1,5 +1,6 @@
-// Server functions for Model 3 — Selective Edge R1.
+// Server functions for Model 3 — Selective Edge R2.
 import { createServerFn } from "@tanstack/react-start";
+import { M3SE_MODEL_VERSION } from "@/lib/model3_selective_edge/config";
 
 async function getAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -18,10 +19,12 @@ function toSerializable(r: Record<string, unknown>): Row {
   return out;
 }
 
+/** Live stats for the active model version (R2). R1 rows are excluded. */
 export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () => {
   const { data: rows } = await (await getAdmin())
     .from("model3_se_predictions")
     .select("published_prediction, published_result, raw_result, resolved_at, selector_net_effect, raw_would_win, abstained_winner, abstained_loser")
+    .eq("model_version", M3SE_MODEL_VERSION)
     .order("target_candle_ts", { ascending: false })
     .limit(5000);
   const r = (rows ?? []) as Array<Record<string, unknown>>;
@@ -40,6 +43,7 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
   const abstainedWinners = resolved.filter((x) => x.abstained_winner === true).length;
   const abstainedLosers = resolved.filter((x) => x.abstained_loser === true).length;
   return {
+    model_version: M3SE_MODEL_VERSION,
     resolved_count: resolved.length,
     pending,
     published: {
@@ -58,16 +62,81 @@ export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () =
   };
 });
 
+/** Most recent pending prediction for the active version. */
 export const getM3SePending = createServerFn({ method: "GET" }).handler(async () => {
   const { data } = await (await getAdmin())
     .from("model3_se_predictions")
-    .select("target_candle_ts, published_prediction, raw_prediction, abstain_reason, abstain_category, abstain_detail, selector_margin, p_correct_calibrated, p_green_stacked_calibrated, selection_threshold")
+    .select("target_candle_ts, published_prediction, raw_prediction, abstain_reason, abstain_category, abstain_detail, selector_margin, selector_score_raw, selector_score_percentile, p_correct_calibrated, p_green_stacked_calibrated, selection_threshold, signed_consensus, expert_agreement, expert_disagreement, stacker_logit_margin")
+    .eq("model_version", M3SE_MODEL_VERSION)
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
   return (data as Row | null) ?? null;
 });
 
+/** 96-row rolling summary for the active R2 version. */
+export const getM3SeR2Summary = createServerFn({ method: "GET" }).handler(async () => {
+  const { data } = await (await getAdmin())
+    .from("model3_se_predictions")
+    .select("published_prediction, published_result, raw_prediction, raw_result, actual_direction, selector_score_raw, expert_agreement, resolved_at")
+    .eq("model_version", M3SE_MODEL_VERSION)
+    .not("resolved_at", "is", null)
+    .neq("actual_direction", "PUSH")
+    .order("resolved_at", { ascending: false })
+    .limit(96);
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const n = rows.length;
+  if (n === 0) {
+    return { window_size: 0 };
+  }
+  const pubDirectional = rows.filter((r) => r.published_prediction !== "ABSTAIN");
+  const rawWin = rows.filter((r) => r.raw_result === "WIN").length;
+  const pubWin = pubDirectional.filter((r) => r.published_result === "WIN").length;
+  const pubLoss = pubDirectional.filter((r) => r.published_result === "LOSS").length;
+  const greenPreds = rows.filter((r) => r.raw_prediction === "GREEN");
+  const redPreds = rows.filter((r) => r.raw_prediction === "RED");
+  const greenAcc = greenPreds.length
+    ? greenPreds.filter((r) => r.raw_result === "WIN").length / greenPreds.length : 0;
+  const redAcc = redPreds.length
+    ? redPreds.filter((r) => r.raw_result === "WIN").length / redPreds.length : 0;
+  const agree = rows.filter((r) => Number(r.expert_agreement) === 1);
+  const disagree = rows.filter((r) => Number(r.expert_agreement) === 0);
+  const agreeAcc = agree.length
+    ? agree.filter((r) => r.raw_result === "WIN").length / agree.length : 0;
+  const disagreeAcc = disagree.length
+    ? disagree.filter((r) => r.raw_result === "WIN").length / disagree.length : 0;
+  const scored = rows
+    .filter((r) => typeof r.selector_score_raw === "number")
+    .map((r) => ({ score: Number(r.selector_score_raw), win: r.raw_result === "WIN" ? 1 : 0 }))
+    .sort((a, b) => b.score - a.score);
+  const band = (topFrac: number, bottom = false) => {
+    if (scored.length === 0) return 0;
+    const k = Math.max(1, Math.round(scored.length * topFrac));
+    const arr = bottom ? scored.slice(-k) : scored.slice(0, k);
+    return arr.reduce((s, x) => s + x.win, 0) / arr.length;
+  };
+  const rawAcc = scored.length ? scored.reduce((s, x) => s + x.win, 0) / scored.length : 0;
+  return {
+    window_size: n,
+    actual_coverage: n ? pubDirectional.length / n : 0,
+    raw_accuracy: n ? rawWin / n : 0,
+    published_accuracy: (pubWin + pubLoss) ? pubWin / (pubWin + pubLoss) : 0,
+    selector_lift_vs_raw: band(0.60) - rawAcc,
+    published_net: pubWin - pubLoss,
+    green_prediction_share: n ? greenPreds.length / n : 0,
+    red_prediction_share: n ? redPreds.length / n : 0,
+    green_accuracy: greenAcc,
+    red_accuracy: redAcc,
+    expert_agreement_accuracy: agreeAcc,
+    expert_disagreement_accuracy: disagreeAcc,
+    top_20_percent_score_accuracy: band(0.20),
+    top_40_percent_score_accuracy: band(0.40),
+    top_60_percent_score_accuracy: band(0.60),
+    bottom_40_percent_score_accuracy: band(0.40, true),
+  };
+});
+
+/** Full R2 prediction CSV (R1 rows excluded — they remain in the DB). */
 export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handler(async (): Promise<Row[]> => {
   const PAGE = 1000;
   const all: Row[] = [];
@@ -75,6 +144,7 @@ export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handle
     const { data, error } = await (await getAdmin())
       .from("model3_se_predictions")
       .select("*")
+      .eq("model_version", M3SE_MODEL_VERSION)
       .order("target_candle_ts", { ascending: false })
       .range(off, off + PAGE - 1);
     if (error) throw error;
@@ -88,7 +158,8 @@ export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handle
 export const exportM3SeFitsCsv = createServerFn({ method: "GET" }).handler(async (): Promise<Row[]> => {
   const { data } = await (await getAdmin())
     .from("model3_se_fits")
-    .select("fit_id, model_version, feature_schema_version, feature_schema_hash, artifact_hash, status, failure_reason, fitted_at, activated_at, retired_at, slow_training_start, slow_training_end, slow_training_rows, fast_training_start, fast_training_end, fast_training_rows, oof_start, oof_end, oof_rows, oof_block_size, calibration_start, calibration_end, calibration_rows, slow_lambda, fast_lambda, stacker_lambda, selector_lambda, selection_threshold, target_coverage, estimated_coverage, oof_direction_accuracy, oof_direction_brier, oof_direction_log_loss, calibration_direction_accuracy, calibration_direction_brier, calibration_direction_log_loss, selector_roc_auc, selector_pr_auc, selector_brier, selector_log_loss")
+    .select("*")
+    .eq("model_version", M3SE_MODEL_VERSION)
     .order("fitted_at", { ascending: false });
   return ((data ?? []) as Array<Record<string, unknown>>).map(toSerializable);
 });
