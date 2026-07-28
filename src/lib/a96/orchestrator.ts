@@ -420,15 +420,22 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     // Load AAS shadow row for this prediction (Layer A/B directions + base selector).
     const { data: shadow } = await sb
       .from("model7_aas96_shadow")
-      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed, skip_reason")
+      .select("layer_a_final_direction, layer_b_final_direction, selector_pre_override_selected_layer, eligibility_passed, skip_reason, layer_a_prob_mean")
       .eq("prediction_id", predictionId)
       .maybeSingle();
+
     if (!shadow) { await emitUpstreamSkip("AAS96_UPSTREAM_SKIP:shadow_row_missing"); return; }
     const s = shadow as Record<string, unknown>;
     const a = s.layer_a_final_direction as string | null;
     const b = s.layer_b_final_direction as string | null;
     const base = s.selector_pre_override_selected_layer as string | null;
     const aasSkipReason = (s.skip_reason as string | null) ?? "upstream_ineligible";
+    const rawLayerAProb = s.layer_a_prob_mean;
+    const layerAProbMean =
+      typeof rawLayerAProb === "number" ? rawLayerAProb
+      : rawLayerAProb == null ? null
+      : Number(rawLayerAProb);
+
     if ((a !== "GREEN" && a !== "RED") || (b !== "GREEN" && b !== "RED")) {
       await emitUpstreamSkip(`AAS96_UPSTREAM_SKIP:${aasSkipReason}`);
       return;
