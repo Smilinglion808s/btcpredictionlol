@@ -9,6 +9,7 @@ import {
   exportTd1RcShadow,
   exportAas96Shadow,
   exportA96Csv,
+  exportUniversalV2,
 } from "@/lib/predictions.functions";
 import { exportM3SePredictionsCsv, exportM3SeFitsCsv } from "@/lib/model3_selective_edge.functions";
 import { supabase } from "@/integrations/supabase/client";
