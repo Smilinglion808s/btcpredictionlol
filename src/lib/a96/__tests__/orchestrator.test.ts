@@ -182,7 +182,11 @@ function seedAasAndSourcePrediction(state: any, opts: {
     layer_b_final_direction: opts.layerB,
     selector_pre_override_selected_layer: opts.base,
     eligibility_passed: true,
+    // r2: default to an in-band Layer A probability so existing tests
+    // exercise the directional path.
+    layer_a_prob_mean: 0.52,
   });
+
   state.predRows.set(opts.predictionId, {
     id: opts.predictionId,
     candle_ts: opts.targetTs,
