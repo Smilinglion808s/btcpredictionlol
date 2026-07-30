@@ -405,6 +405,15 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     row.a96_margin_band_eligible = a96Row ? Boolean((a96Row as Row).margin_band_eligible) : null;
     row.a96_margin_veto_fired = a96Row ? Boolean((a96Row as Row).margin_veto_fired) : null;
 
+    // r3 four-candle path-efficiency audit passthrough
+    row.a96_four_candle_net_displacement = a96Row ? ((a96Row as Row).four_candle_net_displacement ?? null) : null;
+    row.a96_four_candle_total_body_path = a96Row ? ((a96Row as Row).four_candle_total_body_path ?? null) : null;
+    row.a96_four_candle_path_efficiency = a96Row ? ((a96Row as Row).four_candle_path_efficiency ?? null) : null;
+    row.a96_efficiency_veto_min = a96Row ? ((a96Row as Row).efficiency_veto_min ?? null) : null;
+    row.a96_efficiency_veto_max = a96Row ? ((a96Row as Row).efficiency_veto_max ?? null) : null;
+    row.a96_efficiency_veto_condition = a96Row ? ((a96Row as Row).efficiency_veto_condition ?? null) : null;
+    row.a96_efficiency_veto_fired = a96Row ? ((a96Row as Row).efficiency_veto_fired ?? null) : null;
+
     // ---- Availability ---------------------------------------------------
     row.base_feature_tracking_available =
       pred !== null && (pred.indicators !== null && pred.indicators !== undefined);
