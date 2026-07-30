@@ -428,7 +428,37 @@ function StatsPage() {
             <MiniStat label="Abstains" value={Number(a96Stats.abstains ?? 0)} />
             <MiniStat label="Fit overrides" value={Number(a96Stats.overrides ?? 0)} />
             <MiniStat label="Agreement vetoes" value={Number(a96Stats.agreement_vetoes ?? 0)} />
+            <MiniStat label="Efficiency vetoes" value={Number(a96Stats.efficiency_vetoes ?? 0)} />
           </div>
+          {a96Pending && (a96Pending.four_candle_path_efficiency != null || a96Pending.efficiency_veto_condition != null) && (
+            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Four-candle efficiency audit
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat
+                  label="Net displacement"
+                  value={a96Pending.four_candle_net_displacement != null ? Number(a96Pending.four_candle_net_displacement).toFixed(2) : "—"}
+                />
+                <MiniStat
+                  label="Total body path"
+                  value={a96Pending.four_candle_total_body_path != null ? Number(a96Pending.four_candle_total_body_path).toFixed(2) : "—"}
+                />
+                <MiniStat
+                  label="Path efficiency"
+                  value={a96Pending.four_candle_path_efficiency != null ? Number(a96Pending.four_candle_path_efficiency).toFixed(4) : "—"}
+                />
+                <MiniStat
+                  label="Toxic band"
+                  value={a96Pending.efficiency_veto_condition ? "In band" : "Out of band"}
+                />
+                <MiniStat
+                  label="Veto fired"
+                  value={a96Pending.efficiency_veto_fired ? "Yes" : "No"}
+                />
+              </div>
+            </div>
+          )}
           {a96Episode && (a96Episode.comparable_resolved_count ?? 0) > 0 && (
             <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Active fit episode</div>
