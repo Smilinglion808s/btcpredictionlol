@@ -2,8 +2,8 @@
 // disagreement-selector / fit-leader logic with a single Layer-A directional
 // source gated by a fixed margin band on layer_a_prob_mean.
 export const A96_MODEL_NAME = "a96";
-export const A96_MODEL_VERSION = "a96-r2";
-export const A96_VARIANT = "a96";
+export const A96_MODEL_VERSION = "a96-r3";
+export const A96_VARIANT = "layer-a-margin-agreement-efficiency";
 
 export const A96_CONFIG = {
   // r2 margin band (frozen). |layer_a_prob_mean - 0.5| must fall in
@@ -17,6 +17,12 @@ export const A96_CONFIG = {
   required_prior_candles: 4,
   expected_candle_seconds: 900,
   abstain_on_unusable_agreement_history: true,
+
+  // r3 four-candle path-efficiency toxic band (frozen). ABSTAIN when
+  // efficiency is in [min_inclusive, max_exclusive).
+  four_candle_efficiency_veto_min_inclusive: 0.25,
+  four_candle_efficiency_veto_max_exclusive: 0.40,
+
 
   // r1 fit-selector thresholds retained ONLY as audit constants — they are
   // NOT consulted by the r2 decision path. baseSelectedLayer and fitState

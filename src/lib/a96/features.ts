@@ -9,6 +9,35 @@ export function bodyToRange(c: Candle): number {
   return Math.abs(c.close - c.open) / range;
 }
 
+export interface FourCandleEfficiency {
+  net_displacement: number;
+  total_body_path: number;
+  path_efficiency: number;
+}
+
+/**
+ * r3 four-candle path efficiency, computed from the immutable prediction-time
+ * prior-candle snapshot (T-60, T-45, T-30, T-15, oldest → newest).
+ *
+ * netDisplacement = |priorCandles[3].close - priorCandles[0].open|
+ * totalBodyPath   = sum of |close - open| across the four candles
+ * efficiency      = totalBodyPath > 0 ? netDisplacement / totalBodyPath : 0.0
+ *
+ * Returns null when exactly four candles are not available (no substitution,
+ * no clamping, no rounding).
+ */
+export function fourCandleEfficiency(priorCandles: Candle[]): FourCandleEfficiency | null {
+  const need = A96_CONFIG.required_prior_candles;
+  if (!Array.isArray(priorCandles) || priorCandles.length !== need) return null;
+  const first = priorCandles[0];
+  const last = priorCandles[need - 1];
+  if (!first || !last) return null;
+  const net_displacement = Math.abs(last.close - first.open);
+  const total_body_path = priorCandles.reduce((sum, c) => sum + Math.abs(c.close - c.open), 0);
+  const path_efficiency = total_body_path > 0 ? net_displacement / total_body_path : 0.0;
+  return { net_displacement, total_body_path, path_efficiency };
+}
+
 interface AgreementFeatures {
   distance_from_4_candle_low_bps: number;
   mean_2_candle_body_to_range: number;

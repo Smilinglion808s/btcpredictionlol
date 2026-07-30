@@ -1525,11 +1525,11 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
     .eq("id", 1)
     .maybeSingle();
   const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
-  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0 };
+  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0, efficiency_vetoes: 0 };
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("a96_predictions")
-      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,actual_direction,prediction_created_at")
+      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,efficiency_veto_fired,actual_direction,prediction_created_at")
       .range(from, from + PAGE - 1);
     if (resetAt) q = q.gt("prediction_created_at", resetAt);
     const { data } = await q;
@@ -1538,6 +1538,7 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
       c.total += 1;
       if (r.fit_selector_override_fired) c.overrides += 1;
       if (r.agreement_veto_fired) c.agreement_vetoes += 1;
+      if (r.efficiency_veto_fired) c.efficiency_vetoes += 1;
       if (r.resolved_at) {
         c.resolved += 1;
         if (r.final_prediction === "ABSTAIN") c.abstains += 1;
@@ -1576,7 +1577,7 @@ export const getA96Pending = createServerFn({ method: "GET" }).handler(async () 
   const sb = await admin();
   const { data } = await sb
     .from("a96_predictions")
-    .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at, feature_history_valid, feature_history_error, base_prediction, actual_direction, actual_open, actual_close, actual_high, actual_low, layer_a_result_score, layer_b_result_score, base_result_score, resolution_attempt_count, last_resolution_error")
+    .select("target_candle_ts, final_prediction, selected_layer, base_selected_layer, layer_a_direction, layer_b_direction, decision_reason, fit_selector_override_fired, agreement_veto_fired, distance_from_4_candle_low_bps, mean_2_candle_body_to_range, four_candle_net_displacement, four_candle_total_body_path, four_candle_path_efficiency, efficiency_veto_min, efficiency_veto_max, efficiency_veto_condition, efficiency_veto_fired, target_open, fit_resolved_count_at_prediction, layer_a_net_at_prediction, layer_b_net_at_prediction, resolved_at, feature_history_valid, feature_history_error, base_prediction, actual_direction, actual_open, actual_close, actual_high, actual_low, layer_a_result_score, layer_b_result_score, base_result_score, resolution_attempt_count, last_resolution_error")
     .order("target_candle_ts", { ascending: false })
     .limit(1).maybeSingle();
 

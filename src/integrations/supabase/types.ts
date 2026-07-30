@@ -84,12 +84,19 @@ export type Database = {
           decision_reason: string
           distance_from_4_candle_low_bps: number | null
           distance_veto_condition: boolean
+          efficiency_veto_condition: boolean | null
+          efficiency_veto_fired: boolean | null
+          efficiency_veto_max: number | null
+          efficiency_veto_min: number | null
           feature_history_error: string | null
           feature_history_valid: boolean | null
           final_prediction: string
           fit_episode_id: string
           fit_resolved_count_at_prediction: number
           fit_selector_override_fired: boolean
+          four_candle_net_displacement: number | null
+          four_candle_path_efficiency: number | null
+          four_candle_total_body_path: number | null
           last_resolution_attempt_at: string | null
           last_resolution_error: string | null
           layer_a_direction: string
@@ -147,12 +154,19 @@ export type Database = {
           decision_reason: string
           distance_from_4_candle_low_bps?: number | null
           distance_veto_condition?: boolean
+          efficiency_veto_condition?: boolean | null
+          efficiency_veto_fired?: boolean | null
+          efficiency_veto_max?: number | null
+          efficiency_veto_min?: number | null
           feature_history_error?: string | null
           feature_history_valid?: boolean | null
           final_prediction: string
           fit_episode_id: string
           fit_resolved_count_at_prediction: number
           fit_selector_override_fired?: boolean
+          four_candle_net_displacement?: number | null
+          four_candle_path_efficiency?: number | null
+          four_candle_total_body_path?: number | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           layer_a_direction: string
@@ -210,12 +224,19 @@ export type Database = {
           decision_reason?: string
           distance_from_4_candle_low_bps?: number | null
           distance_veto_condition?: boolean
+          efficiency_veto_condition?: boolean | null
+          efficiency_veto_fired?: boolean | null
+          efficiency_veto_max?: number | null
+          efficiency_veto_min?: number | null
           feature_history_error?: string | null
           feature_history_valid?: boolean | null
           final_prediction?: string
           fit_episode_id?: string
           fit_resolved_count_at_prediction?: number
           fit_selector_override_fired?: boolean
+          four_candle_net_displacement?: number | null
+          four_candle_path_efficiency?: number | null
+          four_candle_total_body_path?: number | null
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           layer_a_direction?: string

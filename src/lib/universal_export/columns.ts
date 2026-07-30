@@ -139,6 +139,14 @@ export const LINEAGE_COLUMNS: ColumnDef[] = [
   { name: "a96_margin_band_max", category: "MODEL_STATE", source: "a96_predictions.margin_band_max", description: "Upper exclusive bound of the r2 margin band (frozen 0.04)." },
   { name: "a96_margin_band_eligible", category: "MODEL_STATE", source: "a96_predictions.margin_band_eligible", description: "True when margin fell in [min, max)." },
   { name: "a96_margin_veto_fired", category: "MODEL_STATE", source: "a96_predictions.margin_veto_fired", description: "True when the r2 margin-band gate produced an ABSTAIN." },
+  // a96-r3 four-candle path-efficiency audit
+  { name: "a96_four_candle_net_displacement", category: "MODEL_STATE", source: "a96_predictions.four_candle_net_displacement", description: "|close(T-15m) - open(T-60m)| over the four prior canonical candles." },
+  { name: "a96_four_candle_total_body_path", category: "MODEL_STATE", source: "a96_predictions.four_candle_total_body_path", description: "Sum of |close - open| across the four prior canonical candles." },
+  { name: "a96_four_candle_path_efficiency", category: "MODEL_STATE", source: "a96_predictions.four_candle_path_efficiency", description: "Net displacement divided by total body path (0.0 when denominator is 0)." },
+  { name: "a96_efficiency_veto_min", category: "MODEL_STATE", source: "a96_predictions.efficiency_veto_min", description: "Lower inclusive bound of the r3 toxic efficiency band (frozen 0.25)." },
+  { name: "a96_efficiency_veto_max", category: "MODEL_STATE", source: "a96_predictions.efficiency_veto_max", description: "Upper exclusive bound of the r3 toxic efficiency band (frozen 0.40)." },
+  { name: "a96_efficiency_veto_condition", category: "MODEL_STATE", source: "a96_predictions.efficiency_veto_condition", description: "True when path efficiency fell in [0.25, 0.40), regardless of which veto fired." },
+  { name: "a96_efficiency_veto_fired", category: "MODEL_STATE", source: "a96_predictions.efficiency_veto_fired", description: "True when the r3 efficiency band was the active ABSTAIN reason (margin-eligible only)." },
 
 ];
 
