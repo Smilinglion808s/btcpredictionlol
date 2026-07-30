@@ -31,6 +31,7 @@ import {
   M3SE_MAX_ITER,
   M3SE_TOL,
   M3SE_TARGET_COVERAGE,
+  M3SE_DIRECTION_STRENGTH_PERCENTILE,
   M3SE_MIN_SELECTION_THRESHOLD,
   M3SE_MIN_ESTIMATED_COVERAGE,
   M3SE_MAX_ESTIMATED_COVERAGE,
@@ -64,6 +65,9 @@ export interface M3SEArtifact {
   selection_threshold: number;
   // Sorted calibration selector scores (used for percentile lookups at score time).
   calibration_selector_scores_sorted: number[];
+  // R3 publish gate: direction strength only.
+  direction_strength_threshold: number;
+  calibration_direction_strengths_sorted: number[];
   green_class_weight: number;
   red_class_weight: number;
   fast_half_life: number;
@@ -107,6 +111,12 @@ export interface M3SEFitResult {
     selector_score_calibration_p40: number;
     selector_score_calibration_p60: number;
     selector_score_calibration_max: number;
+    direction_strength_calibration_min: number;
+    direction_strength_calibration_median: number;
+    direction_strength_calibration_p65: number;
+    direction_strength_calibration_p70: number;
+    direction_strength_calibration_max: number;
+    selector_estimated_coverage: number;
     slow_lambda: number;
     fast_lambda: number;
     stacker_lambda: number;
@@ -131,6 +141,12 @@ function quantile(sorted: number[], q: number): number {
   const lo = Math.floor(idx), hi = Math.ceil(idx);
   if (lo === hi) return sorted[lo];
   return sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
+}
+
+/** R3 direction strength: |logit(p_green)| on a clamped probability. */
+export function directionStrengthFromP(pGreen: number): number {
+  const p = Math.min(0.999, Math.max(0.001, pGreen));
+  return Math.abs(Math.log(p / (1 - p)));
 }
 
 function accuracy(p: number[], y: number[]): number {
@@ -239,7 +255,7 @@ function stableFitId(art: M3SEArtifact, nTrain: number): string {
   h.update("|k=" + art.stacker.b.toFixed(8));
   for (const v of art.selector.w) h.update(v.toFixed(8));
   h.update("|l=" + art.selector.b.toFixed(8));
-  return `m3ser2_${nTrain}_${h.digest("hex").slice(0, 12)}`;
+  return `m3ser3_${nTrain}_${h.digest("hex").slice(0, 12)}`;
 }
 
 function hashArtifact(a: M3SEArtifact): string {
@@ -461,8 +477,16 @@ export function trainM3SE(
   const sortedCal = [...selectorRawCal].sort((a, b) => a - b);
   const quantileThreshold = quantile(sortedCal, 1 - M3SE_TARGET_COVERAGE);
   const selection_threshold = Math.max(M3SE_MIN_SELECTION_THRESHOLD, quantileThreshold);
-  const calibration_estimated_coverage =
+  const selector_estimated_coverage =
     selectorRawCal.filter((p) => p >= selection_threshold).length / Math.max(1, selectorRawCal.length);
+
+  // 11b) R3 publish gate — direction strength = |logit(p_green_stacked_calibrated)|.
+  const calDirectionStrengths = calStackerCalibrated.map((p) => directionStrengthFromP(p));
+  const sortedCalDs = [...calDirectionStrengths].sort((a, b) => a - b);
+  const direction_strength_threshold = quantile(sortedCalDs, M3SE_DIRECTION_STRENGTH_PERCENTILE);
+  const calibration_estimated_coverage =
+    calDirectionStrengths.filter((v) => v >= direction_strength_threshold).length /
+    Math.max(1, calDirectionStrengths.length);
 
   // 12) Diagnostics.
   const oof_direction_accuracy = accuracy(stackerRaw, stackerY);
@@ -527,6 +551,8 @@ export function trainM3SE(
     platt_correctness,
     selection_threshold,
     calibration_selector_scores_sorted: sortedCal,
+    direction_strength_threshold,
+    calibration_direction_strengths_sorted: sortedCalDs,
     green_class_weight: slowCW.green,
     red_class_weight: slowCW.red,
     fast_half_life: M3SE_FAST_HALF_LIFE,
@@ -582,6 +608,12 @@ export function trainM3SE(
       selector_score_calibration_p40: quantile(sortedCal, 0.4),
       selector_score_calibration_p60: quantile(sortedCal, 0.6),
       selector_score_calibration_max: sortedCal[sortedCal.length - 1] ?? 0,
+      direction_strength_calibration_min: sortedCalDs[0] ?? 0,
+      direction_strength_calibration_median: quantile(sortedCalDs, 0.5),
+      direction_strength_calibration_p65: quantile(sortedCalDs, 0.65),
+      direction_strength_calibration_p70: quantile(sortedCalDs, 0.70),
+      direction_strength_calibration_max: sortedCalDs[sortedCalDs.length - 1] ?? 0,
+      selector_estimated_coverage,
       slow_lambda: M3SE_SLOW_LAMBDA,
       fast_lambda: M3SE_FAST_LAMBDA,
       stacker_lambda: M3SE_STACKER_LAMBDA,
@@ -613,6 +645,9 @@ export interface M3SEScoreResult {
   selectorScorePercentile: number; // percentile of raw score in calibration distribution
   pCorrectRaw: number;
   pCorrectCalibrated: number;
+  directionStrength: number;
+  directionStrengthThreshold: number;
+  directionStrengthPercentile: number;
 }
 
 function percentileOf(sorted: number[], v: number): number {
@@ -647,6 +682,7 @@ export function scoreM3SE(rawFeatureRow: number[], art: M3SEArtifact): M3SEScore
   const selectorRowV2 = buildSelectorRowV2(rawFeatureRow, rawDir, consensus);
   const selectorScoreRaw = predictProb(selectorRowV2, art.selector);
   const selectorScorePercentile = percentileOf(art.calibration_selector_scores_sorted, selectorScoreRaw);
+  const directionStrength = directionStrengthFromP(pStackedCalibrated);
   const pCorrectRaw = selectorScoreRaw;
   const pCorrectCalibrated = applyPlatt(
     Math.log(pCorrectRaw / (1 - pCorrectRaw)),
@@ -663,5 +699,10 @@ export function scoreM3SE(rawFeatureRow: number[], art: M3SEArtifact): M3SEScore
     selectorScorePercentile,
     pCorrectRaw,
     pCorrectCalibrated,
+    directionStrength,
+    directionStrengthThreshold: art.direction_strength_threshold ?? 0,
+    directionStrengthPercentile: percentileOf(
+      art.calibration_direction_strengths_sorted ?? [], directionStrength,
+    ),
   };
 }
