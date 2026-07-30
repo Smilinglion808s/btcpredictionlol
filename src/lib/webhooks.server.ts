@@ -194,7 +194,7 @@ export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInp
 // probability margin band on layer_a_prob_mean. Directional GREEN → YES,
 // RED → NO. ABSTAIN outcomes (margin, agreement veto, invalid probability,
 // invalid candle data, prospective_invalid) do NOT emit any webhook.
-export const A96_DECISION_POLICY_VERSION = "a96-r2";
+export const A96_DECISION_POLICY_VERSION = "a96-r3";
 export const A96_MODEL_ID = "a96";
 
 
@@ -219,7 +219,7 @@ export function buildA96SkipWebhookPayload({
   const nowIso = new Date().toISOString();
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r2",
+    model_version: "a96-r3",
 
     decision_policy_version: A96_DECISION_POLICY_VERSION,
 
@@ -346,7 +346,7 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
 
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r2",
+    model_version: "a96-r3",
     decision_policy_version: A96_DECISION_POLICY_VERSION,
     fit_episode_id: a96Row.fit_episode_id ?? null,
     artifact_fit_id: a96Row.artifact_fit_id ?? null,
@@ -364,6 +364,14 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
     agreement_veto_fired: Boolean(a96Row.agreement_veto_fired),
     // r2 margin-band audit
     margin_veto_fired: Boolean(a96Row.margin_veto_fired),
+    // r3 four-candle path-efficiency audit
+    efficiency_veto_fired: Boolean(a96Row.efficiency_veto_fired),
+    efficiency_veto_condition: Boolean(a96Row.efficiency_veto_condition),
+    four_candle_net_displacement: a96Row.four_candle_net_displacement ?? null,
+    four_candle_total_body_path: a96Row.four_candle_total_body_path ?? null,
+    four_candle_path_efficiency: a96Row.four_candle_path_efficiency ?? null,
+    efficiency_veto_min: a96Row.efficiency_veto_min ?? null,
+    efficiency_veto_max: a96Row.efficiency_veto_max ?? null,
     layer_a_prob_mean: a96Row.layer_a_prob_mean != null ? Number(a96Row.layer_a_prob_mean) : null,
     layer_a_prob_margin: a96Row.layer_a_prob_margin != null ? Number(a96Row.layer_a_prob_margin) : null,
     layer_a_probability_valid: Boolean(a96Row.layer_a_probability_valid),
