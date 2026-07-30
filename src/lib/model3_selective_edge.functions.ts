@@ -1,4 +1,4 @@
-// Server functions for Model 3 — Selective Edge R2.
+// Server functions for Model 3 — Selective Edge R3.
 import { createServerFn } from "@tanstack/react-start";
 import { M3SE_MODEL_VERSION } from "@/lib/model3_selective_edge/config";
 
@@ -19,7 +19,7 @@ function toSerializable(r: Record<string, unknown>): Row {
   return out;
 }
 
-/** Live stats for the active model version (R2). R1 rows are excluded. */
+/** Live stats for the active model version (R3). R1/R2 rows are excluded. */
 export const getM3SeStats = createServerFn({ method: "GET" }).handler(async () => {
   const { data: rows } = await (await getAdmin())
     .from("model3_se_predictions")
@@ -74,11 +74,11 @@ export const getM3SePending = createServerFn({ method: "GET" }).handler(async ()
   return (data as Row | null) ?? null;
 });
 
-/** 96-row rolling summary for the active R2 version. */
+/** 96-row rolling summary for the active R3 version. */
 export const getM3SeR2Summary = createServerFn({ method: "GET" }).handler(async () => {
   const { data } = await (await getAdmin())
     .from("model3_se_predictions")
-    .select("published_prediction, published_result, raw_prediction, raw_result, actual_direction, selector_score_raw, expert_agreement, resolved_at")
+    .select("published_prediction, published_result, raw_prediction, raw_result, actual_direction, selector_score_raw, expert_agreement, resolved_at, direction_strength, direction_strength_selected, selector_shadow_selected, selector_shadow_result, selector_shadow_net, abstained_winner, abstained_loser, selector_net_effect")
     .eq("model_version", M3SE_MODEL_VERSION)
     .not("resolved_at", "is", null)
     .neq("actual_direction", "PUSH")
@@ -116,8 +116,37 @@ export const getM3SeR2Summary = createServerFn({ method: "GET" }).handler(async 
     return arr.reduce((s, x) => s + x.win, 0) / arr.length;
   };
   const rawAcc = scored.length ? scored.reduce((s, x) => s + x.win, 0) / scored.length : 0;
+  const r3Wins = pubDirectional.filter((r) => r.published_result === "WIN").length;
+  const r3Losses = pubDirectional.filter((r) => r.published_result === "LOSS").length;
+  const r3AbstainedWinners = rows.filter((r) => r.abstained_winner === true).length;
+  const r3AbstainedLosers = rows.filter((r) => r.abstained_loser === true).length;
+  const rawLossCount = rows.filter((r) => r.raw_result === "LOSS").length;
+  const shadow = rows.filter((r) => r.selector_shadow_selected === true);
+  const shadowWins = shadow.filter((r) => r.selector_shadow_result === "WIN").length;
+  const shadowLosses = shadow.filter((r) => r.selector_shadow_result === "LOSS").length;
+
   return {
     window_size: n,
+    // R3 published track (direction-strength gate)
+    r3_published_count: pubDirectional.length,
+    r3_coverage: n ? pubDirectional.length / n : 0,
+    r3_wins: r3Wins,
+    r3_losses: r3Losses,
+    r3_win_rate: (r3Wins + r3Losses) ? r3Wins / (r3Wins + r3Losses) : 0,
+    r3_net: r3Wins - r3Losses,
+    r3_abstained_winners: r3AbstainedWinners,
+    r3_abstained_losers: r3AbstainedLosers,
+    r3_abstain_net_effect: r3AbstainedLosers - r3AbstainedWinners,
+    // Raw direction track
+    raw_wins: rawWin,
+    raw_losses: rawLossCount,
+    raw_net: rawWin - rawLossCount,
+    raw_win_rate: (rawWin + rawLossCount) ? rawWin / (rawWin + rawLossCount) : 0,
+    // Shadow selector counterfactual (not used for publication in R3)
+    selector_shadow_wins: shadowWins,
+    selector_shadow_losses: shadowLosses,
+    selector_shadow_net: shadowWins - shadowLosses,
+    selector_shadow_win_rate: (shadowWins + shadowLosses) ? shadowWins / (shadowWins + shadowLosses) : 0,
     actual_coverage: n ? pubDirectional.length / n : 0,
     raw_accuracy: n ? rawWin / n : 0,
     published_accuracy: (pubWin + pubLoss) ? pubWin / (pubWin + pubLoss) : 0,
@@ -136,7 +165,7 @@ export const getM3SeR2Summary = createServerFn({ method: "GET" }).handler(async 
   };
 });
 
-/** Full R2 prediction CSV (R1 rows excluded — they remain in the DB). */
+/** Full R3 prediction CSV (R1/R2 rows excluded — they remain in the DB). */
 export const exportM3SePredictionsCsv = createServerFn({ method: "GET" }).handler(async (): Promise<Row[]> => {
   const PAGE = 1000;
   const all: Row[] = [];

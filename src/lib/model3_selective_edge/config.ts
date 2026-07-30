@@ -2,9 +2,9 @@
 // R2 is an in-place upgrade of R1: same table, new version tag, new fits.
 // R1 rows already in the DB stay tagged "m3-se-r1" and are preserved.
 
-export const M3SE_MODEL_VERSION = "m3-se-r2";
-export const M3SE_FEATURE_SCHEMA_VERSION = "m3-se-features-v2";
-export const M3SE_CODE_VERSION = "m3-se-r2-2026-07-28-rank-selector";
+export const M3SE_MODEL_VERSION = "m3-se-r3";
+export const M3SE_FEATURE_SCHEMA_VERSION = "m3-se-features-r3";
+export const M3SE_CODE_VERSION = "m3-se-r3-2026-07-30-direction-strength";
 
 export const M3SE_STREAM = {
   symbol: "BTC-USDT",
@@ -45,14 +45,17 @@ export const M3SE_SELECTOR_LAMBDA_GRID = [0.03, 0.10, 0.30, 1.00] as const;
 export const M3SE_MAX_ITER = 400;
 export const M3SE_TOL = 1e-6;
 
-// Publication: publish top ~60% by selector rank on calibration (§5, §7).
-export const M3SE_TARGET_COVERAGE = 0.60;
+// Publication (R3): publish top ~35% by direction strength on calibration.
+export const M3SE_TARGET_COVERAGE = 0.35;
+// R3: publish gate is direction strength only. Threshold = P65 of the
+// calibration direction-strength distribution (=> ~35% coverage).
+export const M3SE_DIRECTION_STRENGTH_PERCENTILE = 0.65;
 // Do NOT apply a 0.50 floor to selector_score_raw (spec §5).
 export const M3SE_MIN_SELECTION_THRESHOLD = -Infinity;
 
 // Coverage sanity gate on calibration.
-export const M3SE_MIN_ESTIMATED_COVERAGE = 0.35;
-export const M3SE_MAX_ESTIMATED_COVERAGE = 0.85;
+export const M3SE_MIN_ESTIMATED_COVERAGE = 0.25;
+export const M3SE_MAX_ESTIMATED_COVERAGE = 0.50;
 
 // Retrain cadence (unchanged).
 export const M3SE_RETRAIN_EVERY_RESOLVED_ROWS = 96;

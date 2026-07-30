@@ -93,7 +93,7 @@ function StatsPage() {
     try {
       setExportingM3se(true);
       const rows = await exportM3sePredsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r2 predictions to export."); return; }
+      if (!rows || rows.length === 0) { alert("No m3-se-r3 predictions to export."); return; }
       triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-predictions-${stamp()}.csv`);
     } finally {
       setExportingM3se(false);
@@ -104,7 +104,7 @@ function StatsPage() {
     try {
       setExportingM3seFits(true);
       const rows = await exportM3seFitsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r2 fits to export."); return; }
+      if (!rows || rows.length === 0) { alert("No m3-se-r3 fits to export."); return; }
       triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-fits-${stamp()}.csv`);
     } finally {
       setExportingM3seFits(false);
@@ -444,7 +444,7 @@ function StatsPage() {
 
         <ModelCard
           title="Model 3 — Selective Edge"
-          subtitle="m3-se-r2"
+          subtitle="m3-se-r3"
           status="Auto"
           tone="violet"
           winRate={Number(m3sePublished.win_rate ?? 0)}

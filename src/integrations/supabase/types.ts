@@ -859,6 +859,11 @@ export type Database = {
           calibration_rows: number | null
           calibration_start: string | null
           created_at: string
+          direction_strength_calibration_max: number | null
+          direction_strength_calibration_median: number | null
+          direction_strength_calibration_min: number | null
+          direction_strength_calibration_p65: number | null
+          direction_strength_calibration_p70: number | null
           estimated_coverage: number | null
           failure_reason: string | null
           fast_lambda: number | null
@@ -926,6 +931,11 @@ export type Database = {
           calibration_rows?: number | null
           calibration_start?: string | null
           created_at?: string
+          direction_strength_calibration_max?: number | null
+          direction_strength_calibration_median?: number | null
+          direction_strength_calibration_min?: number | null
+          direction_strength_calibration_p65?: number | null
+          direction_strength_calibration_p70?: number | null
           estimated_coverage?: number | null
           failure_reason?: string | null
           fast_lambda?: number | null
@@ -993,6 +1003,11 @@ export type Database = {
           calibration_rows?: number | null
           calibration_start?: string | null
           created_at?: string
+          direction_strength_calibration_max?: number | null
+          direction_strength_calibration_median?: number | null
+          direction_strength_calibration_min?: number | null
+          direction_strength_calibration_p65?: number | null
+          direction_strength_calibration_p70?: number | null
           estimated_coverage?: number | null
           failure_reason?: string | null
           fast_lambda?: number | null
@@ -1081,6 +1096,10 @@ export type Database = {
           data_quality_reasons: string[] | null
           data_quality_valid: boolean
           direction_confidence_gap: number | null
+          direction_strength: number | null
+          direction_strength_percentile: number | null
+          direction_strength_selected: boolean | null
+          direction_strength_threshold: number | null
           ema21_minus_ema50_to_atr: number | null
           ema9_minus_ema21_to_atr: number | null
           expert_agreement: number | null
@@ -1149,6 +1168,9 @@ export type Database = {
           selector_net_effect: number | null
           selector_score_percentile: number | null
           selector_score_raw: number | null
+          selector_shadow_net: number | null
+          selector_shadow_result: string | null
+          selector_shadow_selected: boolean | null
           signed_consensus: number | null
           slow_logit: number | null
           stacker_logit_margin: number | null
@@ -1193,6 +1215,10 @@ export type Database = {
           data_quality_reasons?: string[] | null
           data_quality_valid?: boolean
           direction_confidence_gap?: number | null
+          direction_strength?: number | null
+          direction_strength_percentile?: number | null
+          direction_strength_selected?: boolean | null
+          direction_strength_threshold?: number | null
           ema21_minus_ema50_to_atr?: number | null
           ema9_minus_ema21_to_atr?: number | null
           expert_agreement?: number | null
@@ -1261,6 +1287,9 @@ export type Database = {
           selector_net_effect?: number | null
           selector_score_percentile?: number | null
           selector_score_raw?: number | null
+          selector_shadow_net?: number | null
+          selector_shadow_result?: string | null
+          selector_shadow_selected?: boolean | null
           signed_consensus?: number | null
           slow_logit?: number | null
           stacker_logit_margin?: number | null
@@ -1305,6 +1334,10 @@ export type Database = {
           data_quality_reasons?: string[] | null
           data_quality_valid?: boolean
           direction_confidence_gap?: number | null
+          direction_strength?: number | null
+          direction_strength_percentile?: number | null
+          direction_strength_selected?: boolean | null
+          direction_strength_threshold?: number | null
           ema21_minus_ema50_to_atr?: number | null
           ema9_minus_ema21_to_atr?: number | null
           expert_agreement?: number | null
@@ -1373,6 +1406,9 @@ export type Database = {
           selector_net_effect?: number | null
           selector_score_percentile?: number | null
           selector_score_raw?: number | null
+          selector_shadow_net?: number | null
+          selector_shadow_result?: string | null
+          selector_shadow_selected?: boolean | null
           signed_consensus?: number | null
           slow_logit?: number | null
           stacker_logit_margin?: number | null

@@ -584,10 +584,10 @@ function CsvDataPage() {
             className="gap-2"
             onClick={async () => {
               const rows = (await exportM3().catch(() => [])) as any[];
-              downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r1_predictions");
+              downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r3_predictions");
             }}
           >
-            <Download className="size-4" /> m3-se-r2 Predictions CSV
+            <Download className="size-4" /> m3-se-r3 Predictions CSV
           </Button>
           <Button
             size="lg"
@@ -595,10 +595,10 @@ function CsvDataPage() {
             className="gap-2"
             onClick={async () => {
               const rows = (await exportM3Fits().catch(() => [])) as any[];
-              downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r1_fits");
+              downloadJsonRowsAsCsv(rows, "btc15m_m3_se_r3_fits");
             }}
           >
-            <Download className="size-4" /> m3-se-r2 Fits CSV
+            <Download className="size-4" /> m3-se-r3 Fits CSV
           </Button>
         </div>
       </div>
