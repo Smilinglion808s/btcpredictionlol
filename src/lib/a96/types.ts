@@ -29,6 +29,8 @@ export interface Decision {
   agreement_veto_fired: boolean;
   // r2 margin-band audit
   margin_veto_fired: boolean;
+  // r3 four-candle path-efficiency audit
+  efficiency_veto_fired: boolean;
   layer_a_prob_mean: number | null;
   layer_a_prob_margin: number | null;
   layer_a_probability_valid: boolean;
@@ -38,6 +40,10 @@ export interface Decision {
     mean_2_candle_body_to_range: number | null;
     distance_veto_condition: boolean;
     body_ratio_veto_condition: boolean;
+    four_candle_net_displacement: number | null;
+    four_candle_total_body_path: number | null;
+    four_candle_path_efficiency: number | null;
+    efficiency_veto_condition: boolean;
   };
   fit_state_snapshot: FitState & { net_gap_a_minus_b: number };
 }
