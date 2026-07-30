@@ -18,6 +18,12 @@ export const A96_CONFIG = {
   expected_candle_seconds: 900,
   abstain_on_unusable_agreement_history: true,
 
+  // r3 four-candle path-efficiency toxic band (frozen). ABSTAIN when
+  // efficiency is in [min_inclusive, max_exclusive).
+  four_candle_efficiency_veto_min_inclusive: 0.25,
+  four_candle_efficiency_veto_max_exclusive: 0.40,
+
+
   // r1 fit-selector thresholds retained ONLY as audit constants — they are
   // NOT consulted by the r2 decision path. baseSelectedLayer and fitState
   // are still recorded on each row for auditability.
