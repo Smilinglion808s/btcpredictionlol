@@ -1,4 +1,4 @@
-// Orchestrator for m3-se-r2: called from the shared shadow trigger with a
+// Orchestrator for m3-se-r3: called from the shared shadow trigger with a
 // target candle timestamp. Fully wrapped so failures never break siblings.
 // R1 rows already in the DB are preserved; R2 rows are tagged model_version=m3-se-r2.
 
@@ -223,6 +223,11 @@ async function trainAndStoreNewFit(sb: SupabaseClient, candles: Candle[]): Promi
     selector_score_calibration_p40: d.selector_score_calibration_p40,
     selector_score_calibration_p60: d.selector_score_calibration_p60,
     selector_score_calibration_max: d.selector_score_calibration_max,
+    direction_strength_calibration_min: d.direction_strength_calibration_min,
+    direction_strength_calibration_median: d.direction_strength_calibration_median,
+    direction_strength_calibration_p65: d.direction_strength_calibration_p65,
+    direction_strength_calibration_p70: d.direction_strength_calibration_p70,
+    direction_strength_calibration_max: d.direction_strength_calibration_max,
     training_green_count: d.training_green_count,
     training_red_count: d.training_red_count,
     green_class_weight: d.green_class_weight,
@@ -351,6 +356,11 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
     const threshold = active.artifact.selection_threshold;
     const selectorMargin = scored.selectorScoreRaw - threshold;
     const directionConfidenceGap = Math.abs(scored.pStackedCalibrated - 0.5);
+    // R3 publish gate: direction strength only. Selector values remain shadow.
+    const dsThreshold = scored.directionStrengthThreshold;
+    const directionStrength = scored.directionStrength;
+    const directionStrengthSelected = directionStrength >= dsThreshold;
+    const selectorShadowSelected = scored.selectorScoreRaw >= threshold;
 
     let published: "GREEN" | "RED" | "ABSTAIN" = scored.rawDir;
     let abstainReason: string | null = null;
@@ -366,14 +376,14 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       abstainReason = "invalid_data";
       abstainCategory = "invalid_features";
       abstainDetail = `feature row has ${featureNanCount} non-finite value(s)`;
-    } else if (scored.selectorScoreRaw < threshold) {
+    } else if (!directionStrengthSelected) {
       published = "ABSTAIN";
-      abstainReason = "below_selector_rank";
-      abstainCategory = "below_selector_rank";
+      abstainReason = "below_direction_strength";
+      abstainCategory = "below_direction_strength";
       abstainDetail =
-        `selector_score_raw=${scored.selectorScoreRaw.toFixed(4)} < ` +
-        `selection_threshold=${threshold.toFixed(4)} ` +
-        `(margin=${selectorMargin.toFixed(4)}; pct=${(scored.selectorScorePercentile * 100).toFixed(1)}; ` +
+        `direction_strength=${directionStrength.toFixed(4)} < ` +
+        `direction_strength_threshold=${dsThreshold.toFixed(4)} ` +
+        `(pct=${(scored.directionStrengthPercentile * 100).toFixed(1)}; ` +
         `raw_dir=${scored.rawDir}; p_green_cal=${scored.pStackedCalibrated.toFixed(4)}; ` +
         `agreement=${scored.consensus.expertAgreement}; ` +
         `signed_consensus=${scored.consensus.signedConsensus.toFixed(3)}; ` +
@@ -389,7 +399,12 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       dq_reasons: dqReasons,
       feature_row_valid: featureRowValid,
       feature_nan_count: featureNanCount,
-      selector_pass: scored.selectorScoreRaw >= threshold,
+      direction_strength: directionStrength,
+      direction_strength_threshold: dsThreshold,
+      direction_strength_percentile: scored.directionStrengthPercentile,
+      direction_strength_selected: directionStrengthSelected,
+      selector_shadow_selected: selectorShadowSelected,
+      selector_pass: selectorShadowSelected,
       selector_score_raw: scored.selectorScoreRaw,
       selector_score_percentile: scored.selectorScorePercentile,
       selector_margin: selectorMargin,
@@ -442,6 +457,12 @@ export async function runM3SeR1(sb: SupabaseClient, opts: { targetCandleTs: Date
       p_correct_raw: scored.pCorrectRaw,
       p_correct_calibrated: scored.pCorrectCalibrated,
       selection_threshold: threshold,
+      // R3 publish gate (direction strength only)
+      direction_strength: directionStrength,
+      direction_strength_threshold: dsThreshold,
+      direction_strength_percentile: scored.directionStrengthPercentile,
+      direction_strength_selected: directionStrengthSelected,
+      selector_shadow_selected: selectorShadowSelected,
       // Consensus features
       signed_consensus: scored.consensus.signedConsensus,
       consensus_strength: scored.consensus.consensusStrength,
@@ -493,7 +514,7 @@ export async function resolveDueM3SeR1(sb: SupabaseClient): Promise<void> {
   try {
     const { data: pending } = await sb
       .from("model3_se_predictions")
-      .select("prediction_id, target_candle_ts, published_prediction, raw_prediction")
+      .select("prediction_id, target_candle_ts, published_prediction, raw_prediction, selector_shadow_selected")
       .eq("model_version", M3SE_MODEL_VERSION)
       .is("resolved_at", null)
       .lte("target_candle_ts", new Date(Date.now() - TF_MS).toISOString())
@@ -527,6 +548,12 @@ export async function resolveDueM3SeR1(sb: SupabaseClient): Promise<void> {
       const abstainedWinner = pub === "ABSTAIN" && rawWouldWin;
       const abstainedLoser = pub === "ABSTAIN" && rawResult === "LOSS";
       const selectorNet = pub === "ABSTAIN" ? (rawWouldWin ? -1 : rawResult === "LOSS" ? 1 : 0) : 0;
+      // Shadow selector counterfactual (R3: selector no longer publishes).
+      const shadowSelected = row.selector_shadow_selected === true;
+      const shadowResult = !shadowSelected
+        ? "ABSTAIN"
+        : actualDir === "PUSH" ? "PUSH" : raw === actualDir ? "WIN" : "LOSS";
+      const shadowNet = shadowResult === "WIN" ? 1 : shadowResult === "LOSS" ? -1 : 0;
 
       await sb.from("model3_se_predictions").update({
         actual_open: o, actual_high: Number(c.high), actual_low: Number(c.low),
@@ -538,6 +565,8 @@ export async function resolveDueM3SeR1(sb: SupabaseClient): Promise<void> {
         abstained_winner: abstainedWinner,
         abstained_loser: abstainedLoser,
         selector_net_effect: selectorNet,
+        selector_shadow_result: shadowResult,
+        selector_shadow_net: shadowNet,
         resolved_at: new Date().toISOString(),
       }).eq("prediction_id", row.prediction_id);
     }
