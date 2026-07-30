@@ -1,19 +1,23 @@
-// Pure deterministic a96-r2 decision logic.
+// Pure deterministic a96-r3 decision logic.
 //
-// r2 patch (replaces r1 selector/fit-leader logic):
+// r3 patch (adds one prediction-time abstention rule on top of r2):
 //   1. Validate layer_a_prob_mean (finite, [0,1]) → else ABSTAIN.
 //   2. Compute margin = |layer_a_prob_mean - 0.5|.
-//      Eligible iff margin in [0.01, 0.04). Otherwise ABSTAIN.
-//   3. If Layer A == Layer B, apply the existing agreement veto
+//   3. Compute four-candle path efficiency from the immutable prior snapshot.
+//   4. Margin must be in [0.01, 0.04) → else ABSTAIN (margin veto).
+//   5. Efficiency in the toxic band [0.25, 0.40) → ABSTAIN (efficiency veto),
+//      whether or not Layer A and Layer B agree.
+//   6. If Layer A == Layer B, apply the existing agreement veto
 //      (distance-from-4-low OR body-ratio thresholds) → else Layer A pass.
-//   4. If Layer A != Layer B, always publish Layer A (no selector, no leader).
+//   7. If Layer A != Layer B, publish Layer A (no selector, no leader).
 //
-// baseSelectedLayer and fitState are audit inputs only. They cannot change
-// the r2 direction. Every directional r2 decision returns selected_layer='A'
-// and fit_selector_override_fired=false.
+// All feature conditions are computed before returning so overlapping
+// conditions stay auditable. baseSelectedLayer and fitState are audit inputs
+// only; they cannot change the r3 direction. Every directional r3 decision
+// returns selected_layer='A' and fit_selector_override_fired=false.
 
 import { A96_CONFIG } from "./config";
-import { agreementFeatures, CandleHistoryError } from "./features";
+import { agreementFeatures, fourCandleEfficiency, CandleHistoryError } from "./features";
 import type { Candle, Decision, Direction, FitState, Layer } from "./types";
 
 function snapshot(s: FitState) {
@@ -26,6 +30,10 @@ function emptyFeatures(): Decision["feature_values"] {
     mean_2_candle_body_to_range: null,
     distance_veto_condition: false,
     body_ratio_veto_condition: false,
+    four_candle_net_displacement: null,
+    four_candle_total_body_path: null,
+    four_candle_path_efficiency: null,
+    efficiency_veto_condition: false,
   };
 }
 
@@ -45,6 +53,38 @@ export function a96Decide(args: {
   } = args;
   const snap = snapshot(fitState);
 
+  // Feature values are computed up-front so every branch records them.
+  const feature_values = emptyFeatures();
+
+  // Four-candle path efficiency (prediction-time, immutable prior snapshot).
+  const eff = fourCandleEfficiency(priorCandles);
+  if (eff) {
+    feature_values.four_candle_net_displacement = eff.net_displacement;
+    feature_values.four_candle_total_body_path = eff.total_body_path;
+    feature_values.four_candle_path_efficiency = eff.path_efficiency;
+    feature_values.efficiency_veto_condition =
+      eff.path_efficiency >= A96_CONFIG.four_candle_efficiency_veto_min_inclusive &&
+      eff.path_efficiency < A96_CONFIG.four_candle_efficiency_veto_max_exclusive;
+  }
+
+  // Agreement features (only meaningful when A == B, but always audited).
+  let agreementHistoryUnusable = false;
+  try {
+    const f = agreementFeatures({ priorCandles, targetTimestamp, targetOpen });
+    feature_values.distance_from_4_candle_low_bps = f.distance_from_4_candle_low_bps;
+    feature_values.mean_2_candle_body_to_range = f.mean_2_candle_body_to_range;
+    feature_values.distance_veto_condition =
+      f.distance_from_4_candle_low_bps >= A96_CONFIG.agreement_distance_from_4_low_bps;
+    feature_values.body_ratio_veto_condition =
+      f.mean_2_candle_body_to_range <= A96_CONFIG.agreement_mean_2_body_to_range_max;
+  } catch (e) {
+    if (e instanceof CandleHistoryError) {
+      agreementHistoryUnusable = true;
+    } else {
+      throw e;
+    }
+  }
+
   // Step 3-4: probability validation.
   const p = typeof layerAProbMean === "number" ? layerAProbMean : Number(layerAProbMean);
   const probValid =
@@ -60,16 +100,17 @@ export function a96Decide(args: {
       fit_selector_override_fired: false,
       agreement_veto_fired: false,
       margin_veto_fired: false,
+      efficiency_veto_fired: false,
       layer_a_prob_mean: null,
       layer_a_prob_margin: null,
       layer_a_probability_valid: false,
       margin_band_eligible: false,
-      feature_values: emptyFeatures(),
+      feature_values,
       fit_state_snapshot: snap,
     };
   }
 
-  // Step 5-6: margin band.
+  // Step 5 + 8: margin band.
   const margin = Math.abs(p - 0.5);
   const eligible =
     margin >= A96_CONFIG.layer_a_margin_min_inclusive &&
@@ -82,50 +123,55 @@ export function a96Decide(args: {
       fit_selector_override_fired: false,
       agreement_veto_fired: false,
       margin_veto_fired: true,
+      // Efficiency condition is recorded above but the margin veto is the
+      // active firing reason.
+      efficiency_veto_fired: false,
       layer_a_prob_mean: p,
       layer_a_prob_margin: margin,
       layer_a_probability_valid: true,
       margin_band_eligible: false,
-      feature_values: emptyFeatures(),
+      feature_values,
       fit_state_snapshot: snap,
     };
   }
 
-  // Step 7-9: agreement branch — existing veto applies only when A == B.
-  const feature_values = emptyFeatures();
+  // Step 9: four-candle efficiency veto (applies on agreement AND disagreement).
+  if (feature_values.efficiency_veto_condition) {
+    return {
+      prediction: "ABSTAIN",
+      selected_layer: "NONE",
+      reason: "ABSTAIN_FOUR_CANDLE_EFFICIENCY_TOXIC_BAND",
+      fit_selector_override_fired: false,
+      agreement_veto_fired: false,
+      margin_veto_fired: false,
+      efficiency_veto_fired: true,
+      layer_a_prob_mean: p,
+      layer_a_prob_margin: margin,
+      layer_a_probability_valid: true,
+      margin_band_eligible: true,
+      feature_values,
+      fit_state_snapshot: snap,
+    };
+  }
+
+  // Step 10: agreement branch — existing veto applies only when A == B.
   if (a === b) {
-    let features: { distance_from_4_candle_low_bps: number; mean_2_candle_body_to_range: number } | null = null;
-    try {
-      features = agreementFeatures({ priorCandles, targetTimestamp, targetOpen });
-    } catch (e) {
-      if (e instanceof CandleHistoryError) {
-        if (A96_CONFIG.abstain_on_unusable_agreement_history) {
-          return {
-            prediction: "ABSTAIN",
-            selected_layer: "NONE",
-            reason: "ABSTAIN_AGREEMENT_HISTORY_UNUSABLE",
-            fit_selector_override_fired: false,
-            agreement_veto_fired: true,
-            margin_veto_fired: false,
-            layer_a_prob_mean: p,
-            layer_a_prob_margin: margin,
-            layer_a_probability_valid: true,
-            margin_band_eligible: true,
-            feature_values,
-            fit_state_snapshot: snap,
-          };
-        }
-      } else {
-        throw e;
-      }
-    }
-    if (features) {
-      feature_values.distance_from_4_candle_low_bps = features.distance_from_4_candle_low_bps;
-      feature_values.mean_2_candle_body_to_range = features.mean_2_candle_body_to_range;
-      feature_values.distance_veto_condition =
-        features.distance_from_4_candle_low_bps >= A96_CONFIG.agreement_distance_from_4_low_bps;
-      feature_values.body_ratio_veto_condition =
-        features.mean_2_candle_body_to_range <= A96_CONFIG.agreement_mean_2_body_to_range_max;
+    if (agreementHistoryUnusable && A96_CONFIG.abstain_on_unusable_agreement_history) {
+      return {
+        prediction: "ABSTAIN",
+        selected_layer: "NONE",
+        reason: "ABSTAIN_AGREEMENT_HISTORY_UNUSABLE",
+        fit_selector_override_fired: false,
+        agreement_veto_fired: true,
+        margin_veto_fired: false,
+        efficiency_veto_fired: false,
+        layer_a_prob_mean: p,
+        layer_a_prob_margin: margin,
+        layer_a_probability_valid: true,
+        margin_band_eligible: true,
+        feature_values,
+        fit_state_snapshot: snap,
+      };
     }
     if (feature_values.distance_veto_condition || feature_values.body_ratio_veto_condition) {
       const reasons: string[] = [];
@@ -138,6 +184,7 @@ export function a96Decide(args: {
         fit_selector_override_fired: false,
         agreement_veto_fired: true,
         margin_veto_fired: false,
+        efficiency_veto_fired: false,
         layer_a_prob_mean: p,
         layer_a_prob_margin: margin,
         layer_a_probability_valid: true,
@@ -153,6 +200,7 @@ export function a96Decide(args: {
       fit_selector_override_fired: false,
       agreement_veto_fired: false,
       margin_veto_fired: false,
+      efficiency_veto_fired: false,
       layer_a_prob_mean: p,
       layer_a_prob_margin: margin,
       layer_a_probability_valid: true,
@@ -162,7 +210,7 @@ export function a96Decide(args: {
     };
   }
 
-  // Step 10 (disagreement): always publish Layer A. No selector, no leader.
+  // Step 11 (disagreement): always publish Layer A. No selector, no leader.
   return {
     prediction: a,
     selected_layer: "A",
@@ -170,6 +218,7 @@ export function a96Decide(args: {
     fit_selector_override_fired: false,
     agreement_veto_fired: false,
     margin_veto_fired: false,
+    efficiency_veto_fired: false,
     layer_a_prob_mean: p,
     layer_a_prob_margin: margin,
     layer_a_probability_valid: true,
