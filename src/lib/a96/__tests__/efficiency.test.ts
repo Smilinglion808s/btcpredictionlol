@@ -16,7 +16,7 @@ const FIT: FitState = {
 };
 
 /** Four contiguous canonical candles ending at T-15m, given body deltas. */
-function candles(bodies: number[], base = 100_000): Candle[] {
+function candles(bodies: number[], base = 1_000_000): Candle[] {
   let open = base;
   const out: Candle[] = [];
   for (let i = 0; i < 4; i++) {
@@ -24,8 +24,8 @@ function candles(bodies: number[], base = 100_000): Candle[] {
     out.push({
       timestamp: new Date(TARGET.getTime() - (4 - i) * TF_MS),
       open,
-      high: Math.max(open, close) + 50,
-      low: Math.min(open, close) - 500, // keeps distance-from-low veto off
+      high: Math.max(open, close) + 1,
+      low: Math.min(open, close) - 1, // keeps distance-from-4-low veto off
       close,
     });
     open = close;
@@ -46,6 +46,7 @@ function candlesWithEfficiency(eff: number): Candle[] {
 }
 
 function decide(over: Partial<Parameters<typeof a96Decide>[0]> = {}) {
+  const priors = (over.priorCandles ?? candlesWithEfficiency(0.8)) as Candle[];
   return a96Decide({
     layerADirection: "GREEN",
     layerBDirection: "GREEN",
@@ -53,8 +54,8 @@ function decide(over: Partial<Parameters<typeof a96Decide>[0]> = {}) {
     baseSelectedLayer: "B",
     fitState: FIT,
     targetTimestamp: TARGET,
-    targetOpen: 100_000,
-    priorCandles: candlesWithEfficiency(0.8), // passes efficiency veto
+    targetOpen: priors[3].close,
+    priorCandles: priors, // efficiency-veto fixture
     ...over,
   });
 }
@@ -166,7 +167,7 @@ describe("a96-r3 decision order and audit", () => {
 
   it("existing agreement veto behaviour is unchanged when efficiency passes", () => {
     // Wick-dominated prior two candles → body-ratio veto fires.
-    const cs = candlesWithEfficiency(0.8).map((c) => ({ ...c, high: c.high + 100_000 }));
+    const cs = candlesWithEfficiency(0.8).map((c) => ({ ...c, high: c.high + 1_000 }));
     const d = decide({ priorCandles: cs });
     expect(d.prediction).toBe("ABSTAIN");
     expect(d.agreement_veto_fired).toBe(true);
@@ -175,7 +176,7 @@ describe("a96-r3 decision order and audit", () => {
   });
 
   it("efficiency veto takes precedence over the agreement veto", () => {
-    const cs = candlesWithEfficiency(0.3).map((c) => ({ ...c, high: c.high + 100_000 }));
+    const cs = candlesWithEfficiency(0.3).map((c) => ({ ...c, high: c.high + 1_000 }));
     const d = decide({ priorCandles: cs });
     expect(d.reason).toBe("ABSTAIN_FOUR_CANDLE_EFFICIENCY_TOXIC_BAND");
     expect(d.agreement_veto_fired).toBe(false);
