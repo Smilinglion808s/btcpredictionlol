@@ -2,8 +2,8 @@
 // disagreement-selector / fit-leader logic with a single Layer-A directional
 // source gated by a fixed margin band on layer_a_prob_mean.
 export const A96_MODEL_NAME = "a96";
-export const A96_MODEL_VERSION = "a96-r2";
-export const A96_VARIANT = "a96";
+export const A96_MODEL_VERSION = "a96-r3";
+export const A96_VARIANT = "layer-a-margin-agreement-efficiency";
 
 export const A96_CONFIG = {
   // r2 margin band (frozen). |layer_a_prob_mean - 0.5| must fall in
