@@ -1525,11 +1525,11 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
     .eq("id", 1)
     .maybeSingle();
   const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
-  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0 };
+  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0, efficiency_vetoes: 0 };
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("a96_predictions")
-      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,actual_direction,prediction_created_at")
+      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,efficiency_veto_fired,actual_direction,prediction_created_at")
       .range(from, from + PAGE - 1);
     if (resetAt) q = q.gt("prediction_created_at", resetAt);
     const { data } = await q;
@@ -1538,6 +1538,7 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
       c.total += 1;
       if (r.fit_selector_override_fired) c.overrides += 1;
       if (r.agreement_veto_fired) c.agreement_vetoes += 1;
+      if (r.efficiency_veto_fired) c.efficiency_vetoes += 1;
       if (r.resolved_at) {
         c.resolved += 1;
         if (r.final_prediction === "ABSTAIN") c.abstains += 1;
