@@ -346,7 +346,9 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
 
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r3",
+    model_version: (a96Row.model_version as string | null) ?? "a96-r4",
+    variant: (a96Row.variant as string | null) ?? "layer-a-structure-macd",
+
     decision_policy_version: A96_DECISION_POLICY_VERSION,
     fit_episode_id: a96Row.fit_episode_id ?? null,
     artifact_fit_id: a96Row.artifact_fit_id ?? null,
