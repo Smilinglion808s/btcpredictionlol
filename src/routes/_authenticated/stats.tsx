@@ -426,10 +426,49 @@ function StatsPage() {
           <div className="grid grid-cols-2 gap-3 mb-4">
             <MiniStat label="Total rows" value={Number(a96Stats.total ?? 0)} />
             <MiniStat label="Abstains" value={Number(a96Stats.abstains ?? 0)} />
-            <MiniStat label="Fit overrides" value={Number(a96Stats.overrides ?? 0)} />
+            <MiniStat label="Body ratio vetoes" value={Number(a96Stats.body_ratio_vetoes ?? 0)} />
+            <MiniStat label="Wick pressure vetoes" value={Number(a96Stats.wick_pressure_vetoes ?? 0)} />
+            <MiniStat label="MACD vetoes" value={Number(a96Stats.macd_vetoes ?? 0)} />
             <MiniStat label="Agreement vetoes" value={Number(a96Stats.agreement_vetoes ?? 0)} />
-            <MiniStat label="Efficiency vetoes" value={Number(a96Stats.efficiency_vetoes ?? 0)} />
+            <MiniStat label="Efficiency vetoes (r3 legacy)" value={Number(a96Stats.efficiency_vetoes ?? 0)} />
           </div>
+          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              r3 counterfactual (audit only)
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <MiniStat label="Win rate" value={`${Number(a96Stats.r3_cf_win_rate ?? 0)}%`} />
+              <MiniStat label="Wins" value={Number(a96Stats.r3_cf_wins ?? 0)} />
+              <MiniStat label="Losses" value={Number(a96Stats.r3_cf_losses ?? 0)} />
+              <MiniStat label="Abstains" value={Number(a96Stats.r3_cf_abstains ?? 0)} />
+            </div>
+          </div>
+          {a96Pending && (a96Pending.aligned_macd_hist_atr != null || a96Pending.four_candle_aligned_wick_pressure != null) && (
+            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                r4 structure &amp; momentum audit
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat
+                  label="Mean 2c body ratio"
+                  value={a96Pending.mean_2_candle_body_to_range_r4 != null ? Number(a96Pending.mean_2_candle_body_to_range_r4).toFixed(4) : "—"}
+                />
+                <MiniStat label="Body veto" value={a96Pending.body_ratio_veto_fired ? "Fired" : a96Pending.body_ratio_condition ? "In band" : "Clear"} />
+                <MiniStat
+                  label="Aligned wick pressure"
+                  value={a96Pending.four_candle_aligned_wick_pressure != null ? Number(a96Pending.four_candle_aligned_wick_pressure).toFixed(4) : "—"}
+                />
+                <MiniStat label="Wick veto" value={a96Pending.wick_pressure_veto_fired ? "Fired" : a96Pending.wick_pressure_condition ? "In band" : "Clear"} />
+                <MiniStat
+                  label="Aligned MACD/ATR"
+                  value={a96Pending.aligned_macd_hist_atr != null ? Number(a96Pending.aligned_macd_hist_atr).toFixed(4) : "—"}
+                />
+                <MiniStat label="MACD veto" value={a96Pending.macd_veto_fired ? "Fired" : a96Pending.macd_veto_condition ? "In band" : "Clear"} />
+                <MiniStat label="r3 would have" value={a96Pending.r3_counterfactual_direction ?? a96Pending.r3_counterfactual_decision ?? "—"} />
+              </div>
+            </div>
+          )}
+
           {a96Pending && (a96Pending.four_candle_path_efficiency != null || a96Pending.efficiency_veto_condition != null) && (
             <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
