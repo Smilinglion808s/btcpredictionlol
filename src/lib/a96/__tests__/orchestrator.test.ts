@@ -203,6 +203,27 @@ function seedFit(state: any, fitId: string) {
   state.fits.push({ fit_id: fitId, active: true, fitted_at: new Date().toISOString() });
 }
 
+/**
+ * r4: seed >= 200 contiguous confirmed candles ending at T-15m so the
+ * MACD/ATR technical snapshot is available. Never overwrites candles the
+ * test already seeded explicitly.
+ */
+function seedTechnicalHistory(state: any, targetTs: string, base = 200) {
+  const last = new Date(targetTs).getTime() - 15 * 60 * 1000;
+  for (let i = 0; i < 260; i++) {
+    const ts = new Date(last - i * 15 * 60 * 1000).toISOString();
+    if (state.candles.has(ts)) continue;
+    const o = base + (i % 3);
+    state.candles.set(ts, {
+      id: `tech-${ts}`,
+      candle_ts: ts, symbol: "BTC-USDT", timeframe: "15m",
+      open: o, high: o + 2, low: o - 2, close: o + 0.5, volume: 100, confirm: true,
+      fetch_source: "okx",
+    });
+  }
+}
+
+
 function seedCandle(state: any, ts: string, o: number, h: number, l: number, c: number) {
   state.candles.set(ts, {
     id: `cand-${ts}`,
