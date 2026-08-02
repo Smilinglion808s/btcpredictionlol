@@ -97,6 +97,8 @@ function makeDb() {
         eq(k: string, v: any) { filters.push([k, "eq", v]); return api; },
         lt(k: string, v: any) { filters.push([k, "lt", v]); return api; },
         lte(k: string, v: any) { filters.push([k, "lte", v]); return api; },
+        gte(k: string, v: any) { filters.push([k, "gte", v]); return api; },
+
         is(k: string, v: any) { filters.push([k, "is", v]); return api; },
         in(k: string, arr: any[]) { filters.push([k, "in", arr]); return api; },
         order(k: string, o: any) { orderCol = k; orderAsc = !!o?.ascending; return api; },
