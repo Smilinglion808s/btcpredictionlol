@@ -61,7 +61,9 @@ function decide(over: Partial<Parameters<typeof a96Decide>[0]> = {}) {
   const priors = (over.priorCandles ?? candlesWithEfficiency(0.8)) as Candle[];
   return a96Decide({
     layerADirection: "GREEN",
-    layerBDirection: "GREEN",
+    // Default to disagreement so the r3 agreement veto is out of the way; the
+    // agreement branch is exercised explicitly where it matters.
+    layerBDirection: "RED",
     layerAProbMean: 0.52,
     baseSelectedLayer: "B",
     fitState: FIT,
@@ -225,7 +227,7 @@ describe("a96-r4 body-concentration boundary (<= 0.65 passes)", () => {
   }
 
   it("exactly 0.65 passes", () => {
-    const d = decide({ layerBDirection: "RED", priorCandles: candlesWithBodyRatio(0.65) });
+    const d = decide({ priorCandles: candlesWithBodyRatio(0.65) });
     expect(d.feature_values.mean_2_candle_body_to_range).toBeCloseTo(0.65, 10);
     expect(d.feature_values.body_concentration_condition).toBe(false);
     expect(d.body_ratio_veto_fired).toBe(false);
@@ -233,7 +235,7 @@ describe("a96-r4 body-concentration boundary (<= 0.65 passes)", () => {
   });
 
   it("above 0.65 abstains", () => {
-    const d = decide({ layerBDirection: "RED", priorCandles: candlesWithBodyRatio(0.70) });
+    const d = decide({ priorCandles: candlesWithBodyRatio(0.70) });
     expect(d.feature_values.body_concentration_condition).toBe(true);
     expect(d.body_ratio_veto_fired).toBe(true);
     expect(d.reason).toBe("ABSTAIN_TWO_CANDLE_BODY_CONCENTRATION_HIGH");
@@ -246,15 +248,18 @@ describe("a96-r4 wick-pressure boundary (<= 0.20 passes)", () => {
    * rawWickPressure = L / (b + L). Aligned with GREEN → positive.
    */
   function wickCandles(pressure: number): Candle[] {
+    // range = 2b (body-to-range fixed at 0.5, below the 0.65 veto), and
+    // (L - U) / range = pressure.
     const b = 100;
-    const L = (pressure * b) / (1 - pressure);
+    const L = (b + 2 * b * pressure) / 2;
+    const U = (b - 2 * b * pressure) / 2;
     let open = 1_000_000;
     const out: Candle[] = [];
     for (let i = 0; i < 4; i++) {
       const close = open + b;
       out.push({
         timestamp: new Date(TARGET.getTime() - (4 - i) * TF_MS),
-        open, close, high: close, low: open - L,
+        open, close, high: close + U, low: open - L,
       });
       open = close;
     }
@@ -263,7 +268,7 @@ describe("a96-r4 wick-pressure boundary (<= 0.20 passes)", () => {
 
   it("exactly 0.20 passes", () => {
     const cs = wickCandles(0.20);
-    const d = decide({ layerBDirection: "RED", priorCandles: cs });
+    const d = decide({ priorCandles: cs });
     expect(d.feature_values.four_candle_aligned_wick_pressure).toBeCloseTo(0.20, 10);
     expect(d.feature_values.wick_pressure_condition).toBe(false);
     expect(d.wick_pressure_veto_fired).toBe(false);
@@ -271,7 +276,7 @@ describe("a96-r4 wick-pressure boundary (<= 0.20 passes)", () => {
 
   it("above 0.20 abstains", () => {
     const cs = wickCandles(0.30);
-    const d = decide({ layerBDirection: "RED", priorCandles: cs });
+    const d = decide({ priorCandles: cs });
     expect(d.feature_values.wick_pressure_condition).toBe(true);
     expect(d.wick_pressure_veto_fired).toBe(true);
     expect(d.reason).toBe("ABSTAIN_FOUR_CANDLE_WICK_PRESSURE_HIGH");
@@ -355,7 +360,7 @@ describe("a96-r4 margin gate removal", () => {
 describe("a96-r4 decision ordering and audit semantics", () => {
   it("efficiency veto precedes the agreement veto", () => {
     const cs = candlesWithEfficiency(0.3).map((c) => ({ ...c, high: c.high + 1_000 }));
-    const d = decide({ priorCandles: cs });
+    const d = decide({ layerBDirection: "GREEN", priorCandles: cs });
     expect(d.reason).toBe("ABSTAIN_FOUR_CANDLE_EFFICIENCY_TOXIC_BAND");
     expect(d.agreement_veto_fired).toBe(false);
     expect(d.feature_values.body_ratio_veto_condition).toBe(true);
@@ -364,7 +369,7 @@ describe("a96-r4 decision ordering and audit semantics", () => {
   it("agreement veto precedes the r4 structural vetoes", () => {
     // Wick-dominated prior two candles → r3 agreement body-ratio veto.
     const cs = candlesWithEfficiency(0.8).map((c) => ({ ...c, high: c.high + 10_000, low: c.low - 10_000 }));
-    const d = decide({ priorCandles: cs });
+    const d = decide({ layerBDirection: "GREEN", priorCandles: cs });
     expect(d.agreement_veto_fired).toBe(true);
     expect(d.reason).toContain("ABSTAIN_AGREEMENT_");
     expect(d.body_ratio_veto_fired).toBe(false);
@@ -432,7 +437,7 @@ describe("a96 r3 counterfactual (audit only)", () => {
     expect(cf.decision).toBe("ABSTAIN");
     expect(cf.reason).toBe("ABSTAIN_LAYER_A_MARGIN_OUTSIDE_BAND");
     // r4 publishes the same candle.
-    expect(decide({ layerAProbMean: 0.9, layerBDirection: "RED", priorCandles: priors }).prediction).toBe("GREEN");
+    expect(decide({ layerAProbMean: 0.9, priorCandles: priors }).prediction).toBe("GREEN");
   });
 
   it("is independent of the r4 structural vetoes", () => {
@@ -447,7 +452,7 @@ describe("a96 r3 counterfactual (audit only)", () => {
     });
     expect(cf.direction).toBe("GREEN");
     // r4 vetoes the same candle on body concentration.
-    expect(decide({ layerBDirection: "RED", priorCandles: cs }).reason)
+    expect(decide({ priorCandles: cs }).reason)
       .toBe("ABSTAIN_TWO_CANDLE_BODY_CONCENTRATION_HIGH");
   });
 });
