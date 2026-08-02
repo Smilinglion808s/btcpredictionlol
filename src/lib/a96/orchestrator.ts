@@ -361,9 +361,10 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
   try {
     const { data: row } = await sb
       .from("a96_predictions")
-      .select("prediction_id, target_candle_ts, resolved_at, fit_episode_id, target_open, candle_provider")
+      .select("prediction_id, target_candle_ts, resolved_at, fit_episode_id, target_open, candle_provider, r3_counterfactual_direction")
       .eq("prediction_id", predictionId)
       .maybeSingle();
+
     if (!row) return false;
     const r = row as Record<string, unknown>;
     if (r.resolved_at) return true;
