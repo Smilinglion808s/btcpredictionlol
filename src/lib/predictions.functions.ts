@@ -1525,11 +1525,16 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
     .eq("id", 1)
     .maybeSingle();
   const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
-  const c = { total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0, overrides: 0, agreement_vetoes: 0, efficiency_vetoes: 0 };
+  const c = {
+    total: 0, resolved: 0, wins: 0, losses: 0, pushes: 0, abstains: 0, pending: 0,
+    overrides: 0, agreement_vetoes: 0, efficiency_vetoes: 0,
+    body_ratio_vetoes: 0, wick_pressure_vetoes: 0, macd_vetoes: 0,
+    r3_cf_wins: 0, r3_cf_losses: 0, r3_cf_pushes: 0, r3_cf_abstains: 0,
+  };
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("a96_predictions")
-      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,efficiency_veto_fired,actual_direction,prediction_created_at")
+      .select("resolved_at,result_score,final_prediction,fit_selector_override_fired,agreement_veto_fired,efficiency_veto_fired,body_ratio_veto_fired,wick_pressure_veto_fired,macd_veto_fired,r3_counterfactual_result,actual_direction,prediction_created_at")
       .range(from, from + PAGE - 1);
     if (resetAt) q = q.gt("prediction_created_at", resetAt);
     const { data } = await q;
@@ -1539,6 +1544,13 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
       if (r.fit_selector_override_fired) c.overrides += 1;
       if (r.agreement_veto_fired) c.agreement_vetoes += 1;
       if (r.efficiency_veto_fired) c.efficiency_vetoes += 1;
+      if (r.body_ratio_veto_fired) c.body_ratio_vetoes += 1;
+      if (r.wick_pressure_veto_fired) c.wick_pressure_vetoes += 1;
+      if (r.macd_veto_fired) c.macd_vetoes += 1;
+      if (r.r3_counterfactual_result === "WIN") c.r3_cf_wins += 1;
+      else if (r.r3_counterfactual_result === "LOSS") c.r3_cf_losses += 1;
+      else if (r.r3_counterfactual_result === "PUSH") c.r3_cf_pushes += 1;
+      else if (r.r3_counterfactual_result === "ABSTAIN") c.r3_cf_abstains += 1;
       if (r.resolved_at) {
         c.resolved += 1;
         if (r.final_prediction === "ABSTAIN") c.abstains += 1;
@@ -1556,11 +1568,14 @@ export const getA96Stats = createServerFn({ method: "GET" }).handler(async () =>
     .select("fit_episode_id, artifact_fit_id, comparable_resolved_count, layer_a_wins, layer_a_losses, layer_a_net, layer_b_wins, layer_b_losses, layer_b_net, activated_at")
     .eq("is_active", true).maybeSingle();
   const wl = c.wins + c.losses;
+  const cfwl = c.r3_cf_wins + c.r3_cf_losses;
   return {
     ...c,
     win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
+    r3_cf_win_rate: cfwl ? Math.round((c.r3_cf_wins / cfwl) * 10000) / 100 : 0,
     active_episode: active ?? null,
   };
+
 });
 
 /** Visual-only reset for a96 Stats page counters. CSV export remains unchanged. */
