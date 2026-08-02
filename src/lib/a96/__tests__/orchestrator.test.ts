@@ -386,6 +386,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
     seedAasAndSourcePrediction(state, { predictionId: newPid, targetTs: newTargetTs, open: 200, layerA: "GREEN", layerB: "RED", base: "A" });
 
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 }); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, newPid);
     const order = state.resolveDueCalledBeforeFitRead;
     const firstFitRead = order.indexOf("fitRead");
@@ -408,6 +409,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
       seedCandle(state, ts, 199, 201, 198, 200);
     }
     vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(Array.isArray(row.prior_candles_snapshot)).toBe(true);
@@ -430,6 +432,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
       seedCandle(state, ts, 199, 201, 198, 200);
     }
     vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.prior_candles_snapshot.length).toBe(4);
@@ -457,6 +460,7 @@ describe("a96 candle-data-integrity guard", () => {
     // NO prior candles seeded. Retry-poll returns empty; guard must abstain.
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
@@ -482,6 +486,7 @@ describe("a96 candle-data-integrity guard", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
@@ -503,6 +508,7 @@ describe("a96 candle-data-integrity guard", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(true);
@@ -531,6 +537,7 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
@@ -554,6 +561,7 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
