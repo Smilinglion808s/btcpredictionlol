@@ -271,6 +271,70 @@ async function fetchTargetCandle(sb: SupabaseClient, targetTs: Date): Promise<
 }
 
 /**
+ * r4 technical snapshot: MACD histogram + ATR14 computed from >= 200
+ * contiguous, confirmed canonical candles ENDING EXACTLY at T-15m.
+ * Returns null (with a reason) when the history is unusable. Never reads the
+ * target candle.
+ */
+export interface A96Technical {
+  macd_hist: number | null;
+  atr14: number | null;
+  source_ts: Date | null;
+  source_row_id: string | null;
+  error: string | null;
+}
+
+async function fetchTechnicalSnapshot(sb: SupabaseClient, targetTs: Date): Promise<A96Technical> {
+  const empty = (error: string): A96Technical =>
+    ({ macd_hist: null, atr14: null, source_ts: null, source_row_id: null, error });
+  const lastTs = new Date(targetTs.getTime() - TF_MS);
+  const need = A96_CONFIG.technical_min_history_candles;
+  const firstTs = new Date(lastTs.getTime() - (need + 40) * TF_MS);
+  const { data } = await sb
+    .from("candles")
+    .select("id, candle_ts, open, high, low, close")
+    .eq("symbol", A96_CANDLE_STREAM.symbol)
+    .eq("timeframe", A96_CANDLE_STREAM.timeframe)
+    .eq("fetch_source", A96_CANDLE_STREAM.provider)
+    .eq("confirm", true)
+    .gte("candle_ts", firstTs.toISOString())
+    .lte("candle_ts", lastTs.toISOString())
+    .order("candle_ts", { ascending: true });
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  if (rows.length < need) return empty(`technical_history_short:${rows.length}/${need}`);
+
+  const byTs = new Map<string, Record<string, unknown>>();
+  for (const r of rows) {
+    const iso = new Date(String(r.candle_ts)).toISOString();
+    if (byTs.has(iso)) return empty(`technical_duplicate_timestamp:${iso}`);
+    byTs.set(iso, r);
+  }
+  // Walk backwards from T-15m building a strictly contiguous window.
+  const series: Candle[] = [];
+  let rowId: string | null = null;
+  for (let i = 0; i < need; i++) {
+    const ts = new Date(lastTs.getTime() - i * TF_MS).toISOString();
+    const r = byTs.get(ts);
+    if (!r) return empty(`technical_missing_candle:${ts}`);
+    if (i === 0) rowId = String(r.id);
+    series.unshift({
+      timestamp: new Date(ts),
+      open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close),
+    });
+  }
+  const tech = macdAtrFromSeries(series);
+  if (!tech) return empty("technical_calculation_invalid");
+  return {
+    macd_hist: tech.macd_hist,
+    atr14: tech.atr14,
+    source_ts: lastTs,
+    source_row_id: rowId,
+    error: null,
+  };
+}
+
+/**
+
  * Resolve every unresolved a96 prediction whose target candle is at least 15
  * minutes old. Uses candles-table OHLC as ground truth. Idempotent per row
  * (the RPC no-ops if resolved_at is set). Errors per row are logged, not thrown.
