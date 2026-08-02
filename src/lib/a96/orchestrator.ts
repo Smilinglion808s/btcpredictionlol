@@ -420,17 +420,28 @@ async function resolveA96Once(sb: SupabaseClient, predictionId: string): Promise
     // Stamp resolution audit fields (RPC already set actual_*).
     // Always store target_open_difference_bps (numeric or null), and only
     // demote prospective_valid on resolution when resolution_data_invalid.
+    // r3 counterfactual scoring (audit-only; never touches fit-state counters).
+    const actualDir = ohlc.close > ohlc.open ? "GREEN" : ohlc.close < ohlc.open ? "RED" : "PUSH";
+    const cfDir = r.r3_counterfactual_direction ? String(r.r3_counterfactual_direction) : null;
+    const cfResult = cfDir == null
+      ? "ABSTAIN"
+      : actualDir === "PUSH" ? "PUSH" : cfDir === actualDir ? "WIN" : "LOSS";
+    const cfScore = cfResult === "WIN" ? 1 : cfResult === "LOSS" ? -1 : 0;
+
     await sb.from("a96_predictions").update({
       target_candle_row_id: ohlc.id,
       resolution_candle_row_id: ohlc.id,
       resolution_data_invalid,
       target_open_difference_bps,
+      r3_counterfactual_result: cfResult,
+      r3_counterfactual_result_score: cfScore,
       ...(resolution_data_invalid ? {
         prospective_valid: false,
         prospective_invalid_reason: resolution_error ?? "RESOLUTION_DATA_INVALID",
       } : {}),
       ...(resolution_error ? { last_resolution_error: resolution_error.slice(0, 500) } : {}),
     } as never).eq("prediction_id", predictionId);
+
     return true;
   } catch (e) {
     await logApiError(sb, "a96-resolve-error", { prediction_id: predictionId }, e);
