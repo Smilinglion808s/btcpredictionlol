@@ -97,6 +97,8 @@ function makeDb() {
         eq(k: string, v: any) { filters.push([k, "eq", v]); return api; },
         lt(k: string, v: any) { filters.push([k, "lt", v]); return api; },
         lte(k: string, v: any) { filters.push([k, "lte", v]); return api; },
+        gte(k: string, v: any) { filters.push([k, "gte", v]); return api; },
+
         is(k: string, v: any) { filters.push([k, "is", v]); return api; },
         in(k: string, arr: any[]) { filters.push([k, "in", arr]); return api; },
         order(k: string, o: any) { orderCol = k; orderAsc = !!o?.ascending; return api; },
@@ -117,7 +119,9 @@ function makeDb() {
               if (op === "eq") return r[k] === v;
               if (op === "is" && v === null) return r[k] == null;
               if (op === "in") return (v as any[]).includes(r[k]);
+              if (op === "gte") return new Date(r[k]).getTime() >= new Date(v).getTime();
               if (op === "lt") return new Date(r[k]).getTime() < new Date(v).getTime();
+
               if (op === "lte") return new Date(r[k]).getTime() <= new Date(v).getTime();
               return true;
             });
@@ -198,6 +202,27 @@ function seedFit(state: any, fitId: string) {
   state.fits.length = 0;
   state.fits.push({ fit_id: fitId, active: true, fitted_at: new Date().toISOString() });
 }
+
+/**
+ * r4: seed >= 200 contiguous confirmed candles ending at T-15m so the
+ * MACD/ATR technical snapshot is available. Never overwrites candles the
+ * test already seeded explicitly.
+ */
+function seedTechnicalHistory(state: any, targetTs: string, base = 200) {
+  const last = new Date(targetTs).getTime() - 15 * 60 * 1000;
+  for (let i = 0; i < 260; i++) {
+    const ts = new Date(last - i * 15 * 60 * 1000).toISOString();
+    if (state.candles.has(ts)) continue;
+    const o = base + (i % 3);
+    state.candles.set(ts, {
+      id: `tech-${ts}`,
+      candle_ts: ts, symbol: "BTC-USDT", timeframe: "15m",
+      open: o, high: o + 2, low: o - 2, close: o + 0.5, volume: 100, confirm: true,
+      fetch_source: "okx",
+    });
+  }
+}
+
 
 function seedCandle(state: any, ts: string, o: number, h: number, l: number, c: number) {
   state.candles.set(ts, {
@@ -361,6 +386,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
     seedAasAndSourcePrediction(state, { predictionId: newPid, targetTs: newTargetTs, open: 200, layerA: "GREEN", layerB: "RED", base: "A" });
 
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 }); vi.setSystemTime(new Date(new Date(newTargetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, newPid);
     const order = state.resolveDueCalledBeforeFitRead;
     const firstFitRead = order.indexOf("fitRead");
@@ -383,6 +409,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
       seedCandle(state, ts, 199, 201, 198, 200);
     }
     vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(Array.isArray(row.prior_candles_snapshot)).toBe(true);
@@ -405,6 +432,7 @@ describe("a96 orchestrator ordering + audit persistence", () => {
       seedCandle(state, ts, 199, 201, 198, 200);
     }
     vi.useFakeTimers(); vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.prior_candles_snapshot.length).toBe(4);
@@ -457,6 +485,7 @@ describe("a96 candle-data-integrity guard", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
@@ -478,6 +507,7 @@ describe("a96 candle-data-integrity guard", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(true);
@@ -529,6 +559,7 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
+    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);

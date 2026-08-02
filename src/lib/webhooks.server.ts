@@ -346,7 +346,9 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
 
   return {
     model: A96_MODEL_ID,
-    model_version: "a96-r3",
+    model_version: (a96Row.model_version as string | null) ?? "a96-r4",
+    variant: (a96Row.variant as string | null) ?? "layer-a-structure-macd",
+
     decision_policy_version: A96_DECISION_POLICY_VERSION,
     fit_episode_id: a96Row.fit_episode_id ?? null,
     artifact_fit_id: a96Row.artifact_fit_id ?? null,
@@ -380,8 +382,27 @@ export function buildA96WebhookPayload({ a96Row, prediction }: A96WebhookInputs)
     margin_band_eligible: Boolean(a96Row.margin_band_eligible),
     distance_from_4_candle_low_bps: a96Row.distance_from_4_candle_low_bps ?? null,
     mean_2_candle_body_to_range: a96Row.mean_2_candle_body_to_range ?? null,
+    // r4 structure + momentum audit
+    body_ratio_max: a96Row.body_ratio_max ?? null,
+    body_ratio_condition: Boolean(a96Row.body_ratio_condition),
+    body_ratio_veto_fired: Boolean(a96Row.body_ratio_veto_fired),
+    four_candle_aligned_wick_pressure: a96Row.four_candle_aligned_wick_pressure ?? null,
+    wick_pressure_max: a96Row.wick_pressure_max ?? null,
+    wick_pressure_condition: Boolean(a96Row.wick_pressure_condition),
+    wick_pressure_veto_fired: Boolean(a96Row.wick_pressure_veto_fired),
+    prior_macd_hist: a96Row.prior_macd_hist ?? null,
+    prior_atr14: a96Row.prior_atr14 ?? null,
+    aligned_macd_hist_atr: a96Row.aligned_macd_hist_atr ?? null,
+    macd_veto_max: a96Row.macd_veto_max ?? null,
+    macd_veto_condition: Boolean(a96Row.macd_veto_condition),
+    macd_veto_fired: Boolean(a96Row.macd_veto_fired),
+    technical_source_candle_time: a96Row.technical_source_candle_time ?? null,
+    r4_feature_history_valid: a96Row.r4_feature_history_valid ?? null,
     target_open: a96Row.target_open != null ? Number(a96Row.target_open) : null,
     prospective_valid: Boolean(a96Row.prospective_valid),
+    webhook_idempotency_key: a96Row.webhook_idempotency_key
+      ?? `${a96Row.prediction_id}:${a96Row.model_version ?? "a96-r4"}`,
+
 
 
     candle_starts_at: startsAt,

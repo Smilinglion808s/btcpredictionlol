@@ -64,6 +64,8 @@ export type Database = {
       }
       a96_predictions: {
         Row: {
+          active_result: string | null
+          active_result_score: number | null
           actual_close: number | null
           actual_direction: string | null
           actual_high: number | null
@@ -71,11 +73,15 @@ export type Database = {
           actual_open: number | null
           actual_volume: number | null
           agreement_veto_fired: boolean
+          aligned_macd_hist_atr: number | null
           artifact_fit_id: string
           base_prediction: string | null
           base_result_score: number | null
           base_selected_layer: string
+          body_ratio_condition: boolean | null
+          body_ratio_max: number | null
           body_ratio_veto_condition: boolean
+          body_ratio_veto_fired: boolean | null
           candle_data_invalid_reason: string | null
           candle_data_valid: boolean | null
           candle_provider: string | null
@@ -94,6 +100,7 @@ export type Database = {
           fit_episode_id: string
           fit_resolved_count_at_prediction: number
           fit_selector_override_fired: boolean
+          four_candle_aligned_wick_pressure: number | null
           four_candle_net_displacement: number | null
           four_candle_path_efficiency: number | null
           four_candle_total_body_path: number | null
@@ -108,6 +115,11 @@ export type Database = {
           layer_b_direction: string
           layer_b_net_at_prediction: number
           layer_b_result_score: number | null
+          legacy_margin_condition: boolean | null
+          legacy_margin_outside_band: boolean | null
+          macd_veto_condition: boolean | null
+          macd_veto_fired: boolean | null
+          macd_veto_max: number | null
           margin_band_eligible: boolean | null
           margin_band_max: number | null
           margin_band_min: number | null
@@ -117,13 +129,27 @@ export type Database = {
           model_version: string
           prediction_created_at: string
           prediction_id: string
+          prior_atr14: number | null
           prior_candle_row_ids: string[] | null
           prior_candles_snapshot: Json | null
+          prior_macd_hist: number | null
           prospective_invalid_reason: string | null
           prospective_valid: boolean
+          r3_counterfactual_decision: string | null
+          r3_counterfactual_direction: string | null
+          r3_counterfactual_margin_condition: boolean | null
+          r3_counterfactual_reason: string | null
+          r3_counterfactual_result: string | null
+          r3_counterfactual_result_score: number | null
+          r4_feature_history_error: string | null
+          r4_feature_history_valid: boolean | null
+          r4_feature_snapshot: Json | null
+          r4_input_candle_row_ids: Json | null
+          r4_input_candle_times: Json | null
           resolution_attempt_count: number
           resolution_candle_row_id: string | null
           resolution_data_invalid: boolean
+          resolution_provider: string | null
           resolved_at: string | null
           result_score: number | null
           selected_layer: string
@@ -132,8 +158,25 @@ export type Database = {
           target_candle_ts: string
           target_open: number | null
           target_open_difference_bps: number | null
+          technical_source_candle_row_id: string | null
+          technical_source_candle_time: string | null
+          variant: string | null
+          veto_counterfactual_direction: string | null
+          veto_counterfactual_result: string | null
+          veto_counterfactual_score: number | null
+          webhook_attempt_count: number | null
+          webhook_idempotency_key: string | null
+          webhook_last_attempt_at: string | null
+          webhook_last_error: string | null
+          webhook_sent_at: string | null
+          webhook_status: string | null
+          wick_pressure_condition: boolean | null
+          wick_pressure_max: number | null
+          wick_pressure_veto_fired: boolean | null
         }
         Insert: {
+          active_result?: string | null
+          active_result_score?: number | null
           actual_close?: number | null
           actual_direction?: string | null
           actual_high?: number | null
@@ -141,11 +184,15 @@ export type Database = {
           actual_open?: number | null
           actual_volume?: number | null
           agreement_veto_fired?: boolean
+          aligned_macd_hist_atr?: number | null
           artifact_fit_id: string
           base_prediction?: string | null
           base_result_score?: number | null
           base_selected_layer: string
+          body_ratio_condition?: boolean | null
+          body_ratio_max?: number | null
           body_ratio_veto_condition?: boolean
+          body_ratio_veto_fired?: boolean | null
           candle_data_invalid_reason?: string | null
           candle_data_valid?: boolean | null
           candle_provider?: string | null
@@ -164,6 +211,7 @@ export type Database = {
           fit_episode_id: string
           fit_resolved_count_at_prediction: number
           fit_selector_override_fired?: boolean
+          four_candle_aligned_wick_pressure?: number | null
           four_candle_net_displacement?: number | null
           four_candle_path_efficiency?: number | null
           four_candle_total_body_path?: number | null
@@ -178,6 +226,11 @@ export type Database = {
           layer_b_direction: string
           layer_b_net_at_prediction: number
           layer_b_result_score?: number | null
+          legacy_margin_condition?: boolean | null
+          legacy_margin_outside_band?: boolean | null
+          macd_veto_condition?: boolean | null
+          macd_veto_fired?: boolean | null
+          macd_veto_max?: number | null
           margin_band_eligible?: boolean | null
           margin_band_max?: number | null
           margin_band_min?: number | null
@@ -187,13 +240,27 @@ export type Database = {
           model_version?: string
           prediction_created_at?: string
           prediction_id: string
+          prior_atr14?: number | null
           prior_candle_row_ids?: string[] | null
           prior_candles_snapshot?: Json | null
+          prior_macd_hist?: number | null
           prospective_invalid_reason?: string | null
           prospective_valid?: boolean
+          r3_counterfactual_decision?: string | null
+          r3_counterfactual_direction?: string | null
+          r3_counterfactual_margin_condition?: boolean | null
+          r3_counterfactual_reason?: string | null
+          r3_counterfactual_result?: string | null
+          r3_counterfactual_result_score?: number | null
+          r4_feature_history_error?: string | null
+          r4_feature_history_valid?: boolean | null
+          r4_feature_snapshot?: Json | null
+          r4_input_candle_row_ids?: Json | null
+          r4_input_candle_times?: Json | null
           resolution_attempt_count?: number
           resolution_candle_row_id?: string | null
           resolution_data_invalid?: boolean
+          resolution_provider?: string | null
           resolved_at?: string | null
           result_score?: number | null
           selected_layer: string
@@ -202,8 +269,25 @@ export type Database = {
           target_candle_ts: string
           target_open?: number | null
           target_open_difference_bps?: number | null
+          technical_source_candle_row_id?: string | null
+          technical_source_candle_time?: string | null
+          variant?: string | null
+          veto_counterfactual_direction?: string | null
+          veto_counterfactual_result?: string | null
+          veto_counterfactual_score?: number | null
+          webhook_attempt_count?: number | null
+          webhook_idempotency_key?: string | null
+          webhook_last_attempt_at?: string | null
+          webhook_last_error?: string | null
+          webhook_sent_at?: string | null
+          webhook_status?: string | null
+          wick_pressure_condition?: boolean | null
+          wick_pressure_max?: number | null
+          wick_pressure_veto_fired?: boolean | null
         }
         Update: {
+          active_result?: string | null
+          active_result_score?: number | null
           actual_close?: number | null
           actual_direction?: string | null
           actual_high?: number | null
@@ -211,11 +295,15 @@ export type Database = {
           actual_open?: number | null
           actual_volume?: number | null
           agreement_veto_fired?: boolean
+          aligned_macd_hist_atr?: number | null
           artifact_fit_id?: string
           base_prediction?: string | null
           base_result_score?: number | null
           base_selected_layer?: string
+          body_ratio_condition?: boolean | null
+          body_ratio_max?: number | null
           body_ratio_veto_condition?: boolean
+          body_ratio_veto_fired?: boolean | null
           candle_data_invalid_reason?: string | null
           candle_data_valid?: boolean | null
           candle_provider?: string | null
@@ -234,6 +322,7 @@ export type Database = {
           fit_episode_id?: string
           fit_resolved_count_at_prediction?: number
           fit_selector_override_fired?: boolean
+          four_candle_aligned_wick_pressure?: number | null
           four_candle_net_displacement?: number | null
           four_candle_path_efficiency?: number | null
           four_candle_total_body_path?: number | null
@@ -248,6 +337,11 @@ export type Database = {
           layer_b_direction?: string
           layer_b_net_at_prediction?: number
           layer_b_result_score?: number | null
+          legacy_margin_condition?: boolean | null
+          legacy_margin_outside_band?: boolean | null
+          macd_veto_condition?: boolean | null
+          macd_veto_fired?: boolean | null
+          macd_veto_max?: number | null
           margin_band_eligible?: boolean | null
           margin_band_max?: number | null
           margin_band_min?: number | null
@@ -257,13 +351,27 @@ export type Database = {
           model_version?: string
           prediction_created_at?: string
           prediction_id?: string
+          prior_atr14?: number | null
           prior_candle_row_ids?: string[] | null
           prior_candles_snapshot?: Json | null
+          prior_macd_hist?: number | null
           prospective_invalid_reason?: string | null
           prospective_valid?: boolean
+          r3_counterfactual_decision?: string | null
+          r3_counterfactual_direction?: string | null
+          r3_counterfactual_margin_condition?: boolean | null
+          r3_counterfactual_reason?: string | null
+          r3_counterfactual_result?: string | null
+          r3_counterfactual_result_score?: number | null
+          r4_feature_history_error?: string | null
+          r4_feature_history_valid?: boolean | null
+          r4_feature_snapshot?: Json | null
+          r4_input_candle_row_ids?: Json | null
+          r4_input_candle_times?: Json | null
           resolution_attempt_count?: number
           resolution_candle_row_id?: string | null
           resolution_data_invalid?: boolean
+          resolution_provider?: string | null
           resolved_at?: string | null
           result_score?: number | null
           selected_layer?: string
@@ -272,6 +380,21 @@ export type Database = {
           target_candle_ts?: string
           target_open?: number | null
           target_open_difference_bps?: number | null
+          technical_source_candle_row_id?: string | null
+          technical_source_candle_time?: string | null
+          variant?: string | null
+          veto_counterfactual_direction?: string | null
+          veto_counterfactual_result?: string | null
+          veto_counterfactual_score?: number | null
+          webhook_attempt_count?: number | null
+          webhook_idempotency_key?: string | null
+          webhook_last_attempt_at?: string | null
+          webhook_last_error?: string | null
+          webhook_sent_at?: string | null
+          webhook_status?: string | null
+          wick_pressure_condition?: boolean | null
+          wick_pressure_max?: number | null
+          wick_pressure_veto_fired?: boolean | null
         }
         Relationships: [
           {

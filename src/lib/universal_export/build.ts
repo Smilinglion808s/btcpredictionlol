@@ -414,6 +414,50 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     row.a96_efficiency_veto_condition = a96Row ? ((a96Row as Row).efficiency_veto_condition ?? null) : null;
     row.a96_efficiency_veto_fired = a96Row ? ((a96Row as Row).efficiency_veto_fired ?? null) : null;
 
+    // r4 structure / momentum / lineage / counterfactual / webhook passthrough
+    const a96r = a96Row as Row | null;
+    const snap = (a96r?.r4_feature_snapshot ?? null) as Record<string, unknown> | null;
+    const btr = (snap?.body_to_range ?? null) as Record<string, unknown> | null;
+    row.a96_variant = a96r ? (a96r.variant ?? null) : null;
+    row.a96_legacy_margin_condition = a96r ? (a96r.legacy_margin_condition ?? null) : null;
+    row.a96_legacy_margin_outside_band = a96r ? (a96r.legacy_margin_outside_band ?? null) : null;
+    row.a96_body_to_range_t30 = (btr?.t30 as number | undefined) ?? null;
+    row.a96_body_to_range_t15 = (btr?.t15 as number | undefined) ?? null;
+    row.a96_mean_two_body_to_range = a96r ? (a96r.mean_2_candle_body_to_range ?? null) : null;
+    row.a96_body_ratio_max = a96r ? (a96r.body_ratio_max ?? null) : null;
+    row.a96_body_ratio_condition = a96r ? (a96r.body_ratio_condition ?? null) : null;
+    row.a96_body_ratio_veto_fired = a96r ? (a96r.body_ratio_veto_fired ?? null) : null;
+    row.a96_four_candle_aligned_wick_pressure = a96r ? (a96r.four_candle_aligned_wick_pressure ?? null) : null;
+    row.a96_wick_pressure_max = a96r ? (a96r.wick_pressure_max ?? null) : null;
+    row.a96_wick_pressure_condition = a96r ? (a96r.wick_pressure_condition ?? null) : null;
+    row.a96_wick_pressure_veto_fired = a96r ? (a96r.wick_pressure_veto_fired ?? null) : null;
+    row.a96_prior_macd_hist = a96r ? (a96r.prior_macd_hist ?? null) : null;
+    row.a96_prior_atr14 = a96r ? (a96r.prior_atr14 ?? null) : null;
+    row.a96_aligned_macd_hist_atr = a96r ? (a96r.aligned_macd_hist_atr ?? null) : null;
+    row.a96_macd_veto_max = a96r ? (a96r.macd_veto_max ?? null) : null;
+    row.a96_macd_veto_condition = a96r ? (a96r.macd_veto_condition ?? null) : null;
+    row.a96_macd_veto_fired = a96r ? (a96r.macd_veto_fired ?? null) : null;
+    row.a96_technical_source_candle_time = a96r ? (a96r.technical_source_candle_time ?? null) : null;
+    row.a96_technical_source_candle_row_id = a96r ? (a96r.technical_source_candle_row_id ?? null) : null;
+    row.a96_r4_input_candle_times = a96r && Array.isArray(a96r.r4_input_candle_times)
+      ? (a96r.r4_input_candle_times as string[]).join("|") : null;
+    row.a96_r4_input_candle_row_ids = a96r && Array.isArray(a96r.r4_input_candle_row_ids)
+      ? (a96r.r4_input_candle_row_ids as string[]).join("|") : null;
+    row.a96_r4_feature_history_valid = a96r ? (a96r.r4_feature_history_valid ?? null) : null;
+    row.a96_r4_feature_history_error = a96r ? (a96r.r4_feature_history_error ?? null) : null;
+    row.a96_r3_counterfactual_decision = a96r ? (a96r.r3_counterfactual_decision ?? null) : null;
+    row.a96_r3_counterfactual_direction = a96r ? (a96r.r3_counterfactual_direction ?? null) : null;
+    row.a96_r3_counterfactual_reason = a96r ? (a96r.r3_counterfactual_reason ?? null) : null;
+    row.a96_r3_counterfactual_result = a96r ? (a96r.r3_counterfactual_result ?? null) : null;
+    row.a96_r3_counterfactual_result_score = a96r ? (a96r.r3_counterfactual_result_score ?? null) : null;
+    row.a96_webhook_status = a96r ? (a96r.webhook_status ?? null) : null;
+    row.a96_webhook_idempotency_key = a96r ? (a96r.webhook_idempotency_key ?? null) : null;
+    row.a96_webhook_attempt_count = a96r ? (a96r.webhook_attempt_count ?? null) : null;
+    row.a96_webhook_sent_at = a96r ? (a96r.webhook_sent_at ?? null) : null;
+    row.a96_webhook_last_error = a96r ? (a96r.webhook_last_error ?? null) : null;
+
+
+
     // ---- Availability ---------------------------------------------------
     row.base_feature_tracking_available =
       pred !== null && (pred.indicators !== null && pred.indicators !== undefined);
