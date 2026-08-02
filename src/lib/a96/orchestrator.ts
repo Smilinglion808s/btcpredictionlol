@@ -676,6 +676,9 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       feature_history_error = e instanceof CandleHistoryError ? e.message : (e instanceof Error ? e.message : String(e));
     }
 
+    // r4 technical snapshot (MACD hist + ATR14 at exactly T-15m).
+    const technical = await fetchTechnicalSnapshot(sb, targetTs);
+
     const engineInput = {
       layerADirection: a as "GREEN" | "RED",
       layerBDirection: b as "GREEN" | "RED",
@@ -685,20 +688,84 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       targetTimestamp: targetTs,
       targetOpen,
       priorCandles,
+      technical: {
+        macd_hist: technical.macd_hist,
+        atr14: technical.atr14,
+        source_ts: technical.source_ts,
+      },
     };
     rejectExternalModelInputs(engineInput);
     const decision = a96Decide(engineInput);
+
+    // Audit-only r3 replay. Never affects the active decision or webhook.
+    const r3cf = a96DecideR3Counterfactual({
+      layerADirection: a as "GREEN" | "RED",
+      layerBDirection: b as "GREEN" | "RED",
+      layerAProbMean,
+      targetTimestamp: targetTs,
+      targetOpen,
+      priorCandles,
+    });
 
     const distanceBps = decision.feature_values.distance_from_4_candle_low_bps
       ?? (features ? features.distance_from_4_candle_low_bps : null);
     const meanBody = decision.feature_values.mean_2_candle_body_to_range
       ?? (features ? features.mean_2_candle_body_to_range : null);
 
+    const publishes = decision.prediction === "GREEN" || decision.prediction === "RED";
+    const webhookEligible = prospectiveValid && publishes;
+    const idempotencyKey = `${predictionId}:${A96_MODEL_VERSION}`;
+
+    const featureSnapshot = {
+      model_version: A96_MODEL_VERSION,
+      variant: A96_VARIANT,
+      input_candle_times: priorCandles.map((c) => c.timestamp.toISOString()),
+      input_candle_row_ids: priorRowIds,
+      provider: A96_CANDLE_STREAM.provider,
+      symbol: A96_CANDLE_STREAM.symbol,
+      timeframe: A96_CANDLE_STREAM.timeframe,
+      confirmed: true,
+      ohlc: priorSnapshot,
+      body_to_range: {
+        t30: decision.feature_values.body_to_range_t30,
+        t15: decision.feature_values.body_to_range_t15,
+        mean: decision.feature_values.mean_2_candle_body_to_range,
+      },
+      raw_wick_pressures: decision.feature_values.raw_wick_pressures,
+      aligned_wick_pressures: decision.feature_values.aligned_wick_pressures,
+      direction_sign: decision.feature_values.direction_sign,
+      four_candle_efficiency: {
+        net_displacement: decision.feature_values.four_candle_net_displacement,
+        total_body_path: decision.feature_values.four_candle_total_body_path,
+        path_efficiency: decision.feature_values.four_candle_path_efficiency,
+      },
+      macd_hist: decision.feature_values.prior_macd_hist,
+      atr14: decision.feature_values.prior_atr14,
+      aligned_macd_hist_atr: decision.feature_values.aligned_macd_hist_atr,
+      technical_source_candle_time: technical.source_ts ? technical.source_ts.toISOString() : null,
+      technical_source_candle_row_id: technical.source_row_id,
+      thresholds: {
+        efficiency_veto_min: A96_CONFIG.four_candle_efficiency_veto_min_inclusive,
+        efficiency_veto_max: A96_CONFIG.four_candle_efficiency_veto_max_exclusive,
+        agreement_distance_from_low_bps_min: A96_CONFIG.agreement_distance_from_4_low_bps,
+        agreement_mean_two_body_to_range_max: A96_CONFIG.agreement_mean_2_body_to_range_max,
+        mean_two_body_to_range_max: A96_CONFIG.mean_two_body_to_range_max,
+        four_candle_aligned_wick_pressure_max: A96_CONFIG.four_candle_aligned_wick_pressure_max,
+        aligned_macd_hist_atr_max: A96_CONFIG.aligned_macd_hist_atr_max,
+      },
+      layer_a_direction: a,
+      layer_b_direction: b,
+      layer_a_prob_mean: decision.layer_a_prob_mean,
+      layer_a_prob_margin: decision.layer_a_prob_margin,
+      decision_reason: decision.reason,
+    };
+
     const { error: upsertError } = await sb.from("a96_predictions").upsert({
       prediction_id: predictionId,
       source_prediction_id: predictionId,
       model_name: A96_MODEL_NAME,
       model_version: A96_MODEL_VERSION,
+      variant: A96_VARIANT,
       fit_episode_id: fitState.fit_episode_id,
       artifact_fit_id: artifactFitId,
       target_candle_ts: targetTs.toISOString(),
@@ -710,14 +777,16 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       decision_reason: decision.reason,
       fit_selector_override_fired: decision.fit_selector_override_fired,
       agreement_veto_fired: decision.agreement_veto_fired,
-      // r2 margin-band audit
+      // Legacy margin band — recorded only in r4.
       margin_veto_fired: decision.margin_veto_fired,
       layer_a_prob_mean: decision.layer_a_prob_mean,
       layer_a_prob_margin: decision.layer_a_prob_margin,
       layer_a_probability_valid: decision.layer_a_probability_valid,
-      margin_band_min: A96_CONFIG.layer_a_margin_min_inclusive,
-      margin_band_max: A96_CONFIG.layer_a_margin_max_exclusive,
+      margin_band_min: A96_CONFIG.legacy_margin_min_inclusive,
+      margin_band_max: A96_CONFIG.legacy_margin_max_exclusive,
       margin_band_eligible: decision.margin_band_eligible,
+      legacy_margin_condition: decision.legacy_margin_condition,
+      legacy_margin_outside_band: decision.legacy_margin_outside_band,
       distance_from_4_candle_low_bps: distanceBps,
       mean_2_candle_body_to_range: meanBody,
       distance_veto_condition: decision.feature_values.distance_veto_condition,
@@ -730,6 +799,35 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       efficiency_veto_max: A96_CONFIG.four_candle_efficiency_veto_max_exclusive,
       efficiency_veto_condition: decision.feature_values.efficiency_veto_condition,
       efficiency_veto_fired: decision.efficiency_veto_fired,
+      // r4 structure + momentum audit
+      body_ratio_max: A96_CONFIG.mean_two_body_to_range_max,
+      body_ratio_condition: decision.feature_values.body_concentration_condition,
+      body_ratio_veto_fired: decision.body_ratio_veto_fired,
+      four_candle_aligned_wick_pressure: decision.feature_values.four_candle_aligned_wick_pressure,
+      wick_pressure_max: A96_CONFIG.four_candle_aligned_wick_pressure_max,
+      wick_pressure_condition: decision.feature_values.wick_pressure_condition,
+      wick_pressure_veto_fired: decision.wick_pressure_veto_fired,
+      prior_macd_hist: decision.feature_values.prior_macd_hist,
+      prior_atr14: decision.feature_values.prior_atr14,
+      aligned_macd_hist_atr: decision.feature_values.aligned_macd_hist_atr,
+      macd_veto_max: A96_CONFIG.aligned_macd_hist_atr_max,
+      macd_veto_condition: decision.feature_values.macd_veto_condition,
+      macd_veto_fired: decision.macd_veto_fired,
+      r4_feature_history_valid: decision.r4_feature_history_valid,
+      r4_feature_history_error: decision.r4_feature_history_error ?? technical.error,
+      technical_source_candle_time: technical.source_ts ? technical.source_ts.toISOString() : null,
+      technical_source_candle_row_id: technical.source_row_id,
+      r4_input_candle_times: priorCandles.map((c) => c.timestamp.toISOString()),
+      r4_input_candle_row_ids: priorRowIds,
+      r4_feature_snapshot: featureSnapshot,
+      // r3 counterfactual (audit-only)
+      r3_counterfactual_decision: r3cf.decision,
+      r3_counterfactual_direction: r3cf.direction,
+      r3_counterfactual_reason: r3cf.reason,
+      r3_counterfactual_margin_condition: r3cf.margin_condition,
+      // Webhook lifecycle
+      webhook_status: webhookEligible ? "PENDING" : "NOT_APPLICABLE",
+      webhook_idempotency_key: webhookEligible ? idempotencyKey : null,
       target_open: targetOpen,
       fit_resolved_count_at_prediction: fitState.comparable_resolved_count,
       layer_a_net_at_prediction: fitState.layer_a_net,
@@ -740,27 +838,44 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
 
-    // a96-r3 is an ACTIVE outbound webhook source (alongside TD1-RC).
-    // Emit ONLY for directional predictions on prospectively-valid rows.
-    // All ABSTAIN outcomes (margin veto, efficiency veto, agreement veto,
-    // invalid probability, invalid candle data) send no webhook.
-    if (prospectiveValid
-      && (decision.prediction === "GREEN" || decision.prediction === "RED")) {
-      try {
-        const { data: a96Row } = await sb
-          .from("a96_predictions")
-          .select("*")
-          .eq("prediction_id", predictionId)
-          .maybeSingle();
-        if (a96Row) {
+    // a96-r4 is an ACTIVE outbound webhook source (alongside TD1-RC).
+    // Emit ONLY for directional predictions on prospectively-valid rows, only
+    // AFTER the row has been persisted, and only once per (prediction, version).
+    if (webhookEligible) {
+      const { data: a96Row } = await sb
+        .from("a96_predictions")
+        .select("*")
+        .eq("prediction_id", predictionId)
+        .maybeSingle();
+      const row = a96Row as Record<string, unknown> | null;
+      const alreadySent = row?.webhook_sent_at != null || row?.webhook_status === "SENT";
+      if (row && !alreadySent) {
+        const attempt = Number(row.webhook_attempt_count ?? 0) + 1;
+        try {
           const { deliverWebhook, buildA96WebhookPayload } = await import("../webhooks.server");
           await deliverWebhook(sb, "prediction.created", buildA96WebhookPayload({
-            a96Row: a96Row as Record<string, unknown>,
+            a96Row: row,
             prediction: pred as Record<string, unknown>,
           }));
+          await sb.from("a96_predictions").update({
+            webhook_status: "SENT",
+            webhook_sent_at: new Date().toISOString(),
+            webhook_attempt_count: attempt,
+            webhook_last_attempt_at: new Date().toISOString(),
+            webhook_last_error: null,
+          } as never).eq("prediction_id", predictionId);
+        } catch (e) {
+          // never block the pipeline on webhook failure
+          await sb.from("a96_predictions").update({
+            webhook_status: "FAILED",
+            webhook_attempt_count: attempt,
+            webhook_last_attempt_at: new Date().toISOString(),
+            webhook_last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+          } as never).eq("prediction_id", predictionId);
         }
-      } catch { /* never block the pipeline on webhook failure */ }
+      }
     }
+
 
 
 
