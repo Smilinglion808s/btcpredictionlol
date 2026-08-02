@@ -29,12 +29,13 @@
 // External-model inputs (TD1/A2/router/model6) are rejected at runtime.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { a96Decide } from "./engine";
-import { agreementFeatures, CandleHistoryError } from "./features";
+import { a96Decide, a96DecideR3Counterfactual } from "./engine";
+import { agreementFeatures, CandleHistoryError, macdAtrFromSeries } from "./features";
 import type { Candle, FitState, Layer } from "./types";
 import {
   A96_MODEL_NAME,
   A96_MODEL_VERSION,
+  A96_VARIANT,
   A96_CANDLE_STREAM,
   A96_TARGET_OPEN_TOLERANCE_BPS,
   A96_RESOLUTION_OPEN_TOLERANCE_BPS,
@@ -42,6 +43,7 @@ import {
   A96_PRIOR_CANDLE_POLL_INTERVAL_MS,
   A96_CONFIG,
 } from "./config";
+
 
 const TF_MS = A96_CONFIG.expected_candle_seconds * 1000;
 
