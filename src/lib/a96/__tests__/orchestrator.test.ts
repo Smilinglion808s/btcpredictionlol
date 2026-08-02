@@ -117,7 +117,9 @@ function makeDb() {
               if (op === "eq") return r[k] === v;
               if (op === "is" && v === null) return r[k] == null;
               if (op === "in") return (v as any[]).includes(r[k]);
+              if (op === "gte") return new Date(r[k]).getTime() >= new Date(v).getTime();
               if (op === "lt") return new Date(r[k]).getTime() < new Date(v).getTime();
+
               if (op === "lte") return new Date(r[k]).getTime() <= new Date(v).getTime();
               return true;
             });
