@@ -68,7 +68,7 @@ function decide(over: Partial<Parameters<typeof a96Decide>[0]> = {}) {
     baseSelectedLayer: "B",
     fitState: FIT,
     targetTimestamp: TARGET,
-    targetOpen: priors[3].close,
+    targetOpen: priors[priors.length - 1]?.close ?? 1_000_000,
     priorCandles: priors,
     technical: GOOD_TECH,
     ...over,
@@ -402,8 +402,7 @@ describe("a96-r4 decision ordering and audit semantics", () => {
 
   it("missing or non-contiguous prior history abstains", () => {
     const short = candlesWithEfficiency(0.8).slice(0, 3);
-    expect(decide({ priorCandles: short, targetOpen: short[2].close }).reason)
-      .toBe("ABSTAIN_R4_FEATURE_HISTORY_INVALID");
+    expect(decide({ priorCandles: short }).reason).toBe("ABSTAIN_R4_FEATURE_HISTORY_INVALID");
     const dup = candlesWithEfficiency(0.8);
     dup[2] = { ...dup[2], timestamp: dup[1].timestamp };
     expect(decide({ priorCandles: dup }).reason).toBe("ABSTAIN_R4_FEATURE_HISTORY_INVALID");
