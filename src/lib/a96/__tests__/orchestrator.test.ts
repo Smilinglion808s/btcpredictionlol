@@ -536,7 +536,6 @@ describe("a96 exact-timestamp candle query + ingest-ordering contract", () => {
     }
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 500 });
     vi.setSystemTime(new Date(new Date(targetTs).getTime() - 30_000));
-    seedTechnicalHistory(state, targetTs);
     await runA96(sb, pid);
     const row = state.predictions.get(pid)!;
     expect(row.candle_data_valid).toBe(false);
