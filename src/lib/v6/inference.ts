@@ -331,6 +331,8 @@ export function inferV6(
     ? "ABSTAIN"
     : basePrediction;
   let predictionSource: PredictionSource = basePrediction === "ABSTAIN" ? "ABSTAIN" : "V6_BASE";
+  // Parity vectors report source ABSTAIN whenever the saturation veto fires.
+  if (saturationVetoTriggered) predictionSource = "ABSTAIN";
   let abstainReason: string | null = saturationVetoTriggered
     ? "GREEN_SATURATION_BEARISH_WICK_VETO"
     : basePrediction === "ABSTAIN"
