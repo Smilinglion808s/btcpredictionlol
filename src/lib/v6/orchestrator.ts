@@ -1,11 +1,13 @@
 // V6 orchestrator — prediction lifecycle for the frozen V6 model.
 //
 // Contract:
-//   * One row per BTC-USDT 15m target candle, persisted BEFORE the target opens.
+//   * One row per BTC-USDT 15m target candle. Runs that land within
+//     V6_LATE_GRACE_S after the target opens still publish their real prediction.
 //   * Input is the confirmed OKX candle at T-15m. Target-candle data is never read
 //     at prediction time.
-//   * Continuity/feature/timing failures publish OP_FAIL (never ABSTAIN) and clear
-//     the GREEN-saturation rolling history.
+//   * Continuity/feature failures, and runs past the grace window, publish OP_FAIL
+//     (never ABSTAIN) and clear the GREEN-saturation rolling history.
+
 //   * Resolution is idempotent and reads canonical OKX OHLC only.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
