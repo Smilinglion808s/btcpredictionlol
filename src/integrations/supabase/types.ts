@@ -3541,6 +3541,294 @@ export type Database = {
         }
         Relationships: []
       }
+      v6_predictions: {
+        Row: {
+          abstain_reason: string | null
+          abstain_status: string | null
+          aligned_wick_pressure_4: number | null
+          anchor_percentile: number | null
+          anchor_score: number | null
+          base_green_count_last8: number | null
+          base_predictions_last8_json: Json | null
+          base_v6_adjusted_score: number | null
+          base_v6_prediction: string | null
+          base_v6_raw_score: number | null
+          broad_percentile: number | null
+          broad_score: number | null
+          canonical_actual_direction: string | null
+          canonical_candle_row_id: string | null
+          canonical_close: number | null
+          canonical_ground_truth_valid: boolean | null
+          canonical_high: number | null
+          canonical_low: number | null
+          canonical_open: number | null
+          canonical_volume: number | null
+          continuity_valid: boolean
+          created_at: string
+          cum_vol_delta_to_avg: number | null
+          dist_to_high20_pct: number | null
+          ema21_50_pct: number | null
+          feature_schema_version: string | null
+          feature_valid: boolean
+          final_adjusted_score: number | null
+          final_prediction: string
+          final_raw_score: number | null
+          final_score: number | null
+          fit_id: string | null
+          gb_features_json: Json | null
+          gb_p_green: number | null
+          gb_percentile: number | null
+          green_pickup_adjusted_contribution: number | null
+          green_pickup_evaluable: boolean
+          green_pickup_raw_contribution: number | null
+          green_pickup_triggered: boolean
+          green_threshold: number | null
+          imputed_feature_count: number
+          imputed_features_json: Json | null
+          input_candle_ts: string | null
+          input_close: number | null
+          input_cutoff_ts: string | null
+          input_high: number | null
+          input_low: number | null
+          input_open: number | null
+          input_volume: number | null
+          lower_wick_pct: number | null
+          model_artifact_sha256: string | null
+          model_version: string
+          operational_error: string | null
+          operational_status: string
+          pickup_conflict: boolean
+          pre_weak_red_veto_adjusted_score: number | null
+          pre_weak_red_veto_prediction: string | null
+          pre_weak_red_veto_raw_score: number | null
+          prediction_created_at: string
+          prediction_created_before_target: boolean
+          prediction_id: string
+          prediction_source: string | null
+          prior_candle_ids_json: Json | null
+          provider: string
+          range_expansion_vs_avg20: number | null
+          red_pickup_adjusted_contribution: number | null
+          red_pickup_evaluable: boolean
+          red_pickup_raw_contribution: number | null
+          red_pickup_triggered: boolean
+          red_threshold: number | null
+          resolution_timestamp: string | null
+          ridge_features_json: Json | null
+          ridge_p_green: number | null
+          ridge_percentile: number | null
+          roc_4: number | null
+          rsi14: number | null
+          saturation_veto_adjusted_contribution: number | null
+          saturation_veto_avoided_loss: boolean | null
+          saturation_veto_evaluable: boolean
+          saturation_veto_raw_contribution: number | null
+          saturation_veto_sacrificed_win: boolean | null
+          saturation_veto_triggered: boolean
+          symbol: string
+          target_candle_ts: string
+          timeframe: string
+          timing_valid: boolean
+          updated_at: string
+          weak_broad_red_veto_adjusted_contribution: number | null
+          weak_broad_red_veto_avoided_loss: boolean | null
+          weak_broad_red_veto_evaluable: boolean
+          weak_broad_red_veto_raw_contribution: number | null
+          weak_broad_red_veto_sacrificed_win: boolean | null
+          weak_broad_red_veto_triggered: boolean
+        }
+        Insert: {
+          abstain_reason?: string | null
+          abstain_status?: string | null
+          aligned_wick_pressure_4?: number | null
+          anchor_percentile?: number | null
+          anchor_score?: number | null
+          base_green_count_last8?: number | null
+          base_predictions_last8_json?: Json | null
+          base_v6_adjusted_score?: number | null
+          base_v6_prediction?: string | null
+          base_v6_raw_score?: number | null
+          broad_percentile?: number | null
+          broad_score?: number | null
+          canonical_actual_direction?: string | null
+          canonical_candle_row_id?: string | null
+          canonical_close?: number | null
+          canonical_ground_truth_valid?: boolean | null
+          canonical_high?: number | null
+          canonical_low?: number | null
+          canonical_open?: number | null
+          canonical_volume?: number | null
+          continuity_valid?: boolean
+          created_at?: string
+          cum_vol_delta_to_avg?: number | null
+          dist_to_high20_pct?: number | null
+          ema21_50_pct?: number | null
+          feature_schema_version?: string | null
+          feature_valid?: boolean
+          final_adjusted_score?: number | null
+          final_prediction: string
+          final_raw_score?: number | null
+          final_score?: number | null
+          fit_id?: string | null
+          gb_features_json?: Json | null
+          gb_p_green?: number | null
+          gb_percentile?: number | null
+          green_pickup_adjusted_contribution?: number | null
+          green_pickup_evaluable?: boolean
+          green_pickup_raw_contribution?: number | null
+          green_pickup_triggered?: boolean
+          green_threshold?: number | null
+          imputed_feature_count?: number
+          imputed_features_json?: Json | null
+          input_candle_ts?: string | null
+          input_close?: number | null
+          input_cutoff_ts?: string | null
+          input_high?: number | null
+          input_low?: number | null
+          input_open?: number | null
+          input_volume?: number | null
+          lower_wick_pct?: number | null
+          model_artifact_sha256?: string | null
+          model_version?: string
+          operational_error?: string | null
+          operational_status?: string
+          pickup_conflict?: boolean
+          pre_weak_red_veto_adjusted_score?: number | null
+          pre_weak_red_veto_prediction?: string | null
+          pre_weak_red_veto_raw_score?: number | null
+          prediction_created_at?: string
+          prediction_created_before_target?: boolean
+          prediction_id?: string
+          prediction_source?: string | null
+          prior_candle_ids_json?: Json | null
+          provider?: string
+          range_expansion_vs_avg20?: number | null
+          red_pickup_adjusted_contribution?: number | null
+          red_pickup_evaluable?: boolean
+          red_pickup_raw_contribution?: number | null
+          red_pickup_triggered?: boolean
+          red_threshold?: number | null
+          resolution_timestamp?: string | null
+          ridge_features_json?: Json | null
+          ridge_p_green?: number | null
+          ridge_percentile?: number | null
+          roc_4?: number | null
+          rsi14?: number | null
+          saturation_veto_adjusted_contribution?: number | null
+          saturation_veto_avoided_loss?: boolean | null
+          saturation_veto_evaluable?: boolean
+          saturation_veto_raw_contribution?: number | null
+          saturation_veto_sacrificed_win?: boolean | null
+          saturation_veto_triggered?: boolean
+          symbol?: string
+          target_candle_ts: string
+          timeframe?: string
+          timing_valid?: boolean
+          updated_at?: string
+          weak_broad_red_veto_adjusted_contribution?: number | null
+          weak_broad_red_veto_avoided_loss?: boolean | null
+          weak_broad_red_veto_evaluable?: boolean
+          weak_broad_red_veto_raw_contribution?: number | null
+          weak_broad_red_veto_sacrificed_win?: boolean | null
+          weak_broad_red_veto_triggered?: boolean
+        }
+        Update: {
+          abstain_reason?: string | null
+          abstain_status?: string | null
+          aligned_wick_pressure_4?: number | null
+          anchor_percentile?: number | null
+          anchor_score?: number | null
+          base_green_count_last8?: number | null
+          base_predictions_last8_json?: Json | null
+          base_v6_adjusted_score?: number | null
+          base_v6_prediction?: string | null
+          base_v6_raw_score?: number | null
+          broad_percentile?: number | null
+          broad_score?: number | null
+          canonical_actual_direction?: string | null
+          canonical_candle_row_id?: string | null
+          canonical_close?: number | null
+          canonical_ground_truth_valid?: boolean | null
+          canonical_high?: number | null
+          canonical_low?: number | null
+          canonical_open?: number | null
+          canonical_volume?: number | null
+          continuity_valid?: boolean
+          created_at?: string
+          cum_vol_delta_to_avg?: number | null
+          dist_to_high20_pct?: number | null
+          ema21_50_pct?: number | null
+          feature_schema_version?: string | null
+          feature_valid?: boolean
+          final_adjusted_score?: number | null
+          final_prediction?: string
+          final_raw_score?: number | null
+          final_score?: number | null
+          fit_id?: string | null
+          gb_features_json?: Json | null
+          gb_p_green?: number | null
+          gb_percentile?: number | null
+          green_pickup_adjusted_contribution?: number | null
+          green_pickup_evaluable?: boolean
+          green_pickup_raw_contribution?: number | null
+          green_pickup_triggered?: boolean
+          green_threshold?: number | null
+          imputed_feature_count?: number
+          imputed_features_json?: Json | null
+          input_candle_ts?: string | null
+          input_close?: number | null
+          input_cutoff_ts?: string | null
+          input_high?: number | null
+          input_low?: number | null
+          input_open?: number | null
+          input_volume?: number | null
+          lower_wick_pct?: number | null
+          model_artifact_sha256?: string | null
+          model_version?: string
+          operational_error?: string | null
+          operational_status?: string
+          pickup_conflict?: boolean
+          pre_weak_red_veto_adjusted_score?: number | null
+          pre_weak_red_veto_prediction?: string | null
+          pre_weak_red_veto_raw_score?: number | null
+          prediction_created_at?: string
+          prediction_created_before_target?: boolean
+          prediction_id?: string
+          prediction_source?: string | null
+          prior_candle_ids_json?: Json | null
+          provider?: string
+          range_expansion_vs_avg20?: number | null
+          red_pickup_adjusted_contribution?: number | null
+          red_pickup_evaluable?: boolean
+          red_pickup_raw_contribution?: number | null
+          red_pickup_triggered?: boolean
+          red_threshold?: number | null
+          resolution_timestamp?: string | null
+          ridge_features_json?: Json | null
+          ridge_p_green?: number | null
+          ridge_percentile?: number | null
+          roc_4?: number | null
+          rsi14?: number | null
+          saturation_veto_adjusted_contribution?: number | null
+          saturation_veto_avoided_loss?: boolean | null
+          saturation_veto_evaluable?: boolean
+          saturation_veto_raw_contribution?: number | null
+          saturation_veto_sacrificed_win?: boolean | null
+          saturation_veto_triggered?: boolean
+          symbol?: string
+          target_candle_ts?: string
+          timeframe?: string
+          timing_valid?: boolean
+          updated_at?: string
+          weak_broad_red_veto_adjusted_contribution?: number | null
+          weak_broad_red_veto_avoided_loss?: boolean | null
+          weak_broad_red_veto_evaluable?: boolean
+          weak_broad_red_veto_raw_contribution?: number | null
+          weak_broad_red_veto_sacrificed_win?: boolean | null
+          weak_broad_red_veto_triggered?: boolean
+        }
+        Relationships: []
+      }
       webhook_deliveries: {
         Row: {
           attempt: number
