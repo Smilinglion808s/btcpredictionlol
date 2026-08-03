@@ -494,83 +494,13 @@ function StatsPage() {
           )}
         </ModelCard>
 
-        <ModelCard
-          title="V6"
-          subtitle="Frozen forward test"
-          status="Live"
-          tone="violet"
-          winRate={Number(v6Stats.win_rate ?? 0)}
-          wins={Number(v6Stats.wins ?? 0)}
-          losses={Number(v6Stats.losses ?? 0)}
-          pushes={Number(v6Stats.pushes ?? 0)}
-          pending={Number(v6Stats.pending ?? 0)}
-          predictionLabel="Current Prediction"
-          predictionTs={v6Pending?.target_candle_ts}
-          predictionValue={v6Pending?.final_prediction ?? "—"}
-          abstainReason={(v6Pending as any)?.abstain_reason ?? (v6Pending as any)?.operational_error ?? null}
-          actions={(
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadV6Csv} disabled={exportingV6}>
-              {exportingV6 ? "…" : "CSV"}
-            </Button>
-          )}
-        >
-          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Adjusted net (primary)</div>
-            <div className="text-3xl font-bold font-mono tracking-tight">{v6Fmt(v6Stats.adjusted_net)}</div>
-            <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
-              Raw net {v6Fmt(v6Stats.raw_net)} · break-even WR {v6Fmt(v6Stats.breakeven_win_rate, 4)}%
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <MiniStat label="Coverage" value={`${Number(v6Stats.coverage ?? 0)}%`} />
-            <MiniStat label="Pushes" value={Number(v6Stats.pushes ?? 0)} />
-            <MiniStat label="Strategic abstains" value={Number(v6Stats.strategic_abstains ?? 0)} />
-            <MiniStat label="Operational failures" value={Number(v6Stats.op_fails ?? 0)} />
-            <MiniStat label="GREEN W/L" value={`${Number(v6Stats.green_wins ?? 0)}/${Number(v6Stats.green_losses ?? 0)}`} />
-            <MiniStat label="RED W/L" value={`${Number(v6Stats.red_wins ?? 0)}/${Number(v6Stats.red_losses ?? 0)}`} />
-            <MiniStat label="Longest loss streak" value={Number(v6Stats.max_loss_streak ?? 0)} />
-            <MiniStat label="Max adj. drawdown" value={v6Fmt(v6Stats.max_adjusted_drawdown)} />
-            <MiniStat label="Rolling 96 adj. net" value={v6Fmt(v6Stats.rolling96_adjusted_net)} />
-            <MiniStat label="Rolling 96 coverage" value={`${Number(v6Stats.rolling96_coverage ?? 0)}%`} />
-          </div>
-          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Current candle detail</div>
-            <div className="grid grid-cols-2 gap-3">
-              <MiniStat label="Base V6" value={v6Pending?.base_v6_prediction ?? "—"} />
-              <MiniStat label="Source" value={v6Pending?.prediction_source ?? "—"} />
-              <MiniStat label="Final score" value={v6Fmt(v6Pending?.final_score, 6)} />
-              <MiniStat
-                label="Thresholds"
-                value={v6Pending ? `${v6Fmt(v6Pending.red_threshold, 4)} / ${v6Fmt(v6Pending.green_threshold, 4)}` : "—"}
-              />
-              <MiniStat label="Ridge pct" value={v6Fmt(v6Pending?.ridge_percentile, 4)} />
-              <MiniStat label="Boosted pct" value={v6Fmt(v6Pending?.gb_percentile, 4)} />
-              <MiniStat label="Broad pct" value={v6Fmt(v6Pending?.broad_percentile, 4)} />
-              <MiniStat label="Anchor pct" value={v6Fmt(v6Pending?.anchor_percentile, 4)} />
-            </div>
-          </div>
-          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Overlay rules (count · adj. contribution)</div>
-            <div className="grid grid-cols-2 gap-3">
-              <MiniStat
-                label="GREEN saturation veto"
-                value={`${Number(v6Stats.saturation_veto_count ?? 0)} · ${v6Fmt(v6Stats.saturation_veto_adjusted)}`}
-              />
-              <MiniStat
-                label="Weak-broad RED veto"
-                value={`${Number(v6Stats.weak_red_veto_count ?? 0)} · ${v6Fmt(v6Stats.weak_red_veto_adjusted)}`}
-              />
-              <MiniStat
-                label="Consensus RED pickup"
-                value={`${Number(v6Stats.red_pickup_count ?? 0)} · ${v6Fmt(v6Stats.red_pickup_adjusted)}`}
-              />
-              <MiniStat
-                label="Momentum GREEN pickup"
-                value={`${Number(v6Stats.green_pickup_count ?? 0)} · ${v6Fmt(v6Stats.green_pickup_adjusted)}`}
-              />
-            </div>
-          </div>
-        </ModelCard>
+        <V6Card
+          stats={v6Stats}
+          pending={v6Pending}
+          fmt={v6Fmt}
+          onExport={downloadV6Csv}
+          exporting={exportingV6}
+        />
       </div>
 
       <Card>
@@ -717,6 +647,189 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
         {(pending ?? 0) > 0 && (
           <div className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">
             {pending} pending
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+
+function V6Stat({ label, value, tone }: { label: string; value: string | number; tone?: "bull" | "bear" | "violet" }) {
+  const toneClass = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "violet" ? "text-violet" : "text-foreground";
+  return (
+    <div className="v6-chip px-3 py-2">
+      <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      <div className={`font-mono text-sm font-semibold mt-0.5 tabular-nums ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function V6Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{title}</span>
+        <span className="h-px flex-1 bg-gradient-to-r from-violet/40 to-transparent" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">{children}</div>
+    </div>
+  );
+}
+
+function V6Card({
+  stats,
+  pending,
+  fmt,
+  onExport,
+  exporting,
+}: {
+  stats: Record<string, any>;
+  pending: Record<string, any> | null;
+  fmt: (n: unknown, digits?: number) => string;
+  onExport: () => void;
+  exporting: boolean;
+}) {
+  const winRate = Number(stats.win_rate ?? 0);
+  const breakeven = Number(stats.breakeven_win_rate ?? 55.5555556);
+  const adjustedNet = Number(stats.adjusted_net ?? 0);
+  const wins = Number(stats.wins ?? 0);
+  const losses = Number(stats.losses ?? 0);
+  const pushes = Number(stats.pushes ?? 0);
+  const pendingCount = Number(stats.pending ?? 0);
+  const aboveBreakeven = winRate >= breakeven;
+
+  const upper = String(pending?.final_prediction ?? "—").toUpperCase();
+  const predTone =
+    upper === "GREEN"
+      ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
+      : upper === "RED"
+        ? "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]"
+        : "border-violet/40 text-violet bg-violet/10";
+
+  const gaugeR = 34;
+  const circumference = 2 * Math.PI * gaugeR;
+  const pct = Math.max(0, Math.min(100, winRate));
+
+  return (
+    <Card className="v6-shell rounded-2xl p-6">
+      <span className="v6-orbit-ring" aria-hidden />
+      <span className="v6-sheen" aria-hidden />
+
+      <div className="relative flex items-start justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-violet/80 mb-1">Frozen forward test</div>
+          <h3 className="v6-title text-4xl font-bold font-heading tracking-tight leading-none">V6</h3>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
+            {exporting ? "…" : "CSV"}
+          </Button>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-violet/40 bg-violet/10 text-[10px] font-bold uppercase tracking-[0.16em] text-violet">
+            <span className="size-1.5 rounded-full bg-violet v6-live-dot" />
+            Live
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex items-center gap-5 mb-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
+            <circle
+              cx="40"
+              cy="40"
+              r={gaugeR}
+              fill="none"
+              stroke={aboveBreakeven ? "var(--bull)" : "var(--violet)"}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - pct / 100)}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">{winRate}%</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">win rate</span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Adjusted net · primary</div>
+          <div
+            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${adjustedNet > 0 ? "text-bull" : adjustedNet < 0 ? "text-bear" : "text-foreground"}`}
+          >
+            {adjustedNet > 0 ? "+" : ""}{fmt(adjustedNet)}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+            raw {fmt(stats.raw_net)} · break-even {fmt(breakeven, 2)}%
+            <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
+              {aboveBreakeven ? "▲ above" : "▼ below"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative grid grid-cols-4 gap-2">
+        <V6Stat label="Wins" value={wins} tone="bull" />
+        <V6Stat label="Losses" value={losses} tone="bear" />
+        <V6Stat label="Pushes" value={pushes} />
+        <V6Stat label="Pending" value={pendingCount} />
+      </div>
+
+      <div className="relative">
+        <V6Section title="Forward test">
+          <V6Stat label="Coverage" value={`${Number(stats.coverage ?? 0)}%`} />
+          <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
+          <V6Stat label="Operational failures" value={Number(stats.op_fails ?? 0)} />
+          <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
+          <V6Stat label="GREEN W/L" value={`${Number(stats.green_wins ?? 0)}/${Number(stats.green_losses ?? 0)}`} />
+          <V6Stat label="RED W/L" value={`${Number(stats.red_wins ?? 0)}/${Number(stats.red_losses ?? 0)}`} />
+          <V6Stat label="Max adj. drawdown" value={fmt(stats.max_adjusted_drawdown)} tone="bear" />
+          <V6Stat label="Rolling 96 adj. net" value={fmt(stats.rolling96_adjusted_net)} />
+          <V6Stat label="Rolling 96 coverage" value={`${Number(stats.rolling96_coverage ?? 0)}%`} />
+        </V6Section>
+
+        <V6Section title="Current candle">
+          <V6Stat label="Base V6" value={pending?.base_v6_prediction ?? "—"} />
+          <V6Stat label="Source" value={pending?.prediction_source ?? "—"} />
+          <V6Stat label="Final score" value={fmt(pending?.final_score, 6)} />
+          <V6Stat
+            label="Thresholds"
+            value={pending ? `${fmt(pending.red_threshold, 4)} / ${fmt(pending.green_threshold, 4)}` : "—"}
+          />
+          <V6Stat label="Ridge pct" value={fmt(pending?.ridge_percentile, 4)} />
+          <V6Stat label="Boosted pct" value={fmt(pending?.gb_percentile, 4)} />
+          <V6Stat label="Broad pct" value={fmt(pending?.broad_percentile, 4)} />
+          <V6Stat label="Anchor pct" value={fmt(pending?.anchor_percentile, 4)} />
+        </V6Section>
+
+        <V6Section title="Overlay rules · count · adj.">
+          <V6Stat label="GREEN saturation veto" value={`${Number(stats.saturation_veto_count ?? 0)} · ${fmt(stats.saturation_veto_adjusted)}`} />
+          <V6Stat label="Weak-broad RED veto" value={`${Number(stats.weak_red_veto_count ?? 0)} · ${fmt(stats.weak_red_veto_adjusted)}`} />
+          <V6Stat label="Consensus RED pickup" value={`${Number(stats.red_pickup_count ?? 0)} · ${fmt(stats.red_pickup_adjusted)}`} />
+          <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_adjusted)}`} />
+        </V6Section>
+      </div>
+
+      <div className="relative mt-6 pt-4 border-t border-violet/20">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Current prediction</div>
+            {pending?.target_candle_ts && (
+              <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
+                {new Date(pending.target_candle_ts).toLocaleString()}
+              </div>
+            )}
+          </div>
+          <span className={`px-4 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-[0.16em] font-mono ${predTone}`}>
+            {upper}
+          </span>
+        </div>
+        {(pending?.abstain_reason || pending?.operational_error) && (
+          <div className="text-[10px] text-muted-foreground mt-2 text-right">
+            {pending.abstain_reason ?? pending.operational_error}
           </div>
         )}
       </div>
