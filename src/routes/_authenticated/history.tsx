@@ -11,6 +11,7 @@ import {
   exportA96Csv,
   exportUniversalV2,
 } from "@/lib/predictions.functions";
+import { exportV6Csv } from "@/lib/v6.functions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
@@ -455,6 +456,7 @@ function CsvDataPage() {
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportAas96 = useServerFn(exportAas96Shadow);
   const exportA96 = useServerFn(exportA96Csv);
+  const exportV6 = useServerFn(exportV6Csv);
   const [buildingUniversal, setBuildingUniversal] = useState(false);
 
   useEffect(() => {
@@ -575,6 +577,24 @@ function CsvDataPage() {
             }}
           >
             <Download className="size-4" /> a96 CSV
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const res = await exportV6().catch(() => null);
+              if (!res || !res.csv || res.rows === 0) return;
+              const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `V6_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Download className="size-4" /> V6 CSV
           </Button>
         </div>
       </div>
