@@ -808,12 +808,13 @@ function V6Card({
           <V6Stat label="Anchor pct" value={fmt(pending?.anchor_percentile, 4)} />
         </V6Section>
 
-        <V6Section title="Overlay rules · count · adj.">
-          <V6Stat label="GREEN saturation veto" value={`${Number(stats.saturation_veto_count ?? 0)} · ${fmt(stats.saturation_veto_adjusted)}`} />
-          <V6Stat label="Weak-broad RED veto" value={`${Number(stats.weak_red_veto_count ?? 0)} · ${fmt(stats.weak_red_veto_adjusted)}`} />
-          <V6Stat label="Consensus RED pickup" value={`${Number(stats.red_pickup_count ?? 0)} · ${fmt(stats.red_pickup_adjusted)}`} />
-          <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_adjusted)}`} />
+        <V6Section title="Overlay rules · count · raw">
+          <V6Stat label="GREEN saturation veto" value={`${Number(stats.saturation_veto_count ?? 0)} · ${fmt(stats.saturation_veto_raw)}`} />
+          <V6Stat label="Weak-broad RED veto" value={`${Number(stats.weak_red_veto_count ?? 0)} · ${fmt(stats.weak_red_veto_raw)}`} />
+          <V6Stat label="Consensus RED pickup" value={`${Number(stats.red_pickup_count ?? 0)} · ${fmt(stats.red_pickup_raw)}`} />
+          <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_raw)}`} />
         </V6Section>
+
       </div>
 
       <div className="relative mt-6 pt-4 border-t border-violet/20">
