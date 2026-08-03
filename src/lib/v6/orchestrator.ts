@@ -145,13 +145,15 @@ async function loadPriorBaseState(sb: SupabaseClient, targetTs: Date): Promise<D
 }
 
 function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown> = {}) {
+  const t = timingPosture(targetTs);
   return {
     target_candle_ts: targetTs.toISOString(),
     prediction_created_at: new Date().toISOString(),
     input_candle_ts: new Date(targetTs.getTime() - TF_MS).toISOString(),
     input_cutoff_ts: targetTs.toISOString(),
-    prediction_created_before_target: Date.now() < targetTs.getTime(),
-    timing_valid: Date.now() < targetTs.getTime(),
+    prediction_created_before_target: t.createdBefore,
+    timing_valid: t.createdBefore,
+
     symbol: V6_CANDLE_STREAM.symbol,
     timeframe: V6_CANDLE_STREAM.timeframe,
     provider: V6_CANDLE_STREAM.provider,
