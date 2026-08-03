@@ -218,7 +218,11 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = await loadPriorBaseState(sb, targetTs);
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
-    const createdBefore = Date.now() < targetTs.getTime();
+    const timing = timingPosture(targetTs);
+    const createdBefore = timing.createdBefore;
+    const accepted = timing.accepted;
+    const latenessNote =
+      createdBefore ? null : `late_publish:${Math.round(timing.latenessS)}s`;
     const priorIds = history.rows.slice(-5).map((r) => ({ candle_ts: r.candle_ts, id: r.id }));
 
     const row = {
@@ -235,8 +239,9 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       fit_id: V6_FIT_ID,
       model_artifact_sha256: V6_ARTIFACT_SHA256,
       feature_schema_version: V6_FEATURE_SCHEMA_VERSION,
-      operational_status: createdBefore ? "OK" : "OP_FAIL",
-      operational_error: createdBefore ? null : "prediction_after_target_open",
+      operational_status: accepted ? "OK" : "OP_FAIL",
+      operational_error: accepted ? latenessNote : "prediction_after_target_open",
+
       continuity_valid: history.contiguous,
       feature_valid: true,
       imputed_feature_count: inf.imputedFeatures.length,
