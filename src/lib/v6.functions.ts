@@ -42,13 +42,16 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     green_pickup_count: 0, green_pickup_raw: 0, green_pickup_adjusted: 0,
     weak_red_veto_count: 0, weak_red_veto_raw: 0, weak_red_veto_adjusted: 0,
     current_loss_streak: 0, max_loss_streak: 0,
-    max_adjusted_drawdown: 0,
-    rolling96_predictions: 0, rolling96_coverage: 0, rolling96_adjusted_net: 0,
+    max_adjusted_drawdown: 0, max_raw_drawdown: 0,
+    rolling96_predictions: 0, rolling96_coverage: 0, rolling96_adjusted_net: 0, rolling96_raw_net: 0,
   };
 
   let peakAdj = 0;
   let cumAdj = 0;
-  const window: Array<{ adj: number; directional: boolean }> = [];
+  let peakRaw = 0;
+  let cumRaw = 0;
+  const window: Array<{ adj: number; raw: number; directional: boolean }> = [];
+
 
   for (const r of rows) {
     c.total += 1;
