@@ -37,19 +37,28 @@ function emaSeries(values: number[], period: number): number[] {
   return out;
 }
 
-function wilder(values: number[], period: number): number[] {
-  // Wilder smoothing seeded with the simple mean of the first `period` values.
+function rollingMean(values: number[], period: number): number[] {
   const out: number[] = new Array(values.length).fill(NaN);
-  if (values.length < period) return out;
   let sum = 0;
-  for (let i = 0; i < period; i++) sum += values[i];
-  let prev = sum / period;
-  out[period - 1] = prev;
-  for (let i = period; i < values.length; i++) {
-    prev = (prev * (period - 1) + values[i]) / period;
-    out[i] = prev;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= period) sum -= values[i - period];
+    if (i >= period - 1) out[i] = sum / period;
   }
   return out;
+}
+
+function linregSlope(w: number[]): number {
+  const n = w.length;
+  const mx = (n - 1) / 2;
+  const my = w.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let k = 0; k < n; k++) {
+    num += (k - mx) * (w[k] - my);
+    den += (k - mx) * (k - mx);
+  }
+  return num / den;
 }
 
 function mean(a: number[]): number {
@@ -62,10 +71,10 @@ function stdevPop(a: number[]): number {
 }
 
 function zoneOf(pos: number): string {
-  if (!Number.isFinite(pos)) return "middle";
+  if (!Number.isFinite(pos)) return "true_mid";
   if (pos < 0.2) return "support_edge";
   if (pos < 0.4) return "lower_mid";
-  if (pos < 0.6) return "middle";
+  if (pos < 0.6) return "true_mid";
   if (pos < 0.8) return "upper_mid";
   return "resistance_edge";
 }
@@ -112,7 +121,7 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
       tr.push(Math.max(hl, Math.abs(highs[i] - pc), Math.abs(lows[i] - pc)));
     }
   }
-  const atr14 = wilder(tr, 14);
+  const atr14 = rollingMean(tr, 14);
 
   // Wilder RSI14
   const gains: number[] = [0];
@@ -222,8 +231,7 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
 
     // 4-candle path window (current + prior 3)
     const has4 = i >= 3;
-    const netDisp4 = has4 ? close - closes[i - 4 + 1 - 1] : NaN; // close - close[i-3] open-based below
-    const netDisplacement4 = has4 ? close - opens[i - 3] : NaN;
+    const netDisplacement4 = i >= 4 ? close - closes[i - 4] : NaN;
     const totalBodyPath4 = has4
       ? bodies.slice(i - 3, i + 1).reduce((s, v) => s + v, 0)
       : NaN;
@@ -232,7 +240,7 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
       ? mean(
           [0, 1, 2, 3].map((k) => {
             const j = i - 3 + k;
-            return lowerPct[j] - upperPct[j];
+            return upperPct[j] - lowerPct[j];
           }),
         )
       : NaN;
@@ -240,8 +248,10 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
     const high4 = has4 ? Math.max(...highs.slice(i - 3, i + 1)) : NaN;
 
     // Streaks / structure
-    let streak = 1;
-    while (i - streak >= 0 && dirs[i - streak] === dir && dir !== "DOJI") streak++;
+    let streak = dir === "DOJI" ? 0 : 1;
+    if (dir !== "DOJI") {
+      while (i - streak >= 0 && dirs[i - streak] === dir) streak++;
+    }
 
     const higherLow4 =
       i >= 3 &&
@@ -261,17 +271,16 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
     const failedBreakDown =
       Number.isFinite(priorLow20) && lows[i] < priorLow20 && close > priorLow20;
 
-    const bullSweep =
-      i >= 1 && lows[i] < lows[i - 1] && close > Math.min(opens[i - 1], closes[i - 1]);
-    const bearSweep =
-      i >= 1 && highs[i] > highs[i - 1] && close < Math.max(opens[i - 1], closes[i - 1]);
+    const bullSweep = i >= 1 && lows[i] < lows[i - 1] && close > closes[i - 1];
+    const bearSweep = i >= 1 && highs[i] > highs[i - 1] && close < closes[i - 1];
 
     const insideBar = i >= 1 && highs[i] <= highs[i - 1] && lows[i] >= lows[i - 1];
     const outsideBar = i >= 1 && highs[i] > highs[i - 1] && lows[i] < lows[i - 1];
 
     const meanBody2 = i >= 1 ? mean([bodyPct[i - 1], bodyPct[i]]) : NaN;
 
-    const closeSlope8 = i >= 8 ? (close - closes[i - 8]) / 8 : NaN;
+    const closeSlope8 =
+      i >= 7 ? safeDiv(linregSlope(closes.slice(i - 7, i + 1)), avgRange20) : NaN;
 
     const row: TechnicalRow = {
       candle_ts: c.candle_ts,
@@ -358,7 +367,6 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
       dist_from_4_candle_high_bps: r6(safeDiv(high4 - close, close) * 10000),
       mean_body_to_range_2: r6(meanBody2),
     };
-    void netDisp4;
     void dirNum;
     rows.push(row);
   }
