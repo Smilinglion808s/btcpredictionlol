@@ -725,8 +725,13 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
       ?? (features ? features.mean_2_candle_body_to_range : null);
 
     const publishes = decision.prediction === "GREEN" || decision.prediction === "RED";
-    const webhookEligible = prospectiveValid && publishes;
+    // a96 outbound webhooks are DISABLED. TD1-RC is the only webhook source.
+    const webhookEligible = false;
+    void prospectiveValid;
+    void publishes;
     const idempotencyKey = `${predictionId}:${A96_MODEL_VERSION}`;
+    void idempotencyKey;
+
 
     const featureSnapshot = {
       model_version: A96_MODEL_VERSION,
