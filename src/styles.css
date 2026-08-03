@@ -119,3 +119,108 @@
 @utility bg-bear { background-color: var(--bear); }
 @utility bg-warn { background-color: var(--warn); }
 @utility bg-info { background-color: var(--info); }
+
+/* ---- V6 hero card visuals ---- */
+@keyframes v6-sheen {
+  0%   { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  12%  { opacity: 0.55; }
+  55%  { opacity: 0.15; }
+  100% { transform: translateX(220%) skewX(-18deg); opacity: 0; }
+}
+@keyframes v6-orbit {
+  to { transform: rotate(1turn); }
+}
+@keyframes v6-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--violet) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--violet) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--violet) 0%, transparent); }
+}
+
+@utility v6-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--violet) 34%, transparent);
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in oklab, var(--violet) 26%, transparent) 0%, transparent 58%),
+    radial-gradient(110% 80% at 105% 0%, color-mix(in oklab, var(--cyan) 20%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 92%, var(--violet)) 0%, var(--card) 62%);
+  box-shadow:
+    0 26px 60px -28px color-mix(in oklab, var(--violet) 65%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+  transition: box-shadow 320ms ease, border-color 320ms ease, transform 320ms ease;
+
+  &:hover {
+    border-color: color-mix(in oklab, var(--violet) 55%, transparent);
+    box-shadow:
+      0 34px 80px -26px color-mix(in oklab, var(--violet) 78%, transparent),
+      inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
+  }
+
+  /* fine grid texture */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--grid) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--grid) 55%, transparent) 1px, transparent 1px);
+    background-size: 34px 34px;
+    mask-image: radial-gradient(120% 90% at 50% 0%, black 0%, transparent 72%);
+    opacity: 0.5;
+  }
+}
+
+@utility v6-sheen {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, white 16%, transparent), transparent);
+  animation: v6-sheen 6.5s ease-in-out infinite;
+}
+
+@utility v6-orbit-ring {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in oklab, var(--violet) 40%, transparent) 40deg,
+    transparent 120deg,
+    color-mix(in oklab, var(--cyan) 32%, transparent) 200deg,
+    transparent 300deg
+  );
+  animation: v6-orbit 18s linear infinite;
+  opacity: 0.35;
+  mask-image: radial-gradient(closest-side, transparent 62%, black 76%, transparent 92%);
+}
+
+@utility v6-title {
+  background: linear-gradient(100deg, color-mix(in oklab, white 92%, var(--violet)) 0%, var(--violet) 45%, var(--cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility v6-chip {
+  position: relative;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--violet) 18%, var(--border));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--violet) 8%, transparent), color-mix(in oklab, var(--card) 88%, transparent));
+  transition: border-color 220ms ease, transform 220ms ease, background 220ms ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--violet) 42%, transparent);
+  }
+}
+
+@utility v6-live-dot {
+  animation: v6-pulse-ring 2.4s ease-out infinite;
+}
