@@ -467,9 +467,6 @@ function StatsPage() {
             </div>
           )}
         </ModelCard>
-
-
-        </ModelCard>
       </div>
 
       <Card>
