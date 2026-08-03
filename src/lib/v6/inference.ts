@@ -336,7 +336,6 @@ export function inferV6(
     : basePrediction === "ABSTAIN"
       ? "BASE_UNCERTAINTY"
       : null;
-  if (saturationVetoTriggered) predictionSource = "ABSTAIN";
 
   const pickupsEvaluable = basePrediction === "ABSTAIN";
   const redPickupTriggered =
