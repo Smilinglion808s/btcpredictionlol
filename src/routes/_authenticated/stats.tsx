@@ -19,12 +19,6 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
-import {
-  getM3SeStats,
-  getM3SePending,
-  exportM3SePredictionsCsv,
-  exportM3SeFitsCsv,
-} from "@/lib/model3_selective_edge.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -75,41 +69,12 @@ function StatsPage() {
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const m3seStatsFn = useServerFn(getM3SeStats);
-  const m3sePendingFn = useServerFn(getM3SePending);
-  const exportM3sePredsFn = useServerFn(exportM3SePredictionsCsv);
-  const exportM3seFitsFn = useServerFn(exportM3SeFitsCsv);
-  const m3seStatsQ = useQuery({ queryKey: ["m3se-stats"], queryFn: () => m3seStatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m3sePendingQ = useQuery({ queryKey: ["m3se-pending"], queryFn: () => m3sePendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const [exportingM3se, setExportingM3se] = useState(false);
-  const [exportingM3seFits, setExportingM3seFits] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
-  async function downloadM3sePredsCsv() {
-    try {
-      setExportingM3se(true);
-      const rows = await exportM3sePredsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r3 predictions to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-predictions-${stamp()}.csv`);
-    } finally {
-      setExportingM3se(false);
-    }
-  }
-
-  async function downloadM3seFitsCsv() {
-    try {
-      setExportingM3seFits(true);
-      const rows = await exportM3seFitsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r3 fits to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-fits-${stamp()}.csv`);
-    } finally {
-      setExportingM3seFits(false);
-    }
-  }
 
   async function downloadA96Csv() {
     try {
