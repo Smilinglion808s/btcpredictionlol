@@ -19,3 +19,11 @@ export const V6_WARMUP_CANDLES = 800;
 
 /** Minimum contiguous confirmed history required before inference may run. */
 export const V6_MIN_HISTORY_CANDLES = 260;
+
+/**
+ * Grace window (seconds) after the target candle opens during which a completed
+ * run still publishes its real prediction. Beyond this the row is OP_FAIL.
+ * Inputs are always cut off at the target open, so no target-candle leakage.
+ */
+export const V6_LATE_GRACE_S = 300;
+

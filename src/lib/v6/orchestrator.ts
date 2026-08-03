@@ -1,11 +1,13 @@
 // V6 orchestrator — prediction lifecycle for the frozen V6 model.
 //
 // Contract:
-//   * One row per BTC-USDT 15m target candle, persisted BEFORE the target opens.
+//   * One row per BTC-USDT 15m target candle. Runs that land within
+//     V6_LATE_GRACE_S after the target opens still publish their real prediction.
 //   * Input is the confirmed OKX candle at T-15m. Target-candle data is never read
 //     at prediction time.
-//   * Continuity/feature/timing failures publish OP_FAIL (never ABSTAIN) and clear
-//     the GREEN-saturation rolling history.
+//   * Continuity/feature failures, and runs past the grace window, publish OP_FAIL
+//     (never ABSTAIN) and clear the GREEN-saturation rolling history.
+
 //   * Resolution is idempotent and reads canonical OKX OHLC only.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -28,12 +30,28 @@ import {
   V6_CANDLE_STREAM,
   V6_FEATURE_SCHEMA_VERSION,
   V6_FIT_ID,
+  V6_LATE_GRACE_S,
   V6_MIN_HISTORY_CANDLES,
   V6_MODEL_VERSION,
   V6_WARMUP_CANDLES,
 } from "./config";
 
 const TF_MS = 15 * 60 * 1000;
+
+/**
+ * Timing posture for a run against its target candle open. A run that lands
+ * within the grace window is accepted (like a96 / TD1-RC) and publishes its
+ * real prediction; strict truth flags still report it as late.
+ */
+function timingPosture(targetTs: Date) {
+  const latenessS = (Date.now() - targetTs.getTime()) / 1000;
+  return {
+    latenessS,
+    createdBefore: latenessS < 0,
+    accepted: latenessS < V6_LATE_GRACE_S,
+  };
+}
+
 
 async function logError(sb: SupabaseClient, runType: string, payload: Record<string, unknown>, err: unknown) {
   try {
@@ -129,13 +147,15 @@ async function loadPriorBaseState(sb: SupabaseClient, targetTs: Date): Promise<D
 }
 
 function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown> = {}) {
+  const t = timingPosture(targetTs);
   return {
     target_candle_ts: targetTs.toISOString(),
     prediction_created_at: new Date().toISOString(),
     input_candle_ts: new Date(targetTs.getTime() - TF_MS).toISOString(),
     input_cutoff_ts: targetTs.toISOString(),
-    prediction_created_before_target: Date.now() < targetTs.getTime(),
-    timing_valid: Date.now() < targetTs.getTime(),
+    prediction_created_before_target: t.createdBefore,
+    timing_valid: t.createdBefore,
+
     symbol: V6_CANDLE_STREAM.symbol,
     timeframe: V6_CANDLE_STREAM.timeframe,
     provider: V6_CANDLE_STREAM.provider,
@@ -200,7 +220,11 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = await loadPriorBaseState(sb, targetTs);
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
-    const createdBefore = Date.now() < targetTs.getTime();
+    const timing = timingPosture(targetTs);
+    const createdBefore = timing.createdBefore;
+    const accepted = timing.accepted;
+    const latenessNote =
+      createdBefore ? null : `late_publish:${Math.round(timing.latenessS)}s`;
     const priorIds = history.rows.slice(-5).map((r) => ({ candle_ts: r.candle_ts, id: r.id }));
 
     const row = {
@@ -217,8 +241,9 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       fit_id: V6_FIT_ID,
       model_artifact_sha256: V6_ARTIFACT_SHA256,
       feature_schema_version: V6_FEATURE_SCHEMA_VERSION,
-      operational_status: createdBefore ? "OK" : "OP_FAIL",
-      operational_error: createdBefore ? null : "prediction_after_target_open",
+      operational_status: accepted ? "OK" : "OP_FAIL",
+      operational_error: accepted ? latenessNote : "prediction_after_target_open",
+
       continuity_valid: history.contiguous,
       feature_valid: true,
       imputed_feature_count: inf.imputedFeatures.length,
@@ -264,11 +289,12 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
-      final_prediction: createdBefore ? inf.finalPrediction : "OP_FAIL",
+      final_prediction: accepted ? inf.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
-        createdBefore && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: createdBefore ? inf.abstainReason : null,
+        accepted && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted ? inf.abstainReason : null,
+
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
