@@ -72,10 +72,10 @@ function stdevPop(a: number[]): number {
 
 function zoneOf(pos: number): string {
   if (!Number.isFinite(pos)) return "true_mid";
-  if (pos < 0.2) return "support_edge";
-  if (pos < 0.4) return "lower_mid";
-  if (pos < 0.6) return "true_mid";
-  if (pos < 0.8) return "upper_mid";
+  if (pos < 0.236) return "support_edge";
+  if (pos < 0.382) return "lower_mid";
+  if (pos < 0.618) return "true_mid";
+  if (pos < 0.786) return "upper_mid";
   return "resistance_edge";
 }
 
@@ -230,20 +230,24 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
     const channelPos = safeDiv(close - low20, channelWidth);
 
     // 4-candle path window (current + prior 3)
-    const has4 = i >= 3;
+    const has4 = i >= 4;
     const netDisplacement4 = i >= 4 ? close - closes[i - 4] : NaN;
     const totalBodyPath4 = has4
       ? bodies.slice(i - 3, i + 1).reduce((s, v) => s + v, 0)
       : NaN;
     const pathEff4 = has4 ? safeDiv(Math.abs(netDisplacement4), totalBodyPath4) : NaN;
-    const alignedWick4 = has4
-      ? mean(
-          [0, 1, 2, 3].map((k) => {
-            const j = i - 3 + k;
-            return upperPct[j] - lowerPct[j];
-          }),
-        )
-      : NaN;
+    // Wick pressure over the 4-candle window, oriented against the net move:
+    // sign(net_displacement_4) * mean(lower_wick_pct - upper_wick_pct).
+    const alignedWick4 =
+      has4 && Number.isFinite(netDisplacement4)
+        ? (netDisplacement4 < 0 ? -1 : 1) *
+          mean(
+            [0, 1, 2, 3].map((k) => {
+              const j = i - 3 + k;
+              return lowerPct[j] - upperPct[j];
+            }),
+          )
+        : NaN;
     const low4 = has4 ? Math.min(...lows.slice(i - 3, i + 1)) : NaN;
     const high4 = has4 ? Math.max(...highs.slice(i - 3, i + 1)) : NaN;
 
