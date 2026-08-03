@@ -146,10 +146,13 @@ export function buildTechnicalRows(candles: readonly RawCandle[]): TechnicalRow[
   // Alignment + trend age
   const alignments: string[] = [];
   for (let i = 0; i < n; i++) alignments.push(alignmentOf(ema9[i], ema21[i], ema50[i]));
+  // Trend age = run length of sign(ema9 - ema21) inclusive of the current candle.
+  const emaCross: string[] = [];
+  for (let i = 0; i < n; i++) emaCross.push(ema9[i] - ema21[i] > 0 ? "U" : "D");
   const trendAge: number[] = [];
   for (let i = 0; i < n; i++) {
     let age = 1;
-    while (i - age >= 0 && alignments[i - age] === alignments[i]) age++;
+    while (i - age >= 0 && emaCross[i - age] === emaCross[i]) age++;
     trendAge.push(age);
   }
 
