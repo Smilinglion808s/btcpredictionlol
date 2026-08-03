@@ -855,43 +855,9 @@ export async function runA96(sb: SupabaseClient, predictionId: string): Promise<
     } as never, { onConflict: "prediction_id" });
     if (upsertError) throw upsertError;
 
-    // a96-r4 is an ACTIVE outbound webhook source (alongside TD1-RC).
-    // Emit ONLY for directional predictions on prospectively-valid rows, only
-    // AFTER the row has been persisted, and only once per (prediction, version).
-    if (webhookEligible) {
-      const { data: a96Row } = await sb
-        .from("a96_predictions")
-        .select("*")
-        .eq("prediction_id", predictionId)
-        .maybeSingle();
-      const row = a96Row as Record<string, unknown> | null;
-      const alreadySent = row?.webhook_sent_at != null || row?.webhook_status === "SENT";
-      if (row && !alreadySent) {
-        const attempt = Number(row.webhook_attempt_count ?? 0) + 1;
-        try {
-          const { deliverWebhook, buildA96WebhookPayload } = await import("../webhooks.server");
-          await deliverWebhook(sb, "prediction.created", buildA96WebhookPayload({
-            a96Row: row,
-            prediction: pred as Record<string, unknown>,
-          }));
-          await sb.from("a96_predictions").update({
-            webhook_status: "SENT",
-            webhook_sent_at: new Date().toISOString(),
-            webhook_attempt_count: attempt,
-            webhook_last_attempt_at: new Date().toISOString(),
-            webhook_last_error: null,
-          } as never).eq("prediction_id", predictionId);
-        } catch (e) {
-          // never block the pipeline on webhook failure
-          await sb.from("a96_predictions").update({
-            webhook_status: "FAILED",
-            webhook_attempt_count: attempt,
-            webhook_last_attempt_at: new Date().toISOString(),
-            webhook_last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
-          } as never).eq("prediction_id", predictionId);
-        }
-      }
-    }
+    // a96 outbound webhooks are DISABLED — TD1-RC is the only webhook source.
+    // Rows are still persisted with webhook_status NOT_APPLICABLE.
+
 
 
 
