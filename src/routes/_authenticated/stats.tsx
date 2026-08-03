@@ -691,13 +691,14 @@ function V6Card({
   exporting: boolean;
 }) {
   const winRate = Number(stats.win_rate ?? 0);
-  const breakeven = Number(stats.breakeven_win_rate ?? 55.5555556);
-  const adjustedNet = Number(stats.adjusted_net ?? 0);
+  const breakeven = 50;
+  const rawNet = Number(stats.raw_net ?? 0);
   const wins = Number(stats.wins ?? 0);
   const losses = Number(stats.losses ?? 0);
   const pushes = Number(stats.pushes ?? 0);
   const pendingCount = Number(stats.pending ?? 0);
   const aboveBreakeven = winRate >= breakeven;
+
 
   const upper = String(pending?.final_prediction ?? "—").toUpperCase();
   const predTone =
