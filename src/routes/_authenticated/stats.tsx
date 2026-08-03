@@ -19,12 +19,6 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
-import {
-  getM3SeStats,
-  getM3SePending,
-  exportM3SePredictionsCsv,
-  exportM3SeFitsCsv,
-} from "@/lib/model3_selective_edge.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -75,41 +69,12 @@ function StatsPage() {
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const m3seStatsFn = useServerFn(getM3SeStats);
-  const m3sePendingFn = useServerFn(getM3SePending);
-  const exportM3sePredsFn = useServerFn(exportM3SePredictionsCsv);
-  const exportM3seFitsFn = useServerFn(exportM3SeFitsCsv);
-  const m3seStatsQ = useQuery({ queryKey: ["m3se-stats"], queryFn: () => m3seStatsFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const m3sePendingQ = useQuery({ queryKey: ["m3se-pending"], queryFn: () => m3sePendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const [exportingM3se, setExportingM3se] = useState(false);
-  const [exportingM3seFits, setExportingM3seFits] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
-  async function downloadM3sePredsCsv() {
-    try {
-      setExportingM3se(true);
-      const rows = await exportM3sePredsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r3 predictions to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-predictions-${stamp()}.csv`);
-    } finally {
-      setExportingM3se(false);
-    }
-  }
-
-  async function downloadM3seFitsCsv() {
-    try {
-      setExportingM3seFits(true);
-      const rows = await exportM3seFitsFn();
-      if (!rows || rows.length === 0) { alert("No m3-se-r3 fits to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `model3-se-r2-fits-${stamp()}.csv`);
-    } finally {
-      setExportingM3seFits(false);
-    }
-  }
 
   async function downloadA96Csv() {
     try {
@@ -240,10 +205,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["a96-stats"] });
         qc.invalidateQueries({ queryKey: ["a96-pending"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model3_se_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["m3se-stats"] });
-        qc.invalidateQueries({ queryKey: ["m3se-pending"] });
-      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
@@ -294,10 +255,6 @@ function StatsPage() {
   const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
   const a96WinRate = Number(a96Stats.win_rate ?? 0);
 
-  const m3seStats = (m3seStatsQ.data ?? {}) as Record<string, any>;
-  const m3sePublished = (m3seStats.published ?? {}) as Record<string, any>;
-  const m3sePending = m3sePendingQ.data as Record<string, any> | null;
-  const m3seCurrent = m3sePending?.published_prediction ?? null;
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
@@ -509,51 +466,6 @@ function StatsPage() {
               </div>
             </div>
           )}
-        </ModelCard>
-
-        <ModelCard
-          title="Model 3 — Selective Edge"
-          subtitle="m3-se-r3"
-          status="Auto"
-          tone="violet"
-          winRate={Number(m3sePublished.win_rate ?? 0)}
-          wins={Number(m3sePublished.wins ?? 0)}
-          losses={Number(m3sePublished.losses ?? 0)}
-          pushes={Number(m3sePublished.pushes ?? 0)}
-          pending={Number(m3seStats.pending ?? 0)}
-          predictionLabel="Current Prediction"
-          predictionTs={m3sePending?.target_candle_ts}
-          predictionValue={m3seCurrent ?? "—"}
-          abstainReason={
-            (m3sePending as any)?.abstain_detail
-            ?? ((m3sePending as any)?.abstain_category && (m3sePending as any)?.abstain_reason
-                  ? `${(m3sePending as any).abstain_category}: ${(m3sePending as any).abstain_reason}`
-                  : (m3sePending as any)?.abstain_reason)
-            ?? null
-          }
-          actions={(
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3sePredsCsv} disabled={exportingM3se}>
-                {exportingM3se ? "…" : "CSV"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadM3seFitsCsv} disabled={exportingM3seFits}>
-                {exportingM3seFits ? "…" : "Fits"}
-              </Button>
-            </div>
-          )}
-        >
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <MiniStat label="Resolved" value={Number(m3seStats.resolved_count ?? 0)} />
-            <MiniStat label="Abstains" value={Number(m3seStats.abstains ?? 0)} />
-            <MiniStat label="Coverage" value={`${Math.round(Number(m3seStats.coverage ?? 0) * 100)}%`} />
-            <MiniStat label="Raw win rate" value={`${Number(m3seStats.raw?.win_rate ?? 0)}%`} />
-          </div>
-          <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
-            <span className="font-semibold text-foreground">Selective Edge R2:</span> slow (1024) + fast (384, recency ½-life 96) direction experts
-            with capped class-balance weights feed a stacker; the selector is a ranker with L2 penalty picked by ROC-AUC. Publish top ~60% by
-            selector_score_raw (threshold = P40 on calibration). Retrains every 96 resolved rows; prior fit retained if history is insufficient.
-          </div>
-
         </ModelCard>
       </div>
 

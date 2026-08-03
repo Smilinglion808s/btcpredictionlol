@@ -529,15 +529,11 @@ export async function runShadowForPrediction(
 
     // AAS96 shadow — deferred, never blocks webhook. Own storage table.
     // a96-r1 runs after and consumes AAS96 Layer A/B + base selector only.
-    // Model 3 FWD (model8_v3) runs alongside them off the same prediction row
-    // so all three share one target-candle derivation path.
     try {
       const { runAas96Shadow } = await import("./aas96/orchestrator");
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
       const { runA96 } = await import("@/lib/a96/orchestrator");
       await runA96(supabase, predictionRow.id);
-      const { runM3SeR1 } = await import("@/lib/model3_selective_edge/orchestrator");
-      await runM3SeR1(supabase, { targetCandleTs: new Date(String(predictionRow.candle_ts)) });
     } catch { /* never block */ }
 
 
@@ -742,8 +738,6 @@ export async function resolveShadowRowsFor(
     await resolveAas96Row(supabase, predictionId, actualDirection);
     const { resolveA96 } = await import("@/lib/a96/orchestrator");
     await resolveA96(supabase, predictionId);
-    const { resolveDueM3SeR1 } = await import("@/lib/model3_selective_edge/orchestrator");
-    await resolveDueM3SeR1(supabase);
   } catch { /* never block */ }
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
 
