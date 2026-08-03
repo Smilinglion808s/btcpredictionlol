@@ -19,6 +19,7 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
+import { getV6Stats, getV6Pending, exportV6Csv } from "@/lib/v6.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -64,17 +65,34 @@ function StatsPage() {
   const a96Q = useQuery({ queryKey: ["a96-stats"], queryFn: () => a96Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const a96PendingFn = useServerFn(getA96Pending);
   const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6Fn = useServerFn(getV6Stats);
+  const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6PendingFn = useServerFn(getV6Pending);
+  const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportV6Fn = useServerFn(exportV6Csv);
   const exportA96Fn = useServerFn(exportA96Csv);
   const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
   const resetA96Fn = useServerFn(resetA96VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
+  const [exportingV6, setExportingV6] = useState(false);
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
+
+  async function downloadV6Csv() {
+    try {
+      setExportingV6(true);
+      const res = await exportV6Fn();
+      if (!res || res.rows === 0) { alert("No V6 rows to export."); return; }
+      triggerDownload(res.csv, `V6-${stamp()}.csv`);
+    } finally {
+      setExportingV6(false);
+    }
+  }
 
   async function downloadA96Csv() {
     try {
@@ -201,6 +219,10 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["v6-stats"] });
+        qc.invalidateQueries({ queryKey: ["v6-pending"] });
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "a96_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["a96-stats"] });
         qc.invalidateQueries({ queryKey: ["a96-pending"] });
@@ -254,6 +276,10 @@ function StatsPage() {
   const a96Losses = Number(a96Stats.losses ?? 0);
   const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
   const a96WinRate = Number(a96Stats.win_rate ?? 0);
+
+  const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
+  const v6Pending = v6PendingQ.data as Record<string, any> | null;
+  const v6Fmt = (n: unknown, digits = 2) => (n == null || n === "" ? "—" : Number(n).toFixed(digits));
 
 
   return (
@@ -466,6 +492,84 @@ function StatsPage() {
               </div>
             </div>
           )}
+        </ModelCard>
+
+        <ModelCard
+          title="V6"
+          subtitle="Frozen forward test"
+          status="Live"
+          tone="violet"
+          winRate={Number(v6Stats.win_rate ?? 0)}
+          wins={Number(v6Stats.wins ?? 0)}
+          losses={Number(v6Stats.losses ?? 0)}
+          pushes={Number(v6Stats.pushes ?? 0)}
+          pending={Number(v6Stats.pending ?? 0)}
+          predictionLabel="Current Prediction"
+          predictionTs={v6Pending?.target_candle_ts}
+          predictionValue={v6Pending?.final_prediction ?? "—"}
+          abstainReason={(v6Pending as any)?.abstain_reason ?? (v6Pending as any)?.operational_error ?? null}
+          actions={(
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadV6Csv} disabled={exportingV6}>
+              {exportingV6 ? "…" : "CSV"}
+            </Button>
+          )}
+        >
+          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Adjusted net (primary)</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{v6Fmt(v6Stats.adjusted_net)}</div>
+            <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+              Raw net {v6Fmt(v6Stats.raw_net)} · break-even WR {v6Fmt(v6Stats.breakeven_win_rate, 4)}%
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label="Coverage" value={`${Number(v6Stats.coverage ?? 0)}%`} />
+            <MiniStat label="Pushes" value={Number(v6Stats.pushes ?? 0)} />
+            <MiniStat label="Strategic abstains" value={Number(v6Stats.strategic_abstains ?? 0)} />
+            <MiniStat label="Operational failures" value={Number(v6Stats.op_fails ?? 0)} />
+            <MiniStat label="GREEN W/L" value={`${Number(v6Stats.green_wins ?? 0)}/${Number(v6Stats.green_losses ?? 0)}`} />
+            <MiniStat label="RED W/L" value={`${Number(v6Stats.red_wins ?? 0)}/${Number(v6Stats.red_losses ?? 0)}`} />
+            <MiniStat label="Longest loss streak" value={Number(v6Stats.max_loss_streak ?? 0)} />
+            <MiniStat label="Max adj. drawdown" value={v6Fmt(v6Stats.max_adjusted_drawdown)} />
+            <MiniStat label="Rolling 96 adj. net" value={v6Fmt(v6Stats.rolling96_adjusted_net)} />
+            <MiniStat label="Rolling 96 coverage" value={`${Number(v6Stats.rolling96_coverage ?? 0)}%`} />
+          </div>
+          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Current candle detail</div>
+            <div className="grid grid-cols-2 gap-3">
+              <MiniStat label="Base V6" value={v6Pending?.base_v6_prediction ?? "—"} />
+              <MiniStat label="Source" value={v6Pending?.prediction_source ?? "—"} />
+              <MiniStat label="Final score" value={v6Fmt(v6Pending?.final_score, 6)} />
+              <MiniStat
+                label="Thresholds"
+                value={v6Pending ? `${v6Fmt(v6Pending.red_threshold, 4)} / ${v6Fmt(v6Pending.green_threshold, 4)}` : "—"}
+              />
+              <MiniStat label="Ridge pct" value={v6Fmt(v6Pending?.ridge_percentile, 4)} />
+              <MiniStat label="Boosted pct" value={v6Fmt(v6Pending?.gb_percentile, 4)} />
+              <MiniStat label="Broad pct" value={v6Fmt(v6Pending?.broad_percentile, 4)} />
+              <MiniStat label="Anchor pct" value={v6Fmt(v6Pending?.anchor_percentile, 4)} />
+            </div>
+          </div>
+          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Overlay rules (count · adj. contribution)</div>
+            <div className="grid grid-cols-2 gap-3">
+              <MiniStat
+                label="GREEN saturation veto"
+                value={`${Number(v6Stats.saturation_veto_count ?? 0)} · ${v6Fmt(v6Stats.saturation_veto_adjusted)}`}
+              />
+              <MiniStat
+                label="Weak-broad RED veto"
+                value={`${Number(v6Stats.weak_red_veto_count ?? 0)} · ${v6Fmt(v6Stats.weak_red_veto_adjusted)}`}
+              />
+              <MiniStat
+                label="Consensus RED pickup"
+                value={`${Number(v6Stats.red_pickup_count ?? 0)} · ${v6Fmt(v6Stats.red_pickup_adjusted)}`}
+              />
+              <MiniStat
+                label="Momentum GREEN pickup"
+                value={`${Number(v6Stats.green_pickup_count ?? 0)} · ${v6Fmt(v6Stats.green_pickup_adjusted)}`}
+              />
+            </div>
+          </div>
         </ModelCard>
       </div>
 
