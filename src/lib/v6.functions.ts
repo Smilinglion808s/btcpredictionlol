@@ -111,7 +111,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.max_loss_streak = Math.max(c.max_loss_streak, c.current_loss_streak);
       }
     }
-    window.push({ adj, directional });
+    window.push({ adj, raw, directional });
     if (window.length > 96) window.shift();
   }
 
@@ -122,13 +122,16 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     ? Math.round((window.filter((w) => w.directional).length / window.length) * 10000) / 100
     : 0;
   c.rolling96_adjusted_net = Math.round(window.reduce((s, w) => s + w.adj, 0) * 100) / 100;
+  c.rolling96_raw_net = Math.round(window.reduce((s, w) => s + w.raw, 0) * 100) / 100;
 
   return {
     ...c,
     raw_net: Math.round(c.raw_net * 100) / 100,
     adjusted_net: Math.round(c.adjusted_net * 100) / 100,
     max_adjusted_drawdown: Math.round(c.max_adjusted_drawdown * 100) / 100,
+    max_raw_drawdown: Math.round(c.max_raw_drawdown * 100) / 100,
     win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
+
     coverage: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
     breakeven_win_rate: 55.5555556,
   };
