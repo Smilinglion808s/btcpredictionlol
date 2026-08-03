@@ -287,11 +287,12 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
-      final_prediction: createdBefore ? inf.finalPrediction : "OP_FAIL",
+      final_prediction: accepted ? inf.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
-        createdBefore && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: createdBefore ? inf.abstainReason : null,
+        accepted && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted ? inf.abstainReason : null,
+
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
