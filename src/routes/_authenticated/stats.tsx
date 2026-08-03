@@ -757,18 +757,19 @@ function V6Card({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Adjusted net · primary</div>
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · primary</div>
           <div
-            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${adjustedNet > 0 ? "text-bull" : adjustedNet < 0 ? "text-bear" : "text-foreground"}`}
+            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${rawNet > 0 ? "text-bull" : rawNet < 0 ? "text-bear" : "text-foreground"}`}
           >
-            {adjustedNet > 0 ? "+" : ""}{fmt(adjustedNet)}
+            {rawNet > 0 ? "+" : ""}{fmt(rawNet)}
           </div>
           <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
-            raw {fmt(stats.raw_net)} · break-even {fmt(breakeven, 2)}%
+            break-even {fmt(breakeven, 2)}%
             <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
               {aboveBreakeven ? "▲ above" : "▼ below"}
             </span>
           </div>
+
         </div>
       </div>
 
