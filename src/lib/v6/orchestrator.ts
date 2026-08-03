@@ -28,12 +28,28 @@ import {
   V6_CANDLE_STREAM,
   V6_FEATURE_SCHEMA_VERSION,
   V6_FIT_ID,
+  V6_LATE_GRACE_S,
   V6_MIN_HISTORY_CANDLES,
   V6_MODEL_VERSION,
   V6_WARMUP_CANDLES,
 } from "./config";
 
 const TF_MS = 15 * 60 * 1000;
+
+/**
+ * Timing posture for a run against its target candle open. A run that lands
+ * within the grace window is accepted (like a96 / TD1-RC) and publishes its
+ * real prediction; strict truth flags still report it as late.
+ */
+function timingPosture(targetTs: Date) {
+  const latenessS = (Date.now() - targetTs.getTime()) / 1000;
+  return {
+    latenessS,
+    createdBefore: latenessS < 0,
+    accepted: latenessS < V6_LATE_GRACE_S,
+  };
+}
+
 
 async function logError(sb: SupabaseClient, runType: string, payload: Record<string, unknown>, err: unknown) {
   try {
