@@ -534,6 +534,9 @@ export async function runShadowForPrediction(
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
       const { runA96 } = await import("@/lib/a96/orchestrator");
       await runA96(supabase, predictionRow.id);
+      // V6 — standalone frozen model. Never blocks webhooks or other models.
+      const { runV6 } = await import("@/lib/v6/orchestrator");
+      await runV6(supabase, new Date(String(predictionRow.candle_ts)));
     } catch { /* never block */ }
 
 
@@ -738,6 +741,8 @@ export async function resolveShadowRowsFor(
     await resolveAas96Row(supabase, predictionId, actualDirection);
     const { resolveA96 } = await import("@/lib/a96/orchestrator");
     await resolveA96(supabase, predictionId);
+    const { resolveDueV6 } = await import("@/lib/v6/orchestrator");
+    await resolveDueV6(supabase);
   } catch { /* never block */ }
   if (!actualDirection || (actualDirection !== "GREEN" && actualDirection !== "RED")) return;
 
