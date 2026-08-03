@@ -788,8 +788,9 @@ function V6Card({
           <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
           <V6Stat label="GREEN W/L" value={`${Number(stats.green_wins ?? 0)}/${Number(stats.green_losses ?? 0)}`} />
           <V6Stat label="RED W/L" value={`${Number(stats.red_wins ?? 0)}/${Number(stats.red_losses ?? 0)}`} />
-          <V6Stat label="Max adj. drawdown" value={fmt(stats.max_adjusted_drawdown)} tone="bear" />
-          <V6Stat label="Rolling 96 adj. net" value={fmt(stats.rolling96_adjusted_net)} />
+          <V6Stat label="Max raw drawdown" value={fmt(stats.max_raw_drawdown)} tone="bear" />
+          <V6Stat label="Rolling 96 raw net" value={fmt(stats.rolling96_raw_net)} />
+
           <V6Stat label="Rolling 96 coverage" value={`${Number(stats.rolling96_coverage ?? 0)}%`} />
         </V6Section>
 
