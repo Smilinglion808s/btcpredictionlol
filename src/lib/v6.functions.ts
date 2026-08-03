@@ -92,6 +92,10 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     cumAdj += adj;
     peakAdj = Math.max(peakAdj, cumAdj);
     c.max_adjusted_drawdown = Math.max(c.max_adjusted_drawdown, peakAdj - cumAdj);
+    cumRaw += raw;
+    peakRaw = Math.max(peakRaw, cumRaw);
+    c.max_raw_drawdown = Math.max(c.max_raw_drawdown, peakRaw - cumRaw);
+
 
     const directional = r.final_prediction === "GREEN" || r.final_prediction === "RED";
     if (directional) {
