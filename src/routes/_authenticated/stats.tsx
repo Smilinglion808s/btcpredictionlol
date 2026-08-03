@@ -691,13 +691,14 @@ function V6Card({
   exporting: boolean;
 }) {
   const winRate = Number(stats.win_rate ?? 0);
-  const breakeven = Number(stats.breakeven_win_rate ?? 55.5555556);
-  const adjustedNet = Number(stats.adjusted_net ?? 0);
+  const breakeven = 50;
+  const rawNet = Number(stats.raw_net ?? 0);
   const wins = Number(stats.wins ?? 0);
   const losses = Number(stats.losses ?? 0);
   const pushes = Number(stats.pushes ?? 0);
   const pendingCount = Number(stats.pending ?? 0);
   const aboveBreakeven = winRate >= breakeven;
+
 
   const upper = String(pending?.final_prediction ?? "—").toUpperCase();
   const predTone =
@@ -756,18 +757,19 @@ function V6Card({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Adjusted net · primary</div>
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · primary</div>
           <div
-            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${adjustedNet > 0 ? "text-bull" : adjustedNet < 0 ? "text-bear" : "text-foreground"}`}
+            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${rawNet > 0 ? "text-bull" : rawNet < 0 ? "text-bear" : "text-foreground"}`}
           >
-            {adjustedNet > 0 ? "+" : ""}{fmt(adjustedNet)}
+            {rawNet > 0 ? "+" : ""}{fmt(rawNet)}
           </div>
           <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
-            raw {fmt(stats.raw_net)} · break-even {fmt(breakeven, 2)}%
+            break-even {fmt(breakeven, 2)}%
             <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
               {aboveBreakeven ? "▲ above" : "▼ below"}
             </span>
           </div>
+
         </div>
       </div>
 
@@ -786,8 +788,9 @@ function V6Card({
           <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
           <V6Stat label="GREEN W/L" value={`${Number(stats.green_wins ?? 0)}/${Number(stats.green_losses ?? 0)}`} />
           <V6Stat label="RED W/L" value={`${Number(stats.red_wins ?? 0)}/${Number(stats.red_losses ?? 0)}`} />
-          <V6Stat label="Max adj. drawdown" value={fmt(stats.max_adjusted_drawdown)} tone="bear" />
-          <V6Stat label="Rolling 96 adj. net" value={fmt(stats.rolling96_adjusted_net)} />
+          <V6Stat label="Max raw drawdown" value={fmt(stats.max_raw_drawdown)} tone="bear" />
+          <V6Stat label="Rolling 96 raw net" value={fmt(stats.rolling96_raw_net)} />
+
           <V6Stat label="Rolling 96 coverage" value={`${Number(stats.rolling96_coverage ?? 0)}%`} />
         </V6Section>
 
@@ -805,12 +808,13 @@ function V6Card({
           <V6Stat label="Anchor pct" value={fmt(pending?.anchor_percentile, 4)} />
         </V6Section>
 
-        <V6Section title="Overlay rules · count · adj.">
-          <V6Stat label="GREEN saturation veto" value={`${Number(stats.saturation_veto_count ?? 0)} · ${fmt(stats.saturation_veto_adjusted)}`} />
-          <V6Stat label="Weak-broad RED veto" value={`${Number(stats.weak_red_veto_count ?? 0)} · ${fmt(stats.weak_red_veto_adjusted)}`} />
-          <V6Stat label="Consensus RED pickup" value={`${Number(stats.red_pickup_count ?? 0)} · ${fmt(stats.red_pickup_adjusted)}`} />
-          <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_adjusted)}`} />
+        <V6Section title="Overlay rules · count · raw">
+          <V6Stat label="GREEN saturation veto" value={`${Number(stats.saturation_veto_count ?? 0)} · ${fmt(stats.saturation_veto_raw)}`} />
+          <V6Stat label="Weak-broad RED veto" value={`${Number(stats.weak_red_veto_count ?? 0)} · ${fmt(stats.weak_red_veto_raw)}`} />
+          <V6Stat label="Consensus RED pickup" value={`${Number(stats.red_pickup_count ?? 0)} · ${fmt(stats.red_pickup_raw)}`} />
+          <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_raw)}`} />
         </V6Section>
+
       </div>
 
       <div className="relative mt-6 pt-4 border-t border-violet/20">
