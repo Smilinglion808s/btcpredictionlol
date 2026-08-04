@@ -506,7 +506,10 @@ function StatsPage() {
           fmt={v6Fmt}
           onExport={downloadV6Csv}
           exporting={exportingV6}
+          onReset={doResetV6Stats}
+          resetting={resettingV6}
         />
+
 
         <V6RegimeInverterPanel
           state={(v6InverterQ.data as Record<string, any> | null) ?? null}
