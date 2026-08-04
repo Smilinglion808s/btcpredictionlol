@@ -174,12 +174,38 @@ export const getV6Pending = createServerFn({ method: "GET" }).handler(async () =
   const { data } = await sb
     .from("v6_predictions")
     .select(
-      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp",
+      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp, model_revision, original_v6_base_prediction, pre_inverter_prediction, pre_inverter_prediction_source, final_prediction_source, regime_inverter_ready, regime_inverter_active, regime_inverter_triggered, regime_inverter_history_count, regime_inverter_last20_wins, regime_inverter_last20_losses, regime_inverter_last20_adjusted_net, regime_inverter_activation_threshold",
     )
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
   return data ?? null;
+});
+
+/** Live Regime Inverter state (rolling shadow window) for the stats panel. */
+export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("v6_regime_inverter_state")
+    .select("*")
+    .eq("model_version", "V6")
+    .maybeSingle();
+  return (data as Record<string, unknown> | null) ?? null;
+});
+
+/** Rebuild the rolling shadow window from canonical resolved history. */
+export const rebuildV6RegimeInverter = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { rebuildInverterState } = await import("./v6/regimeInverterStore");
+  const state = await rebuildInverterState(sb);
+  return {
+    ready: state.summary.ready,
+    active: state.summary.active,
+    count: state.summary.count,
+    wins: state.summary.wins,
+    losses: state.summary.losses,
+    adjusted_net: state.summary.adjustedNet,
+  };
 });
 
 /** Complete V6 tracking CSV in the frozen template column order. */
