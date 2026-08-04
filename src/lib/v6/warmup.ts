@@ -63,7 +63,7 @@ async function writeState(sb: SupabaseClient, patch: Record<string, unknown>): P
 }
 
 /** Confirmed canonical candles, deduped, longest contiguous tail ending at T-15m. */
-async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Promise<RawCandle[]> {
+export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Promise<RawCandle[]> {
   const lastTs = new Date(targetTs.getTime() - TF_MS);
   const firstTs = new Date(lastTs.getTime() - V6_WARMUP_CANDLES * TF_MS);
   const { data, error } = await sb
