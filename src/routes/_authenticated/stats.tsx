@@ -858,6 +858,130 @@ function V6Card({
   );
 }
 
+/** V6-r1 Regime Inverter — rolling shadow reliability of the ORIGINAL V6_BASE direction. */
+function V6RegimeInverterPanel({
+  state,
+  stats,
+  pending,
+}: {
+  state: Record<string, any> | null;
+  stats: Record<string, any>;
+  pending: Record<string, any> | null;
+}) {
+  const ready = Boolean(state?.regime_inverter_ready);
+  const active = Boolean(state?.regime_inverter_active);
+  const count = Number(state?.regime_inverter_history_count ?? 0);
+  const wins = Number(state?.regime_inverter_last20_wins ?? 0);
+  const losses = Number(state?.regime_inverter_last20_losses ?? 0);
+  const net = Number(state?.regime_inverter_last20_adjusted_net ?? 0);
+  const threshold = -2.8;
+  const history = Array.isArray(state?.regime_inverter_history_json)
+    ? (state?.regime_inverter_history_json as Array<Record<string, any>>)
+    : [];
+
+  const tone = active
+    ? "border-bear/50 text-bear bg-bear/10"
+    : ready
+      ? "border-bull/50 text-bull bg-bull/10"
+      : "border-violet/40 text-violet bg-violet/10";
+  const label = active ? "INVERTING" : ready ? "ARMED · DORMANT" : `WARMING ${count}/20`;
+
+  const num = (v: unknown, d = 2) =>
+    v === null || v === undefined || v === "" || !Number.isFinite(Number(v))
+      ? "—"
+      : Number(v).toFixed(d);
+
+  return (
+    <Card className="relative overflow-hidden border-violet/30">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.14),transparent_60%)]" />
+      <CardHeader className="relative pb-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
+          <span className="flex items-center gap-2">
+            V6 Regime Inverter
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              V6-r1 · adaptive layer
+            </span>
+          </span>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${tone}`}>
+            {label}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="relative space-y-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <MiniStat label="Window" value={`${count} / 20`} />
+          <MiniStat label="Base wins" value={wins} />
+          <MiniStat label="Base losses" value={losses} />
+          <MiniStat label="Rolling net" value={num(net)} />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Activation threshold</span>
+            <span className="font-mono">
+              {num(net)} vs {threshold.toFixed(1)}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full ${active ? "bg-bear" : "bg-violet"}`}
+              style={{
+                width: `${Math.max(0, Math.min(100, ((16 - Math.max(-16, Math.min(16, net))) / 32) * 100))}%`,
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <MiniStat label="Flips fired" value={stats.inverter_trigger_count ?? 0} />
+          <MiniStat label="Flip wins" value={stats.inverter_wins ?? 0} />
+          <MiniStat label="Flip losses" value={stats.inverter_losses ?? 0} />
+          <MiniStat label="Flip raw value" value={num(stats.inverter_raw_contribution)} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <MiniStat label="Published raw net" value={num(stats.raw_net)} />
+          <MiniStat label="Uninverted raw net" value={num(stats.pre_inverter_raw_net)} />
+          <MiniStat label="Coverage" value={`${num(stats.coverage, 1)}%`} />
+          <MiniStat label="Revision" value={String(stats.model_revision ?? "V6-r1-regime-inverter")} />
+        </div>
+
+        {pending && (
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              Current candle
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono">
+              <span>base: {String(pending.original_v6_base_prediction ?? pending.base_v6_prediction ?? "—")}</span>
+              <span>pre-inverter: {String(pending.pre_inverter_prediction ?? "—")}</span>
+              <span>published: {String(pending.final_prediction ?? "—")}</span>
+              <span>source: {String(pending.final_prediction_source ?? pending.prediction_source ?? "—")}</span>
+              {pending.regime_inverter_triggered ? (
+                <span className="text-bear">INVERTED</span>
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {history.map((h, i) => (
+              <span
+                key={`${h.target_candle_ts}-${i}`}
+                title={`${new Date(String(h.target_candle_ts)).toLocaleString()} · base ${h.original_v6_base_prediction} · actual ${h.actual_direction}`}
+                className={`h-2.5 w-2.5 rounded-sm ${
+                  Number(h.original_v6_shadow_adjusted_score) > 0 ? "bg-bull" : "bg-bear"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+
 function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
   const status = String(warmup?.v6_warmup_status ?? "NOT_STARTED");
   const ready = status === "READY";
