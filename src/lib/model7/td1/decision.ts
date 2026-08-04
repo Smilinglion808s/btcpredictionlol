@@ -1,4 +1,12 @@
 // TD1-RC scoring + decision. Faithful port of td1_rc_reference.ts.
+// Policy revision td1-rc-compressed-risk-v1 adds the compressed-market gate.
+
+import {
+  ABSTAIN_TD1_COMPRESSED_RISK,
+  TD1_GLOBAL_TURN_RISK_THRESHOLD,
+} from "./compressedRisk";
+
+
 
 export type Side = "YES" | "NO";
 export type ExternalDecision = Side | "SKIP";
