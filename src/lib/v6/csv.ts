@@ -41,6 +41,22 @@ export const V6_CSV_COLUMNS = [
   "pre_inverter_raw_score","pre_inverter_adjusted_score",
   "regime_inverter_raw_contribution","regime_inverter_adjusted_contribution",
   "final_prediction_source",
+  // --- V6-r2 weak-RED coverage recovery ---
+  "model_revision_activated_at",
+  "prediction_before_weak_red_veto",
+  "weak_red_veto_candidate","weak_red_veto_original_prediction","weak_red_veto_broad_percentile",
+  "weak_red_recovery_evaluable","weak_red_recovery_triggered","weak_red_recovery_reason",
+  "weak_red_rsi_recovery_evaluable","weak_red_rsi_recovery_triggered",
+  "weak_red_rsi_threshold","weak_red_rsi_value",
+  "weak_red_roc4_recovery_evaluable","weak_red_roc4_recovery_triggered",
+  "weak_red_roc4_threshold","weak_red_roc4_value",
+  "prediction_after_weak_red_recovery","prediction_source_after_weak_red_recovery",
+  "weak_red_underlying_prediction","weak_red_underlying_raw_score","weak_red_underlying_adjusted_score",
+  "weak_red_recovery_published_prediction","weak_red_recovery_raw_score","weak_red_recovery_adjusted_score",
+  "weak_red_recovery_counterfactual_adjusted_score",
+  "weak_red_recovery_raw_contribution","weak_red_recovery_adjusted_contribution",
+  "actual_direction",
+  "rolling96_directional_predictions","rolling96_valid_opportunities",
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -102,7 +118,13 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       raw_peak_to_trough_drawdown: ddRaw,
       adjusted_peak_to_trough_drawdown: ddAdj,
       rolling96_predictions: window.length,
+      // rolling96_predictions counts all valid opportunities; the directional
+      // count and coverage are reported explicitly alongside it.
+      rolling96_valid_opportunities: window.length,
+      rolling96_directional_predictions: rollingDirectional,
       rolling96_coverage: window.length ? rollingDirectional / window.length : 0,
+      prediction_before_weak_red_veto: r.pre_weak_red_veto_prediction ?? null,
+      actual_direction: r.canonical_actual_direction ?? null,
       rolling96_raw_net: window.reduce((s, w) => s + w.raw, 0),
       rolling96_adjusted_net: window.reduce((s, w) => s + w.adj, 0),
     };
