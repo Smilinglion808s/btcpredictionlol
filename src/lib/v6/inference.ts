@@ -366,14 +366,44 @@ export function inferV6(
     abstainReason = null;
   }
 
+  // --- V6-r2 weak-broad RED veto + coverage recovery exceptions ---
+  const weakRedVetoCandidate =
+    preWeakRedVetoPrediction === "RED" &&
+    predictionSource === "V6_BASE" &&
+    broadPercentile >= WEAK_RED_BROAD_PERCENTILE_THRESHOLD;
+
+  const rsi14 = built.ridge.rsi14;
+  const roc4 = built.ridge.roc_4;
+  const rsiValid = Number.isFinite(rsi14);
+  const roc4Valid = Number.isFinite(roc4);
+
+  const weakRedRsiRecoveryEvaluable = weakRedVetoCandidate && rsiValid;
+  const weakRedRsiRecoveryTriggered =
+    weakRedRsiRecoveryEvaluable && rsi14 <= WEAK_RED_RSI_THRESHOLD;
+
+  const weakRedRoc4RecoveryEvaluable =
+    weakRedVetoCandidate && !weakRedRsiRecoveryTriggered && rsiValid && roc4Valid && rsi14 > WEAK_RED_RSI_THRESHOLD;
+  const weakRedRoc4RecoveryTriggered =
+    weakRedRoc4RecoveryEvaluable && roc4 >= WEAK_RED_ROC4_THRESHOLD;
+
+  const weakRedRecoveryEvaluable = weakRedVetoCandidate && rsiValid;
+  const weakRedRecoveryTriggered =
+    weakRedRsiRecoveryTriggered || weakRedRoc4RecoveryTriggered;
+  const weakRedRecoveryReason: WeakRedRecoveryReason = weakRedRsiRecoveryTriggered
+    ? "WEAK_RED_RSI_CONTINUATION_RECOVERY"
+    : weakRedRoc4RecoveryTriggered
+      ? "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY"
+      : null;
+
   const weakBroadRedVetoEvaluable =
     preWeakRedVetoPrediction === "RED" && predictionSource === "V6_BASE";
-  const weakBroadRedVetoTriggered = weakBroadRedVetoEvaluable && broadPercentile >= 0.15;
+  const weakBroadRedVetoTriggered = weakRedVetoCandidate && !weakRedRecoveryTriggered;
 
   const finalPrediction: Direction = weakBroadRedVetoTriggered
     ? "ABSTAIN"
     : preWeakRedVetoPrediction;
   if (weakBroadRedVetoTriggered) abstainReason = "WEAK_BROAD_RED_VETO";
+
 
   return {
     ridgeFeatures: built.ridge,
