@@ -603,6 +603,9 @@ export const listVariantA2ConflictRecent = createServerFn({ method: "GET" }).han
 });
 
 // ---------- TD1-RC (Model 8 layer over A2_Combined) — active hero source ----------
+// TD1-RC = original policy (webhook source). TD2-RC = same pipeline + compressed-risk gate.
+const TD1_VARIANT = "A2_Combined_TD1_RC";
+const TD2_VARIANT = "A2_Combined_TD2_RC";
 
 function shapeTd1RcRow(r: any, prod: any | null): B2UiRow {
   const decision = r.external_final_decision as string | null;
@@ -645,6 +648,7 @@ export const getTd1RcLatest = createServerFn({ method: "GET" }).handler(async ()
   const { data, error } = await sb
     .from("model7_td1_rc_shadow")
     .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, result, resolved_at, created_at, prediction_id")
+    .eq("variant", TD1_VARIANT)
     .order("candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -659,6 +663,7 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
   const { data, error } = await sb
     .from("model7_td1_rc_shadow")
     .select("id, candle_ts, external_final_decision, would_trade, a2_probability_green, a2_original_decision, result, resolved_at, created_at, prediction_id")
+    .eq("variant", TD1_VARIANT)
     .order("candle_ts", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -684,19 +689,20 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
 /** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant).
  *  Visual stats honor td1_rc_visual_stats_reset.reset_at so users can refresh
  *  the Stats page without deleting audit rows (CSV export stays full). */
-export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+async function td1RcStatsFor(variant: string, resetId: number) {
   const sb = await admin();
   const PAGE = 1000;
   const { data: resetRow } = await sb
     .from("td1_rc_visual_stats_reset")
     .select("reset_at")
-    .eq("id", 1)
+    .eq("id", resetId)
     .maybeSingle();
   const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
   const rows: any[] = [];
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("model7_td1_rc_shadow")
+      .eq("variant", variant)
       .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_veto_value, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -750,7 +756,7 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
       timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
     }).format(new Date(iso));
 
-  const crRows = rows.filter((r) => r.td1_policy_version === "td1-rc-compressed-risk-v1");
+  const crRows = rows.filter((r) => r.td1_compressed_risk_evaluable !== null && r.td1_compressed_risk_evaluable !== undefined);
   const crEvaluable = crRows.filter((r) => r.td1_compressed_risk_evaluable === true).length;
   const crCondition = crRows.filter((r) => r.td1_compressed_risk_condition === true).length;
   const crVetoes = crRows.filter((r) => r.td1_compressed_risk_veto_fired === true).length;
@@ -840,18 +846,33 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
       daily: dailyRows.slice(0, 30),
     },
   };
+}
 
-});
+export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
+  td1RcStatsFor(TD1_VARIANT, 1),
+);
+
+export const getTd2RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
+  td1RcStatsFor(TD2_VARIANT, 2),
+);
 
 /** Visual-only reset for TD1-RC Stats page counters. CSV export remains unchanged. */
-export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () => {
+async function resetTd1RcVisual(resetId: number) {
   const sb = await admin();
   const { error } = await sb
     .from("td1_rc_visual_stats_reset")
-    .upsert({ id: 1, reset_at: new Date().toISOString(), reason: "user-ui-reset" }, { onConflict: "id" });
+    .upsert({ id: resetId, reset_at: new Date().toISOString(), reason: "user-ui-reset" }, { onConflict: "id" });
   if (error) throw error;
   return { ok: true, reset_at: new Date().toISOString() };
-});
+}
+
+export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () =>
+  resetTd1RcVisual(1),
+);
+
+export const resetTd2RcVisualStats = createServerFn({ method: "POST" }).handler(async () =>
+  resetTd1RcVisual(2),
+);
 
 
 /** Training progress for TD1-RC: shows how many candles remain before the model is ready to make live predictions. */
@@ -907,23 +928,32 @@ export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handle
 });
 
 /** Latest TD1-RC shadow row for the current pending candle. */
-export const getTd1RcShadowPending = createServerFn({ method: "GET" }).handler(async () => {
+async function td1RcPendingFor(variant: string) {
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_td1_rc_shadow")
-    .select("candle_ts, external_final_decision, would_trade, td1_predicted_loss_probability, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, td1_fit_id")
+    .select("candle_ts, external_final_decision, would_trade, td1_predicted_loss_probability, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, td1_fit_id, td1_compressed_risk_veto_fired")
+    .eq("variant", variant)
     .order("candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
-});
+}
+
+export const getTd1RcShadowPending = createServerFn({ method: "GET" }).handler(async () =>
+  td1RcPendingFor(TD1_VARIANT),
+);
+
+export const getTd2RcShadowPending = createServerFn({ method: "GET" }).handler(async () =>
+  td1RcPendingFor(TD2_VARIANT),
+);
 
 /** Export TD1-RC shadow rows as CSV-ready records — full tracker payload.
  *  Includes every column on model7_td1_rc_shadow plus enrichment joins to the
  *  A2_Combined source row (model7_shadow) and the underlying prediction row
  *  (actual candle outcome, boundary timing, partial-candle audit). */
-export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async () => {
+async function buildTd1RcExport(variant: string) {
   const sb = await admin();
 
   // Paginate to bypass PostgREST 1000-row cap.
@@ -940,7 +970,7 @@ export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async
   }
 
   const td1Rows = await fetchAll<any>((from, to) =>
-    sb.from("model7_td1_rc_shadow").select("*").order("candle_ts", { ascending: false }).range(from, to) as any,
+    sb.from("model7_td1_rc_shadow").select("*").eq("variant", variant).order("candle_ts", { ascending: false }).range(from, to) as any,
   );
 
   const predIds = Array.from(new Set(td1Rows.map((r) => r.prediction_id).filter(Boolean)));
@@ -1098,7 +1128,15 @@ export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async
       partial_snapshot_failure_reason: p?.partial_snapshot_failure_reason ?? null,
     };
   });
-});
+}
+
+export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async () =>
+  buildTd1RcExport(TD1_VARIANT),
+);
+
+export const exportTd2RcShadow = createServerFn({ method: "GET" }).handler(async () =>
+  buildTd1RcExport(TD2_VARIANT),
+);
 
 
 
