@@ -460,9 +460,29 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           weak_broad_red_veto_adjusted_contribution: weak.adjusted,
           weak_broad_red_veto_avoided_loss: weak.avoidedLoss,
           weak_broad_red_veto_sacrificed_win: weak.sacrificedWin,
+          original_v6_shadow_raw_score:
+            shadowEligible ? rawScore(originalBase, actual) : null,
+          original_v6_shadow_adjusted_score:
+            shadowEligible ? adjustedScore(originalBase, actual) : null,
+          pre_inverter_raw_score: opFail ? null : rawScore(preInverter, actual),
+          pre_inverter_adjusted_score: opFail ? null : adjustedScore(preInverter, actual),
+          regime_inverter_raw_contribution: inverterContrib.raw,
+          regime_inverter_adjusted_contribution: inverterContrib.adjusted,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
+
+      // Feed the rolling shadow window (idempotent per target timestamp).
+      if (shadowEligible) {
+        await recordResolvedShadowSignal(sb, {
+          target_candle_ts: targetTs.toISOString(),
+          prediction_source: "V6_BASE",
+          original_v6_base_prediction: originalBase,
+          operational_status: "OK",
+          canonical_ground_truth_valid: true,
+          actual_direction: actual,
+        });
+      }
     }
   } catch (e) {
     await logError(sb, "v6-resolution-error", {}, e);
