@@ -165,6 +165,15 @@ export function buildTd1RcWebhookPayload({ td1Row, prediction }: Td1RcWebhookInp
     skip_reason: td1Row.skip_reason ?? null,
     prospective_test_id: td1Row.prospective_test_id ?? null,
 
+    // --- td1-rc-compressed-risk-v1 audit metadata ---
+    td1_policy_version: td1Row.td1_policy_version ?? null,
+    td1_compressed_risk_threshold: td1Row.td1_compressed_risk_threshold ?? null,
+    td1_compressed_risk_market_condition: td1Row.td1_compressed_risk_market_condition ?? null,
+    td1_compressed_risk_evaluable: td1Row.td1_compressed_risk_evaluable ?? null,
+    td1_compressed_risk_veto_fired: Boolean(td1Row.td1_compressed_risk_veto_fired),
+    td1_legacy_global_veto_condition: td1Row.td1_legacy_global_veto_condition ?? null,
+
+
     candle_starts_at: startsAt,
     candle_starts_at_mt: formatMountainTime(startsAt),
     candle_ends_at: endsAt,
