@@ -157,3 +157,14 @@ export const exportV6Csv = createServerFn({ method: "GET" }).handler(async () =>
   const { v6RowsToCsv } = await import("./v6/csv");
   return { csv: v6RowsToCsv(rows), rows: rows.length };
 });
+
+/** V6 warmup / readiness state for the stats card. */
+export const getV6Warmup = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("v6_warmup_state")
+    .select("*")
+    .eq("model_version", "V6")
+    .maybeSingle();
+  return (data as Record<string, unknown> | null) ?? null;
+});
