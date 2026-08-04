@@ -103,10 +103,18 @@ export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Pr
   return rows.slice(start);
 }
 
-/** Mark V6 not ready and clear the persisted saturation history. */
-export async function markV6NotReady(sb: SupabaseClient, reason: string): Promise<void> {
+/**
+ * Mark V6 not ready and clear the persisted saturation history.
+ * `status` defaults to FAILED (runtime failures); manual re-initialization
+ * passes NOT_STARTED so the next boundary performs a clean canonical replay.
+ */
+export async function markV6NotReady(
+  sb: SupabaseClient,
+  reason: string,
+  status: V6WarmupStatus = "FAILED",
+): Promise<void> {
   await writeState(sb, {
-    v6_warmup_status: "FAILED",
+    v6_warmup_status: status,
     warmup_completed_at: null,
     warmup_continuity_valid: false,
     warmup_feature_valid: false,
