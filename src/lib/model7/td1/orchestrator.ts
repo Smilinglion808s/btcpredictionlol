@@ -22,7 +22,36 @@ import type { Candle } from "../featurize";
 
 const BASE_VARIANT = "A2_Combined";
 const PROSPECTIVE_TEST_ID = TD1_RC_PROSPECTIVE_TEST_ID;
-const VARIANT = "A2_Combined_TD1_RC";
+/** Original TD1-RC (no compressed-risk gate). Webhook / hero source. */
+export const TD1_VARIANT = "A2_Combined_TD1_RC";
+/** TD2-RC: identical pipeline plus the active compressed-risk gate. */
+export const TD2_VARIANT = "A2_Combined_TD2_RC";
+export const TD2_PROSPECTIVE_TEST_ID = "A2_COMBINED_TD2_RC_COMPRESSED_RISK_045_V1";
+const VARIANT = TD1_VARIANT;
+const TD1_POLICY_VERSION = "td1-rc-v1";
+
+async function writeSkipRow(
+  supabase: SupabaseClient,
+  base: Record<string, unknown>,
+  reason: string,
+): Promise<Record<string, unknown>> {
+  const row = {
+    ...base,
+    external_final_decision: "SKIP",
+    would_trade: false,
+    skip_reason: reason,
+    all_veto_reasons_json: [reason],
+  };
+  // Mirror the skip to TD2-RC so both trackers stay row-aligned.
+  const td2Row = {
+    ...row,
+    variant: TD2_VARIANT,
+    prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+    td1_policy_version: TD1_RC_POLICY_VERSION,
+  };
+  await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
+  return row;
+}
 
 export interface A2CombinedContext {
   predictionId: string;
@@ -38,22 +67,6 @@ export interface A2CombinedContext {
   marketCondition?: string | null;
   /** Row id of the upstream prediction row the market condition came from. */
   marketConditionSourceRowId?: string | null;
-}
-
-async function writeSkipRow(
-  supabase: SupabaseClient,
-  base: Record<string, unknown>,
-  reason: string,
-): Promise<Record<string, unknown>> {
-  const row = {
-    ...base,
-    external_final_decision: "SKIP",
-    would_trade: false,
-    skip_reason: reason,
-    all_veto_reasons_json: [reason],
-  };
-  await supabase.from("model7_td1_rc_shadow").insert(row as never);
-  return row;
 }
 
 export async function runTd1RcForA2Combined(
@@ -73,8 +86,8 @@ export async function runTd1RcForA2Combined(
     td1_threshold: TD1_GLOBAL_TURN_RISK_THRESHOLD,
     timing_status: ctx.timingStatus,
     leakage_check_passed: ctx.leakageCheckPassed,
-    // --- td1-rc-compressed-risk-v1 audit (persisted on every write path) ---
-    td1_policy_version: TD1_RC_POLICY_VERSION,
+    // --- compressed-risk audit (persisted on every write path; TD1 records only) ---
+    td1_policy_version: TD1_POLICY_VERSION,
     td1_compressed_risk_threshold: TD1_COMPRESSED_RISK_THRESHOLD,
     td1_compressed_risk_market_condition: ctx.marketCondition ?? null,
     td1_compressed_risk_source_prediction_row_id: ctx.marketConditionSourceRowId ?? ctx.predictionId,
@@ -192,24 +205,38 @@ export async function runTd1RcForA2Combined(
       lossProbability: preview.td1LossProbability,
     });
 
+    const containment = {
+      vetoFired: consume.veto_fired,
+      slotsBefore: consume.slots_before,
+      slotsAfter: consume.slots_after,
+      episodeArmed: consume.episode_armed,
+    };
+
+    // TD1-RC: original form — compressed risk recorded for audit, never applied.
     const decision = decideTd1Rc({
       a2FinalDecision: side,
       features: built.features,
       artifact,
-      containment: {
-        vetoFired: consume.veto_fired,
-        slotsBefore: consume.slots_before,
-        slotsAfter: consume.slots_after,
-        episodeArmed: consume.episode_armed,
-      },
+      containment,
       compressedRisk: compressed,
+      applyCompressedRisk: false,
     });
 
-    const finalRow = {
+    // TD2-RC: identical inputs, compressed-risk gate active.
+    const td2Decision = decideTd1Rc({
+      a2FinalDecision: side,
+      features: built.features,
+      artifact,
+      containment,
+      compressedRisk: compressed,
+      applyCompressedRisk: true,
+    });
+
+    const shapeRow = (d: typeof decision) => ({
       ...baseRow,
-      td1_predicted_loss_probability: decision.td1LossProbability,
-      td1_veto_fired: decision.td1VetoFired,
-      containment_veto_fired: decision.containmentVetoFired,
+      td1_predicted_loss_probability: d.td1LossProbability,
+      td1_veto_fired: d.td1VetoFired,
+      containment_veto_fired: d.containmentVetoFired,
       containment_side: side,
       containment_slots_before: consume.slots_before,
       containment_slots_after: consume.slots_after,
@@ -217,26 +244,33 @@ export async function runTd1RcForA2Combined(
       containment_episode_armed_after: consume.episode_armed && consume.slots_after === 0
         ? false
         : consume.episode_armed,
-      all_veto_reasons_json: decision.allVetoReasons,
-      external_final_decision: decision.externalFinalDecision,
-      would_trade: decision.wouldTrade,
-      skip_reason: decision.primarySkipReason,
-      // --- td1-rc-compressed-risk-v1 ---
+      all_veto_reasons_json: d.allVetoReasons,
+      external_final_decision: d.externalFinalDecision,
+      would_trade: d.wouldTrade,
+      skip_reason: d.primarySkipReason,
       td1_compressed_risk_market_condition: compressed.marketCondition,
-      td1_compressed_risk_evaluable: decision.compressedRiskEvaluable,
-      td1_compressed_risk_condition: decision.compressedRiskCondition,
-      td1_compressed_risk_veto_fired: decision.compressedRiskVetoFired,
-      td1_compressed_risk_reason: decision.compressedRiskReason,
-      td1_compressed_risk_probability: decision.td1LossProbability,
-      td1_legacy_global_veto_condition: decision.legacyGlobalVetoCondition,
-      td1_compressed_risk_counterfactual_direction: decision.compressedRiskVetoFired ? side : null,
+      td1_compressed_risk_evaluable: d.compressedRiskEvaluable,
+      td1_compressed_risk_condition: d.compressedRiskCondition,
+      td1_compressed_risk_veto_fired: d.compressedRiskVetoFired,
+      td1_compressed_risk_reason: d.compressedRiskReason,
+      td1_compressed_risk_probability: d.td1LossProbability,
+      td1_legacy_global_veto_condition: d.legacyGlobalVetoCondition,
+      td1_compressed_risk_counterfactual_direction: d.compressedRiskVetoFired ? side : null,
       // Audit-only policy counterfactuals (never published, never webhooked).
-      td1_prev_policy_decision: decision.previousPolicy.decision,
-      td1_prev_policy_would_trade: decision.previousPolicy.wouldTrade,
-      td1_no_global_veto_decision: decision.noGlobalVetoPolicy.decision,
-      td1_no_global_veto_would_trade: decision.noGlobalVetoPolicy.wouldTrade,
+      td1_prev_policy_decision: d.previousPolicy.decision,
+      td1_prev_policy_would_trade: d.previousPolicy.wouldTrade,
+      td1_no_global_veto_decision: d.noGlobalVetoPolicy.decision,
+      td1_no_global_veto_would_trade: d.noGlobalVetoPolicy.wouldTrade,
+    });
+
+    const finalRow = shapeRow(decision);
+    const td2Row = {
+      ...shapeRow(td2Decision),
+      variant: TD2_VARIANT,
+      prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+      td1_policy_version: TD1_RC_POLICY_VERSION,
     };
-    await supabase.from("model7_td1_rc_shadow").insert(finalRow as never);
+    await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
     return finalRow;
   } catch (e) {
     try {
@@ -257,7 +291,7 @@ export async function runTd1RcForA2Combined(
   }
 }
 
-/** Resolve TD1-RC row after actual_direction is known. Never blocks caller. */
+/** Resolve TD1-RC + TD2-RC rows after actual_direction is known. Never blocks caller. */
 export async function resolveTd1RcRow(
   supabase: SupabaseClient,
   predictionId: string,
@@ -267,71 +301,80 @@ export async function resolveTd1RcRow(
     const { data: rowData } = await supabase
       .from("model7_td1_rc_shadow")
       .select(
-        "id, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
+        "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
         "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_no_global_veto_decision",
       )
       .eq("prediction_id", predictionId)
-      .eq("variant", VARIANT)
-      .maybeSingle();
-    const row = rowData as Record<string, unknown> | null;
-    if (!row) return;
+      .in("variant", [VARIANT, TD2_VARIANT]);
+    const rows = ((rowData ?? []) as unknown) as Record<string, unknown>[];
+    if (rows.length === 0) return;
 
-    // Idempotent: already-resolved rows are never re-scored.
-    if (row.resolved_at) return;
-    const a2 = row.a2_original_decision as "YES" | "NO" | null;
-    if (a2 !== "YES" && a2 !== "NO") return;
-    const cfResult = (a2 === "YES" && actualDirection === "GREEN") ||
-                     (a2 === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
-    const ext = row.external_final_decision as string | null;
-    // Row-level status/result mirrors the external decision:
-    //   SKIP → result=PUSH (not traded), YES/NO → grade against actual
-    let result: "WIN" | "LOSS" | "PUSH" = "PUSH";
-    if (ext === "YES" || ext === "NO") {
-      result = (ext === "YES" && actualDirection === "GREEN") ||
-               (ext === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+    let containmentInput: { candleTs: string; side: "YES" | "NO"; cfResult: "WIN" | "LOSS" } | null = null;
+
+    for (const row of rows) {
+      // Idempotent: already-resolved rows are never re-scored.
+      if (row.resolved_at) continue;
+      const a2 = row.a2_original_decision as "YES" | "NO" | null;
+      if (a2 !== "YES" && a2 !== "NO") continue;
+      const cfResult = (a2 === "YES" && actualDirection === "GREEN") ||
+                       (a2 === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+      const ext = row.external_final_decision as string | null;
+      // Row-level status/result mirrors the external decision:
+      //   SKIP → result=PUSH (not traded), YES/NO → grade against actual
+      let result: "WIN" | "LOSS" | "PUSH" = "PUSH";
+      if (ext === "YES" || ext === "NO") {
+        result = (ext === "YES" && actualDirection === "GREEN") ||
+                 (ext === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+      }
+
+      // --- compressed-risk counterfactual accounting ---
+      const compressedVeto = row.td1_compressed_risk_veto_fired === true;
+      const cf = classifyCompressedRiskCounterfactual({
+        vetoFired: compressedVeto,
+        underlyingDirection: a2,
+        actualDirection,
+      });
+      const prev = scoreDecision(
+        (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+        actualDirection,
+      );
+      const noGlobal = scoreDecision(
+        (row.td1_no_global_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+        actualDirection,
+      );
+
+      await supabase.from("model7_td1_rc_shadow").update({
+        a2_counterfactual_result: cfResult,
+        actual_direction: actualDirection,
+        result,
+        resolved_at: new Date().toISOString(),
+        td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
+        td1_compressed_risk_counterfactual_result: cf.classification,
+        td1_compressed_risk_counterfactual_score: cf.abstentionScore,
+        td1_compressed_risk_veto_value: cf.vetoValue,
+        td1_prev_policy_result: prev.result,
+        td1_prev_policy_score: prev.score,
+        td1_no_global_veto_result: noGlobal.result,
+        td1_no_global_veto_score: noGlobal.score,
+      } as never).eq("id", row.id as string).is("resolved_at", null);
+
+      if (row.variant === VARIANT) {
+        containmentInput = { candleTs: row.candle_ts as string, side: a2, cfResult };
+      }
     }
 
-    // --- td1-rc-compressed-risk-v1 counterfactual accounting ---
-    const compressedVeto = row.td1_compressed_risk_veto_fired === true;
-    const cf = classifyCompressedRiskCounterfactual({
-      vetoFired: compressedVeto,
-      underlyingDirection: a2,
-      actualDirection,
-    });
-    const prev = scoreDecision(
-      (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
-      actualDirection,
-    );
-    const noGlobal = scoreDecision(
-      (row.td1_no_global_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null,
-      actualDirection,
-    );
-
-    await supabase.from("model7_td1_rc_shadow").update({
-      a2_counterfactual_result: cfResult,
-      actual_direction: actualDirection,
-      result,
-      resolved_at: new Date().toISOString(),
-      td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
-      td1_compressed_risk_counterfactual_result: cf.classification,
-      td1_compressed_risk_counterfactual_score: cf.abstentionScore,
-      td1_compressed_risk_veto_value: cf.vetoValue,
-      td1_prev_policy_result: prev.result,
-      td1_prev_policy_score: prev.score,
-      td1_no_global_veto_result: noGlobal.result,
-      td1_no_global_veto_score: noGlobal.score,
-    } as never).eq("id", row.id as string).is("resolved_at", null);
-
-    // Apply idempotent containment state update.
-    const resolutionId = `${predictionId}:TD1_RC_V1`;
-    await supabase.rpc("apply_td1_rc_resolution", {
-      p_resolution_id: resolutionId,
-      p_prediction_id: predictionId,
-      p_candle_ts: row.candle_ts as string,
-      p_base_variant: "A2_Combined",
-      p_side: a2,
-      p_result: cfResult,
-    });
+    // Apply idempotent containment state update (once, from the TD1 row).
+    if (containmentInput) {
+      const resolutionId = `${predictionId}:TD1_RC_V1`;
+      await supabase.rpc("apply_td1_rc_resolution", {
+        p_resolution_id: resolutionId,
+        p_prediction_id: predictionId,
+        p_candle_ts: containmentInput.candleTs,
+        p_base_variant: "A2_Combined",
+        p_side: containmentInput.side,
+        p_result: containmentInput.cfResult,
+      });
+    }
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({

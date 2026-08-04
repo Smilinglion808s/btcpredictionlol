@@ -150,6 +150,7 @@ export async function maybeRetrainTd1(supabase: SupabaseClient): Promise<TrainOu
         .from("model7_td1_rc_shadow")
         .select("id", { count: "exact", head: true })
         .eq("a2_source_variant", BASE_VARIANT)
+        .eq("variant", "A2_Combined_TD1_RC")
         .eq("td1_fit_id", fit.fit_id)
         .not("a2_counterfactual_result", "is", null);
       const resolvedInCohort = cohortResolved ?? 0;
