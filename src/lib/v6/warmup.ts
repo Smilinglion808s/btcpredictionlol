@@ -124,6 +124,14 @@ export async function markV6NotReady(
   });
 }
 
+/** Record the boundary the next canonical replay should target. */
+export async function setV6WarmupNextTarget(sb: SupabaseClient, targetTs: Date): Promise<void> {
+  await writeState(sb, {
+    warmup_next_target_ts: targetTs.toISOString(),
+    warmup_started_at: null,
+  });
+}
+
 /**
  * Ensure V6 is fully warm for `targetTs`. Resumes verified persisted state, and
  * otherwise performs a full >=200-candle replay plus 7-base-prediction rebuild.
