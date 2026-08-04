@@ -277,6 +277,8 @@ function StatsPage() {
     a2_baseline_win_rate: Number(td1Stats.a2_baseline_win_rate ?? 0),
     a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
     a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
+    compressed_risk: (td1Stats.compressed_risk ?? null) as Record<string, any> | null,
+
   };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
@@ -799,6 +801,106 @@ function TD1Card({
           <TD1Stat label="Containment vetoes" value={Number(hero.containment_vetoes ?? 0)} tone="bear" />
         </TD1Section>
       </div>
+
+      {(() => {
+        const cr = hero.compressed_risk as Record<string, any> | null;
+        if (!cr) return null;
+        const cur = (cr.current_policy ?? {}) as Record<string, any>;
+        const prev = (cr.previous_policy ?? {}) as Record<string, any>;
+        const nog = (cr.no_global_veto_policy ?? {}) as Record<string, any>;
+        const daily = (cr.daily ?? []) as Array<Record<string, any>>;
+        return (
+          <div className="relative mt-4">
+            <TD1Section title={`Compressed-risk audit · ${cr.policy_version} · ≥ ${cr.threshold}`}>
+              <TD1Stat label="Evaluable" value={Number(cr.evaluable ?? 0)} />
+              <TD1Stat label="Condition met" value={Number(cr.condition_count ?? 0)} />
+              <TD1Stat label="Vetoes" value={Number(cr.veto_count ?? 0)} tone="bear" />
+              <TD1Stat label="Veto rate" value={`${Number(cr.veto_rate ?? 0).toFixed(1)}%`} />
+              <TD1Stat label="Avoided losses" value={Number(cr.avoided_losses ?? 0)} tone="bull" />
+              <TD1Stat label="Sacrificed wins" value={Number(cr.sacrificed_wins ?? 0)} tone="bear" />
+              <TD1Stat
+                label="Net veto value"
+                value={Number(cr.net_veto_value ?? 0)}
+                tone={Number(cr.net_veto_value ?? 0) >= 0 ? "bull" : "bear"}
+              />
+              <TD1Stat label="Max drawdown" value={Number(cr.max_drawdown ?? 0)} tone="bear" />
+              <TD1Stat
+                label="Worst daily net"
+                value={Number(cr.worst_daily_net ?? 0)}
+                tone={Number(cr.worst_daily_net ?? 0) >= 0 ? "bull" : "bear"}
+              />
+            </TD1Section>
+
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-[10px] font-mono tabular-nums">
+                <thead>
+                  <tr className="text-muted-foreground uppercase tracking-[0.14em] text-[9px]">
+                    <th className="text-left py-1">Policy</th>
+                    <th className="text-right">Trades</th>
+                    <th className="text-right">W/L</th>
+                    <th className="text-right">Win rate</th>
+                    <th className="text-right">Coverage</th>
+                    <th className="text-right">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { name: "Live (current)", d: cur },
+                    { name: "Previous policy", d: prev },
+                    { name: "No global veto", d: nog },
+                  ].map((p) => (
+                    <tr key={p.name} className="border-t border-bear/10">
+                      <td className="py-1 text-left">{p.name}</td>
+                      <td className="text-right">{Number(p.d.trades ?? 0)}</td>
+                      <td className="text-right">{Number(p.d.wins ?? 0)}/{Number(p.d.losses ?? 0)}</td>
+                      <td className="text-right">{Number(p.d.win_rate ?? 0).toFixed(1)}%</td>
+                      <td className="text-right">{Number(p.d.coverage ?? 0).toFixed(1)}%</td>
+                      <td className={`text-right ${Number(p.d.net ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>
+                        {Number(p.d.net ?? 0) > 0 ? "+" : ""}{Number(p.d.net ?? 0)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {daily.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground mb-1">
+                  Daily live vs counterfactual · {cr.reporting_timezone}
+                </div>
+                <div className="overflow-x-auto max-h-48 overflow-y-auto">
+                  <table className="w-full text-[10px] font-mono tabular-nums">
+                    <thead>
+                      <tr className="text-muted-foreground uppercase tracking-[0.14em] text-[9px]">
+                        <th className="text-left py-1">Date</th>
+                        <th className="text-right">Trades</th>
+                        <th className="text-right">Live net</th>
+                        <th className="text-right">Prev net</th>
+                        <th className="text-right">No-global net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daily.map((d) => (
+                        <tr key={String(d.date)} className="border-t border-bear/10">
+                          <td className="py-1 text-left">{String(d.date)}</td>
+                          <td className="text-right">{Number(d.trades ?? 0)}</td>
+                          <td className={`text-right ${Number(d.live_net ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>
+                            {Number(d.live_net ?? 0) > 0 ? "+" : ""}{Number(d.live_net ?? 0)}
+                          </td>
+                          <td className="text-right">{Number(d.prev_policy_net ?? 0)}</td>
+                          <td className="text-right">{Number(d.no_global_net ?? 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
 
       <div className="relative mt-6 pt-4 border-t border-bear/20">
         <div className="flex items-center justify-between gap-3">

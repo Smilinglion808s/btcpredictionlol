@@ -697,7 +697,7 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("model7_td1_rc_shadow")
-      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result")
+      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_veto_value, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
     if (resetAt) q = q.gt("candle_ts", resetAt);
@@ -743,6 +743,73 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
   const a2_baseline_win_rate = a2WinsAlone + a2LossesAlone === 0
     ? 0 : Math.round((a2WinsAlone / (a2WinsAlone + a2LossesAlone)) * 10000) / 100;
 
+  // --- td1-rc-compressed-risk-v1 audit ---
+  const REPORT_TZ = "America/Denver";
+  const dayKey = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(iso));
+
+  const crRows = rows.filter((r) => r.td1_policy_version === "td1-rc-compressed-risk-v1");
+  const crEvaluable = crRows.filter((r) => r.td1_compressed_risk_evaluable === true).length;
+  const crCondition = crRows.filter((r) => r.td1_compressed_risk_condition === true).length;
+  const crVetoes = crRows.filter((r) => r.td1_compressed_risk_veto_fired === true).length;
+  const crAvoidedLosses = crRows.filter((r) => r.td1_compressed_risk_counterfactual_result === "AVOIDED_LOSS").length;
+  const crSacrificedWins = crRows.filter((r) => r.td1_compressed_risk_counterfactual_result === "SACRIFICED_WIN").length;
+  const crNetVetoValue = crRows.reduce((s, r) => s + (Number(r.td1_compressed_risk_veto_value) || 0), 0);
+
+  const policySummary = (
+    decisionKey: string, resultKey: string, scope: any[],
+  ) => {
+    const trades = scope.filter((r) => r[decisionKey] === "YES" || r[decisionKey] === "NO");
+    const w = trades.filter((r) => r[resultKey] === "WIN").length;
+    const l = trades.filter((r) => r[resultKey] === "LOSS").length;
+    return {
+      trades: trades.length,
+      wins: w,
+      losses: l,
+      win_rate: w + l === 0 ? 0 : Math.round((w / (w + l)) * 10000) / 100,
+      net: w - l,
+      coverage: scope.length === 0 ? 0 : Math.round((trades.length / scope.length) * 10000) / 100,
+    };
+  };
+
+  const currentPolicy = {
+    trades: total, wins, losses,
+    win_rate,
+    net: wins - losses,
+    coverage: rows.length === 0 ? 0 : Math.round((total / rows.length) * 10000) / 100,
+  };
+  const prevPolicy = policySummary("td1_prev_policy_decision", "td1_prev_policy_result", crRows);
+  const noGlobalPolicy = policySummary("td1_no_global_veto_decision", "td1_no_global_veto_result", crRows);
+
+  // Max trade-sequence drawdown on the live policy (oldest → newest).
+  const seq = traded
+    .filter((r) => r.result === "WIN" || r.result === "LOSS")
+    .sort((a, b) => String(a.candle_ts).localeCompare(String(b.candle_ts)));
+  let run = 0, peak = 0, maxDd = 0;
+  for (const r of seq) {
+    run += r.result === "WIN" ? 1 : -1;
+    peak = Math.max(peak, run);
+    maxDd = Math.max(maxDd, peak - run);
+  }
+
+  // Daily live vs counterfactual comparison in the reporting timezone.
+  const daily: Record<string, { date: string; live_net: number; prev_policy_net: number; no_global_net: number; trades: number }> = {};
+  for (const r of rows) {
+    if (!r.candle_ts) continue;
+    const d = dayKey(String(r.candle_ts));
+    daily[d] ??= { date: d, live_net: 0, prev_policy_net: 0, no_global_net: 0, trades: 0 };
+    if (r.would_trade === true && (r.result === "WIN" || r.result === "LOSS")) {
+      daily[d].live_net += r.result === "WIN" ? 1 : -1;
+      daily[d].trades += 1;
+    }
+    daily[d].prev_policy_net += Number(r.td1_prev_policy_score) || 0;
+    daily[d].no_global_net += Number(r.td1_no_global_veto_score) || 0;
+  }
+  const dailyRows = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date));
+  const worstDailyNet = dailyRows.length ? Math.min(...dailyRows.map((d) => d.live_net)) : 0;
+
   return {
     total, wins, losses, pushes, pending, win_rate,
     last_10_win_rate: lastN(10), last_25_win_rate: lastN(25), last_50_win_rate: lastN(50),
@@ -753,7 +820,27 @@ export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(asy
     a2_baseline_win_rate,
     a2_baseline_wins: a2WinsAlone,
     a2_baseline_losses: a2LossesAlone,
+    compressed_risk: {
+      policy_version: "td1-rc-compressed-risk-v1",
+      threshold: 0.45,
+      reporting_timezone: REPORT_TZ,
+      rows_under_policy: crRows.length,
+      evaluable: crEvaluable,
+      condition_count: crCondition,
+      veto_count: crVetoes,
+      veto_rate: crEvaluable === 0 ? 0 : Math.round((crVetoes / crEvaluable) * 10000) / 100,
+      avoided_losses: crAvoidedLosses,
+      sacrificed_wins: crSacrificedWins,
+      net_veto_value: crNetVetoValue,
+      current_policy: currentPolicy,
+      previous_policy: prevPolicy,
+      no_global_veto_policy: noGlobalPolicy,
+      max_drawdown: maxDd,
+      worst_daily_net: worstDailyNet,
+      daily: dailyRows.slice(0, 30),
+    },
   };
+
 });
 
 /** Visual-only reset for TD1-RC Stats page counters. CSV export remains unchanged. */
@@ -909,6 +996,30 @@ export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async
       td1_predicted_loss_probability: r.td1_predicted_loss_probability,
       td1_threshold: r.td1_threshold,
       td1_veto_fired: r.td1_veto_fired,
+      // --- td1-rc-compressed-risk-v1 ---
+      td1_policy_version: r.td1_policy_version,
+      td1_compressed_risk_threshold: r.td1_compressed_risk_threshold,
+      td1_compressed_risk_market_condition: r.td1_compressed_risk_market_condition,
+      td1_compressed_risk_source_prediction_row_id: r.td1_compressed_risk_source_prediction_row_id,
+      td1_compressed_risk_evaluable: r.td1_compressed_risk_evaluable,
+      td1_compressed_risk_condition: r.td1_compressed_risk_condition,
+      td1_compressed_risk_veto_fired: r.td1_compressed_risk_veto_fired,
+      td1_compressed_risk_reason: r.td1_compressed_risk_reason,
+      td1_compressed_risk_probability: r.td1_compressed_risk_probability,
+      td1_legacy_global_veto_condition: r.td1_legacy_global_veto_condition,
+      td1_compressed_risk_counterfactual_direction: r.td1_compressed_risk_counterfactual_direction,
+      td1_compressed_risk_counterfactual_result: r.td1_compressed_risk_counterfactual_result,
+      td1_compressed_risk_counterfactual_score: r.td1_compressed_risk_counterfactual_score,
+      td1_compressed_risk_veto_value: r.td1_compressed_risk_veto_value,
+      td1_prev_policy_decision: r.td1_prev_policy_decision,
+      td1_prev_policy_would_trade: r.td1_prev_policy_would_trade,
+      td1_prev_policy_result: r.td1_prev_policy_result,
+      td1_prev_policy_score: r.td1_prev_policy_score,
+      td1_no_global_veto_decision: r.td1_no_global_veto_decision,
+      td1_no_global_veto_would_trade: r.td1_no_global_veto_would_trade,
+      td1_no_global_veto_result: r.td1_no_global_veto_result,
+      td1_no_global_veto_score: r.td1_no_global_veto_score,
+
       td1_feature_cutoff_ts: r.td1_feature_cutoff_ts,
       td1_latest_source_candle_ts: r.td1_latest_source_candle_ts,
       feature_values_json: r.feature_values_json ? JSON.stringify(r.feature_values_json) : "",

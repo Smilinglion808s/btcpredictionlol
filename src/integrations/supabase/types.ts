@@ -2452,6 +2452,18 @@ export type Database = {
           td1_candidate_veto_fired: boolean | null
           td1_candidate_would_lose: boolean | null
           td1_candidate_would_win: boolean | null
+          td1_compressed_risk_condition: boolean | null
+          td1_compressed_risk_counterfactual_direction: string | null
+          td1_compressed_risk_counterfactual_result: string | null
+          td1_compressed_risk_counterfactual_score: number | null
+          td1_compressed_risk_evaluable: boolean | null
+          td1_compressed_risk_market_condition: string | null
+          td1_compressed_risk_probability: number | null
+          td1_compressed_risk_reason: string | null
+          td1_compressed_risk_source_prediction_row_id: string | null
+          td1_compressed_risk_threshold: number | null
+          td1_compressed_risk_veto_fired: boolean | null
+          td1_compressed_risk_veto_value: number | null
           td1_feature_cutoff_ts: string | null
           td1_feature_vector_sha256: string | null
           td1_fit_id: string | null
@@ -2468,7 +2480,17 @@ export type Database = {
           td1_incumbent_would_lose: boolean | null
           td1_incumbent_would_win: boolean | null
           td1_latest_source_candle_ts: string | null
+          td1_legacy_global_veto_condition: boolean | null
+          td1_no_global_veto_decision: string | null
+          td1_no_global_veto_result: string | null
+          td1_no_global_veto_score: number | null
+          td1_no_global_veto_would_trade: boolean | null
+          td1_policy_version: string | null
           td1_predicted_loss_probability: number | null
+          td1_prev_policy_decision: string | null
+          td1_prev_policy_result: string | null
+          td1_prev_policy_score: number | null
+          td1_prev_policy_would_trade: boolean | null
           td1_threshold: number
           td1_veto_fired: boolean
           timing_status: string | null
@@ -2519,6 +2541,18 @@ export type Database = {
           td1_candidate_veto_fired?: boolean | null
           td1_candidate_would_lose?: boolean | null
           td1_candidate_would_win?: boolean | null
+          td1_compressed_risk_condition?: boolean | null
+          td1_compressed_risk_counterfactual_direction?: string | null
+          td1_compressed_risk_counterfactual_result?: string | null
+          td1_compressed_risk_counterfactual_score?: number | null
+          td1_compressed_risk_evaluable?: boolean | null
+          td1_compressed_risk_market_condition?: string | null
+          td1_compressed_risk_probability?: number | null
+          td1_compressed_risk_reason?: string | null
+          td1_compressed_risk_source_prediction_row_id?: string | null
+          td1_compressed_risk_threshold?: number | null
+          td1_compressed_risk_veto_fired?: boolean | null
+          td1_compressed_risk_veto_value?: number | null
           td1_feature_cutoff_ts?: string | null
           td1_feature_vector_sha256?: string | null
           td1_fit_id?: string | null
@@ -2535,7 +2569,17 @@ export type Database = {
           td1_incumbent_would_lose?: boolean | null
           td1_incumbent_would_win?: boolean | null
           td1_latest_source_candle_ts?: string | null
+          td1_legacy_global_veto_condition?: boolean | null
+          td1_no_global_veto_decision?: string | null
+          td1_no_global_veto_result?: string | null
+          td1_no_global_veto_score?: number | null
+          td1_no_global_veto_would_trade?: boolean | null
+          td1_policy_version?: string | null
           td1_predicted_loss_probability?: number | null
+          td1_prev_policy_decision?: string | null
+          td1_prev_policy_result?: string | null
+          td1_prev_policy_score?: number | null
+          td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean
           timing_status?: string | null
@@ -2586,6 +2630,18 @@ export type Database = {
           td1_candidate_veto_fired?: boolean | null
           td1_candidate_would_lose?: boolean | null
           td1_candidate_would_win?: boolean | null
+          td1_compressed_risk_condition?: boolean | null
+          td1_compressed_risk_counterfactual_direction?: string | null
+          td1_compressed_risk_counterfactual_result?: string | null
+          td1_compressed_risk_counterfactual_score?: number | null
+          td1_compressed_risk_evaluable?: boolean | null
+          td1_compressed_risk_market_condition?: string | null
+          td1_compressed_risk_probability?: number | null
+          td1_compressed_risk_reason?: string | null
+          td1_compressed_risk_source_prediction_row_id?: string | null
+          td1_compressed_risk_threshold?: number | null
+          td1_compressed_risk_veto_fired?: boolean | null
+          td1_compressed_risk_veto_value?: number | null
           td1_feature_cutoff_ts?: string | null
           td1_feature_vector_sha256?: string | null
           td1_fit_id?: string | null
@@ -2602,7 +2658,17 @@ export type Database = {
           td1_incumbent_would_lose?: boolean | null
           td1_incumbent_would_win?: boolean | null
           td1_latest_source_candle_ts?: string | null
+          td1_legacy_global_veto_condition?: boolean | null
+          td1_no_global_veto_decision?: string | null
+          td1_no_global_veto_result?: string | null
+          td1_no_global_veto_score?: number | null
+          td1_no_global_veto_would_trade?: boolean | null
+          td1_policy_version?: string | null
           td1_predicted_loss_probability?: number | null
+          td1_prev_policy_decision?: string | null
+          td1_prev_policy_result?: string | null
+          td1_prev_policy_score?: number | null
+          td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean
           timing_status?: string | null
