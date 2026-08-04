@@ -50,9 +50,37 @@ export interface V6Inference {
   predictionSource: PredictionSource;
   weakBroadRedVetoEvaluable: boolean;
   weakBroadRedVetoTriggered: boolean;
+  // --- V6-r2 weak-RED coverage recovery ---
+  weakRedVetoCandidate: boolean;
+  weakRedVetoOriginalPrediction: Direction | null;
+  weakRedVetoBroadPercentile: number | null;
+  weakRedRecoveryEvaluable: boolean;
+  weakRedRecoveryTriggered: boolean;
+  weakRedRecoveryReason: WeakRedRecoveryReason;
+  weakRedRsiRecoveryEvaluable: boolean;
+  weakRedRsiRecoveryTriggered: boolean;
+  weakRedRsiThreshold: number;
+  weakRedRsiValue: number | null;
+  weakRedRoc4RecoveryEvaluable: boolean;
+  weakRedRoc4RecoveryTriggered: boolean;
+  weakRedRoc4Threshold: number;
+  weakRedRoc4Value: number | null;
+  predictionAfterWeakRedRecovery: Direction;
+  predictionSourceAfterWeakRedRecovery: PredictionSource;
   finalPrediction: Direction;
   abstainReason: string | null;
 }
+
+/** Frozen V6-r2 recovery thresholds. Never tuned at runtime. */
+export const WEAK_RED_BROAD_PERCENTILE_THRESHOLD = 0.15;
+export const WEAK_RED_RSI_THRESHOLD = 58;
+export const WEAK_RED_ROC4_THRESHOLD = 0.28;
+
+export type WeakRedRecoveryReason =
+  | "WEAK_RED_RSI_CONTINUATION_RECOVERY"
+  | "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY"
+  | null;
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Model = any;
