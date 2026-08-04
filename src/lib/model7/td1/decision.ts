@@ -50,6 +50,13 @@ export interface ContainmentConsumption {
   episodeArmed: boolean;
 }
 
+export interface Td1PolicyOutcome {
+  decision: ExternalDecision;
+  wouldTrade: boolean;
+  reasons: string[];
+  primaryReason: string | null;
+}
+
 export interface Td1RcDecision {
   externalFinalDecision: ExternalDecision;
   wouldTrade: boolean;
@@ -58,30 +65,28 @@ export interface Td1RcDecision {
   containmentVetoFired: boolean;
   allVetoReasons: string[];
   primarySkipReason: string | null;
+  // --- td1-rc-compressed-risk-v1 ---
+  compressedRiskEvaluable: boolean;
+  compressedRiskCondition: boolean;
+  compressedRiskVetoFired: boolean;
+  compressedRiskReason: string | null;
+  legacyGlobalVetoCondition: boolean;
+  /** Direction that would have been published had no gate fired. */
+  underlyingDirection: Side;
+  /** Audit-only replay of the exact pre-patch policy. Never published. */
+  previousPolicy: Td1PolicyOutcome;
+  /** Audit-only replay with compressed-risk active and the 0.60 gate disabled. */
+  noGlobalVetoPolicy: Td1PolicyOutcome;
 }
 
-function assertFiniteFeatures(features: Td1Features): void {
-  for (const name of TD1_FEATURE_ORDER) {
-    if (!Number.isFinite(features[name])) throw new Error(`TD1_FEATURE_NONFINITE:${name}`);
-  }
-}
-
-export function scoreTree(tree: TreeNode, features: Td1Features): number {
-  assertFiniteFeatures(features);
-  let node: TreeNode = tree;
-  for (let depth = 0; depth <= 3; depth += 1) {
-    if (node.leaf) {
-      const p = node.leaf.lossProbability;
-      if (!Number.isFinite(p) || p < 0 || p > 1) throw new Error("TD1_PROBABILITY_INVALID");
-      return p;
-    }
-    if (node.featureIndex === undefined || node.threshold === undefined || !node.left || !node.right) {
-      throw new Error("TD1_ARTIFACT_INVALID");
-    }
-    const featureName = TD1_FEATURE_ORDER[node.featureIndex];
-    node = features[featureName] <= node.threshold ? node.left : node.right;
-  }
-  throw new Error("TD1_TREE_DEPTH_EXCEEDED");
+function buildOutcome(side: Side, reasons: string[]): Td1PolicyOutcome {
+  const skip = reasons.length > 0;
+  return {
+    decision: skip ? "SKIP" : side,
+    wouldTrade: !skip,
+    reasons,
+    primaryReason: reasons[0] ?? null,
+  };
 }
 
 export function decideTd1Rc(args: {
@@ -90,25 +95,54 @@ export function decideTd1Rc(args: {
   artifact: Td1Artifact;
   containment: ContainmentConsumption;
   threshold?: number;
+  /** Prediction-time compressed-risk evaluation for this candle. */
+  compressedRisk?: { evaluable: boolean; condition: boolean; reason: string | null };
 }): Td1RcDecision {
-  const threshold = args.threshold ?? 0.60;
+  const threshold = args.threshold ?? TD1_GLOBAL_TURN_RISK_THRESHOLD;
   const pLoss = scoreTree(args.artifact.tree, args.features);
   const td1Veto = pLoss >= threshold;
   const containmentVeto = args.containment.vetoFired;
+
+  const cr = args.compressedRisk ?? { evaluable: false, condition: false, reason: null };
+  const compressedVeto = cr.condition === true;
+
+  // Active policy, first-match order: compressed risk -> containment -> global
+  // turn risk. The legacy gates keep their existing relative order.
   const reasons: string[] = [];
+  if (compressedVeto) reasons.push(ABSTAIN_TD1_COMPRESSED_RISK);
   if (containmentVeto) reasons.push("DIRECTIONAL_CONTAINMENT");
   if (td1Veto) reasons.push("TD1_TURN_RISK");
-  const skip = reasons.length > 0;
+  const active = buildOutcome(args.a2FinalDecision, reasons);
+
+  // Audit-only counterfactual 1: exact pre-patch decision tree.
+  const prevReasons: string[] = [];
+  if (containmentVeto) prevReasons.push("DIRECTIONAL_CONTAINMENT");
+  if (td1Veto) prevReasons.push("TD1_TURN_RISK");
+
+  // Audit-only counterfactual 2: compressed risk active, global 0.60 disabled.
+  const noGlobalReasons: string[] = [];
+  if (compressedVeto) noGlobalReasons.push(ABSTAIN_TD1_COMPRESSED_RISK);
+  if (containmentVeto) noGlobalReasons.push("DIRECTIONAL_CONTAINMENT");
+
   return {
-    externalFinalDecision: skip ? "SKIP" : args.a2FinalDecision,
-    wouldTrade: !skip,
+    externalFinalDecision: active.decision,
+    wouldTrade: active.wouldTrade,
     td1LossProbability: pLoss,
     td1VetoFired: td1Veto,
     containmentVetoFired: containmentVeto,
-    allVetoReasons: reasons,
-    primarySkipReason: reasons[0] ?? null,
+    allVetoReasons: active.reasons,
+    primarySkipReason: active.primaryReason,
+    compressedRiskEvaluable: cr.evaluable === true,
+    compressedRiskCondition: compressedVeto,
+    compressedRiskVetoFired: compressedVeto,
+    compressedRiskReason: compressedVeto ? ABSTAIN_TD1_COMPRESSED_RISK : null,
+    legacyGlobalVetoCondition: td1Veto,
+    underlyingDirection: args.a2FinalDecision,
+    previousPolicy: buildOutcome(args.a2FinalDecision, prevReasons),
+    noGlobalVetoPolicy: buildOutcome(args.a2FinalDecision, noGlobalReasons),
   };
 }
+
 
 export function resolveA2Counterfactual(side: Side, actual: "GREEN" | "RED"): "WIN" | "LOSS" {
   return (side === "YES" && actual === "GREEN") || (side === "NO" && actual === "RED") ? "WIN" : "LOSS";
