@@ -414,6 +414,21 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
       const redPick = pickupContribution(Boolean(r.red_pickup_triggered) && !opFail, "RED", actual);
       const greenPick = pickupContribution(Boolean(r.green_pickup_triggered) && !opFail, "GREEN", actual);
 
+      // --- Regime Inverter grading ---
+      // The shadow always follows the ORIGINAL uninverted V6_BASE direction,
+      // independent of what was published after inversion.
+      const originalBase =
+        ((r.original_v6_base_prediction as Direction | null) ?? base) ?? "ABSTAIN";
+      const preInverter =
+        ((r.pre_inverter_prediction as Direction | null) ?? final) ?? "ABSTAIN";
+      const inverterTriggered = Boolean(r.regime_inverter_triggered) && !opFail;
+      const inverterContrib = inverterContribution(inverterTriggered, preInverter, final, actual);
+      const shadowEligible =
+        !opFail && r.prediction_source === "V6_BASE" &&
+        (originalBase === "GREEN" || originalBase === "RED") &&
+        (actual === "GREEN" || actual === "RED");
+
+
       await sb
         .from("v6_predictions")
         .update({
