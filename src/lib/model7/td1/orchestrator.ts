@@ -53,6 +53,22 @@ async function writeSkipRow(
   return row;
 }
 
+export interface A2CombinedContext {
+  predictionId: string;
+  candleTs: string;
+  targetBoundaryTs: string;
+  finalDecision: "YES" | "NO" | "SKIP" | null;
+  probabilityGreen: number | null;
+  modelFitId: string | null;
+  timingStatus: string | null;
+  leakageCheckPassed: boolean | null;
+  a2RowId?: string | null;
+  /** Prediction-time market condition from the exact upstream prediction row. */
+  marketCondition?: string | null;
+  /** Row id of the upstream prediction row the market condition came from. */
+  marketConditionSourceRowId?: string | null;
+}
+
 export async function runTd1RcForA2Combined(
   supabase: SupabaseClient,
   ctx: A2CombinedContext,
