@@ -505,7 +505,14 @@ function StatsPage() {
           onExport={downloadV6Csv}
           exporting={exportingV6}
         />
+
+        <V6RegimeInverterPanel
+          state={(v6InverterQ.data as Record<string, any> | null) ?? null}
+          stats={v6Stats}
+          pending={v6Pending}
+        />
       </div>
+
 
       <Card>
         <CardHeader className="pb-2">
