@@ -344,58 +344,17 @@ function StatsPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ModelCard
-          title="TD1-RC"
-          subtitle="Active Layer"
-          status="Live"
-          tone="cyan"
-          winRate={b2Hero.win_rate}
-          wins={b2Hero.wins}
-          losses={b2Hero.losses}
-          pushes={b2Hero.pushes}
-          pending={b2Hero.pending}
-          predictionLabel="Current Prediction"
-          predictionTs={td1PendingQ.data?.candle_ts}
-          predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
-          abstainReason={(td1PendingQ.data as any)?.skip_reason ?? null}
-          actions={(
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetTd1Stats} disabled={resettingTd1}>
-                {resettingTd1 ? "…" : "Reset"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadTd1Csv} disabled={exportingTd1}>
-                {exportingTd1 ? "…" : "CSV"}
-              </Button>
-            </div>
-          )}
-        >
-          {(() => {
-            const prog = td1ProgressQ.data as null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
-            if (!prog || prog.phase === "ready") return null;
-            return (
-              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <div className="font-medium text-amber-400">{prog.label}</div>
-                  <div className="text-muted-foreground tabular-nums">
-                    {prog.current} / {prog.target} <span className="ml-1">({prog.remaining} left)</span>
-                  </div>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, Math.min(100, prog.percent))}%` }} />
-                </div>
-                <div className="text-[11px] text-muted-foreground mt-1">
-                  Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes.
-                </div>
-              </div>
-            );
-          })()}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <MiniStat label="Resolved" value={b2Resolved} />
-            <MiniStat label="Pending" value={b2Hero.pending} />
-            <MiniStat label="TD1 Vetoes" value={b2Hero.td1_vetoes} />
-            <MiniStat label="Containment" value={b2Hero.containment_vetoes} />
-          </div>
-        </ModelCard>
+        <TD1Card
+          hero={b2Hero}
+          resolved={b2Resolved}
+          pending={td1PendingQ.data as any}
+          progress={td1ProgressQ.data as any}
+          onExport={downloadTd1Csv}
+          exporting={exportingTd1}
+          onReset={doResetTd1Stats}
+          resetting={resettingTd1}
+        />
+
 
         <ModelCard
           title="a96"
