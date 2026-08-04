@@ -63,7 +63,7 @@ async function writeState(sb: SupabaseClient, patch: Record<string, unknown>): P
 }
 
 /** Confirmed canonical candles, deduped, longest contiguous tail ending at T-15m. */
-async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Promise<RawCandle[]> {
+export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Promise<RawCandle[]> {
   const lastTs = new Date(targetTs.getTime() - TF_MS);
   const firstTs = new Date(lastTs.getTime() - V6_WARMUP_CANDLES * TF_MS);
   const { data, error } = await sb
@@ -103,16 +103,32 @@ async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Promise<R
   return rows.slice(start);
 }
 
-/** Mark V6 not ready and clear the persisted saturation history. */
-export async function markV6NotReady(sb: SupabaseClient, reason: string): Promise<void> {
+/**
+ * Mark V6 not ready and clear the persisted saturation history.
+ * `status` defaults to FAILED (runtime failures); manual re-initialization
+ * passes NOT_STARTED so the next boundary performs a clean canonical replay.
+ */
+export async function markV6NotReady(
+  sb: SupabaseClient,
+  reason: string,
+  status: V6WarmupStatus = "FAILED",
+): Promise<void> {
   await writeState(sb, {
-    v6_warmup_status: "FAILED",
+    v6_warmup_status: status,
     warmup_completed_at: null,
     warmup_continuity_valid: false,
     warmup_feature_valid: false,
     warmup_base_predictions_count: 0,
     warmup_base_predictions_json: [],
     warmup_error: reason,
+  });
+}
+
+/** Record the boundary the next canonical replay should target. */
+export async function setV6WarmupNextTarget(sb: SupabaseClient, targetTs: Date): Promise<void> {
+  await writeState(sb, {
+    warmup_next_target_ts: targetTs.toISOString(),
+    warmup_started_at: null,
   });
 }
 
