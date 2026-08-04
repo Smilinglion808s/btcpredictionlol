@@ -172,7 +172,7 @@ export function decideTd1Rc(args: {
     allVetoReasons: active.reasons,
     primarySkipReason: active.primaryReason,
     compressedRiskEvaluable: cr.evaluable === true,
-    compressedRiskCondition: compressedVeto,
+    compressedRiskCondition: cr.condition === true,
     compressedRiskVetoFired: compressedVeto,
     compressedRiskReason: compressedVeto ? ABSTAIN_TD1_COMPRESSED_RISK : null,
     legacyGlobalVetoCondition: td1Veto,
