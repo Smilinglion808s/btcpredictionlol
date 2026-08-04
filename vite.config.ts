@@ -12,8 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // nodejs_compat is platform-default as of 2026-08-04. Disable Nitro's
-  // explicit declaration at generation time; post-build rewriting is too late
-  // because the deployment manifest has already captured the worker settings.
-  nitro: { cloudflare: { nodeCompat: false } },
+  // TanStack Start's server functions rely on AsyncLocalStorage to preserve
+  // request context. Keep Nitro's Cloud runtime compatibility enabled so the
+  // published worker has that API; disabling it makes every /_serverFn call
+  // fail with "No Start context found in AsyncLocalStorage".
+  nitro: { cloudflare: { nodeCompat: true } },
 });
