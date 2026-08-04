@@ -205,24 +205,38 @@ export async function runTd1RcForA2Combined(
       lossProbability: preview.td1LossProbability,
     });
 
+    const containment = {
+      vetoFired: consume.veto_fired,
+      slotsBefore: consume.slots_before,
+      slotsAfter: consume.slots_after,
+      episodeArmed: consume.episode_armed,
+    };
+
+    // TD1-RC: original form — compressed risk recorded for audit, never applied.
     const decision = decideTd1Rc({
       a2FinalDecision: side,
       features: built.features,
       artifact,
-      containment: {
-        vetoFired: consume.veto_fired,
-        slotsBefore: consume.slots_before,
-        slotsAfter: consume.slots_after,
-        episodeArmed: consume.episode_armed,
-      },
+      containment,
       compressedRisk: compressed,
+      applyCompressedRisk: false,
     });
 
-    const finalRow = {
+    // TD2-RC: identical inputs, compressed-risk gate active.
+    const td2Decision = decideTd1Rc({
+      a2FinalDecision: side,
+      features: built.features,
+      artifact,
+      containment,
+      compressedRisk: compressed,
+      applyCompressedRisk: true,
+    });
+
+    const shapeRow = (d: typeof decision) => ({
       ...baseRow,
-      td1_predicted_loss_probability: decision.td1LossProbability,
-      td1_veto_fired: decision.td1VetoFired,
-      containment_veto_fired: decision.containmentVetoFired,
+      td1_predicted_loss_probability: d.td1LossProbability,
+      td1_veto_fired: d.td1VetoFired,
+      containment_veto_fired: d.containmentVetoFired,
       containment_side: side,
       containment_slots_before: consume.slots_before,
       containment_slots_after: consume.slots_after,
@@ -230,26 +244,33 @@ export async function runTd1RcForA2Combined(
       containment_episode_armed_after: consume.episode_armed && consume.slots_after === 0
         ? false
         : consume.episode_armed,
-      all_veto_reasons_json: decision.allVetoReasons,
-      external_final_decision: decision.externalFinalDecision,
-      would_trade: decision.wouldTrade,
-      skip_reason: decision.primarySkipReason,
-      // --- td1-rc-compressed-risk-v1 ---
+      all_veto_reasons_json: d.allVetoReasons,
+      external_final_decision: d.externalFinalDecision,
+      would_trade: d.wouldTrade,
+      skip_reason: d.primarySkipReason,
       td1_compressed_risk_market_condition: compressed.marketCondition,
-      td1_compressed_risk_evaluable: decision.compressedRiskEvaluable,
-      td1_compressed_risk_condition: decision.compressedRiskCondition,
-      td1_compressed_risk_veto_fired: decision.compressedRiskVetoFired,
-      td1_compressed_risk_reason: decision.compressedRiskReason,
-      td1_compressed_risk_probability: decision.td1LossProbability,
-      td1_legacy_global_veto_condition: decision.legacyGlobalVetoCondition,
-      td1_compressed_risk_counterfactual_direction: decision.compressedRiskVetoFired ? side : null,
+      td1_compressed_risk_evaluable: d.compressedRiskEvaluable,
+      td1_compressed_risk_condition: d.compressedRiskCondition,
+      td1_compressed_risk_veto_fired: d.compressedRiskVetoFired,
+      td1_compressed_risk_reason: d.compressedRiskReason,
+      td1_compressed_risk_probability: d.td1LossProbability,
+      td1_legacy_global_veto_condition: d.legacyGlobalVetoCondition,
+      td1_compressed_risk_counterfactual_direction: d.compressedRiskVetoFired ? side : null,
       // Audit-only policy counterfactuals (never published, never webhooked).
-      td1_prev_policy_decision: decision.previousPolicy.decision,
-      td1_prev_policy_would_trade: decision.previousPolicy.wouldTrade,
-      td1_no_global_veto_decision: decision.noGlobalVetoPolicy.decision,
-      td1_no_global_veto_would_trade: decision.noGlobalVetoPolicy.wouldTrade,
+      td1_prev_policy_decision: d.previousPolicy.decision,
+      td1_prev_policy_would_trade: d.previousPolicy.wouldTrade,
+      td1_no_global_veto_decision: d.noGlobalVetoPolicy.decision,
+      td1_no_global_veto_would_trade: d.noGlobalVetoPolicy.wouldTrade,
+    });
+
+    const finalRow = shapeRow(decision);
+    const td2Row = {
+      ...shapeRow(td2Decision),
+      variant: TD2_VARIANT,
+      prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+      td1_policy_version: TD1_RC_POLICY_VERSION,
     };
-    await supabase.from("model7_td1_rc_shadow").insert(finalRow as never);
+    await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
     return finalRow;
   } catch (e) {
     try {
