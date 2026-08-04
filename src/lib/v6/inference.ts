@@ -405,23 +405,17 @@ export function inferV6(
   const rsiValid = Number.isFinite(rsi14);
   const roc4Valid = Number.isFinite(roc4);
 
-  const weakRedRsiRecoveryEvaluable = weakRedVetoCandidate && rsiValid;
-  const weakRedRsiRecoveryTriggered =
-    weakRedRsiRecoveryEvaluable && rsi14 <= WEAK_RED_RSI_THRESHOLD;
+  const recovery = evaluateWeakRedRecovery(weakRedVetoCandidate, rsi14, roc4);
+  const {
+    rsiRecoveryEvaluable: weakRedRsiRecoveryEvaluable,
+    rsiRecoveryTriggered: weakRedRsiRecoveryTriggered,
+    roc4RecoveryEvaluable: weakRedRoc4RecoveryEvaluable,
+    roc4RecoveryTriggered: weakRedRoc4RecoveryTriggered,
+    recoveryEvaluable: weakRedRecoveryEvaluable,
+    recoveryTriggered: weakRedRecoveryTriggered,
+    reason: weakRedRecoveryReason,
+  } = recovery;
 
-  const weakRedRoc4RecoveryEvaluable =
-    weakRedVetoCandidate && !weakRedRsiRecoveryTriggered && rsiValid && roc4Valid && rsi14 > WEAK_RED_RSI_THRESHOLD;
-  const weakRedRoc4RecoveryTriggered =
-    weakRedRoc4RecoveryEvaluable && roc4 >= WEAK_RED_ROC4_THRESHOLD;
-
-  const weakRedRecoveryEvaluable = weakRedVetoCandidate && rsiValid;
-  const weakRedRecoveryTriggered =
-    weakRedRsiRecoveryTriggered || weakRedRoc4RecoveryTriggered;
-  const weakRedRecoveryReason: WeakRedRecoveryReason = weakRedRsiRecoveryTriggered
-    ? "WEAK_RED_RSI_CONTINUATION_RECOVERY"
-    : weakRedRoc4RecoveryTriggered
-      ? "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY"
-      : null;
 
   const weakBroadRedVetoEvaluable =
     preWeakRedVetoPrediction === "RED" && predictionSource === "V6_BASE";
