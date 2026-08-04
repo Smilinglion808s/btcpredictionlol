@@ -26,6 +26,21 @@ export const V6_CSV_COLUMNS = [
   "current_directional_loss_streak","max_directional_loss_streak","raw_peak_to_trough_drawdown",
   "adjusted_peak_to_trough_drawdown","rolling96_predictions","rolling96_coverage",
   "rolling96_raw_net","rolling96_adjusted_net",
+  // --- V6-r1 Regime Inverter (documented order) ---
+  "model_revision",
+  "original_v6_base_prediction","original_v6_base_source",
+  "pre_inverter_prediction","pre_inverter_prediction_source",
+  "regime_inverter_evaluable","regime_inverter_ready","regime_inverter_active",
+  "regime_inverter_triggered",
+  "regime_inverter_history_count","regime_inverter_history_json",
+  "regime_inverter_last20_wins","regime_inverter_last20_losses",
+  "regime_inverter_last20_adjusted_net","regime_inverter_activation_threshold",
+  "regime_inverter_original_prediction","regime_inverter_replacement_prediction",
+  "regime_inverter_reason",
+  "original_v6_shadow_raw_score","original_v6_shadow_adjusted_score",
+  "pre_inverter_raw_score","pre_inverter_adjusted_score",
+  "regime_inverter_raw_contribution","regime_inverter_adjusted_contribution",
+  "final_prediction_source",
 ] as const;
 
 type Row = Record<string, unknown>;
