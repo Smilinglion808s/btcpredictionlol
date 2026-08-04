@@ -157,17 +157,25 @@ export async function fetchOkxClosedCandle(candleTs: string): Promise<ClosedCand
   return null;
 }
 
-/** Confirmed OKX candles with candle_ts in [fromMs, toMs], ascending. */
+/**
+ * Confirmed OKX candles with candle_ts in [fromMs, toMs], ascending.
+ *
+ * OKX can lag a few seconds before flipping `confirm` on a candle whose window
+ * has fully elapsed. A candle whose entire 15m window is in the past is closed
+ * by definition, so treat it as confirmed once `now >= ts + 15m + 2s`.
+ */
 export async function fetchOkxConfirmedRange(
   fromMs: number,
   toMs: number,
 ): Promise<Array<{ candle_ts: string; open: number; high: number; low: number; close: number; volume: number }>> {
   const { candles, error } = await tryOkxCandles();
   if (error && candles.length === 0) return [];
+  const now = Date.now();
   return candles
     .filter((c) => {
       const ms = new Date(c.candle_ts).getTime();
-      return c.confirm && ms >= fromMs && ms <= toMs;
+      const windowElapsed = now >= ms + TF_MS + 2000;
+      return (c.confirm || windowElapsed) && ms >= fromMs && ms <= toMs;
     })
     .sort((a, b) => new Date(a.candle_ts).getTime() - new Date(b.candle_ts).getTime())
     .map((c) => ({
@@ -179,6 +187,7 @@ export async function fetchOkxConfirmedRange(
       volume: c.volume,
     }));
 }
+
 
 
 /**
