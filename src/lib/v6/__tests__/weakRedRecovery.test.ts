@@ -14,7 +14,13 @@ import {
   type Direction,
   type TechnicalRow,
 } from "../inference";
-import { applyRegimeInverter, V6_MODEL_REVISION } from "../regimeInverter";
+import {
+  applyRegimeInverter,
+  inverterContribution,
+  shadowScores,
+  V6_MODEL_REVISION,
+  type ShadowSummary,
+} from "../regimeInverter";
 import vectors from "./parity_vectors.json";
 
 type Vector = {
@@ -164,6 +170,107 @@ describe("V6-r2 end-to-end on frozen vectors", () => {
     const actual = "GREEN" as const;
     expect(rawScore("RED", actual)).toBe(-1);
     expect(adjustedScore("RED", actual)).toBe(-1);
+    expect(adjustedScore("GREEN", actual)).toBe(0.8);
+  });
+});
+
+// V6-r2 hotfix: a RED restored by either recovery branch is still an ORIGINAL
+// V6_BASE directional prediction and must remain eligible for the Regime
+// Inverter. Pickups and retained vetoes stay ineligible.
+describe("V6-r2 recovered RED reaches the Regime Inverter", () => {
+  const summary = (over: Partial<ShadowSummary> = {}): ShadowSummary => ({
+    ready: true,
+    active: true,
+    count: 20,
+    wins: 9,
+    losses: 11,
+    adjustedNet: -3.8,
+    threshold: -2.8,
+    ...over,
+  });
+
+  const activeS = summary();
+  const dormantS = summary({ active: false, wins: 10, losses: 10, adjustedNet: -2 });
+  const notReadyS = summary({ ready: false, active: false, count: 12 });
+
+  // Mirrors the orchestrator: pre-inverter values come straight from inference.
+  const recovered = (branch: "rsi" | "roc4") => {
+    const r = evaluateWeakRedRecovery(true, branch === "rsi" ? 41 : 72, branch === "rsi" ? 0 : 0.51);
+    expect(r.recoveryTriggered).toBe(true);
+    expect(r.reason).toBe(
+      branch === "rsi"
+        ? "WEAK_RED_RSI_CONTINUATION_RECOVERY"
+        : "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY",
+    );
+    // Restored RED publishes on V6_BASE, never as a pickup.
+    return { prediction: "RED" as Direction, source: "V6_BASE" };
+  };
+
+  it("an RSI-restored RED stays V6_BASE before inversion", () => {
+    const p = recovered("rsi");
+    expect(p.prediction).toBe("RED");
+    expect(p.source).toBe("V6_BASE");
+    expect(applyRegimeInverter(p.prediction, p.source, dormantS).evaluable).toBe(true);
+  });
+
+  it("a ROC4-restored RED stays V6_BASE before inversion", () => {
+    const p = recovered("roc4");
+    expect(applyRegimeInverter(p.prediction, p.source, dormantS).evaluable).toBe(true);
+  });
+
+  for (const branch of ["rsi", "roc4"] as const) {
+    it(`an active inverter flips a ${branch}-restored RED to GREEN`, () => {
+      const p = recovered(branch);
+      const d = applyRegimeInverter(p.prediction, p.source, activeS);
+      expect(d.evaluable).toBe(true);
+      expect(d.triggered).toBe(true);
+      expect(d.originalPrediction).toBe("RED");
+      expect(d.replacementPrediction).toBe("GREEN");
+      expect(d.finalPrediction).toBe("GREEN");
+      expect(d.finalPredictionSource).toBe("REGIME_INVERTER");
+      expect(d.reason).toBe("V6_REGIME_INVERSION");
+    });
+  }
+
+  it("an inactive inverter leaves a restored RED unchanged", () => {
+    const d = applyRegimeInverter("RED", "V6_BASE", dormantS);
+    expect(d.triggered).toBe(false);
+    expect(d.finalPrediction).toBe("RED");
+    expect(d.finalPredictionSource).toBe("V6_BASE");
+  });
+
+  it("a not-ready inverter leaves a restored RED unchanged", () => {
+    const d = applyRegimeInverter("RED", "V6_BASE", notReadyS);
+    expect(d.triggered).toBe(false);
+    expect(d.finalPrediction).toBe("RED");
+    expect(d.finalPredictionSource).toBe("V6_BASE");
+  });
+
+  it("pickups remain ineligible", () => {
+    for (const src of ["CONSENSUS_RED_PICKUP", "MOMENTUM_EXPANSION_GREEN_PICKUP"]) {
+      const d = applyRegimeInverter(src.includes("RED") ? "RED" : "GREEN", src, activeS);
+      expect(d.evaluable).toBe(false);
+      expect(d.triggered).toBe(false);
+      expect(d.finalPredictionSource).toBe(src);
+    }
+  });
+
+  it("a retained weak-broad RED veto stays ABSTAIN and never inverts", () => {
+    const r = evaluateWeakRedRecovery(true, 72, 0.1);
+    expect(r.recoveryTriggered).toBe(false);
+    const d = applyRegimeInverter("ABSTAIN", "ABSTAIN", activeS);
+    expect(d.evaluable).toBe(false);
+    expect(d.finalPrediction).toBe("ABSTAIN");
+  });
+
+  it("scores recovery and inversion separately and grades the original RED", () => {
+    const actual = "GREEN" as const;
+    // Shadow history always grades the ORIGINAL uninverted V6_BASE RED.
+    expect(shadowScores("RED", actual)).toEqual({ raw: -1, adjusted: -1 });
+    // Recovery: restored RED vs the prior ABSTAIN (0).
+    expect(adjustedScore("RED", actual)).toBe(-1);
+    // Inverter: final GREEN vs pre-inverter RED.
+    expect(inverterContribution(true, "RED", "GREEN", actual)).toEqual({ raw: 2, adjusted: 1.8 });
     expect(adjustedScore("GREEN", actual)).toBe(0.8);
   });
 });
