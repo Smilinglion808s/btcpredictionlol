@@ -116,6 +116,24 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.max_loss_streak = Math.max(c.max_loss_streak, c.current_loss_streak);
       }
     }
+
+    // Regime Inverter accounting (counterfactual pre-inverter track).
+    const preAdj = r.pre_inverter_adjusted_score == null ? adj : Number(r.pre_inverter_adjusted_score);
+    const preRaw = r.pre_inverter_raw_score == null ? raw : Number(r.pre_inverter_raw_score);
+    c.pre_inverter_adjusted_net += preAdj;
+    c.pre_inverter_raw_net += preRaw;
+    const preDirectional =
+      r.pre_inverter_prediction == null
+        ? directional
+        : r.pre_inverter_prediction === "GREEN" || r.pre_inverter_prediction === "RED";
+    if (preDirectional) c.pre_inverter_directional += 1;
+    if (r.regime_inverter_triggered) {
+      c.inverter_trigger_count += 1;
+      if (raw > 0) c.inverter_wins += 1; else c.inverter_losses += 1;
+      c.inverter_raw_contribution += Number(r.regime_inverter_raw_contribution ?? 0);
+      c.inverter_adjusted_contribution += Number(r.regime_inverter_adjusted_contribution ?? 0);
+    }
+
     window.push({ adj, raw, directional });
     if (window.length > 96) window.shift();
   }
@@ -129,15 +147,23 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
   c.rolling96_adjusted_net = Math.round(window.reduce((s, w) => s + w.adj, 0) * 100) / 100;
   c.rolling96_raw_net = Math.round(window.reduce((s, w) => s + w.raw, 0) * 100) / 100;
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   return {
     ...c,
-    raw_net: Math.round(c.raw_net * 100) / 100,
-    adjusted_net: Math.round(c.adjusted_net * 100) / 100,
-    max_adjusted_drawdown: Math.round(c.max_adjusted_drawdown * 100) / 100,
-    max_raw_drawdown: Math.round(c.max_raw_drawdown * 100) / 100,
+    raw_net: round2(c.raw_net),
+    adjusted_net: round2(c.adjusted_net),
+    max_adjusted_drawdown: round2(c.max_adjusted_drawdown),
+    max_raw_drawdown: round2(c.max_raw_drawdown),
     win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
 
     coverage: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
+    pre_inverter_coverage: scored > 0 ? Math.round((c.pre_inverter_directional / scored) * 10000) / 100 : 0,
+    pre_inverter_adjusted_net: round2(c.pre_inverter_adjusted_net),
+    pre_inverter_raw_net: round2(c.pre_inverter_raw_net),
+    inverter_raw_contribution: round2(c.inverter_raw_contribution),
+    inverter_adjusted_contribution: round2(c.inverter_adjusted_contribution),
+    model_revision: "V6-r1-regime-inverter",
     breakeven_win_rate: 55.5555556,
   };
 });
