@@ -157,6 +157,30 @@ export async function fetchOkxClosedCandle(candleTs: string): Promise<ClosedCand
   return null;
 }
 
+/** Confirmed OKX candles with candle_ts in [fromMs, toMs], ascending. */
+export async function fetchOkxConfirmedRange(
+  fromMs: number,
+  toMs: number,
+): Promise<Array<{ candle_ts: string; open: number; high: number; low: number; close: number; volume: number }>> {
+  const { candles, error } = await tryOkxCandles();
+  if (error && candles.length === 0) return [];
+  return candles
+    .filter((c) => {
+      const ms = new Date(c.candle_ts).getTime();
+      return c.confirm && ms >= fromMs && ms <= toMs;
+    })
+    .sort((a, b) => new Date(a.candle_ts).getTime() - new Date(b.candle_ts).getTime())
+    .map((c) => ({
+      candle_ts: c.candle_ts,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
+}
+
+
 /**
  * Backwards-compat wrapper. New code should use `buildPartialCandleContext`
  * which returns full provenance + attempt diagnostics.

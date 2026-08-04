@@ -100,8 +100,27 @@ export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Pr
     start > 0 &&
     new Date(rows[start].candle_ts).getTime() - new Date(rows[start - 1].candle_ts).getTime() === TF_MS
   ) start -= 1;
-  return rows.slice(start);
+  const tail = rows.slice(start);
+
+  // The ingest pipeline can confirm the T-15m candle a few seconds AFTER the
+  // boundary run starts, which used to fail warmup with last_candle_mismatch.
+  // Top the tail up straight from OKX (closed candles only) so the replay always
+  // ends exactly at T-15m. Never appends an unconfirmed / in-progress candle.
+  const lastMs = new Date(tail[tail.length - 1].candle_ts).getTime();
+  if (lastMs < lastTs.getTime()) {
+    const { fetchOkxConfirmedRange } = await import("../okx.server");
+    const missing = await fetchOkxConfirmedRange(lastMs + TF_MS, lastTs.getTime());
+    let expect = lastMs + TF_MS;
+    for (const c of missing) {
+      const ms = new Date(c.candle_ts).getTime();
+      if (ms !== expect) break;
+      tail.push(c);
+      expect += TF_MS;
+    }
+  }
+  return tail;
 }
+
 
 /**
  * Mark V6 not ready and clear the persisted saturation history.
