@@ -306,7 +306,7 @@ export async function resolveTd1RcRow(
       )
       .eq("prediction_id", predictionId)
       .in("variant", [VARIANT, TD2_VARIANT]);
-    const rows = (rowData ?? []) as Record<string, unknown>[];
+    const rows = ((rowData ?? []) as unknown) as Record<string, unknown>[];
     if (rows.length === 0) return;
 
     let containmentInput: { candleTs: string; side: "YES" | "NO"; cfResult: "WIN" | "LOSS" } | null = null;
