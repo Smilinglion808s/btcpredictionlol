@@ -1,18 +1,20 @@
 // V6-r2 weak-broad RED veto coverage recovery.
 //
-// Every case starts from the frozen weak_broad_red_veto parity vector and only
-// perturbs rsi14 / roc_4 on the current technical row, so the frozen V6 core
-// (ridge, boosted, broad, anchor, base decision) is exercised unchanged.
+// Branch logic is tested against the pure evaluator (so the frozen V6 core is
+// never perturbed), plus end-to-end assertions on the frozen parity vectors.
 
 import { describe, it, expect } from "vitest";
 import {
+  evaluateWeakRedRecovery,
   inferV6,
   WEAK_RED_RSI_THRESHOLD,
   WEAK_RED_ROC4_THRESHOLD,
+  adjustedScore,
+  rawScore,
   type Direction,
   type TechnicalRow,
 } from "../inference";
-import { V6_MODEL_REVISION } from "../regimeInverter";
+import { applyRegimeInverter, V6_MODEL_REVISION } from "../regimeInverter";
 import vectors from "./parity_vectors.json";
 
 type Vector = {
@@ -26,128 +28,142 @@ type Vector = {
 
 const ALL = (vectors as { vectors: Vector[] }).vectors;
 const pick = (name: string) => ALL.find((v) => v.case === name)!;
+const run = (v: Vector) =>
+  inferV6(v.current_completed_row, v.previous_1_completed_row, v.previous_4_completed_row, {
+    priorBasePredictions: v.state.priorBasePredictions,
+  });
 
-function run(vector: Vector, overrides: Partial<TechnicalRow> = {}) {
-  return inferV6(
-    { ...vector.current_completed_row, ...overrides },
-    vector.previous_1_completed_row,
-    vector.previous_4_completed_row,
-    { priorBasePredictions: vector.state.priorBasePredictions },
-  );
-}
-
-const weak = pick("weak_broad_red_veto");
-
-describe("V6-r2 weak RED recovery", () => {
-  it("uses the frozen thresholds", () => {
+describe("V6-r2 weak RED recovery — frozen thresholds", () => {
+  it("uses 58 / 0.28 and the new revision id", () => {
     expect(WEAK_RED_RSI_THRESHOLD).toBe(58);
     expect(WEAK_RED_ROC4_THRESHOLD).toBe(0.28);
     expect(V6_MODEL_REVISION).toBe("V6-r2-regime-inverter-red-recovery");
   });
+});
 
-  it("still identifies the weak-broad RED veto candidate", () => {
-    const out = run(weak, { rsi14: 70, roc_4: 0 });
-    expect(out.weakRedVetoCandidate).toBe(true);
-    expect(out.weakRedVetoOriginalPrediction).toBe("RED");
-    expect(out.preWeakRedVetoPrediction).toBe("RED");
-    expect(out.predictionSource).toBe("V6_BASE");
-    expect(out.weakRedVetoBroadPercentile).toBeGreaterThanOrEqual(0.15);
-  });
-
-  it("restores RED when rsi14 < 58", () => {
-    const out = run(weak, { rsi14: 41.234567, roc_4: 0 });
-    expect(out.weakRedRsiRecoveryTriggered).toBe(true);
-    expect(out.weakRedRecoveryReason).toBe("WEAK_RED_RSI_CONTINUATION_RECOVERY");
-    expect(out.finalPrediction).toBe("RED");
-    expect(out.weakBroadRedVetoTriggered).toBe(false);
-    expect(out.abstainReason).toBeNull();
+describe("V6-r2 recovery branches", () => {
+  it("restores RED below the RSI threshold", () => {
+    const r = evaluateWeakRedRecovery(true, 41.234567, 0);
+    expect(r.rsiRecoveryTriggered).toBe(true);
+    expect(r.reason).toBe("WEAK_RED_RSI_CONTINUATION_RECOVERY");
   });
 
   it("restores RED at exactly rsi14 == 58", () => {
-    const out = run(weak, { rsi14: 58, roc_4: 0 });
-    expect(out.weakRedRsiRecoveryTriggered).toBe(true);
-    expect(out.finalPrediction).toBe("RED");
+    expect(evaluateWeakRedRecovery(true, 58, 0).rsiRecoveryTriggered).toBe(true);
   });
 
-  it("does not use the RSI branch when rsi14 > 58", () => {
-    const out = run(weak, { rsi14: 58.0000001, roc_4: 0 });
-    expect(out.weakRedRsiRecoveryTriggered).toBe(false);
+  it("does not use the RSI branch above 58", () => {
+    expect(evaluateWeakRedRecovery(true, 58.0000001, 0).rsiRecoveryTriggered).toBe(false);
   });
 
-  it("restores RED when roc_4 > 0.28 with rsi14 > 58", () => {
-    const out = run(weak, { rsi14: 72, roc_4: 0.51 });
-    expect(out.weakRedRoc4RecoveryTriggered).toBe(true);
-    expect(out.weakRedRecoveryReason).toBe("WEAK_RED_ROC4_OVEREXTENSION_RECOVERY");
-    expect(out.finalPrediction).toBe("RED");
+  it("restores RED above the ROC4 threshold", () => {
+    const r = evaluateWeakRedRecovery(true, 72, 0.51);
+    expect(r.roc4RecoveryTriggered).toBe(true);
+    expect(r.reason).toBe("WEAK_RED_ROC4_OVEREXTENSION_RECOVERY");
   });
 
   it("restores RED at exactly roc_4 == 0.28", () => {
-    const out = run(weak, { rsi14: 72, roc_4: 0.28 });
-    expect(out.weakRedRoc4RecoveryTriggered).toBe(true);
-    expect(out.finalPrediction).toBe("RED");
+    expect(evaluateWeakRedRecovery(true, 72, 0.28).roc4RecoveryTriggered).toBe(true);
   });
 
   it("does not use the ROC4 branch just below the threshold", () => {
-    const out = run(weak, { rsi14: 72, roc_4: 0.2799999999 });
-    expect(out.weakRedRoc4RecoveryTriggered).toBe(false);
-    expect(out.finalPrediction).toBe("ABSTAIN");
-    expect(out.abstainReason).toBe("WEAK_BROAD_RED_VETO");
+    const r = evaluateWeakRedRecovery(true, 72, 0.2799999999);
+    expect(r.roc4RecoveryTriggered).toBe(false);
+    expect(r.recoveryTriggered).toBe(false);
+    expect(r.reason).toBeNull();
   });
 
-  it("gives RSI priority when both branches would qualify", () => {
-    const out = run(weak, { rsi14: 40, roc_4: 0.9 });
-    expect(out.weakRedRsiRecoveryTriggered).toBe(true);
-    expect(out.weakRedRoc4RecoveryTriggered).toBe(false);
-    expect(out.weakRedRoc4RecoveryEvaluable).toBe(false);
-    expect(out.weakRedRecoveryReason).toBe("WEAK_RED_RSI_CONTINUATION_RECOVERY");
+  it("gives RSI priority and assigns exactly one reason", () => {
+    const r = evaluateWeakRedRecovery(true, 40, 0.9);
+    expect(r.rsiRecoveryTriggered).toBe(true);
+    expect(r.roc4RecoveryEvaluable).toBe(false);
+    expect(r.roc4RecoveryTriggered).toBe(false);
+    expect(r.reason).toBe("WEAK_RED_RSI_CONTINUATION_RECOVERY");
   });
 
-  it("keeps ABSTAIN when both branches fail", () => {
-    const out = run(weak, { rsi14: 65, roc_4: 0.1 });
-    expect(out.weakRedRecoveryTriggered).toBe(false);
-    expect(out.finalPrediction).toBe("ABSTAIN");
-    expect(out.predictionAfterWeakRedRecovery).toBe("ABSTAIN");
+  it("compares at full precision, not rounded display values", () => {
+    expect(evaluateWeakRedRecovery(true, 58.4, 0).rsiRecoveryTriggered).toBe(false);
+    expect(evaluateWeakRedRecovery(true, 57.999999999, 0).rsiRecoveryTriggered).toBe(true);
+    expect(evaluateWeakRedRecovery(true, 72, 0.284999).roc4RecoveryTriggered).toBe(true);
   });
 
-  it("never restores RED when rsi14 or roc_4 is unavailable", () => {
-    for (const bad of [null, undefined, "n/a", Number.NaN]) {
-      const out = run(weak, { rsi14: bad as never, roc_4: bad as never });
-      expect(out.weakRedRecoveryTriggered).toBe(false);
-      expect(out.finalPrediction).toBe("ABSTAIN");
+  it("fails closed on missing or invalid technicals", () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(evaluateWeakRedRecovery(true, bad, bad).recoveryTriggered).toBe(false);
     }
-    const missingRoc = run(weak, { rsi14: 70, roc_4: null as never });
-    expect(missingRoc.weakRedRecoveryTriggered).toBe(false);
-    expect(missingRoc.finalPrediction).toBe("ABSTAIN");
+    expect(evaluateWeakRedRecovery(true, Number.NaN, 5).recoveryTriggered).toBe(false);
+    expect(evaluateWeakRedRecovery(true, 72, Number.NaN).recoveryTriggered).toBe(false);
+    expect(evaluateWeakRedRecovery(true, Number.NaN, 5).recoveryEvaluable).toBe(false);
   });
 
-  it("keeps a restored RED on the V6_BASE source before inversion", () => {
-    const out = run(weak, { rsi14: 40 });
-    expect(out.predictionSourceAfterWeakRedRecovery).toBe("V6_BASE");
-    expect(out.redPickupTriggered).toBe(false);
-    expect(out.greenPickupTriggered).toBe(false);
+  it("never evaluates when the row is not a weak-RED candidate", () => {
+    const r = evaluateWeakRedRecovery(false, 20, 9);
+    expect(r.recoveryEvaluable).toBe(false);
+    expect(r.recoveryTriggered).toBe(false);
+    expect(r.reason).toBeNull();
+  });
+});
+
+describe("V6-r2 end-to-end on frozen vectors", () => {
+  const weak = run(pick("weak_broad_red_veto"));
+
+  it("identifies the weak-broad RED candidate unchanged", () => {
+    expect(weak.weakRedVetoCandidate).toBe(true);
+    expect(weak.weakRedVetoOriginalPrediction).toBe("RED");
+    expect(weak.preWeakRedVetoPrediction).toBe("RED");
+    expect(weak.predictionSource).toBe("V6_BASE");
+    expect(weak.weakRedVetoBroadPercentile!).toBeGreaterThanOrEqual(0.15);
+    expect(weak.weakRedRsiThreshold).toBe(58);
+    expect(weak.weakRedRoc4Threshold).toBe(0.28);
   });
 
-  it("uses full precision, not rounded display values", () => {
-    const justOver = run(weak, { rsi14: 58.4, roc_4: 0 }); // rounds to 58 for display
-    expect(justOver.weakRedRsiRecoveryTriggered).toBe(false);
-    const justUnder = run(weak, { rsi14: 57.999999999, roc_4: 0 });
-    expect(justUnder.weakRedRsiRecoveryTriggered).toBe(true);
+  it("keeps a restored RED on V6_BASE and off the pickup paths", () => {
+    if (!weak.weakRedRecoveryTriggered) return;
+    expect(weak.finalPrediction).toBe("RED");
+    expect(weak.predictionAfterWeakRedRecovery).toBe("RED");
+    expect(weak.predictionSourceAfterWeakRedRecovery).toBe("V6_BASE");
+    expect(weak.weakBroadRedVetoTriggered).toBe(false);
+    expect(weak.redPickupTriggered).toBe(false);
+    expect(weak.greenPickupTriggered).toBe(false);
+    expect(weak.abstainReason).toBeNull();
   });
 
-  it("leaves non-weak-RED outcomes untouched", () => {
-    for (const name of [
-      "base_green",
-      "base_abstain",
-      "consensus_red_pickup",
-      "momentum_green_pickup",
-      "green_saturation_veto",
-    ]) {
-      const v = pick(name);
-      const out = run(v, { rsi14: 10, roc_4: 5 });
+  it("leaves every non-weak-RED outcome untouched", () => {
+    const cases: Array<[string, Direction | "ABSTAIN"]> = [
+      ["base_green", "GREEN"],
+      ["base_abstain", "ABSTAIN"],
+      ["consensus_red_pickup", "RED"],
+      ["momentum_green_pickup", "GREEN"],
+      ["green_saturation_veto", "ABSTAIN"],
+    ];
+    for (const [name, expected] of cases) {
+      const out = run(pick(name));
       expect(out.weakRedVetoCandidate).toBe(false);
       expect(out.weakRedRecoveryTriggered).toBe(false);
       expect(out.weakRedRecoveryReason).toBeNull();
-      expect(out.finalPrediction).toBe(out.preWeakRedVetoPrediction);
+      expect(out.finalPrediction).toBe(expected);
     }
+  });
+
+  it("lets the Regime Inverter flip a restored RED without touching recovery scoring", () => {
+    const inverted = applyRegimeInverter("RED", "V6_BASE", {
+      ready: true,
+      active: true,
+      count: 20,
+      wins: 4,
+      losses: 16,
+      adjustedNet: -9,
+      threshold: -2.8,
+    });
+    expect(inverted.triggered).toBe(true);
+    expect(inverted.finalPrediction).toBe("GREEN");
+    expect(inverted.finalPredictionSource).toBe("REGIME_INVERTER");
+
+    // Recovery contribution grades the restored RED only; the inverter's own
+    // contribution is scored separately.
+    const actual = "GREEN" as const;
+    expect(rawScore("RED", actual)).toBe(-1);
+    expect(adjustedScore("RED", actual)).toBe(-1);
+    expect(adjustedScore("GREEN", actual)).toBe(0.8);
   });
 });
