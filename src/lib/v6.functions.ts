@@ -166,5 +166,5 @@ export const getV6Warmup = createServerFn({ method: "GET" }).handler(async () =>
     .select("*")
     .eq("model_version", "V6")
     .maybeSingle();
-  return (data as Record<string, unknown> | null) ?? null;
+  return (data as Record<string, string | number | boolean | null> | null) ?? null;
 });
