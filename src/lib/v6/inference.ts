@@ -81,6 +81,52 @@ export type WeakRedRecoveryReason =
   | "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY"
   | null;
 
+/**
+ * V6-r2 coverage recovery: two narrow, frozen exceptions to the weak-broad RED
+ * veto. RSI continuation has priority; the ROC4 branch is only evaluated when
+ * RSI did not recover, so every restored row carries one unique reason code.
+ * Missing/invalid technicals never restore RED (fail closed).
+ */
+export function evaluateWeakRedRecovery(
+  candidate: boolean,
+  rsi14: number,
+  roc4: number,
+): {
+  rsiRecoveryEvaluable: boolean;
+  rsiRecoveryTriggered: boolean;
+  roc4RecoveryEvaluable: boolean;
+  roc4RecoveryTriggered: boolean;
+  recoveryEvaluable: boolean;
+  recoveryTriggered: boolean;
+  reason: WeakRedRecoveryReason;
+} {
+  const rsiValid = Number.isFinite(rsi14);
+  const roc4Valid = Number.isFinite(roc4);
+
+  const rsiRecoveryEvaluable = candidate && rsiValid;
+  const rsiRecoveryTriggered = rsiRecoveryEvaluable && rsi14 <= WEAK_RED_RSI_THRESHOLD;
+
+  const roc4RecoveryEvaluable =
+    candidate && !rsiRecoveryTriggered && rsiValid && roc4Valid && rsi14 > WEAK_RED_RSI_THRESHOLD;
+  const roc4RecoveryTriggered = roc4RecoveryEvaluable && roc4 >= WEAK_RED_ROC4_THRESHOLD;
+
+  const recoveryTriggered = rsiRecoveryTriggered || roc4RecoveryTriggered;
+  return {
+    rsiRecoveryEvaluable,
+    rsiRecoveryTriggered,
+    roc4RecoveryEvaluable,
+    roc4RecoveryTriggered,
+    recoveryEvaluable: candidate && rsiValid,
+    recoveryTriggered,
+    reason: rsiRecoveryTriggered
+      ? "WEAK_RED_RSI_CONTINUATION_RECOVERY"
+      : roc4RecoveryTriggered
+        ? "WEAK_RED_ROC4_OVEREXTENSION_RECOVERY"
+        : null,
+  };
+}
+
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Model = any;
