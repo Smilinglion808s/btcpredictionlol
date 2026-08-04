@@ -106,9 +106,12 @@ export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Pr
   // boundary run starts, which used to fail warmup with last_candle_mismatch.
   // Top the tail up straight from OKX (closed candles only) so the replay always
   // ends exactly at T-15m. Never appends an unconfirmed / in-progress candle.
-  const lastMs = new Date(tail[tail.length - 1].candle_ts).getTime();
-  if (lastMs < lastTs.getTime()) {
-    const { fetchOkxConfirmedRange } = await import("../okx.server");
+  // OKX itself can lag flipping `confirm`, so retry with a short backoff.
+  const { fetchOkxConfirmedRange } = await import("../okx.server");
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const lastMs = new Date(tail[tail.length - 1].candle_ts).getTime();
+    if (lastMs >= lastTs.getTime()) break;
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
     const missing = await fetchOkxConfirmedRange(lastMs + TF_MS, lastTs.getTime());
     let expect = lastMs + TF_MS;
     for (const c of missing) {
