@@ -19,7 +19,7 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
-import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup } from "@/lib/v6.functions";
+import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
