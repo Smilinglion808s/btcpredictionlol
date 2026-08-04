@@ -763,6 +763,10 @@ function V6Card({
           <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
             {exporting ? "…" : "CSV"}
           </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onReset} disabled={resetting}>
+            {resetting ? "…" : "Reset"}
+          </Button>
+
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-violet/40 bg-violet/10 text-[10px] font-bold uppercase tracking-[0.16em] text-violet">
             <span className="size-1.5 rounded-full bg-violet v6-live-dot" />
             Live
