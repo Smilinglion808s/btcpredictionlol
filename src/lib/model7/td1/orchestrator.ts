@@ -264,7 +264,7 @@ export async function resolveTd1RcRow(
   actualDirection: "GREEN" | "RED",
 ): Promise<void> {
   try {
-    const { data: row } = await supabase
+    const { data: rowData } = await supabase
       .from("model7_td1_rc_shadow")
       .select(
         "id, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
@@ -273,7 +273,9 @@ export async function resolveTd1RcRow(
       .eq("prediction_id", predictionId)
       .eq("variant", VARIANT)
       .maybeSingle();
+    const row = rowData as Record<string, unknown> | null;
     if (!row) return;
+
     // Idempotent: already-resolved rows are never re-scored.
     if (row.resolved_at) return;
     const a2 = row.a2_original_decision as "YES" | "NO" | null;
