@@ -246,6 +246,14 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = livePrior.length === 7 ? livePrior : warm.priorBasePredictions;
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
+    // Step 10-11: rolling shadow state, then the Regime Inverter applied AFTER
+    // every existing Armor rule. The unresolved target never enters the history.
+    const inverterState = await ensureInverterState(sb, targetTs);
+    const inverter = applyRegimeInverter(
+      inf.finalPrediction,
+      inf.predictionSource,
+      inverterState.summary,
+    );
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
