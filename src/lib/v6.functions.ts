@@ -82,7 +82,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     weak_red_rsi_adjusted: 0,
     weak_red_roc4_recoveries: 0, weak_red_roc4_wins: 0, weak_red_roc4_losses: 0,
     weak_red_roc4_adjusted: 0,
-    weak_red_recovery_wins: 0, weak_red_recovery_losses: 0,
+    weak_red_recovery_wins: 0, weak_red_recovery_losses: 0, weak_red_restored_scored: 0,
     weak_red_recovery_raw: 0, weak_red_recovery_adjusted: 0,
     rolling96_directional_predictions: 0, rolling96_valid_opportunities: 0,
   };
@@ -186,6 +186,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       const rAdj = Number(r.weak_red_recovery_adjusted_contribution ?? 0);
       c.weak_red_recovery_raw += rRaw;
       c.weak_red_recovery_adjusted += rAdj;
+      c.weak_red_restored_scored += 1;
       const won = rRaw > 0;
       if (won) c.weak_red_recovery_wins += 1; else c.weak_red_recovery_losses += 1;
       if (r.weak_red_rsi_recovery_triggered) {
@@ -237,9 +238,9 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     // Coverage: final directional predictions / valid opportunities.
     coverage_after_weak_red_recovery: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
     coverage_before_weak_red_recovery:
-      scored > 0 ? Math.round(((wl - c.weak_red_restored) / scored) * 10000) / 100 : 0,
+      scored > 0 ? Math.round(((wl - c.weak_red_restored_scored) / scored) * 10000) / 100 : 0,
     coverage_added_by_weak_red_recovery:
-      scored > 0 ? Math.round((c.weak_red_restored / scored) * 10000) / 100 : 0,
+      scored > 0 ? Math.round((c.weak_red_restored_scored / scored) * 10000) / 100 : 0,
     model_revision: "V6-r2-regime-inverter-red-recovery",
     breakeven_win_rate: 55.5555556,
   };
