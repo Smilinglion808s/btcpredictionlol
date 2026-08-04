@@ -81,6 +81,20 @@ function StatsPage() {
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const [exportingV6, setExportingV6] = useState(false);
+  const [resettingV6, setResettingV6] = useState(false);
+  const resetV6Fn = useServerFn(resetV6VisualStats);
+
+  async function doResetV6Stats() {
+    if (!confirm("Reset V6 visual stats to zero? The CSV export and all tracking keep every historical row.")) return;
+    try {
+      setResettingV6(true);
+      await resetV6Fn();
+      qc.invalidateQueries({ queryKey: ["v6-stats"] });
+    } finally {
+      setResettingV6(false);
+    }
+  }
+
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
