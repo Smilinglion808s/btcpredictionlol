@@ -16,6 +16,7 @@ import {
 import {
   canResumePersistedState,
   replayWarmup,
+  rollWarmupWindow,
   V6_WARMUP_BASE_PREDICTIONS,
   V6_WARMUP_MIN_CANDLES,
   type PersistedWarmupState,
