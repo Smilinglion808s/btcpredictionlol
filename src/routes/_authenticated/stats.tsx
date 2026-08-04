@@ -19,7 +19,7 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
-import { getV6Stats, getV6Pending, exportV6Csv } from "@/lib/v6.functions";
+import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup } from "@/lib/v6.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -69,6 +69,8 @@ function StatsPage() {
   const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6PendingFn = useServerFn(getV6Pending);
   const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6WarmupFn = useServerFn(getV6Warmup);
+  const v6WarmupQ = useQuery({ queryKey: ["v6-warmup"], queryFn: () => v6WarmupFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportV6Fn = useServerFn(exportV6Csv);
   const exportA96Fn = useServerFn(exportA96Csv);
   const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
@@ -497,6 +499,7 @@ function StatsPage() {
         <V6Card
           stats={v6Stats}
           pending={v6Pending}
+          warmup={(v6WarmupQ.data as Record<string, any> | null) ?? null}
           fmt={v6Fmt}
           onExport={downloadV6Csv}
           exporting={exportingV6}
@@ -680,12 +683,14 @@ function V6Section({ title, children }: { title: string; children: React.ReactNo
 function V6Card({
   stats,
   pending,
+  warmup,
   fmt,
   onExport,
   exporting,
 }: {
   stats: Record<string, any>;
   pending: Record<string, any> | null;
+  warmup: Record<string, any> | null;
   fmt: (n: unknown, digits?: number) => string;
   onExport: () => void;
   exporting: boolean;
@@ -817,6 +822,8 @@ function V6Card({
 
       </div>
 
+      <V6WarmupPanel warmup={warmup} />
+
       <div className="relative mt-6 pt-4 border-t border-violet/20">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -838,5 +845,66 @@ function V6Card({
         )}
       </div>
     </Card>
+  );
+}
+
+function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
+  const status = String(warmup?.v6_warmup_status ?? "NOT_STARTED");
+  const ready = status === "READY";
+  const count = Number(warmup?.warmup_candle_count ?? 0);
+  const baseCount = Number(warmup?.warmup_base_predictions_count ?? 0);
+  const decisions = Array.isArray(warmup?.warmup_base_predictions_json)
+    ? (warmup?.warmup_base_predictions_json as Array<Record<string, any>>)
+    : [];
+  const tone = ready
+    ? "border-bull/50 text-bull bg-bull/10"
+    : status === "FAILED"
+      ? "border-bear/50 text-bear bg-bear/10"
+      : "border-violet/40 text-violet bg-violet/10";
+  const ts = (v: unknown) => (v ? new Date(String(v)).toLocaleString() : "—");
+
+  return (
+    <div className="relative mt-6 pt-4 border-t border-violet/20">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Warmup / readiness</div>
+        <span className={`px-3 py-1 rounded-lg border text-[11px] font-bold uppercase tracking-[0.14em] font-mono ${tone}`}>
+          {ready ? "V6 READY" : status}
+        </span>
+      </div>
+
+      {ready && (
+        <div className="mt-2 text-[11px] font-mono text-bull">
+          {count} confirmed candles replayed · {baseCount} prior base predictions restored
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
+        <div>Confirmed history</div><div className="text-right text-foreground">{count}</div>
+        <div>First warmup candle</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_first_candle_ts)}</div>
+        <div>Last warmup candle</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_last_candle_ts)}</div>
+        <div>Continuity valid</div><div className="text-right text-foreground">{warmup?.warmup_continuity_valid ? "yes" : "no"}</div>
+        <div>Technical state valid</div><div className="text-right text-foreground">{warmup?.warmup_feature_valid ? "yes" : "no"}</div>
+        <div>Prior base predictions</div><div className="text-right text-foreground">{baseCount} / 7</div>
+        <div>Warmup completed</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_completed_at)}</div>
+      </div>
+
+      {decisions.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {decisions.map((d, i) => {
+            const dir = String(d.base_v6_prediction ?? "—").toUpperCase();
+            const c = dir === "GREEN" ? "text-bull border-bull/40" : dir === "RED" ? "text-bear border-bear/40" : "text-muted-foreground border-border";
+            return (
+              <span key={i} className={`px-1.5 py-0.5 rounded border text-[9px] font-mono ${c}`} title={String(d.target_candle_ts ?? "")}>
+                {dir}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {warmup?.warmup_error && (
+        <div className="mt-2 text-[10px] text-bear break-all">{String(warmup.warmup_error)}</div>
+      )}
+    </div>
   );
 }
