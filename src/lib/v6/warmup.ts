@@ -16,7 +16,6 @@ import {
 import {
   canResumePersistedState,
   replayWarmup,
-  rollWarmupWindow,
   V6_WARMUP_BASE_PREDICTIONS,
   V6_WARMUP_MIN_CANDLES,
   type PersistedWarmupState,
@@ -227,51 +226,6 @@ export async function ensureV6Warm(sb: SupabaseClient, targetTs: Date): Promise<
     const msg = e instanceof Error ? e.message : String(e);
     try { await markV6NotReady(sb, msg); } catch { /* ignore */ }
     return notReady("FAILED", "V6_WARMUP_NOT_READY", msg);
-  }
-}
-
-/**
- * Advance persisted warmup state after a live prediction for `targetTs`.
- *
- * Without this, the next boundary would find `warmup_last_candle_ts` stale and
- * force a full history replay every 15 minutes. Idempotent and monotonic: a
- * repeated or out-of-order call never regresses state.
- */
-export async function advanceV6Warm(
-  sb: SupabaseClient,
-  targetTs: Date,
-  inputCandleTs: string,
-  basePrediction: Direction,
-): Promise<{ advanced: boolean; reason: string | null }> {
-  try {
-    const state = await readState(sb);
-    if (!state || state.v6_warmup_status !== "READY") return { advanced: false, reason: "not_ready" };
-
-    const lastIso = state.warmup_last_candle_ts
-      ? new Date(state.warmup_last_candle_ts).toISOString()
-      : null;
-    // Already advanced past (or to) this target — nothing to do.
-    if (lastIso && new Date(lastIso).getTime() >= targetTs.getTime()) {
-      return { advanced: false, reason: "already_advanced" };
-    }
-
-    const decisions = Array.isArray(state.warmup_base_predictions_json)
-      ? (state.warmup_base_predictions_json as WarmupBaseDecision[])
-      : [];
-    const rolled = rollWarmupWindow(decisions, targetTs, inputCandleTs, basePrediction);
-    if (!rolled) return { advanced: false, reason: "window_mismatch" };
-
-    await writeState(sb, {
-      v6_warmup_status: "READY",
-      warmup_last_candle_ts: targetTs.toISOString(),
-      warmup_next_target_ts: new Date(targetTs.getTime() + TF_MS).toISOString(),
-      warmup_base_predictions_count: rolled.length,
-      warmup_base_predictions_json: rolled,
-      warmup_error: null,
-    });
-    return { advanced: true, reason: null };
-  } catch (e) {
-    return { advanced: false, reason: e instanceof Error ? e.message : String(e) };
   }
 }
 

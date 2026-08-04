@@ -263,37 +263,6 @@ export function replayWarmup(candles: readonly RawCandle[], targetTs: Date): V6W
   };
 }
 
-/**
- * Roll the seven-decision saturation window forward after a live prediction for
- * `targetTs`. Returns null when the stored window does not connect to `targetTs`
- * (in which case the caller must not advance state — a replay is required).
- */
-export function rollWarmupWindow(
-  decisions: readonly WarmupBaseDecision[],
-  targetTs: Date,
-  inputCandleTs: string,
-  basePrediction: Direction,
-): WarmupBaseDecision[] | null {
-  if (decisions.length !== V6_WARMUP_BASE_PREDICTIONS) return null;
-  for (let i = 0; i < decisions.length; i += 1) {
-    const expected = new Date(
-      targetTs.getTime() - (V6_WARMUP_BASE_PREDICTIONS - i) * TF_MS,
-    ).toISOString();
-    const d = decisions[i];
-    if (!d || new Date(d.target_candle_ts).toISOString() !== expected) return null;
-  }
-  const inputIso = new Date(inputCandleTs).toISOString();
-  if (inputIso !== new Date(targetTs.getTime() - TF_MS).toISOString()) return null;
-  return [
-    ...decisions.slice(1),
-    {
-      target_candle_ts: targetTs.toISOString(),
-      input_candle_ts: inputIso,
-      base_v6_prediction: basePrediction,
-    },
-  ];
-}
-
 export interface PersistedWarmupState {
   v6_warmup_status?: string | null;
   fit_id?: string | null;
