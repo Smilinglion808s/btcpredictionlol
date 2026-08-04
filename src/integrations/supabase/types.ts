@@ -3596,6 +3596,7 @@ export type Database = {
           lower_wick_pct: number | null
           model_artifact_sha256: string | null
           model_revision: string | null
+          model_revision_activated_at: string | null
           model_version: string
           operational_error: string | null
           operational_status: string
@@ -3611,10 +3612,12 @@ export type Database = {
           pre_weak_red_veto_adjusted_score: number | null
           pre_weak_red_veto_prediction: string | null
           pre_weak_red_veto_raw_score: number | null
+          prediction_after_weak_red_recovery: string | null
           prediction_created_at: string
           prediction_created_before_target: boolean
           prediction_id: string
           prediction_source: string | null
+          prediction_source_after_weak_red_recovery: string | null
           prior_candle_ids_json: Json | null
           provider: string
           range_expansion_vs_avg20: number | null
@@ -3661,6 +3664,29 @@ export type Database = {
           weak_broad_red_veto_raw_contribution: number | null
           weak_broad_red_veto_sacrificed_win: boolean | null
           weak_broad_red_veto_triggered: boolean
+          weak_red_recovery_adjusted_contribution: number | null
+          weak_red_recovery_adjusted_score: number | null
+          weak_red_recovery_counterfactual_adjusted_score: number | null
+          weak_red_recovery_evaluable: boolean | null
+          weak_red_recovery_published_prediction: string | null
+          weak_red_recovery_raw_contribution: number | null
+          weak_red_recovery_raw_score: number | null
+          weak_red_recovery_reason: string | null
+          weak_red_recovery_triggered: boolean | null
+          weak_red_roc4_recovery_evaluable: boolean | null
+          weak_red_roc4_recovery_triggered: boolean | null
+          weak_red_roc4_threshold: number | null
+          weak_red_roc4_value: number | null
+          weak_red_rsi_recovery_evaluable: boolean | null
+          weak_red_rsi_recovery_triggered: boolean | null
+          weak_red_rsi_threshold: number | null
+          weak_red_rsi_value: number | null
+          weak_red_underlying_adjusted_score: number | null
+          weak_red_underlying_prediction: string | null
+          weak_red_underlying_raw_score: number | null
+          weak_red_veto_broad_percentile: number | null
+          weak_red_veto_candidate: boolean | null
+          weak_red_veto_original_prediction: string | null
         }
         Insert: {
           abstain_reason?: string | null
@@ -3716,6 +3742,7 @@ export type Database = {
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
           model_revision?: string | null
+          model_revision_activated_at?: string | null
           model_version?: string
           operational_error?: string | null
           operational_status?: string
@@ -3731,10 +3758,12 @@ export type Database = {
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
+          prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
           prediction_id?: string
           prediction_source?: string | null
+          prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
           range_expansion_vs_avg20?: number | null
@@ -3781,6 +3810,29 @@ export type Database = {
           weak_broad_red_veto_raw_contribution?: number | null
           weak_broad_red_veto_sacrificed_win?: boolean | null
           weak_broad_red_veto_triggered?: boolean
+          weak_red_recovery_adjusted_contribution?: number | null
+          weak_red_recovery_adjusted_score?: number | null
+          weak_red_recovery_counterfactual_adjusted_score?: number | null
+          weak_red_recovery_evaluable?: boolean | null
+          weak_red_recovery_published_prediction?: string | null
+          weak_red_recovery_raw_contribution?: number | null
+          weak_red_recovery_raw_score?: number | null
+          weak_red_recovery_reason?: string | null
+          weak_red_recovery_triggered?: boolean | null
+          weak_red_roc4_recovery_evaluable?: boolean | null
+          weak_red_roc4_recovery_triggered?: boolean | null
+          weak_red_roc4_threshold?: number | null
+          weak_red_roc4_value?: number | null
+          weak_red_rsi_recovery_evaluable?: boolean | null
+          weak_red_rsi_recovery_triggered?: boolean | null
+          weak_red_rsi_threshold?: number | null
+          weak_red_rsi_value?: number | null
+          weak_red_underlying_adjusted_score?: number | null
+          weak_red_underlying_prediction?: string | null
+          weak_red_underlying_raw_score?: number | null
+          weak_red_veto_broad_percentile?: number | null
+          weak_red_veto_candidate?: boolean | null
+          weak_red_veto_original_prediction?: string | null
         }
         Update: {
           abstain_reason?: string | null
@@ -3836,6 +3888,7 @@ export type Database = {
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
           model_revision?: string | null
+          model_revision_activated_at?: string | null
           model_version?: string
           operational_error?: string | null
           operational_status?: string
@@ -3851,10 +3904,12 @@ export type Database = {
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
+          prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
           prediction_id?: string
           prediction_source?: string | null
+          prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
           range_expansion_vs_avg20?: number | null
@@ -3901,6 +3956,29 @@ export type Database = {
           weak_broad_red_veto_raw_contribution?: number | null
           weak_broad_red_veto_sacrificed_win?: boolean | null
           weak_broad_red_veto_triggered?: boolean
+          weak_red_recovery_adjusted_contribution?: number | null
+          weak_red_recovery_adjusted_score?: number | null
+          weak_red_recovery_counterfactual_adjusted_score?: number | null
+          weak_red_recovery_evaluable?: boolean | null
+          weak_red_recovery_published_prediction?: string | null
+          weak_red_recovery_raw_contribution?: number | null
+          weak_red_recovery_raw_score?: number | null
+          weak_red_recovery_reason?: string | null
+          weak_red_recovery_triggered?: boolean | null
+          weak_red_roc4_recovery_evaluable?: boolean | null
+          weak_red_roc4_recovery_triggered?: boolean | null
+          weak_red_roc4_threshold?: number | null
+          weak_red_roc4_value?: number | null
+          weak_red_rsi_recovery_evaluable?: boolean | null
+          weak_red_rsi_recovery_triggered?: boolean | null
+          weak_red_rsi_threshold?: number | null
+          weak_red_rsi_value?: number | null
+          weak_red_underlying_adjusted_score?: number | null
+          weak_red_underlying_prediction?: string | null
+          weak_red_underlying_raw_score?: number | null
+          weak_red_veto_broad_percentile?: number | null
+          weak_red_veto_candidate?: boolean | null
+          weak_red_veto_original_prediction?: string | null
         }
         Relationships: []
       }
