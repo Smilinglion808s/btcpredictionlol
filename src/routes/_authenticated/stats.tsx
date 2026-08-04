@@ -344,58 +344,17 @@ function StatsPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ModelCard
-          title="TD1-RC"
-          subtitle="Active Layer"
-          status="Live"
-          tone="cyan"
-          winRate={b2Hero.win_rate}
-          wins={b2Hero.wins}
-          losses={b2Hero.losses}
-          pushes={b2Hero.pushes}
-          pending={b2Hero.pending}
-          predictionLabel="Current Prediction"
-          predictionTs={td1PendingQ.data?.candle_ts}
-          predictionValue={td1PendingQ.data?.external_final_decision ?? "—"}
-          abstainReason={(td1PendingQ.data as any)?.skip_reason ?? null}
-          actions={(
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetTd1Stats} disabled={resettingTd1}>
-                {resettingTd1 ? "…" : "Reset"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadTd1Csv} disabled={exportingTd1}>
-                {exportingTd1 ? "…" : "CSV"}
-              </Button>
-            </div>
-          )}
-        >
-          {(() => {
-            const prog = td1ProgressQ.data as null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
-            if (!prog || prog.phase === "ready") return null;
-            return (
-              <div className="mb-4 rounded-lg border border-amber/20 bg-amber/5 p-3">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <div className="font-medium text-amber-400">{prog.label}</div>
-                  <div className="text-muted-foreground tabular-nums">
-                    {prog.current} / {prog.target} <span className="ml-1">({prog.remaining} left)</span>
-                  </div>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, Math.min(100, prog.percent))}%` }} />
-                </div>
-                <div className="text-[11px] text-muted-foreground mt-1">
-                  Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes.
-                </div>
-              </div>
-            );
-          })()}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <MiniStat label="Resolved" value={b2Resolved} />
-            <MiniStat label="Pending" value={b2Hero.pending} />
-            <MiniStat label="TD1 Vetoes" value={b2Hero.td1_vetoes} />
-            <MiniStat label="Containment" value={b2Hero.containment_vetoes} />
-          </div>
-        </ModelCard>
+        <TD1Card
+          hero={b2Hero}
+          resolved={b2Resolved}
+          pending={td1PendingQ.data as any}
+          progress={td1ProgressQ.data as any}
+          onExport={downloadTd1Csv}
+          exporting={exportingTd1}
+          onReset={doResetTd1Stats}
+          resetting={resettingTd1}
+        />
+
 
         <ModelCard
           title="a96"
@@ -678,6 +637,185 @@ function ModelCard({ title, subtitle, status, tone, winRate, wins, losses, pushe
           <div className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">
             {pending} pending
           </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function TD1Stat({ label, value, tone }: { label: string; value: string | number; tone?: "bull" | "bear" }) {
+  const toneClass = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-foreground";
+  return (
+    <div className="td1-chip px-3 py-2">
+      <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      <div className={`font-mono text-sm font-semibold mt-0.5 tabular-nums ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function TD1Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{title}</span>
+        <span className="h-px flex-1 bg-gradient-to-r from-bear/40 to-transparent" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">{children}</div>
+    </div>
+  );
+}
+
+function TD1Card({
+  hero,
+  resolved,
+  pending,
+  progress,
+  onExport,
+  exporting,
+  onReset,
+  resetting,
+}: {
+  hero: Record<string, any>;
+  resolved: number;
+  pending: Record<string, any> | null;
+  progress: null | { phase: string; label: string; current: number; target: number; remaining: number; percent: number; ready: boolean };
+  onExport: () => void;
+  exporting: boolean;
+  onReset: () => void;
+  resetting: boolean;
+}) {
+  const winRate = Number(hero.win_rate ?? 0);
+  const wins = Number(hero.wins ?? 0);
+  const losses = Number(hero.losses ?? 0);
+  const pushes = Number(hero.pushes ?? 0);
+  const pendingCount = Number(hero.pending ?? 0);
+  const net = wins - losses;
+  const breakeven = 50;
+  const aboveBreakeven = winRate >= breakeven;
+
+  const upper = String(pending?.external_final_decision ?? "—").toUpperCase();
+  const predTone =
+    upper === "YES" || upper === "GREEN"
+      ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
+      : upper === "NO" || upper === "RED"
+        ? "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]"
+        : "border-bear/30 text-muted-foreground bg-bear/5";
+
+  const gaugeR = 34;
+  const circumference = 2 * Math.PI * gaugeR;
+  const pct = Math.max(0, Math.min(100, winRate));
+  const skipReason = pending?.skip_reason ?? null;
+
+  return (
+    <Card className="td1-shell rounded-2xl p-6">
+      <span className="td1-orbit-ring" aria-hidden />
+      <span className="v6-sheen" aria-hidden />
+
+      <div className="relative flex items-start justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-bear/80 mb-1">Active layer</div>
+          <h3 className="td1-title text-4xl font-bold font-heading tracking-tight leading-none">TD1-RC</h3>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-7 text-xs border-bear/30 hover:border-bear/60" onClick={onExport} disabled={exporting}>
+            {exporting ? "…" : "CSV"}
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-bear/30 hover:border-bear/60" onClick={onReset} disabled={resetting}>
+            {resetting ? "…" : "Reset"}
+          </Button>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-bear/40 bg-bear/10 text-[10px] font-bold uppercase tracking-[0.16em] text-bear">
+            <span className="size-1.5 rounded-full bg-bear td1-live-dot" />
+            Live
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex items-center gap-5 mb-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
+            <circle
+              cx="40"
+              cy="40"
+              r={gaugeR}
+              fill="none"
+              stroke={aboveBreakeven ? "var(--bull)" : "var(--bear)"}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - pct / 100)}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">{winRate}%</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">win rate</span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · primary</div>
+          <div className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-foreground"}`}>
+            {net > 0 ? "+" : ""}{net}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+            break-even {breakeven.toFixed(2)}%
+            <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
+              {aboveBreakeven ? "▲ above" : "▼ below"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {progress && progress.phase !== "ready" && (
+        <div className="relative mb-4 rounded-xl border border-amber/25 bg-amber/5 p-3">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <div className="font-medium text-amber-400">{progress.label}</div>
+            <div className="text-muted-foreground tabular-nums">
+              {progress.current} / {progress.target} <span className="ml-1">({progress.remaining} left)</span>
+            </div>
+          </div>
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div className="h-full transition-all bg-amber-500" style={{ width: `${Math.max(2, Math.min(100, progress.percent))}%` }} />
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            Collecting resolved A2 Combined signals — TD1 will fail-closed (SKIP) until the first fit promotes.
+          </div>
+        </div>
+      )}
+
+      <div className="relative grid grid-cols-4 gap-2">
+        <TD1Stat label="Wins" value={wins} tone="bull" />
+        <TD1Stat label="Losses" value={losses} tone="bear" />
+        <TD1Stat label="Pushes" value={pushes} />
+        <TD1Stat label="Pending" value={pendingCount} />
+      </div>
+
+      <div className="relative">
+        <TD1Section title="Layer activity">
+          <TD1Stat label="Resolved" value={resolved} />
+          <TD1Stat label="Pending" value={pendingCount} />
+          <TD1Stat label="TD1 vetoes" value={Number(hero.td1_vetoes ?? 0)} tone="bear" />
+          <TD1Stat label="Containment vetoes" value={Number(hero.containment_vetoes ?? 0)} tone="bear" />
+        </TD1Section>
+      </div>
+
+      <div className="relative mt-6 pt-4 border-t border-bear/20">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Current prediction</div>
+            {pending?.candle_ts && (
+              <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
+                {new Date(pending.candle_ts).toLocaleString()}
+              </div>
+            )}
+          </div>
+          <span className={`px-4 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-[0.16em] font-mono ${predTone}`}>
+            {upper}
+          </span>
+        </div>
+        {skipReason && (
+          <div className="text-[10px] text-muted-foreground mt-2 text-right font-mono break-words">{skipReason}</div>
         )}
       </div>
     </Card>
