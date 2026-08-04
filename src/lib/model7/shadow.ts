@@ -678,6 +678,10 @@ async function runA2Policies(
           timingStatus: (inherited.timing_status as string | null) ?? null,
           leakageCheckPassed: (inherited.leakage_check_passed as boolean | null) ?? null,
           a2RowId: null,
+          // Prediction-time market condition read from the exact upstream row.
+          marketCondition: (predictionRow as { market_condition?: string | null }).market_condition ?? null,
+          marketConditionSourceRowId: predictionRow.id,
+
         });
       } catch { /* never block */ }
 
