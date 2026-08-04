@@ -39,7 +39,9 @@ import {
   applyRegimeInverter,
   inverterContribution,
   V6_MODEL_REVISION,
+  V6_MODEL_REVISION_ACTIVATED_AT,
   V6_REGIME_INVERTER_THRESHOLD,
+
 } from "./regimeInverter";
 import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
 
