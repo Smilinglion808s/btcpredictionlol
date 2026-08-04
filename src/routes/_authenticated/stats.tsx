@@ -697,6 +697,8 @@ function V6Card({
   fmt,
   onExport,
   exporting,
+  onReset,
+  resetting,
 }: {
   stats: Record<string, any>;
   pending: Record<string, any> | null;
@@ -704,7 +706,10 @@ function V6Card({
   fmt: (n: unknown, digits?: number) => string;
   onExport: () => void;
   exporting: boolean;
+  onReset: () => void;
+  resetting: boolean;
 }) {
+
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
   const rawNet = Number(stats.raw_net ?? 0);
