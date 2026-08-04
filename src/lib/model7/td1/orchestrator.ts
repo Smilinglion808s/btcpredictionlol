@@ -22,23 +22,13 @@ import type { Candle } from "../featurize";
 
 const BASE_VARIANT = "A2_Combined";
 const PROSPECTIVE_TEST_ID = TD1_RC_PROSPECTIVE_TEST_ID;
-const VARIANT = "A2_Combined_TD1_RC";
-
-export interface A2CombinedContext {
-  predictionId: string;
-  candleTs: string;
-  targetBoundaryTs: string;
-  finalDecision: "YES" | "NO" | "SKIP" | null;
-  probabilityGreen: number | null;
-  modelFitId: string | null;
-  timingStatus: string | null;
-  leakageCheckPassed: boolean | null;
-  a2RowId?: string | null;
-  /** Prediction-time market condition from the exact upstream prediction row. */
-  marketCondition?: string | null;
-  /** Row id of the upstream prediction row the market condition came from. */
-  marketConditionSourceRowId?: string | null;
-}
+/** Original TD1-RC (no compressed-risk gate). Webhook / hero source. */
+export const TD1_VARIANT = "A2_Combined_TD1_RC";
+/** TD2-RC: identical pipeline plus the active compressed-risk gate. */
+export const TD2_VARIANT = "A2_Combined_TD2_RC";
+export const TD2_PROSPECTIVE_TEST_ID = "A2_COMBINED_TD2_RC_COMPRESSED_RISK_045_V1";
+const VARIANT = TD1_VARIANT;
+const TD1_POLICY_VERSION = "td1-rc-v1";
 
 async function writeSkipRow(
   supabase: SupabaseClient,
@@ -52,7 +42,14 @@ async function writeSkipRow(
     skip_reason: reason,
     all_veto_reasons_json: [reason],
   };
-  await supabase.from("model7_td1_rc_shadow").insert(row as never);
+  // Mirror the skip to TD2-RC so both trackers stay row-aligned.
+  const td2Row = {
+    ...row,
+    variant: TD2_VARIANT,
+    prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+    td1_policy_version: TD1_RC_POLICY_VERSION,
+  };
+  await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
   return row;
 }
 
