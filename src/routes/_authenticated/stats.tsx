@@ -277,6 +277,8 @@ function StatsPage() {
     a2_baseline_win_rate: Number(td1Stats.a2_baseline_win_rate ?? 0),
     a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
     a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
+    compressed_risk: (td1Stats.compressed_risk ?? null) as Record<string, any> | null,
+
   };
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
