@@ -3572,6 +3572,7 @@ export type Database = {
           feature_valid: boolean
           final_adjusted_score: number | null
           final_prediction: string
+          final_prediction_source: string | null
           final_raw_score: number | null
           final_score: number | null
           fit_id: string | null
@@ -3594,10 +3595,19 @@ export type Database = {
           input_volume: number | null
           lower_wick_pct: number | null
           model_artifact_sha256: string | null
+          model_revision: string | null
           model_version: string
           operational_error: string | null
           operational_status: string
+          original_v6_base_prediction: string | null
+          original_v6_base_source: string | null
+          original_v6_shadow_adjusted_score: number | null
+          original_v6_shadow_raw_score: number | null
           pickup_conflict: boolean
+          pre_inverter_adjusted_score: number | null
+          pre_inverter_prediction: string | null
+          pre_inverter_prediction_source: string | null
+          pre_inverter_raw_score: number | null
           pre_weak_red_veto_adjusted_score: number | null
           pre_weak_red_veto_prediction: string | null
           pre_weak_red_veto_raw_score: number | null
@@ -3613,6 +3623,21 @@ export type Database = {
           red_pickup_raw_contribution: number | null
           red_pickup_triggered: boolean
           red_threshold: number | null
+          regime_inverter_activation_threshold: number | null
+          regime_inverter_active: boolean | null
+          regime_inverter_adjusted_contribution: number | null
+          regime_inverter_evaluable: boolean | null
+          regime_inverter_history_count: number | null
+          regime_inverter_history_json: Json | null
+          regime_inverter_last20_adjusted_net: number | null
+          regime_inverter_last20_losses: number | null
+          regime_inverter_last20_wins: number | null
+          regime_inverter_original_prediction: string | null
+          regime_inverter_raw_contribution: number | null
+          regime_inverter_ready: boolean | null
+          regime_inverter_reason: string | null
+          regime_inverter_replacement_prediction: string | null
+          regime_inverter_triggered: boolean | null
           resolution_timestamp: string | null
           ridge_features_json: Json | null
           ridge_p_green: number | null
@@ -3667,6 +3692,7 @@ export type Database = {
           feature_valid?: boolean
           final_adjusted_score?: number | null
           final_prediction: string
+          final_prediction_source?: string | null
           final_raw_score?: number | null
           final_score?: number | null
           fit_id?: string | null
@@ -3689,10 +3715,19 @@ export type Database = {
           input_volume?: number | null
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
+          model_revision?: string | null
           model_version?: string
           operational_error?: string | null
           operational_status?: string
+          original_v6_base_prediction?: string | null
+          original_v6_base_source?: string | null
+          original_v6_shadow_adjusted_score?: number | null
+          original_v6_shadow_raw_score?: number | null
           pickup_conflict?: boolean
+          pre_inverter_adjusted_score?: number | null
+          pre_inverter_prediction?: string | null
+          pre_inverter_prediction_source?: string | null
+          pre_inverter_raw_score?: number | null
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
@@ -3708,6 +3743,21 @@ export type Database = {
           red_pickup_raw_contribution?: number | null
           red_pickup_triggered?: boolean
           red_threshold?: number | null
+          regime_inverter_activation_threshold?: number | null
+          regime_inverter_active?: boolean | null
+          regime_inverter_adjusted_contribution?: number | null
+          regime_inverter_evaluable?: boolean | null
+          regime_inverter_history_count?: number | null
+          regime_inverter_history_json?: Json | null
+          regime_inverter_last20_adjusted_net?: number | null
+          regime_inverter_last20_losses?: number | null
+          regime_inverter_last20_wins?: number | null
+          regime_inverter_original_prediction?: string | null
+          regime_inverter_raw_contribution?: number | null
+          regime_inverter_ready?: boolean | null
+          regime_inverter_reason?: string | null
+          regime_inverter_replacement_prediction?: string | null
+          regime_inverter_triggered?: boolean | null
           resolution_timestamp?: string | null
           ridge_features_json?: Json | null
           ridge_p_green?: number | null
@@ -3762,6 +3812,7 @@ export type Database = {
           feature_valid?: boolean
           final_adjusted_score?: number | null
           final_prediction?: string
+          final_prediction_source?: string | null
           final_raw_score?: number | null
           final_score?: number | null
           fit_id?: string | null
@@ -3784,10 +3835,19 @@ export type Database = {
           input_volume?: number | null
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
+          model_revision?: string | null
           model_version?: string
           operational_error?: string | null
           operational_status?: string
+          original_v6_base_prediction?: string | null
+          original_v6_base_source?: string | null
+          original_v6_shadow_adjusted_score?: number | null
+          original_v6_shadow_raw_score?: number | null
           pickup_conflict?: boolean
+          pre_inverter_adjusted_score?: number | null
+          pre_inverter_prediction?: string | null
+          pre_inverter_prediction_source?: string | null
+          pre_inverter_raw_score?: number | null
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
@@ -3803,6 +3863,21 @@ export type Database = {
           red_pickup_raw_contribution?: number | null
           red_pickup_triggered?: boolean
           red_threshold?: number | null
+          regime_inverter_activation_threshold?: number | null
+          regime_inverter_active?: boolean | null
+          regime_inverter_adjusted_contribution?: number | null
+          regime_inverter_evaluable?: boolean | null
+          regime_inverter_history_count?: number | null
+          regime_inverter_history_json?: Json | null
+          regime_inverter_last20_adjusted_net?: number | null
+          regime_inverter_last20_losses?: number | null
+          regime_inverter_last20_wins?: number | null
+          regime_inverter_original_prediction?: string | null
+          regime_inverter_raw_contribution?: number | null
+          regime_inverter_ready?: boolean | null
+          regime_inverter_reason?: string | null
+          regime_inverter_replacement_prediction?: string | null
+          regime_inverter_triggered?: boolean | null
           resolution_timestamp?: string | null
           ridge_features_json?: Json | null
           ridge_p_green?: number | null
@@ -3826,6 +3901,66 @@ export type Database = {
           weak_broad_red_veto_raw_contribution?: number | null
           weak_broad_red_veto_sacrificed_win?: boolean | null
           weak_broad_red_veto_triggered?: boolean
+        }
+        Relationships: []
+      }
+      v6_regime_inverter_state: {
+        Row: {
+          created_at: string
+          feature_schema_version: string | null
+          fit_id: string | null
+          model_artifact_sha256: string | null
+          model_version: string
+          regime_inverter_activation_threshold: number
+          regime_inverter_active: boolean
+          regime_inverter_history_count: number
+          regime_inverter_history_json: Json
+          regime_inverter_last_resolved_target_ts: string | null
+          regime_inverter_last20_adjusted_net: number
+          regime_inverter_last20_losses: number
+          regime_inverter_last20_wins: number
+          regime_inverter_model_revision: string
+          regime_inverter_ready: boolean
+          regime_inverter_state_updated_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          model_artifact_sha256?: string | null
+          model_version: string
+          regime_inverter_activation_threshold?: number
+          regime_inverter_active?: boolean
+          regime_inverter_history_count?: number
+          regime_inverter_history_json?: Json
+          regime_inverter_last_resolved_target_ts?: string | null
+          regime_inverter_last20_adjusted_net?: number
+          regime_inverter_last20_losses?: number
+          regime_inverter_last20_wins?: number
+          regime_inverter_model_revision: string
+          regime_inverter_ready?: boolean
+          regime_inverter_state_updated_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          model_artifact_sha256?: string | null
+          model_version?: string
+          regime_inverter_activation_threshold?: number
+          regime_inverter_active?: boolean
+          regime_inverter_history_count?: number
+          regime_inverter_history_json?: Json
+          regime_inverter_last_resolved_target_ts?: string | null
+          regime_inverter_last20_adjusted_net?: number
+          regime_inverter_last20_losses?: number
+          regime_inverter_last20_wins?: number
+          regime_inverter_model_revision?: string
+          regime_inverter_ready?: boolean
+          regime_inverter_state_updated_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

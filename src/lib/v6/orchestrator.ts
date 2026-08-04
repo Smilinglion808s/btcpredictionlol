@@ -35,6 +35,13 @@ import {
   V6_MODEL_VERSION,
   V6_WARMUP_CANDLES,
 } from "./config";
+import {
+  applyRegimeInverter,
+  inverterContribution,
+  V6_MODEL_REVISION,
+  V6_REGIME_INVERTER_THRESHOLD,
+} from "./regimeInverter";
+import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
 
 const TF_MS = 15 * 60 * 1000;
 
@@ -168,6 +175,11 @@ function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown
     continuity_valid: false,
     feature_valid: false,
     final_prediction: "OP_FAIL",
+    final_prediction_source: "OP_FAIL",
+    model_revision: V6_MODEL_REVISION,
+    regime_inverter_evaluable: false,
+    regime_inverter_triggered: false,
+    regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
     abstain_status: null,
     red_threshold: V6_RED_THRESHOLD,
     green_threshold: V6_GREEN_THRESHOLD,
@@ -246,6 +258,14 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = livePrior.length === 7 ? livePrior : warm.priorBasePredictions;
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
+    // Step 10-11: rolling shadow state, then the Regime Inverter applied AFTER
+    // every existing Armor rule. The unresolved target never enters the history.
+    const inverterState = await ensureInverterState(sb, targetTs);
+    const inverter = applyRegimeInverter(
+      inf.finalPrediction,
+      inf.predictionSource,
+      inverterState.summary,
+    );
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
@@ -316,12 +336,32 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
-      final_prediction: accepted ? inf.finalPrediction : "OP_FAIL",
+      final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
-        accepted && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+        accepted && inverter.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
       abstain_reason: accepted ? inf.abstainReason : null,
 
+      // --- V6-r1 Regime Inverter (prediction-time, immutable after resolution) ---
+      model_revision: V6_MODEL_REVISION,
+      original_v6_base_prediction: inf.basePrediction,
+      original_v6_base_source: inf.predictionSource,
+      pre_inverter_prediction: inf.finalPrediction,
+      pre_inverter_prediction_source: inf.predictionSource,
+      regime_inverter_evaluable: inverter.evaluable,
+      regime_inverter_ready: inverterState.summary.ready,
+      regime_inverter_active: inverterState.summary.active,
+      regime_inverter_triggered: accepted ? inverter.triggered : false,
+      regime_inverter_history_count: inverterState.summary.count,
+      regime_inverter_history_json: inverterState.history,
+      regime_inverter_last20_wins: inverterState.summary.wins,
+      regime_inverter_last20_losses: inverterState.summary.losses,
+      regime_inverter_last20_adjusted_net: inverterState.summary.adjustedNet,
+      regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
+      regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
+      regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
+      regime_inverter_reason: accepted ? inverter.reason : null,
+      final_prediction_source: accepted ? inverter.finalPredictionSource : "OP_FAIL",
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
@@ -338,7 +378,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, pre_inverter_prediction, regime_inverter_triggered",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -374,6 +414,21 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
       const redPick = pickupContribution(Boolean(r.red_pickup_triggered) && !opFail, "RED", actual);
       const greenPick = pickupContribution(Boolean(r.green_pickup_triggered) && !opFail, "GREEN", actual);
 
+      // --- Regime Inverter grading ---
+      // The shadow always follows the ORIGINAL uninverted V6_BASE direction,
+      // independent of what was published after inversion.
+      const originalBase =
+        ((r.original_v6_base_prediction as Direction | null) ?? base) ?? "ABSTAIN";
+      const preInverter =
+        ((r.pre_inverter_prediction as Direction | null) ?? final) ?? "ABSTAIN";
+      const inverterTriggered = Boolean(r.regime_inverter_triggered) && !opFail;
+      const inverterContrib = inverterContribution(inverterTriggered, preInverter, final, actual);
+      const shadowEligible =
+        !opFail && r.prediction_source === "V6_BASE" &&
+        (originalBase === "GREEN" || originalBase === "RED") &&
+        (actual === "GREEN" || actual === "RED");
+
+
       await sb
         .from("v6_predictions")
         .update({
@@ -405,9 +460,29 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           weak_broad_red_veto_adjusted_contribution: weak.adjusted,
           weak_broad_red_veto_avoided_loss: weak.avoidedLoss,
           weak_broad_red_veto_sacrificed_win: weak.sacrificedWin,
+          original_v6_shadow_raw_score:
+            shadowEligible ? rawScore(originalBase, actual) : null,
+          original_v6_shadow_adjusted_score:
+            shadowEligible ? adjustedScore(originalBase, actual) : null,
+          pre_inverter_raw_score: opFail ? null : rawScore(preInverter, actual),
+          pre_inverter_adjusted_score: opFail ? null : adjustedScore(preInverter, actual),
+          regime_inverter_raw_contribution: inverterContrib.raw,
+          regime_inverter_adjusted_contribution: inverterContrib.adjusted,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
+
+      // Feed the rolling shadow window (idempotent per target timestamp).
+      if (shadowEligible) {
+        await recordResolvedShadowSignal(sb, {
+          target_candle_ts: targetTs.toISOString(),
+          prediction_source: "V6_BASE",
+          original_v6_base_prediction: originalBase,
+          operational_status: "OK",
+          canonical_ground_truth_valid: true,
+          actual_direction: actual,
+        });
+      }
     }
   } catch (e) {
     await logError(sb, "v6-resolution-error", {}, e);

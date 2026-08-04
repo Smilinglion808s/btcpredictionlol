@@ -28,7 +28,7 @@ async function pageAllV6(select: string): Promise<Array<Record<string, unknown>>
 /** Aggregate V6 performance. Adjusted net is the primary headline metric. */
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAllV6(
-    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution",
+    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution",
   );
 
   const c = {
@@ -44,6 +44,11 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     current_loss_streak: 0, max_loss_streak: 0,
     max_adjusted_drawdown: 0, max_raw_drawdown: 0,
     rolling96_predictions: 0, rolling96_coverage: 0, rolling96_adjusted_net: 0, rolling96_raw_net: 0,
+    // Regime Inverter (V6-r1)
+    inverter_trigger_count: 0, inverter_wins: 0, inverter_losses: 0,
+    inverter_raw_contribution: 0, inverter_adjusted_contribution: 0,
+    pre_inverter_raw_net: 0, pre_inverter_adjusted_net: 0,
+    pre_inverter_directional: 0,
   };
 
   let peakAdj = 0;
@@ -111,6 +116,24 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.max_loss_streak = Math.max(c.max_loss_streak, c.current_loss_streak);
       }
     }
+
+    // Regime Inverter accounting (counterfactual pre-inverter track).
+    const preAdj = r.pre_inverter_adjusted_score == null ? adj : Number(r.pre_inverter_adjusted_score);
+    const preRaw = r.pre_inverter_raw_score == null ? raw : Number(r.pre_inverter_raw_score);
+    c.pre_inverter_adjusted_net += preAdj;
+    c.pre_inverter_raw_net += preRaw;
+    const preDirectional =
+      r.pre_inverter_prediction == null
+        ? directional
+        : r.pre_inverter_prediction === "GREEN" || r.pre_inverter_prediction === "RED";
+    if (preDirectional) c.pre_inverter_directional += 1;
+    if (r.regime_inverter_triggered) {
+      c.inverter_trigger_count += 1;
+      if (raw > 0) c.inverter_wins += 1; else c.inverter_losses += 1;
+      c.inverter_raw_contribution += Number(r.regime_inverter_raw_contribution ?? 0);
+      c.inverter_adjusted_contribution += Number(r.regime_inverter_adjusted_contribution ?? 0);
+    }
+
     window.push({ adj, raw, directional });
     if (window.length > 96) window.shift();
   }
@@ -124,15 +147,23 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
   c.rolling96_adjusted_net = Math.round(window.reduce((s, w) => s + w.adj, 0) * 100) / 100;
   c.rolling96_raw_net = Math.round(window.reduce((s, w) => s + w.raw, 0) * 100) / 100;
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   return {
     ...c,
-    raw_net: Math.round(c.raw_net * 100) / 100,
-    adjusted_net: Math.round(c.adjusted_net * 100) / 100,
-    max_adjusted_drawdown: Math.round(c.max_adjusted_drawdown * 100) / 100,
-    max_raw_drawdown: Math.round(c.max_raw_drawdown * 100) / 100,
+    raw_net: round2(c.raw_net),
+    adjusted_net: round2(c.adjusted_net),
+    max_adjusted_drawdown: round2(c.max_adjusted_drawdown),
+    max_raw_drawdown: round2(c.max_raw_drawdown),
     win_rate: wl ? Math.round((c.wins / wl) * 10000) / 100 : 0,
 
     coverage: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
+    pre_inverter_coverage: scored > 0 ? Math.round((c.pre_inverter_directional / scored) * 10000) / 100 : 0,
+    pre_inverter_adjusted_net: round2(c.pre_inverter_adjusted_net),
+    pre_inverter_raw_net: round2(c.pre_inverter_raw_net),
+    inverter_raw_contribution: round2(c.inverter_raw_contribution),
+    inverter_adjusted_contribution: round2(c.inverter_adjusted_contribution),
+    model_revision: "V6-r1-regime-inverter",
     breakeven_win_rate: 55.5555556,
   };
 });
@@ -143,12 +174,38 @@ export const getV6Pending = createServerFn({ method: "GET" }).handler(async () =
   const { data } = await sb
     .from("v6_predictions")
     .select(
-      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp",
+      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp, model_revision, original_v6_base_prediction, pre_inverter_prediction, pre_inverter_prediction_source, final_prediction_source, regime_inverter_ready, regime_inverter_active, regime_inverter_triggered, regime_inverter_history_count, regime_inverter_last20_wins, regime_inverter_last20_losses, regime_inverter_last20_adjusted_net, regime_inverter_activation_threshold",
     )
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
   return data ?? null;
+});
+
+/** Live Regime Inverter state (rolling shadow window) for the stats panel. */
+export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("v6_regime_inverter_state")
+    .select("*")
+    .eq("model_version", "V6")
+    .maybeSingle();
+  return (data as Record<string, string | number | boolean | null> | null) ?? null;
+});
+
+/** Rebuild the rolling shadow window from canonical resolved history. */
+export const rebuildV6RegimeInverter = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { rebuildInverterState } = await import("./v6/regimeInverterStore");
+  const state = await rebuildInverterState(sb);
+  return {
+    ready: state.summary.ready,
+    active: state.summary.active,
+    count: state.summary.count,
+    wins: state.summary.wins,
+    losses: state.summary.losses,
+    adjusted_net: state.summary.adjustedNet,
+  };
 });
 
 /** Complete V6 tracking CSV in the frozen template column order. */
