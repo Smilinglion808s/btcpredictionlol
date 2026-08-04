@@ -72,6 +72,8 @@ function StatsPage() {
   const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6WarmupFn = useServerFn(getV6Warmup);
   const v6WarmupQ = useQuery({ queryKey: ["v6-warmup"], queryFn: () => v6WarmupFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6InverterFn = useServerFn(getV6RegimeInverter);
+  const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportV6Fn = useServerFn(exportV6Csv);
   const exportA96Fn = useServerFn(exportA96Csv);
   const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
