@@ -50,6 +50,31 @@ export interface ContainmentConsumption {
   episodeArmed: boolean;
 }
 
+function assertFiniteFeatures(features: Td1Features): void {
+  for (const name of TD1_FEATURE_ORDER) {
+    if (!Number.isFinite(features[name])) throw new Error(`TD1_FEATURE_NONFINITE:${name}`);
+  }
+}
+
+export function scoreTree(tree: TreeNode, features: Td1Features): number {
+  assertFiniteFeatures(features);
+  let node: TreeNode = tree;
+  for (let depth = 0; depth <= 3; depth += 1) {
+    if (node.leaf) {
+      const p = node.leaf.lossProbability;
+      if (!Number.isFinite(p) || p < 0 || p > 1) throw new Error("TD1_PROBABILITY_INVALID");
+      return p;
+    }
+    if (node.featureIndex === undefined || node.threshold === undefined || !node.left || !node.right) {
+      throw new Error("TD1_ARTIFACT_INVALID");
+    }
+    const featureName = TD1_FEATURE_ORDER[node.featureIndex];
+    node = features[featureName] <= node.threshold ? node.left : node.right;
+  }
+  throw new Error("TD1_TREE_DEPTH_EXCEEDED");
+}
+
+
 export interface Td1PolicyOutcome {
   decision: ExternalDecision;
   wouldTrade: boolean;
