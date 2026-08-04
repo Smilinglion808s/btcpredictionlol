@@ -44,6 +44,11 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     current_loss_streak: 0, max_loss_streak: 0,
     max_adjusted_drawdown: 0, max_raw_drawdown: 0,
     rolling96_predictions: 0, rolling96_coverage: 0, rolling96_adjusted_net: 0, rolling96_raw_net: 0,
+    // Regime Inverter (V6-r1)
+    inverter_trigger_count: 0, inverter_wins: 0, inverter_losses: 0,
+    inverter_raw_contribution: 0, inverter_adjusted_contribution: 0,
+    pre_inverter_raw_net: 0, pre_inverter_adjusted_net: 0,
+    pre_inverter_directional: 0,
   };
 
   let peakAdj = 0;
