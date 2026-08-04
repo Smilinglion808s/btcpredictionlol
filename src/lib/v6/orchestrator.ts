@@ -331,12 +331,32 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
-      final_prediction: accepted ? inf.finalPrediction : "OP_FAIL",
+      final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
-        accepted && inf.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+        accepted && inverter.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
       abstain_reason: accepted ? inf.abstainReason : null,
 
+      // --- V6-r1 Regime Inverter (prediction-time, immutable after resolution) ---
+      model_revision: V6_MODEL_REVISION,
+      original_v6_base_prediction: inf.basePrediction,
+      original_v6_base_source: inf.predictionSource,
+      pre_inverter_prediction: inf.finalPrediction,
+      pre_inverter_prediction_source: inf.predictionSource,
+      regime_inverter_evaluable: inverter.evaluable,
+      regime_inverter_ready: inverterState.summary.ready,
+      regime_inverter_active: inverterState.summary.active,
+      regime_inverter_triggered: accepted ? inverter.triggered : false,
+      regime_inverter_history_count: inverterState.summary.count,
+      regime_inverter_history_json: inverterState.history,
+      regime_inverter_last20_wins: inverterState.summary.wins,
+      regime_inverter_last20_losses: inverterState.summary.losses,
+      regime_inverter_last20_adjusted_net: inverterState.summary.adjustedNet,
+      regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
+      regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
+      regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
+      regime_inverter_reason: accepted ? inverter.reason : null,
+      final_prediction_source: accepted ? inverter.finalPredictionSource : "OP_FAIL",
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
