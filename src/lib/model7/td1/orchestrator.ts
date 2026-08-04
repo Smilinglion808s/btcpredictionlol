@@ -86,8 +86,8 @@ export async function runTd1RcForA2Combined(
     td1_threshold: TD1_GLOBAL_TURN_RISK_THRESHOLD,
     timing_status: ctx.timingStatus,
     leakage_check_passed: ctx.leakageCheckPassed,
-    // --- td1-rc-compressed-risk-v1 audit (persisted on every write path) ---
-    td1_policy_version: TD1_RC_POLICY_VERSION,
+    // --- compressed-risk audit (persisted on every write path; TD1 records only) ---
+    td1_policy_version: TD1_POLICY_VERSION,
     td1_compressed_risk_threshold: TD1_COMPRESSED_RISK_THRESHOLD,
     td1_compressed_risk_market_condition: ctx.marketCondition ?? null,
     td1_compressed_risk_source_prediction_row_id: ctx.marketConditionSourceRowId ?? ctx.predictionId,
