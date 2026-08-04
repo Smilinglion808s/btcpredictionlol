@@ -326,6 +326,11 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
     if (error && !String(error.message).includes("duplicate key")) throw error;
+
+    // Roll warmup state forward so the next boundary resumes instead of replaying
+    // the full 200+ candle history. Idempotent; never regresses.
+    const { advanceV6Warm } = await import("./warmup");
+    await advanceV6Warm(sb, targetTs, input.candle_ts, inf.basePrediction);
   } catch (e) {
     await logError(sb, "v6-prediction-error", { target_candle_ts: targetTs.toISOString() }, e);
   }
