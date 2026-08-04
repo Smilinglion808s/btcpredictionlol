@@ -102,13 +102,16 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     table: string,
     orderCol: string,
     cap = 40000,
+    variantFilter?: string,
   ): Promise<T[]> {
     const PAGE = 1000;
     const out: T[] = [];
     for (let from = 0; from < cap; from += PAGE) {
-      const { data, error } = await sb
+      let q = sb
         .from(table as never)
-        .select("*")
+        .select("*");
+      if (variantFilter) q = q.eq("variant", variantFilter) as never;
+      const { data, error } = await q
         .order(orderCol, { ascending: false })
         .range(from, Math.min(from + PAGE, cap) - 1);
       if (error) throw error;
@@ -122,7 +125,7 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
   const [live, arch, td1Rows, aas96Rows, a96Rows] = await Promise.all([
     pageAll<Record<string, unknown>>("predictions", "candle_ts", 10000),
     pageAll<Record<string, unknown>>("predictions_archive", "candle_ts", 40000),
-    pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000),
+    pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000, "A2_Combined_TD1_RC"),
     pageAll<Record<string, unknown>>("model7_aas96_shadow", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("a96_predictions", "target_candle_ts", 20000),
   ]);
