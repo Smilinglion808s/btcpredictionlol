@@ -106,7 +106,7 @@ describe("V6-r2 weak RED recovery", () => {
     const out = run(weak, { rsi14: 65, roc_4: 0.1 });
     expect(out.weakRedRecoveryTriggered).toBe(false);
     expect(out.finalPrediction).toBe("ABSTAIN");
-    expect(out.prediction_after_weak_red_recovery ?? out.predictionAfterWeakRedRecovery).toBe("ABSTAIN");
+    expect(out.predictionAfterWeakRedRecovery).toBe("ABSTAIN");
   });
 
   it("never restores RED when rsi14 or roc_4 is unavailable", () => {
