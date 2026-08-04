@@ -336,6 +336,26 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
+
+      // --- V6-r2 weak-RED coverage recovery (prediction-time, immutable) ---
+      model_revision_activated_at: V6_MODEL_REVISION_ACTIVATED_AT,
+      weak_red_veto_candidate: inf.weakRedVetoCandidate,
+      weak_red_veto_original_prediction: inf.weakRedVetoOriginalPrediction,
+      weak_red_veto_broad_percentile: inf.weakRedVetoBroadPercentile,
+      weak_red_recovery_evaluable: inf.weakRedRecoveryEvaluable,
+      weak_red_recovery_triggered: inf.weakRedRecoveryTriggered,
+      weak_red_recovery_reason: inf.weakRedRecoveryReason,
+      weak_red_rsi_recovery_evaluable: inf.weakRedRsiRecoveryEvaluable,
+      weak_red_rsi_recovery_triggered: inf.weakRedRsiRecoveryTriggered,
+      weak_red_rsi_threshold: inf.weakRedRsiThreshold,
+      weak_red_rsi_value: inf.weakRedRsiValue,
+      weak_red_roc4_recovery_evaluable: inf.weakRedRoc4RecoveryEvaluable,
+      weak_red_roc4_recovery_triggered: inf.weakRedRoc4RecoveryTriggered,
+      weak_red_roc4_threshold: inf.weakRedRoc4Threshold,
+      weak_red_roc4_value: inf.weakRedRoc4Value,
+      prediction_after_weak_red_recovery: inf.predictionAfterWeakRedRecovery,
+      prediction_source_after_weak_red_recovery: inf.predictionSourceAfterWeakRedRecovery,
+
       final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
