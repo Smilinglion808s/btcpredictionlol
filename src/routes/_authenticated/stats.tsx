@@ -1044,22 +1044,14 @@ function V6Card({
 function V6RegimeInverterPanel({
   state,
   stats,
-  pending,
 }: {
   state: Record<string, any> | null;
   stats: Record<string, any>;
-  pending: Record<string, any> | null;
+  pending?: Record<string, any> | null;
 }) {
   const ready = Boolean(state?.regime_inverter_ready);
   const active = Boolean(state?.regime_inverter_active);
   const count = Number(state?.regime_inverter_history_count ?? 0);
-  const wins = Number(state?.regime_inverter_last20_wins ?? 0);
-  const losses = Number(state?.regime_inverter_last20_losses ?? 0);
-  const net = Number(state?.regime_inverter_last20_adjusted_net ?? 0);
-  const threshold = -2.8;
-  const history = Array.isArray(state?.regime_inverter_history_json)
-    ? (state?.regime_inverter_history_json as Array<Record<string, any>>)
-    : [];
 
   const tone = active
     ? "border-bear/50 text-bear bg-bear/10"
@@ -1068,10 +1060,6 @@ function V6RegimeInverterPanel({
       : "border-violet/40 text-violet bg-violet/10";
   const label = active ? "INVERTING" : ready ? "ARMED · DORMANT" : `WARMING ${count}/20`;
 
-  const num = (v: unknown, d = 2) =>
-    v === null || v === undefined || v === "" || !Number.isFinite(Number(v))
-      ? "—"
-      : Number(v).toFixed(d);
 
   return (
     <Card className="relative overflow-hidden border-violet/30">
