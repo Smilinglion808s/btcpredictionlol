@@ -863,6 +863,53 @@ function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
       : "border-violet/40 text-violet bg-violet/10";
   const ts = (v: unknown) => (v ? new Date(String(v)).toLocaleString() : "—");
 
+  const qc = useQueryClient();
+  const initFn = useServerFn(initV6Warmup);
+  const boundaryFn = useServerFn(runV6AtBoundary);
+  const [initing, setIniting] = useState(false);
+  const [init, setInit] = useState<Record<string, any> | null>(null);
+  const [initErr, setInitErr] = useState<string | null>(null);
+  const [watching, setWatching] = useState(false);
+
+  const onInit = async () => {
+    setIniting(true);
+    setInitErr(null);
+    try {
+      const res = (await initFn()) as Record<string, any>;
+      setInit(res);
+      setWatching(true);
+      qc.invalidateQueries({ queryKey: ["v6-warmup"] });
+    } catch (e) {
+      setInitErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIniting(false);
+    }
+  };
+
+  // Once initialized, invoke runV6 at the next boundary and keep refreshing
+  // readiness until the canonical replay reports READY or FAILED.
+  useEffect(() => {
+    if (!watching) return;
+    if (status === "READY" || status === "FAILED") {
+      setWatching(false);
+      return;
+    }
+    const targetMs = init?.next_target_ts ? new Date(String(init.next_target_ts)).getTime() : 0;
+    const tick = async () => {
+      if (targetMs && Date.now() >= targetMs) {
+        try {
+          await boundaryFn();
+        } catch (e) {
+          setInitErr(e instanceof Error ? e.message : String(e));
+        }
+      }
+      qc.invalidateQueries({ queryKey: ["v6-warmup"] });
+      qc.invalidateQueries({ queryKey: ["v6-pending"] });
+    };
+    const id = setInterval(tick, 10_000);
+    return () => clearInterval(id);
+  }, [watching, status, init, boundaryFn, qc]);
+
   return (
     <div className="relative mt-6 pt-4 border-t border-violet/20">
       <div className="flex items-center justify-between gap-3">
@@ -877,6 +924,32 @@ function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
           {count} confirmed candles replayed · {baseCount} prior base predictions restored
         </div>
       )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={onInit} disabled={initing} className="h-7 text-[10px]">
+          {initing ? "Initializing…" : "Initialize V6 Warmup"}
+        </Button>
+        {watching && <span className="text-[10px] text-muted-foreground">waiting for next boundary…</span>}
+      </div>
+
+      {init && (
+        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
+          <div>Contiguous confirmed candles</div>
+          <div className={`text-right ${init.sufficient_history ? "text-bull" : "text-bear"}`}>
+            {init.contiguous_candles} / {init.required_candles}
+          </div>
+          <div>Next target candle</div>
+          <div className="text-right text-foreground truncate">{ts(init.next_target_ts)}</div>
+          <div>Canonical stream</div>
+          <div className="text-right text-foreground truncate">{String(init.stream ?? "")}</div>
+        </div>
+      )}
+
+      {(initErr || init?.error) && (
+        <div className="mt-2 text-[10px] text-bear break-all">{String(initErr ?? init?.error)}</div>
+      )}
+
+
 
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
         <div>Confirmed history</div><div className="text-right text-foreground">{count}</div>
