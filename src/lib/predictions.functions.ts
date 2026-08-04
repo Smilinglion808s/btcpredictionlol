@@ -702,8 +702,8 @@ async function td1RcStatsFor(variant: string, resetId: number) {
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("model7_td1_rc_shadow")
-      .eq("variant", variant)
       .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_veto_value, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
+      .eq("variant", variant)
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
     if (resetAt) q = q.gt("candle_ts", resetAt);
@@ -756,7 +756,7 @@ async function td1RcStatsFor(variant: string, resetId: number) {
       timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
     }).format(new Date(iso));
 
-  const crRows = rows.filter((r) => r.td1_compressed_risk_evaluable !== null && r.td1_compressed_risk_evaluable !== undefined);
+  const crRows = rows;
   const crEvaluable = crRows.filter((r) => r.td1_compressed_risk_evaluable === true).length;
   const crCondition = crRows.filter((r) => r.td1_compressed_risk_condition === true).length;
   const crVetoes = crRows.filter((r) => r.td1_compressed_risk_veto_fired === true).length;
