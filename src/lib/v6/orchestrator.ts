@@ -35,6 +35,13 @@ import {
   V6_MODEL_VERSION,
   V6_WARMUP_CANDLES,
 } from "./config";
+import {
+  applyRegimeInverter,
+  inverterContribution,
+  V6_MODEL_REVISION,
+  V6_REGIME_INVERTER_THRESHOLD,
+} from "./regimeInverter";
+import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
 
 const TF_MS = 15 * 60 * 1000;
 
