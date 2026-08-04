@@ -190,19 +190,39 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       .maybeSingle();
     if (existing) return;
 
+    // Warmup gate: no directional publication until historical technical state
+    // and the 7 prior BASE decisions are rebuilt and verified.
+    const { ensureV6Warm, markV6NotReady } = await import("./warmup");
+    const warm = await ensureV6Warm(sb, targetTs);
+    if (!warm.ready) {
+      await sb
+        .from("v6_predictions")
+        .insert(opFailRow(targetTs, `${warm.failureReason ?? "V6_WARMUP_NOT_READY"}:${warm.error ?? ""}`) as never);
+      return;
+    }
+
     const history = await loadHistory(sb, targetTs);
     if (history.error) {
-      await sb.from("v6_predictions").insert(opFailRow(targetTs, history.error) as never);
+      await markV6NotReady(sb, history.error);
+      await sb
+        .from("v6_predictions")
+        .insert(opFailRow(targetTs, `V6_WARMUP_HISTORY_MISSING:${history.error}`) as never);
       return;
+    }
+    if (!history.contiguous) {
+      // Continuity break — saturation history may not cross it.
+      await markV6NotReady(sb, "continuity_break_detected");
     }
 
     let technical: TechnicalRow[];
     try {
       technical = buildTechnicalRows(history.rows) as unknown as TechnicalRow[];
     } catch (e) {
+      const reason = `feature_build_failed:${e instanceof Error ? e.message : String(e)}`;
+      await markV6NotReady(sb, reason);
       await sb
         .from("v6_predictions")
-        .insert(opFailRow(targetTs, `feature_build_failed:${e instanceof Error ? e.message : String(e)}`) as never);
+        .insert(opFailRow(targetTs, `V6_WARMUP_FEATURE_FAILURE:${reason}`) as never);
       return;
     }
 
@@ -213,12 +233,19 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const input = history.rows[history.rows.length - 1];
 
     if (!current || !previous1 || !previous4) {
-      await sb.from("v6_predictions").insert(opFailRow(targetTs, "missing_lag_rows") as never);
+      await markV6NotReady(sb, "missing_lag_rows");
+      await sb
+        .from("v6_predictions")
+        .insert(opFailRow(targetTs, "V6_WARMUP_FEATURE_FAILURE:missing_lag_rows") as never);
       return;
     }
 
-    const priorBasePredictions = await loadPriorBaseState(sb, targetTs);
+    // Live rows are authoritative when a complete window exists; otherwise the
+    // warmup replay supplies the seven prior BASE decisions.
+    const livePrior = await loadPriorBaseState(sb, targetTs);
+    const priorBasePredictions = livePrior.length === 7 ? livePrior : warm.priorBasePredictions;
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;

@@ -3829,6 +3829,72 @@ export type Database = {
         }
         Relationships: []
       }
+      v6_warmup_state: {
+        Row: {
+          created_at: string
+          feature_schema_version: string | null
+          fit_id: string | null
+          id: string
+          model_artifact_sha256: string | null
+          model_version: string
+          updated_at: string
+          v6_warmup_status: string
+          warmup_base_predictions_count: number
+          warmup_base_predictions_json: Json
+          warmup_candle_count: number
+          warmup_completed_at: string | null
+          warmup_continuity_valid: boolean
+          warmup_error: string | null
+          warmup_feature_valid: boolean
+          warmup_first_candle_ts: string | null
+          warmup_last_candle_ts: string | null
+          warmup_next_target_ts: string | null
+          warmup_started_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          id?: string
+          model_artifact_sha256?: string | null
+          model_version: string
+          updated_at?: string
+          v6_warmup_status?: string
+          warmup_base_predictions_count?: number
+          warmup_base_predictions_json?: Json
+          warmup_candle_count?: number
+          warmup_completed_at?: string | null
+          warmup_continuity_valid?: boolean
+          warmup_error?: string | null
+          warmup_feature_valid?: boolean
+          warmup_first_candle_ts?: string | null
+          warmup_last_candle_ts?: string | null
+          warmup_next_target_ts?: string | null
+          warmup_started_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          id?: string
+          model_artifact_sha256?: string | null
+          model_version?: string
+          updated_at?: string
+          v6_warmup_status?: string
+          warmup_base_predictions_count?: number
+          warmup_base_predictions_json?: Json
+          warmup_candle_count?: number
+          warmup_completed_at?: string | null
+          warmup_continuity_valid?: boolean
+          warmup_error?: string | null
+          warmup_feature_valid?: boolean
+          warmup_first_candle_ts?: string | null
+          warmup_last_candle_ts?: string | null
+          warmup_next_target_ts?: string | null
+          warmup_started_at?: string | null
+        }
+        Relationships: []
+      }
       webhook_deliveries: {
         Row: {
           attempt: number
