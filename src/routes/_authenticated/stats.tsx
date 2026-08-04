@@ -994,6 +994,24 @@ function V6Card({
           <V6Stat label="Momentum GREEN pickup" value={`${Number(stats.green_pickup_count ?? 0)} · ${fmt(stats.green_pickup_raw)}`} />
         </V6Section>
 
+        <V6Section title="Weak RED recovery">
+          <V6Stat label="Veto candidates" value={Number(stats.weak_red_candidates ?? 0)} />
+          <V6Stat label="Veto retained" value={Number(stats.weak_red_vetoed ?? 0)} />
+          <V6Stat label="Restored (RED)" value={Number(stats.weak_red_restored ?? 0)} tone="bear" />
+          <V6Stat label="Coverage added" value={`${Number(stats.coverage_added_by_weak_red_recovery ?? 0)}%`} />
+          <V6Stat label="Coverage before → after" value={`${Number(stats.coverage_before_weak_red_recovery ?? 0)}% → ${Number(stats.coverage_after_weak_red_recovery ?? 0)}%`} />
+          <V6Stat label="Thresholds" value={`RSI14 ≤ ${Number(stats.weak_red_rsi_threshold ?? 58)} · ROC4 ≥ ${Number(stats.weak_red_roc4_threshold ?? 0.28)}`} />
+          <V6Stat label="Restored by RSI" value={Number(stats.weak_red_rsi_recoveries ?? 0)} />
+          <V6Stat label="Restored by ROC4" value={Number(stats.weak_red_roc4_recoveries ?? 0)} />
+          <V6Stat label="RSI W/L" value={`${Number(stats.weak_red_rsi_wins ?? 0)}/${Number(stats.weak_red_rsi_losses ?? 0)}`} />
+          <V6Stat label="ROC4 W/L" value={`${Number(stats.weak_red_roc4_wins ?? 0)}/${Number(stats.weak_red_roc4_losses ?? 0)}`} />
+          <V6Stat label="RSI adjusted" value={fmt(stats.weak_red_rsi_adjusted)} />
+          <V6Stat label="ROC4 adjusted" value={fmt(stats.weak_red_roc4_adjusted)} />
+          <V6Stat label="Combined W/L" value={`${Number(stats.weak_red_recovery_wins ?? 0)}/${Number(stats.weak_red_recovery_losses ?? 0)}`} />
+          <V6Stat label="Combined raw · adjusted" value={`${fmt(stats.weak_red_recovery_raw)} · ${fmt(stats.weak_red_recovery_adjusted)}`} />
+        </V6Section>
+
+
       </div>
 
       <V6WarmupPanel warmup={warmup} />

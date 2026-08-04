@@ -9,7 +9,9 @@
 
 import type { Actual, Direction } from "./inference";
 
-export const V6_MODEL_REVISION = "V6-r1-regime-inverter";
+export const V6_MODEL_REVISION = "V6-r2-regime-inverter-red-recovery";
+/** Explicit activation boundary for V6-r2. Older rows keep their prior revision. */
+export const V6_MODEL_REVISION_ACTIVATED_AT = "2026-08-04T20:45:00.000Z";
 export const V6_REGIME_INVERTER_WINDOW = 20;
 export const V6_REGIME_INVERTER_THRESHOLD = -2.8;
 export const V6_REGIME_INVERTER_REASON = "V6_REGIME_INVERSION";

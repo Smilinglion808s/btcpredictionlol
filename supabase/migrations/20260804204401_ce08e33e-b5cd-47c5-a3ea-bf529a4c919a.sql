@@ -1,0 +1,30 @@
+ALTER TABLE public.v6_predictions
+  ADD COLUMN IF NOT EXISTS model_revision_activated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS weak_red_veto_candidate boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_veto_original_prediction text,
+  ADD COLUMN IF NOT EXISTS weak_red_veto_broad_percentile double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_evaluable boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_triggered boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_reason text,
+  ADD COLUMN IF NOT EXISTS weak_red_rsi_recovery_evaluable boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_rsi_recovery_triggered boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_rsi_threshold double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_rsi_value double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_roc4_recovery_evaluable boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_roc4_recovery_triggered boolean,
+  ADD COLUMN IF NOT EXISTS weak_red_roc4_threshold double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_roc4_value double precision,
+  ADD COLUMN IF NOT EXISTS prediction_after_weak_red_recovery text,
+  ADD COLUMN IF NOT EXISTS prediction_source_after_weak_red_recovery text,
+  ADD COLUMN IF NOT EXISTS weak_red_underlying_prediction text,
+  ADD COLUMN IF NOT EXISTS weak_red_underlying_raw_score double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_underlying_adjusted_score double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_published_prediction text,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_raw_score double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_adjusted_score double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_counterfactual_adjusted_score double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_raw_contribution double precision,
+  ADD COLUMN IF NOT EXISTS weak_red_recovery_adjusted_contribution double precision;
+
+CREATE INDEX IF NOT EXISTS v6_predictions_model_revision_idx
+  ON public.v6_predictions (model_revision, target_candle_ts DESC);

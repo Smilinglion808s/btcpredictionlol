@@ -53,7 +53,7 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
   const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
-    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution",
+    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score",
     resetAt,
   );
 
@@ -76,6 +76,15 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     inverter_raw_contribution: 0, inverter_adjusted_contribution: 0,
     pre_inverter_raw_net: 0, pre_inverter_adjusted_net: 0,
     pre_inverter_directional: 0,
+    // Weak-RED coverage recovery (V6-r2)
+    weak_red_candidates: 0, weak_red_vetoed: 0, weak_red_restored: 0,
+    weak_red_rsi_recoveries: 0, weak_red_rsi_wins: 0, weak_red_rsi_losses: 0,
+    weak_red_rsi_adjusted: 0,
+    weak_red_roc4_recoveries: 0, weak_red_roc4_wins: 0, weak_red_roc4_losses: 0,
+    weak_red_roc4_adjusted: 0,
+    weak_red_recovery_wins: 0, weak_red_recovery_losses: 0, weak_red_restored_scored: 0,
+    weak_red_recovery_raw: 0, weak_red_recovery_adjusted: 0,
+    rolling96_directional_predictions: 0, rolling96_valid_opportunities: 0,
   };
 
   let peakAdj = 0;
@@ -109,6 +118,17 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       c.weak_red_veto_count += 1;
       c.weak_red_veto_raw += Number(r.weak_broad_red_veto_raw_contribution ?? 0);
       c.weak_red_veto_adjusted += Number(r.weak_broad_red_veto_adjusted_contribution ?? 0);
+    }
+
+    if (r.weak_red_veto_candidate) {
+      c.weak_red_candidates += 1;
+      if (r.weak_red_recovery_triggered) {
+        c.weak_red_restored += 1;
+        if (r.weak_red_rsi_recovery_triggered) c.weak_red_rsi_recoveries += 1;
+        if (r.weak_red_roc4_recovery_triggered) c.weak_red_roc4_recoveries += 1;
+      } else {
+        c.weak_red_vetoed += 1;
+      }
     }
 
     if (!r.resolution_timestamp) { c.pending += 1; continue; }
@@ -161,6 +181,23 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       c.inverter_adjusted_contribution += Number(r.regime_inverter_adjusted_contribution ?? 0);
     }
 
+    if (r.weak_red_veto_candidate && r.weak_red_recovery_triggered) {
+      const rRaw = Number(r.weak_red_recovery_raw_contribution ?? 0);
+      const rAdj = Number(r.weak_red_recovery_adjusted_contribution ?? 0);
+      c.weak_red_recovery_raw += rRaw;
+      c.weak_red_recovery_adjusted += rAdj;
+      c.weak_red_restored_scored += 1;
+      const won = rRaw > 0;
+      if (won) c.weak_red_recovery_wins += 1; else c.weak_red_recovery_losses += 1;
+      if (r.weak_red_rsi_recovery_triggered) {
+        c.weak_red_rsi_adjusted += rAdj;
+        if (won) c.weak_red_rsi_wins += 1; else c.weak_red_rsi_losses += 1;
+      } else if (r.weak_red_roc4_recovery_triggered) {
+        c.weak_red_roc4_adjusted += rAdj;
+        if (won) c.weak_red_roc4_wins += 1; else c.weak_red_roc4_losses += 1;
+      }
+    }
+
     window.push({ adj, raw, directional });
     if (window.length > 96) window.shift();
   }
@@ -168,8 +205,10 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
   const wl = c.wins + c.losses;
   const scored = c.resolved - c.pushes - c.pending;
   c.rolling96_predictions = window.length;
+  c.rolling96_valid_opportunities = window.length;
+  c.rolling96_directional_predictions = window.filter((w) => w.directional).length;
   c.rolling96_coverage = window.length
-    ? Math.round((window.filter((w) => w.directional).length / window.length) * 10000) / 100
+    ? Math.round((c.rolling96_directional_predictions / window.length) * 10000) / 100
     : 0;
   c.rolling96_adjusted_net = Math.round(window.reduce((s, w) => s + w.adj, 0) * 100) / 100;
   c.rolling96_raw_net = Math.round(window.reduce((s, w) => s + w.raw, 0) * 100) / 100;
@@ -190,7 +229,19 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     pre_inverter_raw_net: round2(c.pre_inverter_raw_net),
     inverter_raw_contribution: round2(c.inverter_raw_contribution),
     inverter_adjusted_contribution: round2(c.inverter_adjusted_contribution),
-    model_revision: "V6-r1-regime-inverter",
+    weak_red_recovery_raw: round2(c.weak_red_recovery_raw),
+    weak_red_recovery_adjusted: round2(c.weak_red_recovery_adjusted),
+    weak_red_rsi_adjusted: round2(c.weak_red_rsi_adjusted),
+    weak_red_roc4_adjusted: round2(c.weak_red_roc4_adjusted),
+    weak_red_rsi_threshold: 58,
+    weak_red_roc4_threshold: 0.28,
+    // Coverage: final directional predictions / valid opportunities.
+    coverage_after_weak_red_recovery: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
+    coverage_before_weak_red_recovery:
+      scored > 0 ? Math.round(((wl - c.weak_red_restored_scored) / scored) * 10000) / 100 : 0,
+    coverage_added_by_weak_red_recovery:
+      scored > 0 ? Math.round((c.weak_red_restored_scored / scored) * 10000) / 100 : 0,
+    model_revision: "V6-r2-regime-inverter-red-recovery",
     breakeven_win_rate: 55.5555556,
   };
 });

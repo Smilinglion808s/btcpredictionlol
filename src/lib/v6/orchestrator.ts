@@ -39,7 +39,9 @@ import {
   applyRegimeInverter,
   inverterContribution,
   V6_MODEL_REVISION,
+  V6_MODEL_REVISION_ACTIVATED_AT,
   V6_REGIME_INVERTER_THRESHOLD,
+
 } from "./regimeInverter";
 import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
 
@@ -336,6 +338,26 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source: inf.predictionSource,
       weak_broad_red_veto_evaluable: inf.weakBroadRedVetoEvaluable,
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
+
+      // --- V6-r2 weak-RED coverage recovery (prediction-time, immutable) ---
+      model_revision_activated_at: V6_MODEL_REVISION_ACTIVATED_AT,
+      weak_red_veto_candidate: inf.weakRedVetoCandidate,
+      weak_red_veto_original_prediction: inf.weakRedVetoOriginalPrediction,
+      weak_red_veto_broad_percentile: inf.weakRedVetoBroadPercentile,
+      weak_red_recovery_evaluable: inf.weakRedRecoveryEvaluable,
+      weak_red_recovery_triggered: inf.weakRedRecoveryTriggered,
+      weak_red_recovery_reason: inf.weakRedRecoveryReason,
+      weak_red_rsi_recovery_evaluable: inf.weakRedRsiRecoveryEvaluable,
+      weak_red_rsi_recovery_triggered: inf.weakRedRsiRecoveryTriggered,
+      weak_red_rsi_threshold: inf.weakRedRsiThreshold,
+      weak_red_rsi_value: inf.weakRedRsiValue,
+      weak_red_roc4_recovery_evaluable: inf.weakRedRoc4RecoveryEvaluable,
+      weak_red_roc4_recovery_triggered: inf.weakRedRoc4RecoveryTriggered,
+      weak_red_roc4_threshold: inf.weakRedRoc4Threshold,
+      weak_red_roc4_value: inf.weakRedRoc4Value,
+      prediction_after_weak_red_recovery: inf.predictionAfterWeakRedRecovery,
+      prediction_source_after_weak_red_recovery: inf.predictionSourceAfterWeakRedRecovery,
+
       final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
       abstain_status:
@@ -378,7 +400,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, pre_inverter_prediction, regime_inverter_triggered",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, pre_inverter_prediction, regime_inverter_triggered, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -411,6 +433,20 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
 
       const sat = abstentionContribution(Boolean(r.saturation_veto_triggered) && !opFail, base, actual);
       const weak = abstentionContribution(Boolean(r.weak_broad_red_veto_triggered) && !opFail, pre, actual);
+
+      // --- V6-r2 weak-RED recovery counterfactuals (kept separate from the inverter) ---
+      const weakRedCandidate = Boolean(r.weak_red_veto_candidate) && !opFail;
+      const weakRedRestored = weakRedCandidate && Boolean(r.weak_red_recovery_triggered);
+      const weakRedUnderlying: Direction | null = weakRedCandidate ? "RED" : null;
+      const weakRedPublished =
+        (r.prediction_after_weak_red_recovery as Direction | null) ??
+        (weakRedRestored ? "RED" : "ABSTAIN");
+      const weakRedUnderlyingRaw = weakRedCandidate ? rawScore("RED", actual) : null;
+      const weakRedUnderlyingAdj = weakRedCandidate ? adjustedScore("RED", actual) : null;
+      const weakRedRecoveryContribution =
+        weakRedRestored && actual !== "PUSH"
+          ? { raw: rawScore("RED", actual) ?? 0, adjusted: adjustedScore("RED", actual) ?? 0 }
+          : { raw: 0, adjusted: 0 };
       const redPick = pickupContribution(Boolean(r.red_pickup_triggered) && !opFail, "RED", actual);
       const greenPick = pickupContribution(Boolean(r.green_pickup_triggered) && !opFail, "GREEN", actual);
 
@@ -468,6 +504,15 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           pre_inverter_adjusted_score: opFail ? null : adjustedScore(preInverter, actual),
           regime_inverter_raw_contribution: inverterContrib.raw,
           regime_inverter_adjusted_contribution: inverterContrib.adjusted,
+          weak_red_underlying_prediction: weakRedUnderlying,
+          weak_red_underlying_raw_score: weakRedUnderlyingRaw,
+          weak_red_underlying_adjusted_score: weakRedUnderlyingAdj,
+          weak_red_recovery_published_prediction: weakRedCandidate ? weakRedPublished : null,
+          weak_red_recovery_raw_score: weakRedCandidate ? rawScore(weakRedPublished, actual) : null,
+          weak_red_recovery_adjusted_score: weakRedCandidate ? adjustedScore(weakRedPublished, actual) : null,
+          weak_red_recovery_counterfactual_adjusted_score: weakRedRestored ? weakRedUnderlyingAdj : null,
+          weak_red_recovery_raw_contribution: weakRedRecoveryContribution.raw,
+          weak_red_recovery_adjusted_contribution: weakRedRecoveryContribution.adjusted,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
