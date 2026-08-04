@@ -434,6 +434,24 @@ export function inferV6(
 
 
   return {
+    weakRedVetoCandidate,
+    weakRedVetoOriginalPrediction: weakRedVetoCandidate ? "RED" : null,
+    weakRedVetoBroadPercentile: weakRedVetoCandidate ? broadPercentile : null,
+    weakRedRecoveryEvaluable,
+    weakRedRecoveryTriggered,
+    weakRedRecoveryReason,
+    weakRedRsiRecoveryEvaluable,
+    weakRedRsiRecoveryTriggered,
+    weakRedRsiThreshold: WEAK_RED_RSI_THRESHOLD,
+    weakRedRsiValue: rsiValid ? rsi14 : null,
+    weakRedRoc4RecoveryEvaluable,
+    weakRedRoc4RecoveryTriggered,
+    weakRedRoc4Threshold: WEAK_RED_ROC4_THRESHOLD,
+    weakRedRoc4Value: roc4Valid ? roc4 : null,
+    predictionAfterWeakRedRecovery: finalPrediction,
+    predictionSourceAfterWeakRedRecovery:
+      finalPrediction === "ABSTAIN" ? "ABSTAIN" : predictionSource,
+
     ridgeFeatures: built.ridge,
     gbFeatures: built.gb,
     imputedFeatures,
