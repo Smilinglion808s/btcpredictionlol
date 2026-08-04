@@ -9,15 +9,28 @@ async function admin() {
 
 const PAGE = 1000;
 
-async function pageAllV6(select: string): Promise<Array<Record<string, unknown>>> {
+/** Visual-only cutoff: rows created at/before this are hidden from the stats card. */
+async function v6VisualResetAt(): Promise<string | null> {
+  const sb = await admin();
+  const { data } = await sb
+    .from("v6_visual_stats_reset")
+    .select("reset_at")
+    .eq("id", 1)
+    .maybeSingle();
+  return data?.reset_at ? new Date(String(data.reset_at)).toISOString() : null;
+}
+
+async function pageAllV6(select: string, sinceIso?: string | null): Promise<Array<Record<string, unknown>>> {
   const sb = await admin();
   const out: Array<Record<string, unknown>> = [];
   for (let from = 0; ; from += PAGE) {
-    const { data } = await sb
+    let q = sb
       .from("v6_predictions")
       .select(select)
       .order("target_candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
+    if (sinceIso) q = q.gt("prediction_created_at", sinceIso);
+    const { data } = await q;
     if (!data || data.length === 0) break;
     out.push(...(data as unknown as Array<Record<string, unknown>>));
     if (data.length < PAGE) break;
@@ -25,11 +38,25 @@ async function pageAllV6(select: string): Promise<Array<Record<string, unknown>>
   return out;
 }
 
+/** Visual-only reset of the V6 stats card counters. CSV/history stay intact. */
+export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const reset_at = new Date().toISOString();
+  const { error } = await sb
+    .from("v6_visual_stats_reset")
+    .upsert({ id: 1, reset_at, reason: "user-ui-reset" }, { onConflict: "id" });
+  if (error) throw error;
+  return { ok: true, reset_at };
+});
+
 /** Aggregate V6 performance. Adjusted net is the primary headline metric. */
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
+  const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
     "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution",
+    resetAt,
   );
+
 
   const c = {
     total: 0, resolved: 0, pending: 0,
