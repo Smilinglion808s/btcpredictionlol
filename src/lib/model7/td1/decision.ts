@@ -130,6 +130,11 @@ export function decideTd1Rc(args: {
   threshold?: number;
   /** Prediction-time compressed-risk evaluation for this candle. */
   compressedRisk?: { evaluable: boolean; condition: boolean; reason: string | null };
+  /**
+   * When false (TD1-RC, original form) the compressed-risk gate is evaluated and
+   * recorded for audit but never changes the published decision. TD2-RC passes true.
+   */
+  applyCompressedRisk?: boolean;
 }): Td1RcDecision {
   const threshold = args.threshold ?? TD1_GLOBAL_TURN_RISK_THRESHOLD;
   const pLoss = scoreTree(args.artifact.tree, args.features);
@@ -137,7 +142,8 @@ export function decideTd1Rc(args: {
   const containmentVeto = args.containment.vetoFired;
 
   const cr = args.compressedRisk ?? { evaluable: false, condition: false, reason: null };
-  const compressedVeto = cr.condition === true;
+  const applyCompressed = args.applyCompressedRisk !== false;
+  const compressedVeto = applyCompressed && cr.condition === true;
 
   // Active policy, first-match order: compressed risk -> containment -> global
   // turn risk. The legacy gates keep their existing relative order.
