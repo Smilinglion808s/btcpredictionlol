@@ -19,7 +19,7 @@ import {
   resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
-import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter } from "@/lib/v6.functions";
+import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
@@ -81,6 +81,20 @@ function StatsPage() {
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const [exportingV6, setExportingV6] = useState(false);
+  const [resettingV6, setResettingV6] = useState(false);
+  const resetV6Fn = useServerFn(resetV6VisualStats);
+
+  async function doResetV6Stats() {
+    if (!confirm("Reset V6 visual stats to zero? The CSV export and all tracking keep every historical row.")) return;
+    try {
+      setResettingV6(true);
+      await resetV6Fn();
+      qc.invalidateQueries({ queryKey: ["v6-stats"] });
+    } finally {
+      setResettingV6(false);
+    }
+  }
+
   const [exportingA96, setExportingA96] = useState(false);
   const [exportingA96Combined, setExportingA96Combined] = useState(false);
   const [resettingA96, setResettingA96] = useState(false);
@@ -506,7 +520,10 @@ function StatsPage() {
           fmt={v6Fmt}
           onExport={downloadV6Csv}
           exporting={exportingV6}
+          onReset={doResetV6Stats}
+          resetting={resettingV6}
         />
+
 
         <V6RegimeInverterPanel
           state={(v6InverterQ.data as Record<string, any> | null) ?? null}
@@ -697,6 +714,8 @@ function V6Card({
   fmt,
   onExport,
   exporting,
+  onReset,
+  resetting,
 }: {
   stats: Record<string, any>;
   pending: Record<string, any> | null;
@@ -704,7 +723,10 @@ function V6Card({
   fmt: (n: unknown, digits?: number) => string;
   onExport: () => void;
   exporting: boolean;
+  onReset: () => void;
+  resetting: boolean;
 }) {
+
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
   const rawNet = Number(stats.raw_net ?? 0);
@@ -741,6 +763,10 @@ function V6Card({
           <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
             {exporting ? "…" : "CSV"}
           </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onReset} disabled={resetting}>
+            {resetting ? "…" : "Reset"}
+          </Button>
+
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-violet/40 bg-violet/10 text-[10px] font-bold uppercase tracking-[0.16em] text-violet">
             <span className="size-1.5 rounded-full bg-violet v6-live-dot" />
             Live

@@ -3964,6 +3964,24 @@ export type Database = {
         }
         Relationships: []
       }
+      v6_visual_stats_reset: {
+        Row: {
+          id: number
+          reason: string | null
+          reset_at: string
+        }
+        Insert: {
+          id: number
+          reason?: string | null
+          reset_at?: string
+        }
+        Update: {
+          id?: number
+          reason?: string | null
+          reset_at?: string
+        }
+        Relationships: []
+      }
       v6_warmup_state: {
         Row: {
           created_at: string
