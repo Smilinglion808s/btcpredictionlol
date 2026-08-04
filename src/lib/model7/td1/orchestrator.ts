@@ -291,7 +291,7 @@ export async function runTd1RcForA2Combined(
   }
 }
 
-/** Resolve TD1-RC row after actual_direction is known. Never blocks caller. */
+/** Resolve TD1-RC + TD2-RC rows after actual_direction is known. Never blocks caller. */
 export async function resolveTd1RcRow(
   supabase: SupabaseClient,
   predictionId: string,
@@ -301,71 +301,80 @@ export async function resolveTd1RcRow(
     const { data: rowData } = await supabase
       .from("model7_td1_rc_shadow")
       .select(
-        "id, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
+        "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
         "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_no_global_veto_decision",
       )
       .eq("prediction_id", predictionId)
-      .eq("variant", VARIANT)
-      .maybeSingle();
-    const row = rowData as Record<string, unknown> | null;
-    if (!row) return;
+      .in("variant", [VARIANT, TD2_VARIANT]);
+    const rows = (rowData ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) return;
 
-    // Idempotent: already-resolved rows are never re-scored.
-    if (row.resolved_at) return;
-    const a2 = row.a2_original_decision as "YES" | "NO" | null;
-    if (a2 !== "YES" && a2 !== "NO") return;
-    const cfResult = (a2 === "YES" && actualDirection === "GREEN") ||
-                     (a2 === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
-    const ext = row.external_final_decision as string | null;
-    // Row-level status/result mirrors the external decision:
-    //   SKIP → result=PUSH (not traded), YES/NO → grade against actual
-    let result: "WIN" | "LOSS" | "PUSH" = "PUSH";
-    if (ext === "YES" || ext === "NO") {
-      result = (ext === "YES" && actualDirection === "GREEN") ||
-               (ext === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+    let containmentInput: { candleTs: string; side: "YES" | "NO"; cfResult: "WIN" | "LOSS" } | null = null;
+
+    for (const row of rows) {
+      // Idempotent: already-resolved rows are never re-scored.
+      if (row.resolved_at) continue;
+      const a2 = row.a2_original_decision as "YES" | "NO" | null;
+      if (a2 !== "YES" && a2 !== "NO") continue;
+      const cfResult = (a2 === "YES" && actualDirection === "GREEN") ||
+                       (a2 === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+      const ext = row.external_final_decision as string | null;
+      // Row-level status/result mirrors the external decision:
+      //   SKIP → result=PUSH (not traded), YES/NO → grade against actual
+      let result: "WIN" | "LOSS" | "PUSH" = "PUSH";
+      if (ext === "YES" || ext === "NO") {
+        result = (ext === "YES" && actualDirection === "GREEN") ||
+                 (ext === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+      }
+
+      // --- compressed-risk counterfactual accounting ---
+      const compressedVeto = row.td1_compressed_risk_veto_fired === true;
+      const cf = classifyCompressedRiskCounterfactual({
+        vetoFired: compressedVeto,
+        underlyingDirection: a2,
+        actualDirection,
+      });
+      const prev = scoreDecision(
+        (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+        actualDirection,
+      );
+      const noGlobal = scoreDecision(
+        (row.td1_no_global_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+        actualDirection,
+      );
+
+      await supabase.from("model7_td1_rc_shadow").update({
+        a2_counterfactual_result: cfResult,
+        actual_direction: actualDirection,
+        result,
+        resolved_at: new Date().toISOString(),
+        td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
+        td1_compressed_risk_counterfactual_result: cf.classification,
+        td1_compressed_risk_counterfactual_score: cf.abstentionScore,
+        td1_compressed_risk_veto_value: cf.vetoValue,
+        td1_prev_policy_result: prev.result,
+        td1_prev_policy_score: prev.score,
+        td1_no_global_veto_result: noGlobal.result,
+        td1_no_global_veto_score: noGlobal.score,
+      } as never).eq("id", row.id as string).is("resolved_at", null);
+
+      if (row.variant === VARIANT) {
+        containmentInput = { candleTs: row.candle_ts as string, side: a2, cfResult };
+      }
     }
 
-    // --- td1-rc-compressed-risk-v1 counterfactual accounting ---
-    const compressedVeto = row.td1_compressed_risk_veto_fired === true;
-    const cf = classifyCompressedRiskCounterfactual({
-      vetoFired: compressedVeto,
-      underlyingDirection: a2,
-      actualDirection,
-    });
-    const prev = scoreDecision(
-      (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
-      actualDirection,
-    );
-    const noGlobal = scoreDecision(
-      (row.td1_no_global_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null,
-      actualDirection,
-    );
-
-    await supabase.from("model7_td1_rc_shadow").update({
-      a2_counterfactual_result: cfResult,
-      actual_direction: actualDirection,
-      result,
-      resolved_at: new Date().toISOString(),
-      td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
-      td1_compressed_risk_counterfactual_result: cf.classification,
-      td1_compressed_risk_counterfactual_score: cf.abstentionScore,
-      td1_compressed_risk_veto_value: cf.vetoValue,
-      td1_prev_policy_result: prev.result,
-      td1_prev_policy_score: prev.score,
-      td1_no_global_veto_result: noGlobal.result,
-      td1_no_global_veto_score: noGlobal.score,
-    } as never).eq("id", row.id as string).is("resolved_at", null);
-
-    // Apply idempotent containment state update.
-    const resolutionId = `${predictionId}:TD1_RC_V1`;
-    await supabase.rpc("apply_td1_rc_resolution", {
-      p_resolution_id: resolutionId,
-      p_prediction_id: predictionId,
-      p_candle_ts: row.candle_ts as string,
-      p_base_variant: "A2_Combined",
-      p_side: a2,
-      p_result: cfResult,
-    });
+    // Apply idempotent containment state update (once, from the TD1 row).
+    if (containmentInput) {
+      const resolutionId = `${predictionId}:TD1_RC_V1`;
+      await supabase.rpc("apply_td1_rc_resolution", {
+        p_resolution_id: resolutionId,
+        p_prediction_id: predictionId,
+        p_candle_ts: containmentInput.candleTs,
+        p_base_variant: "A2_Combined",
+        p_side: containmentInput.side,
+        p_result: containmentInput.cfResult,
+      });
+    }
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
