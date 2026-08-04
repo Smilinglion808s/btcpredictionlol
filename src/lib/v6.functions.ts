@@ -190,7 +190,7 @@ export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(asy
     .select("*")
     .eq("model_version", "V6")
     .maybeSingle();
-  return (data as Record<string, unknown> | null) ?? null;
+  return (data as Record<string, string | number | boolean | null> | null) ?? null;
 });
 
 /** Rebuild the rolling shadow window from canonical resolved history. */
