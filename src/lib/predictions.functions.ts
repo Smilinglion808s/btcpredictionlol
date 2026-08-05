@@ -819,9 +819,35 @@ async function td1RcStatsFor(variant: string, resetId: number) {
   const dailyRows = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date));
   const worstDailyNet = dailyRows.length ? Math.min(...dailyRows.map((d) => d.live_net)) : 0;
 
+  // Last 3 calendar days (reporting timezone): win rate + net wins per day.
+  const buckets: Record<string, { wins: number; losses: number }> = {};
+  for (const r of traded) {
+    if (!r.candle_ts) continue;
+    if (r.result !== "WIN" && r.result !== "LOSS") continue;
+    const k = dayKey(String(r.candle_ts));
+    buckets[k] ??= { wins: 0, losses: 0 };
+    if (r.result === "WIN") buckets[k].wins += 1; else buckets[k].losses += 1;
+  }
+  const daily_3d = [0, 1, 2].map((back) => {
+    const d = new Date(Date.now() - back * 86400000);
+    const key = dayKey(d.toISOString());
+    const b = buckets[key] ?? { wins: 0, losses: 0 };
+    const n = b.wins + b.losses;
+    return {
+      date: key,
+      wins: b.wins,
+      losses: b.losses,
+      net: b.wins - b.losses,
+      win_rate: n === 0 ? 0 : Math.round((b.wins / n) * 10000) / 100,
+      trades: n,
+    };
+  });
+
   return {
     total, wins, losses, pushes, pending, win_rate,
+    daily_3d,
     last_10_win_rate: lastN(10), last_25_win_rate: lastN(25), last_50_win_rate: lastN(50),
+
     td1_vetoes: td1Vetoes,
     containment_vetoes: containmentVetoes,
     total_rows: rows.length,
