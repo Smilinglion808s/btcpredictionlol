@@ -743,6 +743,12 @@ function TD1Card({
       </div>
 
       <div className="relative">
+        <Daily3d days={hero.daily_3d ?? []} />
+      </div>
+
+
+
+      <div className="relative">
         <TD1Section title="Layer activity">
           <TD1Stat label="Resolved" value={resolved} />
           <TD1Stat label="Pending" value={pendingCount} />
