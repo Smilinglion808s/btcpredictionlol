@@ -103,6 +103,8 @@ async function loadHistory(
   for (const r of (data ?? []) as Array<Record<string, unknown>>) {
     const iso = new Date(String(r.candle_ts)).toISOString();
     if (seen.has(iso)) continue;
+    // Only fully-elapsed (closed) candles may enter the feature window.
+    if (new Date(iso).getTime() + TF_MS > Date.now()) continue;
     seen.add(iso);
     const open = Number(r.open), high = Number(r.high), low = Number(r.low), close = Number(r.close);
     if (![open, high, low, close].every((n) => Number.isFinite(n) && n > 0)) continue;
@@ -114,9 +116,31 @@ async function loadHistory(
     });
   }
 
+  // Ingest can lag the boundary run; top the tail up straight from OKX so the
+  // window always ends exactly at T-15m (closed candles only).
+  if (all.length > 0 && all[all.length - 1].candle_ts !== lastTs.toISOString()) {
+    try {
+      const { fetchOkxConfirmedRange } = await import("../okx.server");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const lastMs = new Date(all[all.length - 1].candle_ts).getTime();
+        if (lastMs >= lastTs.getTime()) break;
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+        const missing = await fetchOkxConfirmedRange(lastMs + TF_MS, lastTs.getTime());
+        let expect = lastMs + TF_MS;
+        for (const c of missing) {
+          const ms = new Date(c.candle_ts).getTime();
+          if (ms !== expect) break;
+          all.push({ id: `okx:${c.candle_ts}`, ...c });
+          expect += TF_MS;
+        }
+      }
+    } catch { /* fall through to the missing-input error below */ }
+  }
+
   if (all.length === 0 || all[all.length - 1].candle_ts !== lastTs.toISOString()) {
     return { rows: [], contiguous: false, error: `missing_input_candle:${lastTs.toISOString()}` };
   }
+
 
   // Longest contiguous tail ending at T-15m.
   let start = all.length - 1;
