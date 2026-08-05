@@ -16,11 +16,6 @@ import {
   resetTd2RcVisualStats,
   getTd1RcTrainingProgress,
   listTd1RcRecent,
-  getA96Stats,
-  getA96Pending,
-  exportA96Csv,
-  exportA96CombinedCsv,
-  resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
@@ -73,10 +68,6 @@ function StatsPage() {
   const exportTd2Fn = useServerFn(exportTd2RcShadow);
   const resetTd2Fn = useServerFn(resetTd2RcVisualStats);
 
-  const a96Fn = useServerFn(getA96Stats);
-  const a96Q = useQuery({ queryKey: ["a96-stats"], queryFn: () => a96Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const a96PendingFn = useServerFn(getA96Pending);
-  const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6Fn = useServerFn(getV6Stats);
   const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6PendingFn = useServerFn(getV6Pending);
@@ -86,14 +77,11 @@ function StatsPage() {
   const v6InverterFn = useServerFn(getV6RegimeInverter);
   const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportV6Fn = useServerFn(exportV6Csv);
-  const exportA96Fn = useServerFn(exportA96Csv);
-  const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
-  const resetA96Fn = useServerFn(resetA96VisualStats);
+  const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const [exportingV6, setExportingV6] = useState(false);
   const [resettingV6, setResettingV6] = useState(false);
-  const resetV6Fn = useServerFn(resetV6VisualStats);
 
   async function doResetV6Stats() {
     if (!confirm("Reset V6 visual stats to zero? The CSV export and all tracking keep every historical row.")) return;
@@ -106,9 +94,6 @@ function StatsPage() {
     }
   }
 
-  const [exportingA96, setExportingA96] = useState(false);
-  const [exportingA96Combined, setExportingA96Combined] = useState(false);
-  const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [resettingTd2, setResettingTd2] = useState(false);
@@ -123,39 +108,6 @@ function StatsPage() {
       triggerDownload(res.csv, `V6-${stamp()}.csv`);
     } finally {
       setExportingV6(false);
-    }
-  }
-
-  async function downloadA96Csv() {
-    try {
-      setExportingA96(true);
-      const rows = await exportA96Fn();
-      if (rows.length === 0) { alert("No a96 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `a96-${stamp()}.csv`);
-    } finally {
-      setExportingA96(false);
-    }
-  }
-
-  async function downloadA96CombinedCsv() {
-    try {
-      setExportingA96Combined(true);
-      const rows = await exportA96CombinedFn();
-      if (rows.length === 0) { alert("No a96 / AAS96 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `a96-combined-${stamp()}.csv`);
-    } finally {
-      setExportingA96Combined(false);
-    }
-  }
-
-  async function doResetA96Stats() {
-    if (!confirm("Reset a96 visual stats to zero? The CSV export will keep all historical rows.")) return;
-    try {
-      setResettingA96(true);
-      await resetA96Fn();
-      qc.invalidateQueries({ queryKey: ["a96-stats"] });
-    } finally {
-      setResettingA96(false);
     }
   }
 
@@ -279,10 +231,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["v6-stats"] });
         qc.invalidateQueries({ queryKey: ["v6-pending"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "a96_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["a96-stats"] });
-        qc.invalidateQueries({ queryKey: ["a96-pending"] });
-      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
@@ -340,14 +288,6 @@ function StatsPage() {
     if (activeVersion && !list.includes(activeVersion)) list.unshift(activeVersion);
     return list;
   }, [versions, activeVersion]);
-
-  const a96Stats = (a96Q.data ?? {}) as Record<string, any>;
-  const a96Episode = (a96Stats.active_episode ?? {}) as Record<string, any>;
-  const a96Pending = a96PendingQ.data as Record<string, any> | null;
-  const a96Wins = Number(a96Stats.wins ?? 0);
-  const a96Losses = Number(a96Stats.losses ?? 0);
-  const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
-  const a96WinRate = Number(a96Stats.win_rate ?? 0);
 
   const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
   const v6Pending = v6PendingQ.data as Record<string, any> | null;
@@ -412,121 +352,6 @@ function StatsPage() {
         />
 
 
-        <ModelCard
-          title="a96"
-          subtitle="a96-r4"
-          status="Stable"
-          tone="emerald"
-          winRate={a96WinRate}
-          wins={a96Wins}
-          losses={a96Losses}
-          pushes={Number(a96Stats.pushes ?? 0)}
-          pending={Number(a96Stats.pending ?? 0)}
-          predictionLabel="Current Prediction"
-          predictionTs={a96Pending?.target_candle_ts}
-          predictionValue={a96Pending?.final_prediction ?? "—"}
-          abstainReason={(a96Pending as any)?.decision_reason ?? null}
-          actions={(
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={doResetA96Stats} disabled={resettingA96}>
-                {resettingA96 ? "…" : "Reset"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadA96Csv} disabled={exportingA96}>
-                {exportingA96 ? "…" : "CSV"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadA96CombinedCsv} disabled={exportingA96Combined}>
-                {exportingA96Combined ? "…" : "CSV+"}
-              </Button>
-            </div>
-          )}
-        >
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <MiniStat label="Total rows" value={Number(a96Stats.total ?? 0)} />
-            <MiniStat label="Abstains" value={Number(a96Stats.abstains ?? 0)} />
-            <MiniStat label="Body ratio vetoes" value={Number(a96Stats.body_ratio_vetoes ?? 0)} />
-            <MiniStat label="Wick pressure vetoes" value={Number(a96Stats.wick_pressure_vetoes ?? 0)} />
-            <MiniStat label="MACD vetoes" value={Number(a96Stats.macd_vetoes ?? 0)} />
-            <MiniStat label="Agreement vetoes" value={Number(a96Stats.agreement_vetoes ?? 0)} />
-            <MiniStat label="Efficiency vetoes (r3 legacy)" value={Number(a96Stats.efficiency_vetoes ?? 0)} />
-          </div>
-          <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-              r3 counterfactual (audit only)
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <MiniStat label="Win rate" value={`${Number(a96Stats.r3_cf_win_rate ?? 0)}%`} />
-              <MiniStat label="Wins" value={Number(a96Stats.r3_cf_wins ?? 0)} />
-              <MiniStat label="Losses" value={Number(a96Stats.r3_cf_losses ?? 0)} />
-              <MiniStat label="Abstains" value={Number(a96Stats.r3_cf_abstains ?? 0)} />
-            </div>
-          </div>
-          {a96Pending && (a96Pending.aligned_macd_hist_atr != null || a96Pending.four_candle_aligned_wick_pressure != null) && (
-            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                r4 structure &amp; momentum audit
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <MiniStat
-                  label="Mean 2c body ratio"
-                  value={a96Pending.mean_2_candle_body_to_range_r4 != null ? Number(a96Pending.mean_2_candle_body_to_range_r4).toFixed(4) : "—"}
-                />
-                <MiniStat label="Body veto" value={a96Pending.body_ratio_veto_fired ? "Fired" : a96Pending.body_ratio_condition ? "In band" : "Clear"} />
-                <MiniStat
-                  label="Aligned wick pressure"
-                  value={a96Pending.four_candle_aligned_wick_pressure != null ? Number(a96Pending.four_candle_aligned_wick_pressure).toFixed(4) : "—"}
-                />
-                <MiniStat label="Wick veto" value={a96Pending.wick_pressure_veto_fired ? "Fired" : a96Pending.wick_pressure_condition ? "In band" : "Clear"} />
-                <MiniStat
-                  label="Aligned MACD/ATR"
-                  value={a96Pending.aligned_macd_hist_atr != null ? Number(a96Pending.aligned_macd_hist_atr).toFixed(4) : "—"}
-                />
-                <MiniStat label="MACD veto" value={a96Pending.macd_veto_fired ? "Fired" : a96Pending.macd_veto_condition ? "In band" : "Clear"} />
-                <MiniStat label="r3 would have" value={a96Pending.r3_counterfactual_direction ?? a96Pending.r3_counterfactual_decision ?? "—"} />
-              </div>
-            </div>
-          )}
-
-          {a96Pending && (a96Pending.four_candle_path_efficiency != null || a96Pending.efficiency_veto_condition != null) && (
-            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                Four-candle efficiency audit
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <MiniStat
-                  label="Net displacement"
-                  value={a96Pending.four_candle_net_displacement != null ? Number(a96Pending.four_candle_net_displacement).toFixed(2) : "—"}
-                />
-                <MiniStat
-                  label="Total body path"
-                  value={a96Pending.four_candle_total_body_path != null ? Number(a96Pending.four_candle_total_body_path).toFixed(2) : "—"}
-                />
-                <MiniStat
-                  label="Path efficiency"
-                  value={a96Pending.four_candle_path_efficiency != null ? Number(a96Pending.four_candle_path_efficiency).toFixed(4) : "—"}
-                />
-                <MiniStat
-                  label="Toxic band"
-                  value={a96Pending.efficiency_veto_condition ? "In band" : "Out of band"}
-                />
-                <MiniStat
-                  label="Veto fired"
-                  value={a96Pending.efficiency_veto_fired ? "Yes" : "No"}
-                />
-              </div>
-            </div>
-          )}
-          {a96Episode && (a96Episode.comparable_resolved_count ?? 0) > 0 && (
-            <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Active fit episode</div>
-              <div className="grid grid-cols-2 gap-3">
-                <MiniStat label="Comparable" value={a96Episode.comparable_resolved_count ?? 0} />
-                <MiniStat label="Layer A net" value={a96Episode.layer_a_net ?? 0} />
-                <MiniStat label="Layer B net" value={a96Episode.layer_b_net ?? 0} />
-                <MiniStat label="Activated" value={a96Episode.activated_at ? new Date(a96Episode.activated_at).toLocaleDateString() : "—"} />
-              </div>
-            </div>
-          )}
-        </ModelCard>
 
         <V6Card
           stats={v6Stats}
