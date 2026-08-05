@@ -84,13 +84,15 @@ async function loadHistory(
 ): Promise<{ rows: HistoryRow[]; contiguous: boolean; error: string | null }> {
   const lastTs = new Date(targetTs.getTime() - TF_MS);
   const firstTs = new Date(lastTs.getTime() - V6_WARMUP_CANDLES * TF_MS);
+  // NOTE: the `confirm` flag can lag several seconds behind the boundary run.
+  // A candle whose full 15m window has elapsed is closed by definition, so
+  // elapsed-time is the authoritative confirmation here (same rule as warmup).
   const { data, error } = await sb
     .from("candles")
     .select("id, candle_ts, open, high, low, close, volume")
     .eq("symbol", V6_CANDLE_STREAM.symbol)
     .eq("timeframe", V6_CANDLE_STREAM.timeframe)
     .eq("fetch_source", V6_CANDLE_STREAM.provider)
-    .eq("confirm", true)
     .gte("candle_ts", firstTs.toISOString())
     .lte("candle_ts", lastTs.toISOString())
     .order("candle_ts", { ascending: true });
