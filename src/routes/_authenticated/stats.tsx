@@ -111,39 +111,6 @@ function StatsPage() {
     }
   }
 
-  async function downloadA96Csv() {
-    try {
-      setExportingA96(true);
-      const rows = await exportA96Fn();
-      if (rows.length === 0) { alert("No a96 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `a96-${stamp()}.csv`);
-    } finally {
-      setExportingA96(false);
-    }
-  }
-
-  async function downloadA96CombinedCsv() {
-    try {
-      setExportingA96Combined(true);
-      const rows = await exportA96CombinedFn();
-      if (rows.length === 0) { alert("No a96 / AAS96 rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `a96-combined-${stamp()}.csv`);
-    } finally {
-      setExportingA96Combined(false);
-    }
-  }
-
-  async function doResetA96Stats() {
-    if (!confirm("Reset a96 visual stats to zero? The CSV export will keep all historical rows.")) return;
-    try {
-      setResettingA96(true);
-      await resetA96Fn();
-      qc.invalidateQueries({ queryKey: ["a96-stats"] });
-    } finally {
-      setResettingA96(false);
-    }
-  }
-
   async function doResetTd1Stats() {
     if (!confirm("Reset TD1-RC visual stats to zero? The CSV export will keep all historical rows.")) return;
     try {
