@@ -1017,6 +1017,10 @@ function V6Card({
       </div>
 
       <div className="relative">
+        <Daily3d days={(stats.daily_3d ?? []) as Array<Record<string, any>>} accent="cyan" />
+      </div>
+
+      <div className="relative">
         <V6Section title="Forward test">
           <V6Stat label="Coverage" value={`${Number(stats.coverage ?? 0)}%`} />
           <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
