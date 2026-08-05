@@ -263,6 +263,7 @@ function StatsPage() {
     a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
     a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
     compressed_risk: (td1Stats.compressed_risk ?? null) as Record<string, any> | null,
+    daily_3d: (td1Stats.daily_3d ?? []) as Array<Record<string, any>>,
 
   };
   const td2Stats = (td2Q.data ?? {}) as Record<string, any>;
@@ -276,6 +277,8 @@ function StatsPage() {
     td1_vetoes: Number(td2Stats.td1_vetoes ?? 0),
     containment_vetoes: Number(td2Stats.containment_vetoes ?? 0),
     compressed_risk: (td2Stats.compressed_risk ?? null) as Record<string, any> | null,
+    daily_3d: (td2Stats.daily_3d ?? []) as Array<Record<string, any>>,
+
   };
   const td2Resolved = td2Hero.wins + td2Hero.losses + td2Hero.pushes;
 
@@ -550,6 +553,51 @@ function TD1Stat({ label, value, tone }: { label: string; value: string | number
   );
 }
 
+/** Last 3 calendar days (Mountain Time): win rate + net wins per day. */
+function Daily3d({ days, accent = "bear" }: { days: Array<Record<string, any>>; accent?: "bear" | "cyan" }) {
+  const rows = (days ?? []).slice(0, 3);
+  if (rows.length === 0) return null;
+  const line = accent === "cyan" ? "from-cyan-400/40" : "from-bear/40";
+  const label = (dateKey: string, i: number) => {
+    if (i === 0) return "Today";
+    if (i === 1) return "Yesterday";
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1)).toLocaleDateString("en-US", {
+      timeZone: "UTC", month: "short", day: "numeric",
+    });
+  };
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Last 3 days</span>
+        <span className={`h-px flex-1 bg-gradient-to-r ${line} to-transparent`} />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {rows.map((d, i) => {
+          const net = Number(d.net ?? 0);
+          const trades = Number(d.trades ?? 0);
+          const netCls = net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-muted-foreground";
+          return (
+            <div key={String(d.date ?? i)} className="td1-chip px-3 py-2">
+              <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground truncate">
+                {label(String(d.date ?? ""), i)}
+              </div>
+              <div className="font-mono text-sm font-semibold mt-0.5 tabular-nums">
+                {trades === 0 ? "—" : `${Number(d.win_rate ?? 0).toFixed(1)}%`}
+              </div>
+              <div className={`font-mono text-[10px] mt-0.5 tabular-nums ${netCls}`}>
+                {trades === 0 ? "no trades" : `${net > 0 ? "+" : ""}${net} net · ${d.wins}W-${d.losses}L`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+
 function TD1Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5">
@@ -693,6 +741,12 @@ function TD1Card({
         <TD1Stat label="Pushes" value={pushes} />
         <TD1Stat label="Pending" value={pendingCount} />
       </div>
+
+      <div className="relative">
+        <Daily3d days={hero.daily_3d ?? []} />
+      </div>
+
+
 
       <div className="relative">
         <TD1Section title="Layer activity">
@@ -960,6 +1014,10 @@ function V6Card({
         <V6Stat label="Losses" value={losses} tone="bear" />
         <V6Stat label="Pushes" value={pushes} />
         <V6Stat label="Pending" value={pendingCount} />
+      </div>
+
+      <div className="relative">
+        <Daily3d days={(stats.daily_3d ?? []) as Array<Record<string, any>>} accent="cyan" />
       </div>
 
       <div className="relative">

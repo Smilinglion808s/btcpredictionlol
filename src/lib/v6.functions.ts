@@ -87,11 +87,21 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     rolling96_directional_predictions: 0, rolling96_valid_opportunities: 0,
   };
 
+  // Last 3 calendar days (Mountain Time): win rate + net wins per day, raw scoring.
+  const REPORT_TZ = "America/Denver";
+  const dayKey = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(iso));
+  const dayBuckets: Record<string, { wins: number; losses: number }> = {};
+
   let peakAdj = 0;
   let cumAdj = 0;
   let peakRaw = 0;
   let cumRaw = 0;
   const window: Array<{ adj: number; raw: number; directional: boolean }> = [];
+
+
 
 
   for (const r of rows) {
@@ -152,6 +162,11 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     const directional = r.final_prediction === "GREEN" || r.final_prediction === "RED";
     if (directional) {
       const won = raw > 0;
+      if (r.target_candle_ts) {
+        const k = dayKey(String(r.target_candle_ts));
+        dayBuckets[k] ??= { wins: 0, losses: 0 };
+        if (won) dayBuckets[k].wins += 1; else dayBuckets[k].losses += 1;
+      }
       if (won) {
         c.wins += 1;
         if (r.final_prediction === "GREEN") c.green_wins += 1; else c.red_wins += 1;
@@ -163,6 +178,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.max_loss_streak = Math.max(c.max_loss_streak, c.current_loss_streak);
       }
     }
+
 
     // Regime Inverter accounting (counterfactual pre-inverter track).
     const preAdj = r.pre_inverter_adjusted_score == null ? adj : Number(r.pre_inverter_adjusted_score);
@@ -215,8 +231,24 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
+  const daily_3d = [0, 1, 2].map((back) => {
+    const key = dayKey(new Date(Date.now() - back * 86400000).toISOString());
+    const b = dayBuckets[key] ?? { wins: 0, losses: 0 };
+    const n = b.wins + b.losses;
+    return {
+      date: key,
+      wins: b.wins,
+      losses: b.losses,
+      net: b.wins - b.losses,
+      trades: n,
+      win_rate: n === 0 ? 0 : Math.round((b.wins / n) * 10000) / 100,
+    };
+  });
+
   return {
     ...c,
+    daily_3d,
+
     raw_net: round2(c.raw_net),
     adjusted_net: round2(c.adjusted_net),
     max_adjusted_drawdown: round2(c.max_adjusted_drawdown),
