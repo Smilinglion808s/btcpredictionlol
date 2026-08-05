@@ -94,9 +94,6 @@ function StatsPage() {
     }
   }
 
-  const [exportingA96, setExportingA96] = useState(false);
-  const [exportingA96Combined, setExportingA96Combined] = useState(false);
-  const [resettingA96, setResettingA96] = useState(false);
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
   const [resettingTd2, setResettingTd2] = useState(false);
