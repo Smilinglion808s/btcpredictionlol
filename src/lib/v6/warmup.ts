@@ -72,7 +72,6 @@ export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Pr
     .eq("symbol", V6_CANDLE_STREAM.symbol)
     .eq("timeframe", V6_CANDLE_STREAM.timeframe)
     .eq("fetch_source", V6_CANDLE_STREAM.provider)
-    .eq("confirm", true)
     .gte("candle_ts", firstTs.toISOString())
     .lte("candle_ts", lastTs.toISOString())
     .order("candle_ts", { ascending: true });
@@ -83,6 +82,8 @@ export async function fetchWarmupCandles(sb: SupabaseClient, targetTs: Date): Pr
   for (const r of (data ?? []) as Array<Record<string, unknown>>) {
     const iso = new Date(String(r.candle_ts)).toISOString();
     if (seen.has(iso)) continue;
+    // `confirm` can lag; an elapsed 15m window is closed by definition.
+    if (new Date(iso).getTime() + TF_MS > Date.now()) continue;
     seen.add(iso);
     rows.push({
       candle_ts: iso,
