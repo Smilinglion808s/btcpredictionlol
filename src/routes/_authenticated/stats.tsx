@@ -263,6 +263,7 @@ function StatsPage() {
     a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
     a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
     compressed_risk: (td1Stats.compressed_risk ?? null) as Record<string, any> | null,
+    daily_3d: (td1Stats.daily_3d ?? []) as Array<Record<string, any>>,
 
   };
   const td2Stats = (td2Q.data ?? {}) as Record<string, any>;
@@ -276,6 +277,8 @@ function StatsPage() {
     td1_vetoes: Number(td2Stats.td1_vetoes ?? 0),
     containment_vetoes: Number(td2Stats.containment_vetoes ?? 0),
     compressed_risk: (td2Stats.compressed_risk ?? null) as Record<string, any> | null,
+    daily_3d: (td2Stats.daily_3d ?? []) as Array<Record<string, any>>,
+
   };
   const td2Resolved = td2Hero.wins + td2Hero.losses + td2Hero.pushes;
 
