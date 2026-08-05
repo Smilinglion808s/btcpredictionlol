@@ -231,10 +231,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["v6-stats"] });
         qc.invalidateQueries({ queryKey: ["v6-pending"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "a96_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["a96-stats"] });
-        qc.invalidateQueries({ queryKey: ["a96-pending"] });
-      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
