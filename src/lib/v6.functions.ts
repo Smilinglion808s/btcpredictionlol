@@ -231,8 +231,24 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
+  const daily_3d = [0, 1, 2].map((back) => {
+    const key = dayKey(new Date(Date.now() - back * 86400000).toISOString());
+    const b = dayBuckets[key] ?? { wins: 0, losses: 0 };
+    const n = b.wins + b.losses;
+    return {
+      date: key,
+      wins: b.wins,
+      losses: b.losses,
+      net: b.wins - b.losses,
+      trades: n,
+      win_rate: n === 0 ? 0 : Math.round((b.wins / n) * 10000) / 100,
+    };
+  });
+
   return {
     ...c,
+    daily_3d,
+
     raw_net: round2(c.raw_net),
     adjusted_net: round2(c.adjusted_net),
     max_adjusted_drawdown: round2(c.max_adjusted_drawdown),
