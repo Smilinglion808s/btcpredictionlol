@@ -162,6 +162,11 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     const directional = r.final_prediction === "GREEN" || r.final_prediction === "RED";
     if (directional) {
       const won = raw > 0;
+      if (r.target_candle_ts) {
+        const k = dayKey(String(r.target_candle_ts));
+        dayBuckets[k] ??= { wins: 0, losses: 0 };
+        if (won) dayBuckets[k].wins += 1; else dayBuckets[k].losses += 1;
+      }
       if (won) {
         c.wins += 1;
         if (r.final_prediction === "GREEN") c.green_wins += 1; else c.red_wins += 1;
@@ -173,6 +178,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.max_loss_streak = Math.max(c.max_loss_streak, c.current_loss_streak);
       }
     }
+
 
     // Regime Inverter accounting (counterfactual pre-inverter track).
     const preAdj = r.pre_inverter_adjusted_score == null ? adj : Number(r.pre_inverter_adjusted_score);
