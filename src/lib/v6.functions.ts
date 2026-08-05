@@ -87,11 +87,21 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     rolling96_directional_predictions: 0, rolling96_valid_opportunities: 0,
   };
 
+  // Last 3 calendar days (Mountain Time): win rate + net wins per day, raw scoring.
+  const REPORT_TZ = "America/Denver";
+  const dayKey = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(iso));
+  const dayBuckets: Record<string, { wins: number; losses: number }> = {};
+
   let peakAdj = 0;
   let cumAdj = 0;
   let peakRaw = 0;
   let cumRaw = 0;
   const window: Array<{ adj: number; raw: number; directional: boolean }> = [];
+
+
 
 
   for (const r of rows) {
