@@ -68,10 +68,6 @@ function StatsPage() {
   const exportTd2Fn = useServerFn(exportTd2RcShadow);
   const resetTd2Fn = useServerFn(resetTd2RcVisualStats);
 
-  const a96Fn = useServerFn(getA96Stats);
-  const a96Q = useQuery({ queryKey: ["a96-stats"], queryFn: () => a96Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const a96PendingFn = useServerFn(getA96Pending);
-  const a96PendingQ = useQuery({ queryKey: ["a96-pending"], queryFn: () => a96PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6Fn = useServerFn(getV6Stats);
   const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const v6PendingFn = useServerFn(getV6Pending);
@@ -81,9 +77,7 @@ function StatsPage() {
   const v6InverterFn = useServerFn(getV6RegimeInverter);
   const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportV6Fn = useServerFn(exportV6Csv);
-  const exportA96Fn = useServerFn(exportA96Csv);
-  const exportA96CombinedFn = useServerFn(exportA96CombinedCsv);
-  const resetA96Fn = useServerFn(resetA96VisualStats);
+  const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const [exportingV6, setExportingV6] = useState(false);
