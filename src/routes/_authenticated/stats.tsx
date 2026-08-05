@@ -16,11 +16,6 @@ import {
   resetTd2RcVisualStats,
   getTd1RcTrainingProgress,
   listTd1RcRecent,
-  getA96Stats,
-  getA96Pending,
-  exportA96Csv,
-  exportA96CombinedCsv,
-  resetA96VisualStats,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
