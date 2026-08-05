@@ -189,7 +189,7 @@ export async function ensureV6Warm(sb: SupabaseClient, targetTs: Date): Promise<
         .eq("symbol", V6_CANDLE_STREAM.symbol)
         .eq("timeframe", V6_CANDLE_STREAM.timeframe)
         .eq("fetch_source", V6_CANDLE_STREAM.provider)
-        .eq("confirm", true)
+        
         .eq("candle_ts", inputIso)
         .maybeSingle();
       if (anchor) {
