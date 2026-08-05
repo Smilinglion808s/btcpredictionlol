@@ -289,14 +289,6 @@ function StatsPage() {
     return list;
   }, [versions, activeVersion]);
 
-  const a96Stats = (a96Q.data ?? {}) as Record<string, any>;
-  const a96Episode = (a96Stats.active_episode ?? {}) as Record<string, any>;
-  const a96Pending = a96PendingQ.data as Record<string, any> | null;
-  const a96Wins = Number(a96Stats.wins ?? 0);
-  const a96Losses = Number(a96Stats.losses ?? 0);
-  const a96Total = a96Wins + a96Losses + Number(a96Stats.pushes ?? 0);
-  const a96WinRate = Number(a96Stats.win_rate ?? 0);
-
   const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
   const v6Pending = v6PendingQ.data as Record<string, any> | null;
   const v6Fmt = (n: unknown, digits = 2) => (n == null || n === "" ? "—" : Number(n).toFixed(digits));
