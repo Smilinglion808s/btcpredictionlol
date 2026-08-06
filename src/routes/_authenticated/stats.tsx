@@ -360,6 +360,7 @@ function StatsPage() {
           stats={v6Stats}
           pending={v6Pending}
           warmup={(v6WarmupQ.data as Record<string, any> | null) ?? null}
+          inverter={(v6InverterQ.data as Record<string, any> | null) ?? null}
           fmt={v6Fmt}
           onExport={downloadV6Csv}
           exporting={exportingV6}
@@ -367,16 +368,6 @@ function StatsPage() {
           resetting={resettingV6}
         />
 
-
-        <V6BroadConflictPanel stats={v6Stats} />
-
-        <V6BroadRedReliabilityPanel stats={v6Stats} />
-
-        <V6RegimeInverterPanel
-          state={(v6InverterQ.data as Record<string, any> | null) ?? null}
-          stats={v6Stats}
-          pending={v6Pending}
-        />
 
       </div>
 
