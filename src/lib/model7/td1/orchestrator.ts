@@ -77,7 +77,7 @@ export interface A2CombinedContext {
 export async function runTd1RcForA2Combined(
   supabase: SupabaseClient,
   ctx: A2CombinedContext,
-): Promise<Record<string, unknown> | null> {
+): Promise<Td1RcRunResult | null> {
   const baseRow: Record<string, unknown> = {
     prediction_id: ctx.predictionId,
     candle_ts: ctx.candleTs,
