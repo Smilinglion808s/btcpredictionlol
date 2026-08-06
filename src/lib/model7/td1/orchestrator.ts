@@ -52,12 +52,30 @@ async function writeSkipRow(
   const td2Row = {
     ...row,
     variant: TD2_VARIANT,
-    prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+    prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
     td1_policy_version: TD1_RC_POLICY_VERSION,
+    // td2-r2 prediction-time audit fields are persisted on every write path.
+    td2_policy_version: TD2_R2_POLICY_VERSION,
+    td2_prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
+    td2_policy_activation_ts: TD2_R2_ACTIVATION_TS,
+    td2_recovery_feature_name: TD2_RECOVERY_FEATURE_NAME,
+    td2_recovery_feature_value: null,
+    td2_recovery_threshold: TD2_RECOVERY_THRESHOLD,
+    td2_recovery_evaluable: false,
+    td2_recovery_condition: false,
+    td2_recovery_fired: false,
+    td2_recovery_reason: "COMPRESSED_RISK_NOT_FIRED",
+    td2_recovery_direction: null,
+    td2_recovery_source_feature_cutoff_ts: (base.td1_feature_cutoff_ts as string | null) ?? null,
+    td2_r1_counterfactual_decision: "SKIP",
+    td2_r1_counterfactual_would_trade: false,
+    td2_r1_counterfactual_skip_reason: reason,
+    td2_recovery_value_class: "NO_CHANGE",
   };
   await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
   return { td1Row: row, td2Row };
 }
+
 
 export interface A2CombinedContext {
   predictionId: string;
