@@ -53,7 +53,7 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
   const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
-    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score",
+    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution",
     resetAt,
   );
 
@@ -85,6 +85,21 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     weak_red_recovery_wins: 0, weak_red_recovery_losses: 0, weak_red_restored_scored: 0,
     weak_red_recovery_raw: 0, weak_red_recovery_adjusted: 0,
     rolling96_directional_predictions: 0, rolling96_valid_opportunities: 0,
+    // Broad mild-anchor-conflict veto (V6-r3)
+    broad_conflict_candidates: 0, broad_conflict_vetoes: 0,
+    broad_conflict_avoided_losses: 0, broad_conflict_sacrificed_wins: 0,
+    broad_conflict_raw: 0, broad_conflict_adjusted: 0,
+    broad_conflict_last_anchor_distance: 0,
+    // BROAD_RED reliability governor (V6-r3)
+    broad_red_history_count: 0, broad_red_last12_wins: 0, broad_red_last12_losses: 0,
+    broad_red_last12_adjusted_net: 0,
+    broad_red_reliability_ready: false, broad_red_reliability_active: false,
+    broad_red_vetoes: 0, broad_red_avoided_losses: 0, broad_red_sacrificed_wins: 0,
+    broad_red_raw: 0, broad_red_adjusted: 0,
+    broad_red_shadow_wins: 0, broad_red_shadow_losses: 0,
+    // Regime Inverter — shadow only (V6-r3)
+    inverter_would_trigger_count: 0, inverter_shadow_wins: 0, inverter_shadow_losses: 0,
+    inverter_shadow_raw_contribution: 0, inverter_shadow_adjusted_contribution: 0,
   };
 
   // Last 3 calendar days (Mountain Time): win rate + net wins per day, raw scoring.
@@ -128,6 +143,22 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       c.weak_red_veto_count += 1;
       c.weak_red_veto_raw += Number(r.weak_broad_red_veto_raw_contribution ?? 0);
       c.weak_red_veto_adjusted += Number(r.weak_broad_red_veto_adjusted_contribution ?? 0);
+    }
+
+    if (r.broad_conflict_veto_evaluable) c.broad_conflict_candidates += 1;
+    if (r.broad_conflict_veto_triggered) c.broad_conflict_vetoes += 1;
+    if (r.broad_conflict_anchor_distance != null) {
+      c.broad_conflict_last_anchor_distance = Number(r.broad_conflict_anchor_distance);
+    }
+    if (r.broad_red_reliability_veto_triggered) c.broad_red_vetoes += 1;
+    // Governor state is a running value; the newest row carries the live status.
+    if (r.broad_red_history_count != null) {
+      c.broad_red_history_count = Number(r.broad_red_history_count);
+      c.broad_red_last12_wins = Number(r.broad_red_last12_wins ?? 0);
+      c.broad_red_last12_losses = Number(r.broad_red_last12_losses ?? 0);
+      c.broad_red_last12_adjusted_net = Number(r.broad_red_last12_adjusted_net ?? 0);
+      c.broad_red_reliability_ready = Boolean(r.broad_red_reliability_ready);
+      c.broad_red_reliability_active = Boolean(r.broad_red_reliability_veto_active);
     }
 
     if (r.weak_red_veto_candidate) {
@@ -212,6 +243,33 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
         c.weak_red_roc4_adjusted += rAdj;
         if (won) c.weak_red_roc4_wins += 1; else c.weak_red_roc4_losses += 1;
       }
+    }
+
+    // --- V6-r3 resolved accounting ---
+    if (r.broad_conflict_veto_triggered) {
+      const cr = Number(r.broad_conflict_veto_raw_contribution ?? 0);
+      c.broad_conflict_raw += cr;
+      c.broad_conflict_adjusted += Number(r.broad_conflict_veto_adjusted_contribution ?? 0);
+      if (cr > 0) c.broad_conflict_avoided_losses += 1;
+      else if (cr < 0) c.broad_conflict_sacrificed_wins += 1;
+    }
+    if (r.broad_red_reliability_veto_triggered) {
+      const br = Number(r.broad_red_reliability_raw_contribution ?? 0);
+      c.broad_red_raw += br;
+      c.broad_red_adjusted += Number(r.broad_red_reliability_adjusted_contribution ?? 0);
+      if (br > 0) c.broad_red_avoided_losses += 1;
+      else if (br < 0) c.broad_red_sacrificed_wins += 1;
+    }
+    if (r.broad_red_shadow_prediction) {
+      if (Number(r.broad_red_shadow_adjusted_score ?? 0) > 0) c.broad_red_shadow_wins += 1;
+      else c.broad_red_shadow_losses += 1;
+    }
+    if (r.regime_inverter_would_trigger) {
+      c.inverter_would_trigger_count += 1;
+      if (Number(r.regime_inverter_shadow_raw_score ?? 0) > 0) c.inverter_shadow_wins += 1;
+      else c.inverter_shadow_losses += 1;
+      c.inverter_shadow_raw_contribution += Number(r.regime_inverter_counterfactual_raw_contribution ?? 0);
+      c.inverter_shadow_adjusted_contribution += Number(r.regime_inverter_counterfactual_adjusted_contribution ?? 0);
     }
 
     window.push({ adj, raw, directional });
