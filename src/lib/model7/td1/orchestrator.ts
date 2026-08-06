@@ -19,7 +19,17 @@ import {
   evaluateCompressedRisk,
   scoreDecision,
 } from "./compressedRisk";
+import {
+  TD2_R2_ACTIVATION_TS,
+  TD2_R2_POLICY_VERSION,
+  TD2_R2_PROSPECTIVE_TEST_ID,
+  TD2_RECOVERY_FEATURE_NAME,
+  TD2_RECOVERY_THRESHOLD,
+  attributeTd2R2,
+  evaluateTd2R2,
+} from "./td2r2";
 import type { Candle } from "../featurize";
+
 
 const BASE_VARIANT = "A2_Combined";
 const PROSPECTIVE_TEST_ID = TD1_RC_PROSPECTIVE_TEST_ID;
