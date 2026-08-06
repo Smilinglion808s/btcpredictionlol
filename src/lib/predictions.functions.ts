@@ -891,8 +891,32 @@ async function td1RcStatsFor(variant: string, resetId: number) {
       worst_daily_net: worstDailyNet,
       daily: dailyRows.slice(0, 30),
     },
+    recovery: (() => {
+      const scope = rows.filter((r) => r.td2_policy_version);
+      const rec = scope.filter((r) => r.td2_recovery_fired === true);
+      const recWins = rec.filter((r) => r.td2_recovery_result === "WIN").length;
+      const recLosses = rec.filter((r) => r.td2_recovery_result === "LOSS").length;
+      const r1 = policySummary("td2_r1_counterfactual_decision", "td2_r1_counterfactual_result", scope);
+      return {
+        policy_version: "td2-r2-opposing-drift-4-recovery",
+        feature: "opposing_drift_4",
+        threshold: 0.5,
+        rows_under_policy: scope.length,
+        evaluable: scope.filter((r) => r.td2_recovery_evaluable === true).length,
+        condition_count: scope.filter((r) => r.td2_recovery_condition === true).length,
+        recovered: rec.length,
+        recovered_wins: recWins,
+        recovered_losses: recLosses,
+        recovered_pending: rec.filter((r) => !r.td2_recovery_result).length,
+        recovered_win_rate: recWins + recLosses === 0
+          ? 0 : Math.round((recWins / (recWins + recLosses)) * 10000) / 100,
+        incremental_net: scope.reduce((s, r) => s + (Number(r.td2_recovery_incremental_value) || 0), 0),
+        r1_counterfactual: r1,
+      };
+    })(),
   };
 }
+
 
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
   td1RcStatsFor(TD1_VARIANT, 1),
