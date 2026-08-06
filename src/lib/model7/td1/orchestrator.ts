@@ -19,7 +19,17 @@ import {
   evaluateCompressedRisk,
   scoreDecision,
 } from "./compressedRisk";
+import {
+  TD2_R2_ACTIVATION_TS,
+  TD2_R2_POLICY_VERSION,
+  TD2_R2_PROSPECTIVE_TEST_ID,
+  TD2_RECOVERY_FEATURE_NAME,
+  TD2_RECOVERY_THRESHOLD,
+  attributeTd2R2,
+  evaluateTd2R2,
+} from "./td2r2";
 import type { Candle } from "../featurize";
+
 
 const BASE_VARIANT = "A2_Combined";
 const PROSPECTIVE_TEST_ID = TD1_RC_PROSPECTIVE_TEST_ID;
@@ -52,12 +62,30 @@ async function writeSkipRow(
   const td2Row = {
     ...row,
     variant: TD2_VARIANT,
-    prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+    prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
     td1_policy_version: TD1_RC_POLICY_VERSION,
+    // td2-r2 prediction-time audit fields are persisted on every write path.
+    td2_policy_version: TD2_R2_POLICY_VERSION,
+    td2_prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
+    td2_policy_activation_ts: TD2_R2_ACTIVATION_TS,
+    td2_recovery_feature_name: TD2_RECOVERY_FEATURE_NAME,
+    td2_recovery_feature_value: null,
+    td2_recovery_threshold: TD2_RECOVERY_THRESHOLD,
+    td2_recovery_evaluable: false,
+    td2_recovery_condition: false,
+    td2_recovery_fired: false,
+    td2_recovery_reason: "COMPRESSED_RISK_NOT_FIRED",
+    td2_recovery_direction: null,
+    td2_recovery_source_feature_cutoff_ts: (base.td1_feature_cutoff_ts as string | null) ?? null,
+    td2_r1_counterfactual_decision: "SKIP",
+    td2_r1_counterfactual_would_trade: false,
+    td2_r1_counterfactual_skip_reason: reason,
+    td2_recovery_value_class: "NO_CHANGE",
   };
   await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
   return { td1Row: row, td2Row };
 }
+
 
 export interface A2CombinedContext {
   predictionId: string;
@@ -273,12 +301,47 @@ export async function runTd1RcForA2Combined(
     });
 
     const finalRow = shapeRow(decision);
+
+    // --- TD2-r2: Opposing Drift Recovery (active TD2 shadow policy) ---
+    // Recovery only ever converts an incremental compressed-risk abstention back
+    // into the exact previous-policy direction. Never reverses.
+    const r2 = evaluateTd2R2({
+      r1Decision: td2Decision.externalFinalDecision,
+      r1WouldTrade: td2Decision.wouldTrade,
+      r1SkipReason: td2Decision.primarySkipReason,
+      compressedRiskVetoFired: td2Decision.compressedRiskVetoFired,
+      previousPolicy: td2Decision.previousPolicy,
+      opposingDrift4: built.features.opposing_drift_4,
+      timingValid: ctx.leakageCheckPassed === true,
+    });
+    const td2Base = shapeRow(td2Decision);
     const td2Row = {
-      ...shapeRow(td2Decision),
+      ...td2Base,
       variant: TD2_VARIANT,
-      prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+      prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
       td1_policy_version: TD1_RC_POLICY_VERSION,
+      external_final_decision: r2.decision,
+      would_trade: r2.wouldTrade,
+      skip_reason: r2.skipReason,
+      all_veto_reasons_json: r2.vetoReasons,
+      td2_policy_version: TD2_R2_POLICY_VERSION,
+      td2_prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
+      td2_policy_activation_ts: TD2_R2_ACTIVATION_TS,
+      td2_recovery_feature_name: TD2_RECOVERY_FEATURE_NAME,
+      td2_recovery_feature_value: r2.featureValue,
+      td2_recovery_threshold: TD2_RECOVERY_THRESHOLD,
+      td2_recovery_evaluable: r2.evaluable,
+      td2_recovery_condition: r2.condition,
+      td2_recovery_fired: r2.fired,
+      td2_recovery_reason: r2.reason,
+      td2_recovery_direction: r2.direction,
+      td2_recovery_source_feature_cutoff_ts: built.featureCutoffTs,
+      td2_r1_counterfactual_decision: r2.r1Decision,
+      td2_r1_counterfactual_would_trade: r2.r1WouldTrade,
+      td2_r1_counterfactual_skip_reason: r2.r1SkipReason,
+      td2_recovery_value_class: r2.fired ? "UNRESOLVED" : "NO_CHANGE",
     };
+
     await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
     return { td1Row: finalRow, td2Row };
   } catch (e) {
@@ -312,8 +375,10 @@ export async function resolveTd1RcRow(
       .select(
         "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
         "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_prev_policy_would_trade, " +
-        "td1_prev_policy_skip_reason, td1_no_global_veto_decision",
+        "td1_prev_policy_skip_reason, td1_no_global_veto_decision, " +
+        "td2_policy_version, td2_recovery_fired, td2_r1_counterfactual_decision",
       )
+
       .eq("prediction_id", predictionId)
       .in("variant", [VARIANT, TD2_VARIANT]);
     const rows = ((rowData ?? []) as unknown) as Record<string, unknown>[];
@@ -355,6 +420,25 @@ export async function resolveTd1RcRow(
         actualDirection,
       );
 
+      // --- TD2-r2 recovery attribution (TD2 rows only) ---
+      let td2Patch: Record<string, unknown> = {};
+      if (row.variant === TD2_VARIANT && row.td2_policy_version) {
+        const att = attributeTd2R2({
+          activeDecision: (ext as "YES" | "NO" | "SKIP" | null) ?? null,
+          r1Decision: (row.td2_r1_counterfactual_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          recoveryFired: row.td2_recovery_fired === true,
+          actualDirection,
+        });
+        td2Patch = {
+          td2_r1_counterfactual_result: att.r1Result,
+          td2_r1_counterfactual_score: att.r1Score,
+          td2_recovery_result: att.recoveryResult,
+          td2_recovery_score: att.recoveryScore,
+          td2_recovery_incremental_value: att.incrementalValue,
+          td2_recovery_value_class: att.valueClass,
+        };
+      }
+
       await supabase.from("model7_td1_rc_shadow").update({
         a2_counterfactual_result: cfResult,
         actual_direction: actualDirection,
@@ -370,7 +454,9 @@ export async function resolveTd1RcRow(
         td1_prev_policy_score: prev.score,
         td1_no_global_veto_result: noGlobal.result,
         td1_no_global_veto_score: noGlobal.score,
+        ...td2Patch,
       } as never).eq("id", row.id as string).is("resolved_at", null);
+
 
       if (row.variant === VARIANT) {
         containmentInput = { candleTs: row.candle_ts as string, side: a2, cfResult };

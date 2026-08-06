@@ -2496,6 +2496,27 @@ export type Database = {
           td1_prev_policy_would_trade: boolean | null
           td1_threshold: number
           td1_veto_fired: boolean
+          td2_policy_activation_ts: string | null
+          td2_policy_version: string | null
+          td2_prospective_test_id: string | null
+          td2_r1_counterfactual_decision: string | null
+          td2_r1_counterfactual_result: string | null
+          td2_r1_counterfactual_score: number | null
+          td2_r1_counterfactual_skip_reason: string | null
+          td2_r1_counterfactual_would_trade: boolean | null
+          td2_recovery_condition: boolean | null
+          td2_recovery_direction: string | null
+          td2_recovery_evaluable: boolean | null
+          td2_recovery_feature_name: string | null
+          td2_recovery_feature_value: number | null
+          td2_recovery_fired: boolean | null
+          td2_recovery_incremental_value: number | null
+          td2_recovery_reason: string | null
+          td2_recovery_result: string | null
+          td2_recovery_score: number | null
+          td2_recovery_source_feature_cutoff_ts: string | null
+          td2_recovery_threshold: number | null
+          td2_recovery_value_class: string | null
           timing_status: string | null
           updated_at: string
           variant: string
@@ -2588,6 +2609,27 @@ export type Database = {
           td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean
+          td2_policy_activation_ts?: string | null
+          td2_policy_version?: string | null
+          td2_prospective_test_id?: string | null
+          td2_r1_counterfactual_decision?: string | null
+          td2_r1_counterfactual_result?: string | null
+          td2_r1_counterfactual_score?: number | null
+          td2_r1_counterfactual_skip_reason?: string | null
+          td2_r1_counterfactual_would_trade?: boolean | null
+          td2_recovery_condition?: boolean | null
+          td2_recovery_direction?: string | null
+          td2_recovery_evaluable?: boolean | null
+          td2_recovery_feature_name?: string | null
+          td2_recovery_feature_value?: number | null
+          td2_recovery_fired?: boolean | null
+          td2_recovery_incremental_value?: number | null
+          td2_recovery_reason?: string | null
+          td2_recovery_result?: string | null
+          td2_recovery_score?: number | null
+          td2_recovery_source_feature_cutoff_ts?: string | null
+          td2_recovery_threshold?: number | null
+          td2_recovery_value_class?: string | null
           timing_status?: string | null
           updated_at?: string
           variant?: string
@@ -2680,6 +2722,27 @@ export type Database = {
           td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean
+          td2_policy_activation_ts?: string | null
+          td2_policy_version?: string | null
+          td2_prospective_test_id?: string | null
+          td2_r1_counterfactual_decision?: string | null
+          td2_r1_counterfactual_result?: string | null
+          td2_r1_counterfactual_score?: number | null
+          td2_r1_counterfactual_skip_reason?: string | null
+          td2_r1_counterfactual_would_trade?: boolean | null
+          td2_recovery_condition?: boolean | null
+          td2_recovery_direction?: string | null
+          td2_recovery_evaluable?: boolean | null
+          td2_recovery_feature_name?: string | null
+          td2_recovery_feature_value?: number | null
+          td2_recovery_fired?: boolean | null
+          td2_recovery_incremental_value?: number | null
+          td2_recovery_reason?: string | null
+          td2_recovery_result?: string | null
+          td2_recovery_score?: number | null
+          td2_recovery_source_feature_cutoff_ts?: string | null
+          td2_recovery_threshold?: number | null
+          td2_recovery_value_class?: string | null
           timing_status?: string | null
           updated_at?: string
           variant?: string

@@ -705,7 +705,7 @@ async function td1RcStatsFor(variant: string, resetId: number) {
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("model7_td1_rc_shadow")
-      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_counterfactual_score, td1_compressed_risk_veto_value, td1_compressed_risk_incremental_change, td1_compressed_risk_attribution_version, td1_prev_policy_skip_reason, td1_prev_policy_would_trade, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
+      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_counterfactual_score, td1_compressed_risk_veto_value, td1_compressed_risk_incremental_change, td1_compressed_risk_attribution_version, td1_prev_policy_skip_reason, td1_prev_policy_would_trade, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score, td2_policy_version, td2_recovery_feature_value, td2_recovery_evaluable, td2_recovery_condition, td2_recovery_fired, td2_recovery_reason, td2_recovery_result, td2_recovery_score, td2_recovery_incremental_value, td2_recovery_value_class, td2_r1_counterfactual_decision, td2_r1_counterfactual_would_trade, td2_r1_counterfactual_result, td2_r1_counterfactual_score")
       .eq("variant", variant)
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -891,8 +891,32 @@ async function td1RcStatsFor(variant: string, resetId: number) {
       worst_daily_net: worstDailyNet,
       daily: dailyRows.slice(0, 30),
     },
+    recovery: (() => {
+      const scope = rows.filter((r) => r.td2_policy_version);
+      const rec = scope.filter((r) => r.td2_recovery_fired === true);
+      const recWins = rec.filter((r) => r.td2_recovery_result === "WIN").length;
+      const recLosses = rec.filter((r) => r.td2_recovery_result === "LOSS").length;
+      const r1 = policySummary("td2_r1_counterfactual_decision", "td2_r1_counterfactual_result", scope);
+      return {
+        policy_version: "td2-r2-opposing-drift-4-recovery",
+        feature: "opposing_drift_4",
+        threshold: 0.5,
+        rows_under_policy: scope.length,
+        evaluable: scope.filter((r) => r.td2_recovery_evaluable === true).length,
+        condition_count: scope.filter((r) => r.td2_recovery_condition === true).length,
+        recovered: rec.length,
+        recovered_wins: recWins,
+        recovered_losses: recLosses,
+        recovered_pending: rec.filter((r) => !r.td2_recovery_result).length,
+        recovered_win_rate: recWins + recLosses === 0
+          ? 0 : Math.round((recWins / (recWins + recLosses)) * 10000) / 100,
+        incremental_net: scope.reduce((s, r) => s + (Number(r.td2_recovery_incremental_value) || 0), 0),
+        r1_counterfactual: r1,
+      };
+    })(),
   };
 }
+
 
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
   td1RcStatsFor(TD1_VARIANT, 1),
@@ -1098,6 +1122,30 @@ async function buildTd1RcExport(variant: string) {
       td1_no_global_veto_would_trade: r.td1_no_global_veto_would_trade,
       td1_no_global_veto_result: r.td1_no_global_veto_result,
       td1_no_global_veto_score: r.td1_no_global_veto_score,
+      // --- td2-r2-opposing-drift-4-recovery ---
+      td2_policy_version: r.td2_policy_version,
+      td2_prospective_test_id: r.td2_prospective_test_id,
+      td2_policy_activation_ts: r.td2_policy_activation_ts,
+      td2_recovery_feature_name: r.td2_recovery_feature_name,
+      td2_recovery_feature_value: r.td2_recovery_feature_value,
+      td2_recovery_threshold: r.td2_recovery_threshold,
+      td2_recovery_evaluable: r.td2_recovery_evaluable,
+      td2_recovery_condition: r.td2_recovery_condition,
+      td2_recovery_fired: r.td2_recovery_fired,
+      td2_recovery_reason: r.td2_recovery_reason,
+      td2_recovery_direction: r.td2_recovery_direction,
+      td2_recovery_source_feature_cutoff_ts: r.td2_recovery_source_feature_cutoff_ts,
+      td2_r1_counterfactual_decision: r.td2_r1_counterfactual_decision,
+      td2_r1_counterfactual_would_trade: r.td2_r1_counterfactual_would_trade,
+      td2_r1_counterfactual_skip_reason: r.td2_r1_counterfactual_skip_reason,
+      td2_r1_counterfactual_result: r.td2_r1_counterfactual_result,
+      td2_r1_counterfactual_score: r.td2_r1_counterfactual_score,
+      td2_recovery_result: r.td2_recovery_result,
+      td2_recovery_score: r.td2_recovery_score,
+      td2_recovery_incremental_value: r.td2_recovery_incremental_value,
+      td2_recovery_value_class: r.td2_recovery_value_class,
+
+
 
       td1_feature_cutoff_ts: r.td1_feature_cutoff_ts,
       td1_latest_source_candle_ts: r.td1_latest_source_candle_ts,
