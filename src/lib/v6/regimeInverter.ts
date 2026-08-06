@@ -9,9 +9,20 @@
 
 import type { Actual, Direction } from "./inference";
 
-export const V6_MODEL_REVISION = "V6-r2-regime-inverter-red-recovery";
-/** Explicit activation boundary for V6-r2. Older rows keep their prior revision. */
-export const V6_MODEL_REVISION_ACTIVATED_AT = "2026-08-04T20:45:00.000Z";
+export const V6_MODEL_REVISION = "V6-r3-broad-conflict-reliability";
+/** Explicit activation boundary for V6-r3. Older rows keep their prior revision. */
+export const V6_MODEL_REVISION_ACTIVATED_AT = "2026-08-06T02:00:00.000Z";
+/**
+ * Revision tag of the inverter's own persisted shadow window. It is deliberately
+ * decoupled from `V6_MODEL_REVISION`: the rolling history and its scoring rules
+ * did not change in r3 (only its publication authority did), so the stored
+ * window must survive the r3 activation intact.
+ */
+export const V6_REGIME_INVERTER_STATE_REVISION = "V6-regime-inverter-v1";
+/** V6-r3: the inverter is shadow-only and may never change publication. */
+export const V6_REGIME_INVERTER_SHADOW_ONLY = true;
+export const V6_REGIME_INVERTER_PUBLICATION_ENABLED = false;
+
 export const V6_REGIME_INVERTER_WINDOW = 20;
 export const V6_REGIME_INVERTER_THRESHOLD = -2.8;
 export const V6_REGIME_INVERTER_REASON = "V6_REGIME_INVERSION";

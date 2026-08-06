@@ -44,6 +44,20 @@ import {
 
 } from "./regimeInverter";
 import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
+import {
+  applyBroadConflictVeto,
+  applyBroadRedReliabilityVeto,
+  vetoContribution,
+  BROAD_CONFLICT_MAX_DISTANCE,
+  BROAD_CONFLICT_MIN_DISTANCE,
+  BROAD_CONFLICT_VETO_REASON,
+  BROAD_RED_RELIABILITY_REASON,
+  BROAD_RED_RELIABILITY_THRESHOLD,
+  REGIME_INVERTER_PUBLICATION_ENABLED,
+  REGIME_INVERTER_SHADOW_ONLY,
+} from "./r3";
+import { ensureBroadRedState, recordResolvedBroadRedSignal } from "./broadRedStore";
+
 
 const TF_MS = 15 * 60 * 1000;
 
@@ -286,14 +300,37 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = livePrior.length === 7 ? livePrior : warm.priorBasePredictions;
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
-    // Step 10-11: rolling shadow state, then the Regime Inverter applied AFTER
-    // every existing Armor rule. The unresolved target never enters the history.
-    const inverterState = await ensureInverterState(sb, targetTs);
-    const inverter = applyRegimeInverter(
-      inf.finalPrediction,
-      inf.predictionSource,
-      inverterState.summary,
+    // --- V6-r3 steps 14-18 -------------------------------------------------
+    // 14/15. Broad mild-anchor-conflict veto.
+    const conflict = applyBroadConflictVeto(
+      inf.predictionAfterWeakRedRecovery,
+      inf.predictionSourceAfterWeakRedRecovery,
+      inf.selectedComponent,
+      inf.anchorPercentile,
     );
+    // 16/17/18. BROAD_RED reliability governor. The unresolved target never
+    // enters the shadow history before publication.
+    const broadRedState = await ensureBroadRedState(sb, targetTs);
+    const reliability = applyBroadRedReliabilityVeto(
+      conflict.prediction,
+      conflict.predictionSource,
+      inf.selectedComponent,
+      broadRedState.summary,
+    );
+    const r3Prediction = reliability.prediction;
+    const r3Source = reliability.predictionSource;
+
+    // 20. Regime Inverter — SHADOW ONLY under r3. It still computes everything
+    // it used to, but it can no longer change publication.
+    const inverterState = await ensureInverterState(sb, targetTs);
+    const inverter = applyRegimeInverter(r3Prediction, r3Source, inverterState.summary);
+
+    const r3AbstainReason = conflict.triggered
+      ? BROAD_CONFLICT_VETO_REASON
+      : reliability.triggered
+        ? BROAD_RED_RELIABILITY_REASON
+        : inf.abstainReason;
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
@@ -384,22 +421,58 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_after_weak_red_recovery: inf.predictionAfterWeakRedRecovery,
       prediction_source_after_weak_red_recovery: inf.predictionSourceAfterWeakRedRecovery,
 
-      final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
-      // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status:
-        accepted && inverter.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted ? inf.abstainReason : null,
+      // --- V6-r3 component selection + broad mild-anchor-conflict veto ---
+      selected_component: inf.selectedComponent,
+      broad_distance_from_neutral: inf.broadDistanceFromNeutral,
+      anchor_distance_from_neutral: inf.anchorDistanceFromNeutral,
+      broad_conflict_veto_evaluable: conflict.evaluable,
+      broad_conflict_veto_triggered: accepted && conflict.triggered,
+      broad_conflict_veto_reason: accepted ? conflict.reason : null,
+      broad_conflict_original_prediction: conflict.originalPrediction,
+      broad_conflict_original_source: conflict.originalSource,
+      broad_conflict_anchor_percentile: conflict.anchorPercentile,
+      broad_conflict_anchor_direction: conflict.anchorDirection,
+      broad_conflict_anchor_distance: conflict.anchorDistance,
+      broad_conflict_min_distance: BROAD_CONFLICT_MIN_DISTANCE,
+      broad_conflict_max_distance: BROAD_CONFLICT_MAX_DISTANCE,
+      prediction_after_broad_conflict_veto: conflict.prediction,
+      prediction_source_after_broad_conflict_veto: conflict.predictionSource,
 
-      // --- V6-r1 Regime Inverter (prediction-time, immutable after resolution) ---
+      // --- V6-r3 BROAD_RED reliability governor ---
+      broad_red_reliability_evaluable: reliability.evaluable,
+      broad_red_reliability_ready: broadRedState.summary.ready,
+      broad_red_reliability_veto_active: broadRedState.summary.active,
+      broad_red_reliability_veto_triggered: accepted && reliability.triggered,
+      broad_red_reliability_reason: accepted ? reliability.reason : null,
+      broad_red_history_count: broadRedState.summary.count,
+      broad_red_history_json: broadRedState.history,
+      broad_red_last12_wins: broadRedState.summary.wins,
+      broad_red_last12_losses: broadRedState.summary.losses,
+      broad_red_last12_adjusted_net: broadRedState.summary.adjustedNet,
+      broad_red_reliability_threshold: BROAD_RED_RELIABILITY_THRESHOLD,
+      prediction_after_broad_red_reliability: r3Prediction,
+      prediction_source_after_broad_red_reliability: r3Source,
+
+      final_prediction: accepted ? r3Prediction : "OP_FAIL",
+      // Strategic ABSTAIN is never an operational failure and vice versa.
+      abstain_status: accepted && r3Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted ? r3AbstainReason : null,
+
+      // --- Regime Inverter — SHADOW ONLY (V6-r3) ---
       model_revision: V6_MODEL_REVISION,
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
-      pre_inverter_prediction: inf.finalPrediction,
-      pre_inverter_prediction_source: inf.predictionSource,
+      pre_inverter_prediction: r3Prediction,
+      pre_inverter_prediction_source: r3Source,
+      regime_inverter_shadow_only: REGIME_INVERTER_SHADOW_ONLY,
+      regime_inverter_publication_enabled: REGIME_INVERTER_PUBLICATION_ENABLED,
       regime_inverter_evaluable: inverter.evaluable,
       regime_inverter_ready: inverterState.summary.ready,
       regime_inverter_active: inverterState.summary.active,
-      regime_inverter_triggered: accepted ? inverter.triggered : false,
+      // Publication authority removed: the inverter can no longer trigger.
+      regime_inverter_triggered: false,
+      regime_inverter_would_trigger: accepted ? inverter.triggered : false,
+      regime_inverter_would_publish: accepted && inverter.triggered ? inverter.finalPrediction : null,
       regime_inverter_history_count: inverterState.summary.count,
       regime_inverter_history_json: inverterState.history,
       regime_inverter_last20_wins: inverterState.summary.wins,
@@ -408,8 +481,9 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
-      regime_inverter_reason: accepted ? inverter.reason : null,
-      final_prediction_source: accepted ? inverter.finalPredictionSource : "OP_FAIL",
+      regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
+      final_prediction_source: accepted ? r3Source : "OP_FAIL",
+
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
@@ -426,7 +500,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, pre_inverter_prediction, regime_inverter_triggered, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -489,6 +563,54 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         !opFail && r.prediction_source === "V6_BASE" &&
         (originalBase === "GREEN" || originalBase === "RED") &&
         (actual === "GREEN" || actual === "RED");
+      // --- V6-r3 shadow inverter accounting ---
+      // Under r3 the inverter never publishes; its would-be result is graded
+      // separately and excluded from the published V6-r3 net.
+      const wouldTrigger = Boolean(r.regime_inverter_would_trigger) && !opFail;
+      const wouldPublish = (r.regime_inverter_would_publish as Direction | null) ?? null;
+      const inverterShadowRaw =
+        wouldTrigger && wouldPublish ? rawScore(wouldPublish, actual) : null;
+      const inverterShadowAdj =
+        wouldTrigger && wouldPublish ? adjustedScore(wouldPublish, actual) : null;
+      const inverterCounterfactual = inverterContribution(
+        wouldTrigger,
+        preInverter,
+        wouldPublish ?? preInverter,
+        actual,
+      );
+
+      // --- V6-r3 broad mild-anchor-conflict veto counterfactual ---
+      const conflictTriggered = Boolean(r.broad_conflict_veto_triggered) && !opFail;
+      const conflictUnderlying =
+        (r.broad_conflict_original_prediction as Direction | null) ?? null;
+      const conflictContrib = vetoContribution(conflictTriggered, conflictUnderlying, actual);
+
+      // --- V6-r3 BROAD_RED reliability veto counterfactual ---
+      const reliabilityTriggered = Boolean(r.broad_red_reliability_veto_triggered) && !opFail;
+      const reliabilityUnderlying: Direction | null = reliabilityTriggered ? "RED" : null;
+      const reliabilityContrib = vetoContribution(
+        reliabilityTriggered,
+        reliabilityUnderlying,
+        actual,
+      );
+
+      // --- V6-r3 BROAD_RED shadow membership (original frozen signal only) ---
+      const selectedComponent =
+        (r.selected_component as string | null) ??
+        (Number.isFinite(Number(r.broad_percentile)) && Number.isFinite(Number(r.anchor_percentile))
+          ? Math.abs(Number(r.broad_percentile) - 0.5) >=
+            Math.abs(Number(r.anchor_percentile) - 0.5)
+            ? "BROAD"
+            : "ANCHOR"
+          : "NONE");
+      const baseSource =
+        (r.original_v6_base_source as string | null) ?? (r.prediction_source as string | null);
+      const broadRedEligible =
+        !opFail &&
+        selectedComponent === "BROAD" &&
+        originalBase === "RED" &&
+        baseSource === "V6_BASE" &&
+        (actual === "GREEN" || actual === "RED");
 
 
       await sb
@@ -539,6 +661,31 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           weak_red_recovery_counterfactual_adjusted_score: weakRedRestored ? weakRedUnderlyingAdj : null,
           weak_red_recovery_raw_contribution: weakRedRecoveryContribution.raw,
           weak_red_recovery_adjusted_contribution: weakRedRecoveryContribution.adjusted,
+
+          // --- V6-r3 counterfactual accounting ---
+          broad_conflict_underlying_prediction: conflictUnderlying,
+          broad_conflict_underlying_raw_score:
+            conflictUnderlying ? rawScore(conflictUnderlying, actual) : null,
+          broad_conflict_underlying_adjusted_score:
+            conflictUnderlying ? adjustedScore(conflictUnderlying, actual) : null,
+          broad_conflict_veto_raw_contribution: conflictContrib.raw,
+          broad_conflict_veto_adjusted_contribution: conflictContrib.adjusted,
+
+          broad_red_underlying_prediction: reliabilityUnderlying,
+          broad_red_underlying_raw_score:
+            reliabilityUnderlying ? rawScore(reliabilityUnderlying, actual) : null,
+          broad_red_underlying_adjusted_score:
+            reliabilityUnderlying ? adjustedScore(reliabilityUnderlying, actual) : null,
+          broad_red_reliability_raw_contribution: reliabilityContrib.raw,
+          broad_red_reliability_adjusted_contribution: reliabilityContrib.adjusted,
+
+          broad_red_shadow_prediction: broadRedEligible ? "RED" : null,
+          broad_red_shadow_adjusted_score: broadRedEligible ? adjustedScore("RED", actual) : null,
+
+          regime_inverter_shadow_raw_score: inverterShadowRaw,
+          regime_inverter_shadow_adjusted_score: inverterShadowAdj,
+          regime_inverter_counterfactual_raw_contribution: inverterCounterfactual.raw,
+          regime_inverter_counterfactual_adjusted_contribution: inverterCounterfactual.adjusted,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
@@ -554,6 +701,20 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           actual_direction: actual,
         });
       }
+
+      // Feed the BROAD_RED reliability governor (idempotent per target ts).
+      if (broadRedEligible) {
+        await recordResolvedBroadRedSignal(sb, {
+          target_candle_ts: targetTs.toISOString(),
+          selected_component: "BROAD",
+          base_v6_prediction: "RED",
+          base_v6_prediction_source: "V6_BASE",
+          operational_status: "OK",
+          canonical_ground_truth_valid: true,
+          actual_direction: actual,
+        });
+      }
+
     }
   } catch (e) {
     await logError(sb, "v6-resolution-error", {}, e);

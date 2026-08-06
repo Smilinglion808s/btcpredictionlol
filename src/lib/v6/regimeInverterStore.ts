@@ -18,7 +18,7 @@ import {
   buildShadowHistory,
   summarizeShadow,
   toShadowEntry,
-  V6_MODEL_REVISION,
+  V6_REGIME_INVERTER_STATE_REVISION,
   V6_REGIME_INVERTER_THRESHOLD,
   V6_REGIME_INVERTER_WINDOW,
   type ShadowCandidate,
@@ -115,7 +115,7 @@ async function persist(
   await sb.from(TABLE).upsert(
     {
       model_version: V6_MODEL_VERSION,
-      regime_inverter_model_revision: V6_MODEL_REVISION,
+      regime_inverter_model_revision: V6_REGIME_INVERTER_STATE_REVISION,
       fit_id: V6_FIT_ID,
       model_artifact_sha256: V6_ARTIFACT_SHA256,
       feature_schema_version: V6_FEATURE_SCHEMA_VERSION,
@@ -148,7 +148,8 @@ export async function ensureInverterState(
 
   const valid =
     state !== null &&
-    state.regime_inverter_model_revision === V6_MODEL_REVISION &&
+    (state.regime_inverter_model_revision === V6_REGIME_INVERTER_STATE_REVISION ||
+      state.regime_inverter_model_revision === "V6-r2-regime-inverter-red-recovery") &&
     state.model_artifact_sha256 === V6_ARTIFACT_SHA256 &&
     state.feature_schema_version === V6_FEATURE_SCHEMA_VERSION;
 

@@ -43,7 +43,7 @@ describe("V6-r2 weak RED recovery — frozen thresholds", () => {
   it("uses 58 / 0.28 and the new revision id", () => {
     expect(WEAK_RED_RSI_THRESHOLD).toBe(58);
     expect(WEAK_RED_ROC4_THRESHOLD).toBe(0.28);
-    expect(V6_MODEL_REVISION).toBe("V6-r2-regime-inverter-red-recovery");
+    expect(V6_MODEL_REVISION).toBe("V6-r3-broad-conflict-reliability");
   });
 });
 

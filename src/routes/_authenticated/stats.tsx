@@ -368,11 +368,16 @@ function StatsPage() {
         />
 
 
+        <V6BroadConflictPanel stats={v6Stats} />
+
+        <V6BroadRedReliabilityPanel stats={v6Stats} />
+
         <V6RegimeInverterPanel
           state={(v6InverterQ.data as Record<string, any> | null) ?? null}
           stats={v6Stats}
           pending={v6Pending}
         />
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -1090,7 +1095,87 @@ function V6Card({
   );
 }
 
-/** V6-r1 Regime Inverter — rolling shadow reliability of the ORIGINAL V6_BASE direction. */
+/** V6-r3 broad mild-anchor-conflict veto audit. */
+function V6BroadConflictPanel({ stats }: { stats: Record<string, any> }) {
+  const n = (k: string) => Number(stats[k] ?? 0);
+  return (
+    <Card className="relative overflow-hidden border-violet/30">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.12),transparent_60%)]" />
+      <CardHeader className="relative pb-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
+          <span className="flex items-center gap-2">
+            V6 Broad Conflict Veto
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              V6-r3 · band [0.025, 0.075)
+            </span>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="relative grid grid-cols-3 gap-3">
+        <MiniStat label="Candidates" value={String(n("broad_conflict_candidates"))} />
+        <MiniStat label="Vetoes" value={String(n("broad_conflict_vetoes"))} />
+        <MiniStat label="Avoided losses" value={String(n("broad_conflict_avoided_losses"))} />
+        <MiniStat label="Sacrificed wins" value={String(n("broad_conflict_sacrificed_wins"))} />
+        <MiniStat label="Raw contribution" value={n("broad_conflict_raw").toFixed(2)} />
+        <MiniStat label="Adj. contribution" value={n("broad_conflict_adjusted").toFixed(2)} />
+        <MiniStat
+          label="Last anchor distance"
+          value={n("broad_conflict_last_anchor_distance").toFixed(4)}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** V6-r3 BROAD_RED reliability governor — 12-signal shadow window, threshold ≤ -2.0. */
+function V6BroadRedReliabilityPanel({ stats }: { stats: Record<string, any> }) {
+  const n = (k: string) => Number(stats[k] ?? 0);
+  const ready = Boolean(stats.broad_red_reliability_ready);
+  const active = Boolean(stats.broad_red_reliability_active);
+  const count = n("broad_red_history_count");
+  const tone = active
+    ? "border-bear/50 text-bear bg-bear/10"
+    : ready
+      ? "border-bull/50 text-bull bg-bull/10"
+      : "border-violet/40 text-violet bg-violet/10";
+  const label = active ? "VETOED" : ready ? "ACTIVE" : `WARMING ${count}/12`;
+  return (
+    <Card className="relative overflow-hidden border-violet/30">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.12),transparent_60%)]" />
+      <CardHeader className="relative pb-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
+          <span className="flex items-center gap-2">
+            V6 BROAD_RED Reliability
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+              V6-r3 · threshold ≤ -2.0
+            </span>
+          </span>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${tone}`}>
+            {label}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="relative grid grid-cols-3 gap-3">
+        <MiniStat label="History" value={`${count} / 12`} />
+        <MiniStat
+          label="Last-12 W/L"
+          value={`${n("broad_red_last12_wins")}/${n("broad_red_last12_losses")}`}
+        />
+        <MiniStat label="Last-12 adj. net" value={n("broad_red_last12_adjusted_net").toFixed(2)} />
+        <MiniStat
+          label="Shadow W/L"
+          value={`${n("broad_red_shadow_wins")}/${n("broad_red_shadow_losses")}`}
+        />
+        <MiniStat label="Vetoes" value={String(n("broad_red_vetoes"))} />
+        <MiniStat label="Avoided losses" value={String(n("broad_red_avoided_losses"))} />
+        <MiniStat label="Sacrificed wins" value={String(n("broad_red_sacrificed_wins"))} />
+        <MiniStat label="Adj. contribution" value={n("broad_red_adjusted").toFixed(2)} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Regime Inverter — SHADOW ONLY under V6-r3. It never changes publication. */
 function V6RegimeInverterPanel({
   state,
   stats,
@@ -1103,14 +1188,6 @@ function V6RegimeInverterPanel({
   const active = Boolean(state?.regime_inverter_active);
   const count = Number(state?.regime_inverter_history_count ?? 0);
 
-  const tone = active
-    ? "border-bear/50 text-bear bg-bear/10"
-    : ready
-      ? "border-bull/50 text-bull bg-bull/10"
-      : "border-violet/40 text-violet bg-violet/10";
-  const label = active ? "INVERTING" : ready ? "ARMED · DORMANT" : `WARMING ${count}/20`;
-
-
   return (
     <Card className="relative overflow-hidden border-violet/30">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.14),transparent_60%)]" />
@@ -1119,25 +1196,34 @@ function V6RegimeInverterPanel({
           <span className="flex items-center gap-2">
             V6 Regime Inverter
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              V6-r1 · adaptive layer
+              V6-r3 · audit layer
             </span>
           </span>
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${tone}`}>
-            {label}
+          <span className="rounded-full border border-muted-foreground/40 bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            Shadow only — does not change publication
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="relative">
         {(() => {
-          const w = Number(stats.inverter_wins ?? 0);
-          const l = Number(stats.inverter_losses ?? 0);
+          const w = Number(stats.inverter_shadow_wins ?? 0);
+          const l = Number(stats.inverter_shadow_losses ?? 0);
           const total = w + l;
           const wr = total ? (w / total) * 100 : 0;
           return (
             <div className="grid grid-cols-3 gap-3">
-              <MiniStat label="Flip win rate" value={total ? `${wr.toFixed(1)}%` : "—"} />
-              <MiniStat label="Flip W/L" value={`${w}/${l}`} />
-              <MiniStat label="Status" value={active ? "ACTIVE" : ready ? "DORMANT" : `${count}/20`} />
+              <MiniStat label="Would-be win rate" value={total ? `${wr.toFixed(1)}%` : "—"} />
+              <MiniStat label="Would-be W/L" value={`${w}/${l}`} />
+              <MiniStat
+                label="Would-have-triggered"
+                value={String(Number(stats.inverter_would_trigger_count ?? 0))}
+              />
+              <MiniStat label="Ready" value={ready ? "YES" : `${count}/20`} />
+              <MiniStat label="Active" value={active ? "YES" : "NO"} />
+              <MiniStat
+                label="Would-be adj. contribution"
+                value={Number(stats.inverter_shadow_adjusted_contribution ?? 0).toFixed(2)}
+              />
             </div>
           );
         })()}
@@ -1145,6 +1231,7 @@ function V6RegimeInverterPanel({
     </Card>
   );
 }
+
 
 
 function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
