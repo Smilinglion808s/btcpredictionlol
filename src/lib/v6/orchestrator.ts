@@ -664,14 +664,18 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
 
           // --- V6-r3 counterfactual accounting ---
           broad_conflict_underlying_prediction: conflictUnderlying,
-          broad_conflict_underlying_raw_score: conflictContrib.underlyingRaw,
-          broad_conflict_underlying_adjusted_score: conflictContrib.underlyingAdjusted,
+          broad_conflict_underlying_raw_score:
+            conflictUnderlying ? rawScore(conflictUnderlying, actual) : null,
+          broad_conflict_underlying_adjusted_score:
+            conflictUnderlying ? adjustedScore(conflictUnderlying, actual) : null,
           broad_conflict_veto_raw_contribution: conflictContrib.raw,
           broad_conflict_veto_adjusted_contribution: conflictContrib.adjusted,
 
           broad_red_underlying_prediction: reliabilityUnderlying,
-          broad_red_underlying_raw_score: reliabilityContrib.underlyingRaw,
-          broad_red_underlying_adjusted_score: reliabilityContrib.underlyingAdjusted,
+          broad_red_underlying_raw_score:
+            reliabilityUnderlying ? rawScore(reliabilityUnderlying, actual) : null,
+          broad_red_underlying_adjusted_score:
+            reliabilityUnderlying ? adjustedScore(reliabilityUnderlying, actual) : null,
           broad_red_reliability_raw_contribution: reliabilityContrib.raw,
           broad_red_reliability_adjusted_contribution: reliabilityContrib.adjusted,
 
@@ -702,6 +706,11 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
       if (broadRedEligible) {
         await recordResolvedBroadRedSignal(sb, {
           target_candle_ts: targetTs.toISOString(),
+          selected_component: "BROAD",
+          base_v6_prediction: "RED",
+          base_v6_prediction_source: "V6_BASE",
+          operational_status: "OK",
+          canonical_ground_truth_valid: true,
           actual_direction: actual,
         });
       }
