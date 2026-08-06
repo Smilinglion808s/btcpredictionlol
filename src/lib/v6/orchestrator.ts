@@ -421,22 +421,58 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_after_weak_red_recovery: inf.predictionAfterWeakRedRecovery,
       prediction_source_after_weak_red_recovery: inf.predictionSourceAfterWeakRedRecovery,
 
-      final_prediction: accepted ? inverter.finalPrediction : "OP_FAIL",
-      // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status:
-        accepted && inverter.finalPrediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted ? inf.abstainReason : null,
+      // --- V6-r3 component selection + broad mild-anchor-conflict veto ---
+      selected_component: inf.selectedComponent,
+      broad_distance_from_neutral: inf.broadDistanceFromNeutral,
+      anchor_distance_from_neutral: inf.anchorDistanceFromNeutral,
+      broad_conflict_veto_evaluable: conflict.evaluable,
+      broad_conflict_veto_triggered: accepted && conflict.triggered,
+      broad_conflict_veto_reason: accepted ? conflict.reason : null,
+      broad_conflict_original_prediction: conflict.originalPrediction,
+      broad_conflict_original_source: conflict.originalSource,
+      broad_conflict_anchor_percentile: conflict.anchorPercentile,
+      broad_conflict_anchor_direction: conflict.anchorDirection,
+      broad_conflict_anchor_distance: conflict.anchorDistance,
+      broad_conflict_min_distance: BROAD_CONFLICT_MIN_DISTANCE,
+      broad_conflict_max_distance: BROAD_CONFLICT_MAX_DISTANCE,
+      prediction_after_broad_conflict_veto: conflict.prediction,
+      prediction_source_after_broad_conflict_veto: conflict.predictionSource,
 
-      // --- V6-r1 Regime Inverter (prediction-time, immutable after resolution) ---
+      // --- V6-r3 BROAD_RED reliability governor ---
+      broad_red_reliability_evaluable: reliability.evaluable,
+      broad_red_reliability_ready: broadRedState.summary.ready,
+      broad_red_reliability_veto_active: broadRedState.summary.active,
+      broad_red_reliability_veto_triggered: accepted && reliability.triggered,
+      broad_red_reliability_reason: accepted ? reliability.reason : null,
+      broad_red_history_count: broadRedState.summary.count,
+      broad_red_history_json: broadRedState.history,
+      broad_red_last12_wins: broadRedState.summary.wins,
+      broad_red_last12_losses: broadRedState.summary.losses,
+      broad_red_last12_adjusted_net: broadRedState.summary.adjustedNet,
+      broad_red_reliability_threshold: BROAD_RED_RELIABILITY_THRESHOLD,
+      prediction_after_broad_red_reliability: r3Prediction,
+      prediction_source_after_broad_red_reliability: r3Source,
+
+      final_prediction: accepted ? r3Prediction : "OP_FAIL",
+      // Strategic ABSTAIN is never an operational failure and vice versa.
+      abstain_status: accepted && r3Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted ? r3AbstainReason : null,
+
+      // --- Regime Inverter — SHADOW ONLY (V6-r3) ---
       model_revision: V6_MODEL_REVISION,
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
-      pre_inverter_prediction: inf.finalPrediction,
-      pre_inverter_prediction_source: inf.predictionSource,
+      pre_inverter_prediction: r3Prediction,
+      pre_inverter_prediction_source: r3Source,
+      regime_inverter_shadow_only: REGIME_INVERTER_SHADOW_ONLY,
+      regime_inverter_publication_enabled: REGIME_INVERTER_PUBLICATION_ENABLED,
       regime_inverter_evaluable: inverter.evaluable,
       regime_inverter_ready: inverterState.summary.ready,
       regime_inverter_active: inverterState.summary.active,
-      regime_inverter_triggered: accepted ? inverter.triggered : false,
+      // Publication authority removed: the inverter can no longer trigger.
+      regime_inverter_triggered: false,
+      regime_inverter_would_trigger: accepted ? inverter.triggered : false,
+      regime_inverter_would_publish: accepted && inverter.triggered ? inverter.finalPrediction : null,
       regime_inverter_history_count: inverterState.summary.count,
       regime_inverter_history_json: inverterState.history,
       regime_inverter_last20_wins: inverterState.summary.wins,
@@ -445,8 +481,9 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
-      regime_inverter_reason: accepted ? inverter.reason : null,
-      final_prediction_source: accepted ? inverter.finalPredictionSource : "OP_FAIL",
+      regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
+      final_prediction_source: accepted ? r3Source : "OP_FAIL",
+
     };
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
