@@ -66,12 +66,15 @@ export type CounterfactualClass =
   | "SACRIFICED_WIN"
   | "PUSH"
   | "UNRESOLVED"
+  | "NO_INCREMENTAL_CHANGE"
   | "NOT_APPLICABLE";
 
+/** Attribution scheme identifier persisted on every corrected row. */
+export const COMPRESSED_RISK_ATTRIBUTION_VERSION = "policy-delta-v2";
+
 /**
- * Classify what the compressed-risk abstention gave up / avoided once the
- * candle resolves. `underlyingDirection` is the direction that would have been
- * published had the rule not fired.
+ * Legacy raw-direction classification. Retained only for historical reference;
+ * not used by the resolver (superseded by `attributeCompressedRisk`).
  */
 export function classifyCompressedRiskCounterfactual(args: {
   vetoFired: boolean;
@@ -94,6 +97,92 @@ export function classifyCompressedRiskCounterfactual(args: {
     ? { classification: "SACRIFICED_WIN", vetoValue: -1, abstentionScore: 0 }
     : { classification: "AVOIDED_LOSS", vetoValue: 1, abstentionScore: 0 };
 }
+
+export interface CompressedRiskAttribution {
+  classification: CounterfactualClass;
+  /** Counterfactual score of the previous policy (null while unresolved). */
+  counterfactualScore: number | null;
+  /** activePolicyScore - previousPolicyScore (null while unresolved). */
+  vetoValue: number | null;
+  incrementalChange: boolean;
+  attributionVersion: string;
+  previousPolicySkipReason: string | null;
+}
+
+/**
+ * Canonical policy-delta attribution (policy-delta-v2).
+ *
+ * The compressed-risk gate is only credited/blamed for the delta between the
+ * active policy and the EXACT previous policy (all pre-existing gates intact,
+ * compressed-risk removed). A compressed-risk veto always abstains, so the
+ * active score is 0 and vetoValue = -previousPolicyScore.
+ */
+export function attributeCompressedRisk(args: {
+  vetoFired: boolean;
+  previousPolicyDecision: "YES" | "NO" | "SKIP" | null;
+  previousPolicyWouldTrade: boolean | null;
+  previousPolicySkipReason?: string | null;
+  actualDirection: "GREEN" | "RED" | "PUSH" | null;
+}): CompressedRiskAttribution {
+  const base = {
+    attributionVersion: COMPRESSED_RISK_ATTRIBUTION_VERSION,
+    previousPolicySkipReason: args.previousPolicySkipReason ?? null,
+  };
+  if (!args.vetoFired) {
+    return {
+      ...base,
+      classification: "NOT_APPLICABLE",
+      counterfactualScore: 0,
+      vetoValue: 0,
+      incrementalChange: false,
+    };
+  }
+  const prevDir =
+    args.previousPolicyDecision === "YES" || args.previousPolicyDecision === "NO"
+      ? args.previousPolicyDecision
+      : null;
+  const prevTrades = args.previousPolicyWouldTrade === true && prevDir !== null;
+  if (!prevTrades) {
+    return {
+      ...base,
+      classification: "NO_INCREMENTAL_CHANGE",
+      counterfactualScore: 0,
+      vetoValue: 0,
+      incrementalChange: false,
+    };
+  }
+  if (args.actualDirection == null) {
+    return {
+      ...base,
+      classification: "UNRESOLVED",
+      counterfactualScore: null,
+      vetoValue: null,
+      incrementalChange: true,
+    };
+  }
+  if (args.actualDirection === "PUSH") {
+    return { ...base, classification: "PUSH", counterfactualScore: 0, vetoValue: 0, incrementalChange: true };
+  }
+  const prevWon =
+    (prevDir === "YES" && args.actualDirection === "GREEN") ||
+    (prevDir === "NO" && args.actualDirection === "RED");
+  return prevWon
+    ? {
+        ...base,
+        classification: "SACRIFICED_WIN",
+        counterfactualScore: 1,
+        vetoValue: -1,
+        incrementalChange: true,
+      }
+    : {
+        ...base,
+        classification: "AVOIDED_LOSS",
+        counterfactualScore: -1,
+        vetoValue: 1,
+        incrementalChange: true,
+      };
+}
+
 
 /** WIN=+1, LOSS=-1, PUSH=0, ABSTAIN/SKIP=0. */
 export function scoreDecision(
