@@ -563,6 +563,54 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         !opFail && r.prediction_source === "V6_BASE" &&
         (originalBase === "GREEN" || originalBase === "RED") &&
         (actual === "GREEN" || actual === "RED");
+      // --- V6-r3 shadow inverter accounting ---
+      // Under r3 the inverter never publishes; its would-be result is graded
+      // separately and excluded from the published V6-r3 net.
+      const wouldTrigger = Boolean(r.regime_inverter_would_trigger) && !opFail;
+      const wouldPublish = (r.regime_inverter_would_publish as Direction | null) ?? null;
+      const inverterShadowRaw =
+        wouldTrigger && wouldPublish ? rawScore(wouldPublish, actual) : null;
+      const inverterShadowAdj =
+        wouldTrigger && wouldPublish ? adjustedScore(wouldPublish, actual) : null;
+      const inverterCounterfactual = inverterContribution(
+        wouldTrigger,
+        preInverter,
+        wouldPublish ?? preInverter,
+        actual,
+      );
+
+      // --- V6-r3 broad mild-anchor-conflict veto counterfactual ---
+      const conflictTriggered = Boolean(r.broad_conflict_veto_triggered) && !opFail;
+      const conflictUnderlying =
+        (r.broad_conflict_original_prediction as Direction | null) ?? null;
+      const conflictContrib = vetoContribution(conflictTriggered, conflictUnderlying, actual);
+
+      // --- V6-r3 BROAD_RED reliability veto counterfactual ---
+      const reliabilityTriggered = Boolean(r.broad_red_reliability_veto_triggered) && !opFail;
+      const reliabilityUnderlying: Direction | null = reliabilityTriggered ? "RED" : null;
+      const reliabilityContrib = vetoContribution(
+        reliabilityTriggered,
+        reliabilityUnderlying,
+        actual,
+      );
+
+      // --- V6-r3 BROAD_RED shadow membership (original frozen signal only) ---
+      const selectedComponent =
+        (r.selected_component as string | null) ??
+        (Number.isFinite(Number(r.broad_percentile)) && Number.isFinite(Number(r.anchor_percentile))
+          ? Math.abs(Number(r.broad_percentile) - 0.5) >=
+            Math.abs(Number(r.anchor_percentile) - 0.5)
+            ? "BROAD"
+            : "ANCHOR"
+          : "NONE");
+      const baseSource =
+        (r.original_v6_base_source as string | null) ?? (r.prediction_source as string | null);
+      const broadRedEligible =
+        !opFail &&
+        selectedComponent === "BROAD" &&
+        originalBase === "RED" &&
+        baseSource === "V6_BASE" &&
+        (actual === "GREEN" || actual === "RED");
 
 
       await sb
