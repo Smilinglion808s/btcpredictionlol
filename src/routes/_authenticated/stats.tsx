@@ -1056,6 +1056,32 @@ function V6Card({
           <V6Stat label="Regime inversion" value={Number(stats.inverter_trigger_count ?? 0)} tone="violet" />
         </V6Section>
 
+        <V6Section title="Broad conflict veto · band [0.025, 0.075)">
+          <V6Stat label="Candidates" value={Number(stats.broad_conflict_candidates ?? 0)} />
+          <V6Stat label="Vetoes" value={Number(stats.broad_conflict_vetoes ?? 0)} />
+          <V6Stat label="Avoided losses" value={Number(stats.broad_conflict_avoided_losses ?? 0)} tone="bull" />
+          <V6Stat label="Sacrificed wins" value={Number(stats.broad_conflict_sacrificed_wins ?? 0)} tone="bear" />
+        </V6Section>
+
+        <V6Section title={`BROAD_RED reliability · ${broadRedLabel}`}>
+          <V6Stat label="History" value={`${Number(stats.broad_red_history_count ?? 0)} / 12`} />
+          <V6Stat
+            label="Last-12 W/L"
+            value={`${Number(stats.broad_red_last12_wins ?? 0)}/${Number(stats.broad_red_last12_losses ?? 0)}`}
+          />
+          <V6Stat label="Vetoes" value={Number(stats.broad_red_vetoes ?? 0)} />
+          <V6Stat label="Avoided losses" value={Number(stats.broad_red_avoided_losses ?? 0)} tone="bull" />
+        </V6Section>
+
+        <V6Section title="Regime inverter · shadow only">
+          <V6Stat label="Would-be win rate" value={invTotal ? `${invWr.toFixed(1)}%` : "—"} tone="violet" />
+          <V6Stat label="Would-be W/L" value={`${invWins}/${invLosses}`} />
+          <V6Stat label="Would-have-fired" value={Number(stats.inverter_would_trigger_count ?? 0)} />
+          <V6Stat label="Ready" value={invReady ? "YES" : `${invCount}/20`} />
+        </V6Section>
+
+
+
 
 
       </div>
