@@ -276,7 +276,7 @@ export async function runTd1RcForA2Combined(
       td1_policy_version: TD1_RC_POLICY_VERSION,
     };
     await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
-    return finalRow;
+    return { td1Row: finalRow, td2Row };
   } catch (e) {
     try {
       return await writeSkipRow(supabase, baseRow, `TD1_RC_ERROR:${e instanceof Error ? e.message : String(e)}`);
