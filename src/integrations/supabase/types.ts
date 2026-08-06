@@ -2452,11 +2452,13 @@ export type Database = {
           td1_candidate_veto_fired: boolean | null
           td1_candidate_would_lose: boolean | null
           td1_candidate_would_win: boolean | null
+          td1_compressed_risk_attribution_version: string | null
           td1_compressed_risk_condition: boolean | null
           td1_compressed_risk_counterfactual_direction: string | null
           td1_compressed_risk_counterfactual_result: string | null
           td1_compressed_risk_counterfactual_score: number | null
           td1_compressed_risk_evaluable: boolean | null
+          td1_compressed_risk_incremental_change: boolean | null
           td1_compressed_risk_market_condition: string | null
           td1_compressed_risk_probability: number | null
           td1_compressed_risk_reason: string | null
@@ -2490,6 +2492,7 @@ export type Database = {
           td1_prev_policy_decision: string | null
           td1_prev_policy_result: string | null
           td1_prev_policy_score: number | null
+          td1_prev_policy_skip_reason: string | null
           td1_prev_policy_would_trade: boolean | null
           td1_threshold: number
           td1_veto_fired: boolean
@@ -2541,11 +2544,13 @@ export type Database = {
           td1_candidate_veto_fired?: boolean | null
           td1_candidate_would_lose?: boolean | null
           td1_candidate_would_win?: boolean | null
+          td1_compressed_risk_attribution_version?: string | null
           td1_compressed_risk_condition?: boolean | null
           td1_compressed_risk_counterfactual_direction?: string | null
           td1_compressed_risk_counterfactual_result?: string | null
           td1_compressed_risk_counterfactual_score?: number | null
           td1_compressed_risk_evaluable?: boolean | null
+          td1_compressed_risk_incremental_change?: boolean | null
           td1_compressed_risk_market_condition?: string | null
           td1_compressed_risk_probability?: number | null
           td1_compressed_risk_reason?: string | null
@@ -2579,6 +2584,7 @@ export type Database = {
           td1_prev_policy_decision?: string | null
           td1_prev_policy_result?: string | null
           td1_prev_policy_score?: number | null
+          td1_prev_policy_skip_reason?: string | null
           td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean
@@ -2630,11 +2636,13 @@ export type Database = {
           td1_candidate_veto_fired?: boolean | null
           td1_candidate_would_lose?: boolean | null
           td1_candidate_would_win?: boolean | null
+          td1_compressed_risk_attribution_version?: string | null
           td1_compressed_risk_condition?: boolean | null
           td1_compressed_risk_counterfactual_direction?: string | null
           td1_compressed_risk_counterfactual_result?: string | null
           td1_compressed_risk_counterfactual_score?: number | null
           td1_compressed_risk_evaluable?: boolean | null
+          td1_compressed_risk_incremental_change?: boolean | null
           td1_compressed_risk_market_condition?: string | null
           td1_compressed_risk_probability?: number | null
           td1_compressed_risk_reason?: string | null
@@ -2668,6 +2676,7 @@ export type Database = {
           td1_prev_policy_decision?: string | null
           td1_prev_policy_result?: string | null
           td1_prev_policy_score?: number | null
+          td1_prev_policy_skip_reason?: string | null
           td1_prev_policy_would_trade?: boolean | null
           td1_threshold?: number
           td1_veto_fired?: boolean

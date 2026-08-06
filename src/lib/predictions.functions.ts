@@ -705,7 +705,7 @@ async function td1RcStatsFor(variant: string, resetId: number) {
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("model7_td1_rc_shadow")
-      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_veto_value, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
+      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_counterfactual_score, td1_compressed_risk_veto_value, td1_compressed_risk_incremental_change, td1_compressed_risk_attribution_version, td1_prev_policy_skip_reason, td1_prev_policy_would_trade, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score")
       .eq("variant", variant)
       .order("candle_ts", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -765,7 +765,19 @@ async function td1RcStatsFor(variant: string, resetId: number) {
   const crVetoes = crRows.filter((r) => r.td1_compressed_risk_veto_fired === true).length;
   const crAvoidedLosses = crRows.filter((r) => r.td1_compressed_risk_counterfactual_result === "AVOIDED_LOSS").length;
   const crSacrificedWins = crRows.filter((r) => r.td1_compressed_risk_counterfactual_result === "SACRIFICED_WIN").length;
+  const crNoChange = crRows.filter((r) => r.td1_compressed_risk_counterfactual_result === "NO_INCREMENTAL_CHANGE").length;
+  const crIncrementalChanges = crRows.filter((r) => r.td1_compressed_risk_incremental_change === true).length;
+  const crPrevAbstentionOverlap = crRows.filter(
+    (r) => r.td1_compressed_risk_veto_fired === true && r.td1_prev_policy_would_trade !== true,
+  ).length;
+  // Headline value: policy-delta-v2 sum of incremental veto values.
   const crNetVetoValue = crRows.reduce((s, r) => s + (Number(r.td1_compressed_risk_veto_value) || 0), 0);
+  const crOverlapSkipReasons: Record<string, number> = {};
+  for (const r of crRows) {
+    if (r.td1_compressed_risk_veto_fired !== true || r.td1_prev_policy_would_trade === true) continue;
+    const k = (r.td1_prev_policy_skip_reason as string | null) ?? "UNKNOWN";
+    crOverlapSkipReasons[k] = (crOverlapSkipReasons[k] ?? 0) + 1;
+  }
 
   const policySummary = (
     decisionKey: string, resultKey: string, scope: any[],
@@ -864,8 +876,13 @@ async function td1RcStatsFor(variant: string, resetId: number) {
       condition_count: crCondition,
       veto_count: crVetoes,
       veto_rate: crEvaluable === 0 ? 0 : Math.round((crVetoes / crEvaluable) * 10000) / 100,
+      attribution_version: "policy-delta-v2",
       avoided_losses: crAvoidedLosses,
       sacrificed_wins: crSacrificedWins,
+      no_incremental_change: crNoChange,
+      incremental_changes: crIncrementalChanges,
+      prev_policy_abstention_overlap: crPrevAbstentionOverlap,
+      overlap_skip_reasons: crOverlapSkipReasons,
       net_veto_value: crNetVetoValue,
       current_policy: currentPolicy,
       previous_policy: prevPolicy,
@@ -1072,6 +1089,9 @@ async function buildTd1RcExport(variant: string) {
       td1_compressed_risk_veto_value: r.td1_compressed_risk_veto_value,
       td1_prev_policy_decision: r.td1_prev_policy_decision,
       td1_prev_policy_would_trade: r.td1_prev_policy_would_trade,
+      td1_prev_policy_skip_reason: r.td1_prev_policy_skip_reason,
+      td1_compressed_risk_incremental_change: r.td1_compressed_risk_incremental_change,
+      td1_compressed_risk_attribution_version: r.td1_compressed_risk_attribution_version,
       td1_prev_policy_result: r.td1_prev_policy_result,
       td1_prev_policy_score: r.td1_prev_policy_score,
       td1_no_global_veto_decision: r.td1_no_global_veto_decision,
