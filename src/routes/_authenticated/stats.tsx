@@ -277,7 +277,9 @@ function StatsPage() {
     td1_vetoes: Number(td2Stats.td1_vetoes ?? 0),
     containment_vetoes: Number(td2Stats.containment_vetoes ?? 0),
     compressed_risk: (td2Stats.compressed_risk ?? null) as Record<string, any> | null,
+    recovery: (td2Stats.recovery ?? null) as Record<string, any> | null,
     daily_3d: (td2Stats.daily_3d ?? []) as Array<Record<string, any>>,
+
 
   };
   const td2Resolved = td2Hero.wins + td2Hero.losses + td2Hero.pushes;
