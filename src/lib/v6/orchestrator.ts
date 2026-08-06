@@ -44,6 +44,20 @@ import {
 
 } from "./regimeInverter";
 import { ensureInverterState, recordResolvedShadowSignal } from "./regimeInverterStore";
+import {
+  applyBroadConflictVeto,
+  applyBroadRedReliabilityVeto,
+  vetoContribution,
+  BROAD_CONFLICT_MAX_DISTANCE,
+  BROAD_CONFLICT_MIN_DISTANCE,
+  BROAD_CONFLICT_VETO_REASON,
+  BROAD_RED_RELIABILITY_REASON,
+  BROAD_RED_RELIABILITY_THRESHOLD,
+  REGIME_INVERTER_PUBLICATION_ENABLED,
+  REGIME_INVERTER_SHADOW_ONLY,
+} from "./r3";
+import { ensureBroadRedState, recordResolvedBroadRedSignal } from "./broadRedStore";
+
 
 const TF_MS = 15 * 60 * 1000;
 
