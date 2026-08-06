@@ -756,7 +756,32 @@ function TD1Card({
       </div>
 
       {(() => {
+        const rc = (hero as Record<string, any>).recovery as Record<string, any> | null;
+        if (!rc || !showCompressedRisk) return null;
+        const r1 = (rc.r1_counterfactual ?? {}) as Record<string, any>;
+        const inc = Number(rc.incremental_net ?? 0);
+        return (
+          <div className="relative mt-4">
+            <TD1Section title={`Opposing drift recovery · ${rc.policy_version} · ${rc.feature} ≥ ${rc.threshold}`}>
+              <TD1Stat label="Evaluable" value={Number(rc.evaluable ?? 0)} />
+              <TD1Stat label="Condition met" value={Number(rc.condition_count ?? 0)} />
+              <TD1Stat label="Recovered trades" value={Number(rc.recovered ?? 0)} tone="bull" />
+              <TD1Stat label="Recovered W/L" value={`${Number(rc.recovered_wins ?? 0)}/${Number(rc.recovered_losses ?? 0)}`} />
+              <TD1Stat label="Recovered win rate" value={`${Number(rc.recovered_win_rate ?? 0).toFixed(1)}%`} />
+              <TD1Stat label="Recovered pending" value={Number(rc.recovered_pending ?? 0)} />
+              <TD1Stat label="Incremental net" value={`${inc > 0 ? "+" : ""}${inc}`} tone={inc >= 0 ? "bull" : "bear"} />
+              <TD1Stat
+                label="TD2-r1 counterfactual"
+                value={`${Number(r1.trades ?? 0)} · ${Number(r1.net ?? 0) > 0 ? "+" : ""}${Number(r1.net ?? 0)}`}
+              />
+            </TD1Section>
+          </div>
+        );
+      })()}
+
+      {(() => {
         const cr = hero.compressed_risk as Record<string, any> | null;
+
         if (!cr || !showCompressedRisk) return null;
         const cur = (cr.current_policy ?? {}) as Record<string, any>;
         const prev = (cr.previous_policy ?? {}) as Record<string, any>;
