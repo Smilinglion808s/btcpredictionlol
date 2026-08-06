@@ -517,6 +517,10 @@ export function inferV6(
     anchorScore,
     anchorPercentile,
     finalScore,
+    selectedComponent,
+    broadDistanceFromNeutral,
+    anchorDistanceFromNeutral,
+
     basePrediction,
     basePredictionsLast8,
     baseGreenCountLast8,
