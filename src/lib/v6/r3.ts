@@ -94,6 +94,10 @@ export function applyBroadConflictVeto(
     anchorFinite;
 
   const anchorDistance = anchorFinite ? Math.abs(anchorPercentile - 0.5) : null;
+  // Full-precision comparison, with IEEE-754 representation noise normalized at
+  // the 1e-10 level only. Without this, an anchor of exactly 0.575 yields
+  // 0.07499999999999996 and would wrongly fall inside the exclusive upper bound.
+  const compareDistance = anchorDistance === null ? null : round(anchorDistance);
   const anchorDirection: Directional | null = anchorFinite
     ? anchorPercentile > 0.5
       ? "GREEN"
@@ -109,9 +113,9 @@ export function applyBroadConflictVeto(
 
   const triggered =
     opposite &&
-    anchorDistance !== null &&
-    anchorDistance >= BROAD_CONFLICT_MIN_DISTANCE &&
-    anchorDistance < BROAD_CONFLICT_MAX_DISTANCE;
+    compareDistance !== null &&
+    compareDistance >= BROAD_CONFLICT_MIN_DISTANCE &&
+    compareDistance < BROAD_CONFLICT_MAX_DISTANCE;
 
   return {
     evaluable,
