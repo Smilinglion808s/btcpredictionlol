@@ -3616,11 +3616,66 @@ export type Database = {
         }
         Relationships: []
       }
+      v6_broad_red_state: {
+        Row: {
+          broad_red_history_count: number
+          broad_red_history_json: Json
+          broad_red_last_resolved_target_ts: string | null
+          broad_red_last12_adjusted_net: number
+          broad_red_last12_losses: number
+          broad_red_last12_wins: number
+          broad_red_reliability_ready: boolean
+          broad_red_reliability_threshold: number
+          broad_red_reliability_veto_active: boolean
+          broad_red_state_updated_at: string
+          feature_schema_version: string | null
+          fit_id: string | null
+          model_artifact_sha256: string | null
+          model_revision: string
+          model_version: string
+        }
+        Insert: {
+          broad_red_history_count?: number
+          broad_red_history_json?: Json
+          broad_red_last_resolved_target_ts?: string | null
+          broad_red_last12_adjusted_net?: number
+          broad_red_last12_losses?: number
+          broad_red_last12_wins?: number
+          broad_red_reliability_ready?: boolean
+          broad_red_reliability_threshold?: number
+          broad_red_reliability_veto_active?: boolean
+          broad_red_state_updated_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          model_artifact_sha256?: string | null
+          model_revision: string
+          model_version: string
+        }
+        Update: {
+          broad_red_history_count?: number
+          broad_red_history_json?: Json
+          broad_red_last_resolved_target_ts?: string | null
+          broad_red_last12_adjusted_net?: number
+          broad_red_last12_losses?: number
+          broad_red_last12_wins?: number
+          broad_red_reliability_ready?: boolean
+          broad_red_reliability_threshold?: number
+          broad_red_reliability_veto_active?: boolean
+          broad_red_state_updated_at?: string
+          feature_schema_version?: string | null
+          fit_id?: string | null
+          model_artifact_sha256?: string | null
+          model_revision?: string
+          model_version?: string
+        }
+        Relationships: []
+      }
       v6_predictions: {
         Row: {
           abstain_reason: string | null
           abstain_status: string | null
           aligned_wick_pressure_4: number | null
+          anchor_distance_from_neutral: number | null
           anchor_percentile: number | null
           anchor_score: number | null
           base_green_count_last8: number | null
@@ -3628,7 +3683,41 @@ export type Database = {
           base_v6_adjusted_score: number | null
           base_v6_prediction: string | null
           base_v6_raw_score: number | null
+          broad_conflict_anchor_direction: string | null
+          broad_conflict_anchor_distance: number | null
+          broad_conflict_anchor_percentile: number | null
+          broad_conflict_max_distance: number | null
+          broad_conflict_min_distance: number | null
+          broad_conflict_original_prediction: string | null
+          broad_conflict_original_source: string | null
+          broad_conflict_underlying_adjusted_score: number | null
+          broad_conflict_underlying_prediction: string | null
+          broad_conflict_underlying_raw_score: number | null
+          broad_conflict_veto_adjusted_contribution: number | null
+          broad_conflict_veto_evaluable: boolean | null
+          broad_conflict_veto_raw_contribution: number | null
+          broad_conflict_veto_reason: string | null
+          broad_conflict_veto_triggered: boolean | null
+          broad_distance_from_neutral: number | null
           broad_percentile: number | null
+          broad_red_history_count: number | null
+          broad_red_history_json: Json | null
+          broad_red_last12_adjusted_net: number | null
+          broad_red_last12_losses: number | null
+          broad_red_last12_wins: number | null
+          broad_red_reliability_adjusted_contribution: number | null
+          broad_red_reliability_evaluable: boolean | null
+          broad_red_reliability_raw_contribution: number | null
+          broad_red_reliability_ready: boolean | null
+          broad_red_reliability_reason: string | null
+          broad_red_reliability_threshold: number | null
+          broad_red_reliability_veto_active: boolean | null
+          broad_red_reliability_veto_triggered: boolean | null
+          broad_red_shadow_adjusted_score: number | null
+          broad_red_shadow_prediction: string | null
+          broad_red_underlying_adjusted_score: number | null
+          broad_red_underlying_prediction: string | null
+          broad_red_underlying_raw_score: number | null
           broad_score: number | null
           canonical_actual_direction: string | null
           canonical_candle_row_id: string | null
@@ -3687,11 +3776,15 @@ export type Database = {
           pre_weak_red_veto_adjusted_score: number | null
           pre_weak_red_veto_prediction: string | null
           pre_weak_red_veto_raw_score: number | null
+          prediction_after_broad_conflict_veto: string | null
+          prediction_after_broad_red_reliability: string | null
           prediction_after_weak_red_recovery: string | null
           prediction_created_at: string
           prediction_created_before_target: boolean
           prediction_id: string
           prediction_source: string | null
+          prediction_source_after_broad_conflict_veto: string | null
+          prediction_source_after_broad_red_reliability: string | null
           prediction_source_after_weak_red_recovery: string | null
           prior_candle_ids_json: Json | null
           provider: string
@@ -3704,6 +3797,8 @@ export type Database = {
           regime_inverter_activation_threshold: number | null
           regime_inverter_active: boolean | null
           regime_inverter_adjusted_contribution: number | null
+          regime_inverter_counterfactual_adjusted_contribution: number | null
+          regime_inverter_counterfactual_raw_contribution: number | null
           regime_inverter_evaluable: boolean | null
           regime_inverter_history_count: number | null
           regime_inverter_history_json: Json | null
@@ -3711,11 +3806,17 @@ export type Database = {
           regime_inverter_last20_losses: number | null
           regime_inverter_last20_wins: number | null
           regime_inverter_original_prediction: string | null
+          regime_inverter_publication_enabled: boolean | null
           regime_inverter_raw_contribution: number | null
           regime_inverter_ready: boolean | null
           regime_inverter_reason: string | null
           regime_inverter_replacement_prediction: string | null
+          regime_inverter_shadow_adjusted_score: number | null
+          regime_inverter_shadow_only: boolean | null
+          regime_inverter_shadow_raw_score: number | null
           regime_inverter_triggered: boolean | null
+          regime_inverter_would_publish: string | null
+          regime_inverter_would_trigger: boolean | null
           resolution_timestamp: string | null
           ridge_features_json: Json | null
           ridge_p_green: number | null
@@ -3728,6 +3829,7 @@ export type Database = {
           saturation_veto_raw_contribution: number | null
           saturation_veto_sacrificed_win: boolean | null
           saturation_veto_triggered: boolean
+          selected_component: string | null
           symbol: string
           target_candle_ts: string
           timeframe: string
@@ -3767,6 +3869,7 @@ export type Database = {
           abstain_reason?: string | null
           abstain_status?: string | null
           aligned_wick_pressure_4?: number | null
+          anchor_distance_from_neutral?: number | null
           anchor_percentile?: number | null
           anchor_score?: number | null
           base_green_count_last8?: number | null
@@ -3774,7 +3877,41 @@ export type Database = {
           base_v6_adjusted_score?: number | null
           base_v6_prediction?: string | null
           base_v6_raw_score?: number | null
+          broad_conflict_anchor_direction?: string | null
+          broad_conflict_anchor_distance?: number | null
+          broad_conflict_anchor_percentile?: number | null
+          broad_conflict_max_distance?: number | null
+          broad_conflict_min_distance?: number | null
+          broad_conflict_original_prediction?: string | null
+          broad_conflict_original_source?: string | null
+          broad_conflict_underlying_adjusted_score?: number | null
+          broad_conflict_underlying_prediction?: string | null
+          broad_conflict_underlying_raw_score?: number | null
+          broad_conflict_veto_adjusted_contribution?: number | null
+          broad_conflict_veto_evaluable?: boolean | null
+          broad_conflict_veto_raw_contribution?: number | null
+          broad_conflict_veto_reason?: string | null
+          broad_conflict_veto_triggered?: boolean | null
+          broad_distance_from_neutral?: number | null
           broad_percentile?: number | null
+          broad_red_history_count?: number | null
+          broad_red_history_json?: Json | null
+          broad_red_last12_adjusted_net?: number | null
+          broad_red_last12_losses?: number | null
+          broad_red_last12_wins?: number | null
+          broad_red_reliability_adjusted_contribution?: number | null
+          broad_red_reliability_evaluable?: boolean | null
+          broad_red_reliability_raw_contribution?: number | null
+          broad_red_reliability_ready?: boolean | null
+          broad_red_reliability_reason?: string | null
+          broad_red_reliability_threshold?: number | null
+          broad_red_reliability_veto_active?: boolean | null
+          broad_red_reliability_veto_triggered?: boolean | null
+          broad_red_shadow_adjusted_score?: number | null
+          broad_red_shadow_prediction?: string | null
+          broad_red_underlying_adjusted_score?: number | null
+          broad_red_underlying_prediction?: string | null
+          broad_red_underlying_raw_score?: number | null
           broad_score?: number | null
           canonical_actual_direction?: string | null
           canonical_candle_row_id?: string | null
@@ -3833,11 +3970,15 @@ export type Database = {
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
+          prediction_after_broad_conflict_veto?: string | null
+          prediction_after_broad_red_reliability?: string | null
           prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
           prediction_id?: string
           prediction_source?: string | null
+          prediction_source_after_broad_conflict_veto?: string | null
+          prediction_source_after_broad_red_reliability?: string | null
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
@@ -3850,6 +3991,8 @@ export type Database = {
           regime_inverter_activation_threshold?: number | null
           regime_inverter_active?: boolean | null
           regime_inverter_adjusted_contribution?: number | null
+          regime_inverter_counterfactual_adjusted_contribution?: number | null
+          regime_inverter_counterfactual_raw_contribution?: number | null
           regime_inverter_evaluable?: boolean | null
           regime_inverter_history_count?: number | null
           regime_inverter_history_json?: Json | null
@@ -3857,11 +4000,17 @@ export type Database = {
           regime_inverter_last20_losses?: number | null
           regime_inverter_last20_wins?: number | null
           regime_inverter_original_prediction?: string | null
+          regime_inverter_publication_enabled?: boolean | null
           regime_inverter_raw_contribution?: number | null
           regime_inverter_ready?: boolean | null
           regime_inverter_reason?: string | null
           regime_inverter_replacement_prediction?: string | null
+          regime_inverter_shadow_adjusted_score?: number | null
+          regime_inverter_shadow_only?: boolean | null
+          regime_inverter_shadow_raw_score?: number | null
           regime_inverter_triggered?: boolean | null
+          regime_inverter_would_publish?: string | null
+          regime_inverter_would_trigger?: boolean | null
           resolution_timestamp?: string | null
           ridge_features_json?: Json | null
           ridge_p_green?: number | null
@@ -3874,6 +4023,7 @@ export type Database = {
           saturation_veto_raw_contribution?: number | null
           saturation_veto_sacrificed_win?: boolean | null
           saturation_veto_triggered?: boolean
+          selected_component?: string | null
           symbol?: string
           target_candle_ts: string
           timeframe?: string
@@ -3913,6 +4063,7 @@ export type Database = {
           abstain_reason?: string | null
           abstain_status?: string | null
           aligned_wick_pressure_4?: number | null
+          anchor_distance_from_neutral?: number | null
           anchor_percentile?: number | null
           anchor_score?: number | null
           base_green_count_last8?: number | null
@@ -3920,7 +4071,41 @@ export type Database = {
           base_v6_adjusted_score?: number | null
           base_v6_prediction?: string | null
           base_v6_raw_score?: number | null
+          broad_conflict_anchor_direction?: string | null
+          broad_conflict_anchor_distance?: number | null
+          broad_conflict_anchor_percentile?: number | null
+          broad_conflict_max_distance?: number | null
+          broad_conflict_min_distance?: number | null
+          broad_conflict_original_prediction?: string | null
+          broad_conflict_original_source?: string | null
+          broad_conflict_underlying_adjusted_score?: number | null
+          broad_conflict_underlying_prediction?: string | null
+          broad_conflict_underlying_raw_score?: number | null
+          broad_conflict_veto_adjusted_contribution?: number | null
+          broad_conflict_veto_evaluable?: boolean | null
+          broad_conflict_veto_raw_contribution?: number | null
+          broad_conflict_veto_reason?: string | null
+          broad_conflict_veto_triggered?: boolean | null
+          broad_distance_from_neutral?: number | null
           broad_percentile?: number | null
+          broad_red_history_count?: number | null
+          broad_red_history_json?: Json | null
+          broad_red_last12_adjusted_net?: number | null
+          broad_red_last12_losses?: number | null
+          broad_red_last12_wins?: number | null
+          broad_red_reliability_adjusted_contribution?: number | null
+          broad_red_reliability_evaluable?: boolean | null
+          broad_red_reliability_raw_contribution?: number | null
+          broad_red_reliability_ready?: boolean | null
+          broad_red_reliability_reason?: string | null
+          broad_red_reliability_threshold?: number | null
+          broad_red_reliability_veto_active?: boolean | null
+          broad_red_reliability_veto_triggered?: boolean | null
+          broad_red_shadow_adjusted_score?: number | null
+          broad_red_shadow_prediction?: string | null
+          broad_red_underlying_adjusted_score?: number | null
+          broad_red_underlying_prediction?: string | null
+          broad_red_underlying_raw_score?: number | null
           broad_score?: number | null
           canonical_actual_direction?: string | null
           canonical_candle_row_id?: string | null
@@ -3979,11 +4164,15 @@ export type Database = {
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
+          prediction_after_broad_conflict_veto?: string | null
+          prediction_after_broad_red_reliability?: string | null
           prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
           prediction_id?: string
           prediction_source?: string | null
+          prediction_source_after_broad_conflict_veto?: string | null
+          prediction_source_after_broad_red_reliability?: string | null
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
@@ -3996,6 +4185,8 @@ export type Database = {
           regime_inverter_activation_threshold?: number | null
           regime_inverter_active?: boolean | null
           regime_inverter_adjusted_contribution?: number | null
+          regime_inverter_counterfactual_adjusted_contribution?: number | null
+          regime_inverter_counterfactual_raw_contribution?: number | null
           regime_inverter_evaluable?: boolean | null
           regime_inverter_history_count?: number | null
           regime_inverter_history_json?: Json | null
@@ -4003,11 +4194,17 @@ export type Database = {
           regime_inverter_last20_losses?: number | null
           regime_inverter_last20_wins?: number | null
           regime_inverter_original_prediction?: string | null
+          regime_inverter_publication_enabled?: boolean | null
           regime_inverter_raw_contribution?: number | null
           regime_inverter_ready?: boolean | null
           regime_inverter_reason?: string | null
           regime_inverter_replacement_prediction?: string | null
+          regime_inverter_shadow_adjusted_score?: number | null
+          regime_inverter_shadow_only?: boolean | null
+          regime_inverter_shadow_raw_score?: number | null
           regime_inverter_triggered?: boolean | null
+          regime_inverter_would_publish?: string | null
+          regime_inverter_would_trigger?: boolean | null
           resolution_timestamp?: string | null
           ridge_features_json?: Json | null
           ridge_p_green?: number | null
@@ -4020,6 +4217,7 @@ export type Database = {
           saturation_veto_raw_contribution?: number | null
           saturation_veto_sacrificed_win?: boolean | null
           saturation_veto_triggered?: boolean
+          selected_component?: string | null
           symbol?: string
           target_candle_ts?: string
           timeframe?: string
