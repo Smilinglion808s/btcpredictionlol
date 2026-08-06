@@ -36,7 +36,12 @@ export interface V6Inference {
   anchorScore: number;
   anchorPercentile: number;
   finalScore: number;
+  /** V6-r3: component that controlled the frozen final score (ties → BROAD). */
+  selectedComponent: "BROAD" | "ANCHOR" | "NONE";
+  broadDistanceFromNeutral: number;
+  anchorDistanceFromNeutral: number;
   basePrediction: Direction;
+
   basePredictionsLast8: Direction[];
   baseGreenCountLast8: number;
   saturationVetoEvaluable: boolean;
