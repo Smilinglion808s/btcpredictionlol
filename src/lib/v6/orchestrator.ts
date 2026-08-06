@@ -661,6 +661,27 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           weak_red_recovery_counterfactual_adjusted_score: weakRedRestored ? weakRedUnderlyingAdj : null,
           weak_red_recovery_raw_contribution: weakRedRecoveryContribution.raw,
           weak_red_recovery_adjusted_contribution: weakRedRecoveryContribution.adjusted,
+
+          // --- V6-r3 counterfactual accounting ---
+          broad_conflict_underlying_prediction: conflictUnderlying,
+          broad_conflict_underlying_raw_score: conflictContrib.underlyingRaw,
+          broad_conflict_underlying_adjusted_score: conflictContrib.underlyingAdjusted,
+          broad_conflict_veto_raw_contribution: conflictContrib.raw,
+          broad_conflict_veto_adjusted_contribution: conflictContrib.adjusted,
+
+          broad_red_underlying_prediction: reliabilityUnderlying,
+          broad_red_underlying_raw_score: reliabilityContrib.underlyingRaw,
+          broad_red_underlying_adjusted_score: reliabilityContrib.underlyingAdjusted,
+          broad_red_reliability_raw_contribution: reliabilityContrib.raw,
+          broad_red_reliability_adjusted_contribution: reliabilityContrib.adjusted,
+
+          broad_red_shadow_prediction: broadRedEligible ? "RED" : null,
+          broad_red_shadow_adjusted_score: broadRedEligible ? adjustedScore("RED", actual) : null,
+
+          regime_inverter_shadow_raw_score: inverterShadowRaw,
+          regime_inverter_shadow_adjusted_score: inverterShadowAdj,
+          regime_inverter_counterfactual_raw_contribution: inverterCounterfactual.raw,
+          regime_inverter_counterfactual_adjusted_contribution: inverterCounterfactual.adjusted,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
@@ -676,6 +697,15 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           actual_direction: actual,
         });
       }
+
+      // Feed the BROAD_RED reliability governor (idempotent per target ts).
+      if (broadRedEligible) {
+        await recordResolvedBroadRedSignal(sb, {
+          target_candle_ts: targetTs.toISOString(),
+          actual_direction: actual,
+        });
+      }
+
     }
   } catch (e) {
     await logError(sb, "v6-resolution-error", {}, e);
