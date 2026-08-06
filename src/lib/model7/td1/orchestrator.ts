@@ -418,6 +418,25 @@ export async function resolveTd1RcRow(
         actualDirection,
       );
 
+      // --- TD2-r2 recovery attribution (TD2 rows only) ---
+      let td2Patch: Record<string, unknown> = {};
+      if (row.variant === TD2_VARIANT && row.td2_policy_version) {
+        const att = attributeTd2R2({
+          activeDecision: (ext as "YES" | "NO" | "SKIP" | null) ?? null,
+          r1Decision: (row.td2_r1_counterfactual_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          recoveryFired: row.td2_recovery_fired === true,
+          actualDirection,
+        });
+        td2Patch = {
+          td2_r1_counterfactual_result: att.r1Result,
+          td2_r1_counterfactual_score: att.r1Score,
+          td2_recovery_result: att.recoveryResult,
+          td2_recovery_score: att.recoveryScore,
+          td2_recovery_incremental_value: att.incrementalValue,
+          td2_recovery_value_class: att.valueClass,
+        };
+      }
+
       await supabase.from("model7_td1_rc_shadow").update({
         a2_counterfactual_result: cfResult,
         actual_direction: actualDirection,
@@ -433,7 +452,9 @@ export async function resolveTd1RcRow(
         td1_prev_policy_score: prev.score,
         td1_no_global_veto_result: noGlobal.result,
         td1_no_global_veto_score: noGlobal.score,
+        ...td2Patch,
       } as never).eq("id", row.id as string).is("resolved_at", null);
+
 
       if (row.variant === VARIANT) {
         containmentInput = { candleTs: row.candle_ts as string, side: a2, cfResult };
