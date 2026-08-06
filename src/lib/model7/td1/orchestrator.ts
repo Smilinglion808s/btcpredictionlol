@@ -14,7 +14,8 @@ import {
   TD1_GLOBAL_TURN_RISK_THRESHOLD,
   TD1_RC_POLICY_VERSION,
   TD1_RC_PROSPECTIVE_TEST_ID,
-  classifyCompressedRiskCounterfactual,
+  COMPRESSED_RISK_ATTRIBUTION_VERSION,
+  attributeCompressedRisk,
   evaluateCompressedRisk,
   scoreDecision,
 } from "./compressedRisk";
@@ -264,6 +265,9 @@ export async function runTd1RcForA2Combined(
       // Audit-only policy counterfactuals (never published, never webhooked).
       td1_prev_policy_decision: d.previousPolicy.decision,
       td1_prev_policy_would_trade: d.previousPolicy.wouldTrade,
+      td1_prev_policy_skip_reason: d.previousPolicy.primaryReason,
+      td1_compressed_risk_attribution_version: COMPRESSED_RISK_ATTRIBUTION_VERSION,
+      td1_compressed_risk_incremental_change: null,
       td1_no_global_veto_decision: d.noGlobalVetoPolicy.decision,
       td1_no_global_veto_would_trade: d.noGlobalVetoPolicy.wouldTrade,
     });
@@ -307,7 +311,8 @@ export async function resolveTd1RcRow(
       .from("model7_td1_rc_shadow")
       .select(
         "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
-        "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_no_global_veto_decision",
+        "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_prev_policy_would_trade, " +
+        "td1_prev_policy_skip_reason, td1_no_global_veto_decision",
       )
       .eq("prediction_id", predictionId)
       .in("variant", [VARIANT, TD2_VARIANT]);
@@ -334,9 +339,11 @@ export async function resolveTd1RcRow(
 
       // --- compressed-risk counterfactual accounting ---
       const compressedVeto = row.td1_compressed_risk_veto_fired === true;
-      const cf = classifyCompressedRiskCounterfactual({
+      const cf = attributeCompressedRisk({
         vetoFired: compressedVeto,
-        underlyingDirection: a2,
+        previousPolicyDecision: (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+        previousPolicyWouldTrade: (row.td1_prev_policy_would_trade as boolean | null) ?? null,
+        previousPolicySkipReason: (row.td1_prev_policy_skip_reason as string | null) ?? null,
         actualDirection,
       });
       const prev = scoreDecision(
@@ -355,8 +362,10 @@ export async function resolveTd1RcRow(
         resolved_at: new Date().toISOString(),
         td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
         td1_compressed_risk_counterfactual_result: cf.classification,
-        td1_compressed_risk_counterfactual_score: cf.abstentionScore,
+        td1_compressed_risk_counterfactual_score: cf.counterfactualScore,
         td1_compressed_risk_veto_value: cf.vetoValue,
+        td1_compressed_risk_incremental_change: cf.incrementalChange,
+        td1_compressed_risk_attribution_version: cf.attributionVersion,
         td1_prev_policy_result: prev.result,
         td1_prev_policy_score: prev.score,
         td1_no_global_veto_result: noGlobal.result,
