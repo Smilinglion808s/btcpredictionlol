@@ -30,11 +30,16 @@ export const TD2_PROSPECTIVE_TEST_ID = "A2_COMBINED_TD2_RC_COMPRESSED_RISK_045_V
 const VARIANT = TD1_VARIANT;
 const TD1_POLICY_VERSION = "td1-rc-v1";
 
+export interface Td1RcRunResult {
+  td1Row: Record<string, unknown>;
+  td2Row: Record<string, unknown>;
+}
+
 async function writeSkipRow(
   supabase: SupabaseClient,
   base: Record<string, unknown>,
   reason: string,
-): Promise<Record<string, unknown>> {
+): Promise<Td1RcRunResult> {
   const row = {
     ...base,
     external_final_decision: "SKIP",
@@ -50,7 +55,7 @@ async function writeSkipRow(
     td1_policy_version: TD1_RC_POLICY_VERSION,
   };
   await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
-  return row;
+  return { td1Row: row, td2Row };
 }
 
 export interface A2CombinedContext {
@@ -72,7 +77,7 @@ export interface A2CombinedContext {
 export async function runTd1RcForA2Combined(
   supabase: SupabaseClient,
   ctx: A2CombinedContext,
-): Promise<Record<string, unknown> | null> {
+): Promise<Td1RcRunResult | null> {
   const baseRow: Record<string, unknown> = {
     prediction_id: ctx.predictionId,
     candle_ts: ctx.candleTs,
@@ -271,7 +276,7 @@ export async function runTd1RcForA2Combined(
       td1_policy_version: TD1_RC_POLICY_VERSION,
     };
     await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
-    return finalRow;
+    return { td1Row: finalRow, td2Row };
   } catch (e) {
     try {
       return await writeSkipRow(supabase, baseRow, `TD1_RC_ERROR:${e instanceof Error ? e.message : String(e)}`);

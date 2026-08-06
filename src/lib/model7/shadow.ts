@@ -660,15 +660,15 @@ async function runA2Policies(
       } catch { /* never block */ }
     }));
 
-    // ---- TD1-RC is the ACTIVE webhook source. Runs on A2_Combined output. ----
-    // Emit the webhook AFTER TD1-RC decides so bot receives the gated signal.
+    // ---- TD2-RC is the ACTIVE webhook source. Runs on A2_Combined output. ----
+    // Emit the webhook AFTER TD2-RC decides so bot receives the gated signal.
     const combined = built.find((b) => b.policy === "A2_Combined")!;
     const combinedTimingStatus = String((inherited.timing_status as string | null) ?? "");
     const td1Promise = (async () => {
-      let td1Row: Record<string, unknown> | null = null;
+      let td2Row: Record<string, unknown> | null = null;
       try {
         const { runTd1RcForA2Combined } = await import("./td1/orchestrator");
-        td1Row = await runTd1RcForA2Combined(supabase, {
+        const res = await runTd1RcForA2Combined(supabase, {
           predictionId: predictionRow.id,
           candleTs: predictionRow.candle_ts,
           targetBoundaryTs: String(inherited.target_boundary_ts ?? predictionRow.candle_ts),
@@ -683,19 +683,20 @@ async function runA2Policies(
           marketConditionSourceRowId: predictionRow.id,
 
         });
+        td2Row = res?.td2Row ?? null;
       } catch { /* never block */ }
 
-      // Emit TD1-RC webhook. Only fire when timing is real and TD1-RC produced
-      // a decision (YES / NO / SKIP). If TD1-RC failed catastrophically
-      // (td1Row null), do not send a payload so the bot doesn't act on noise.
+      // Emit TD2-RC webhook. Only fire when timing is real and TD2-RC produced
+      // a decision (YES / NO / SKIP). If the layer failed catastrophically
+      // (td2Row null), do not send a payload so the bot doesn't act on noise.
       const eligible =
-        td1Row != null &&
+        td2Row != null &&
         (combinedTimingStatus === "ON_TIME" || combinedTimingStatus === "LATE_WARNING");
       if (!eligible) return;
       try {
         const { deliverWebhook, buildTd1RcWebhookPayload } = await import("../webhooks.server");
         const payload = buildTd1RcWebhookPayload({
-          td1Row: td1Row as Record<string, unknown>,
+          td1Row: td2Row as Record<string, unknown>,
           prediction: predictionRow as unknown as Record<string, unknown>,
         });
         await deliverWebhook(supabase, "prediction.created", payload);
@@ -705,7 +706,7 @@ async function runA2Policies(
             run_type: "webhook-created-error",
             response_payload: {
               error: whErr instanceof Error ? whErr.message : String(whErr),
-              prediction_id: predictionRow.id, variant: "TD1_RC",
+              prediction_id: predictionRow.id, variant: "TD2_RC",
             },
             success: false,
             error_message: whErr instanceof Error ? whErr.message : String(whErr),
