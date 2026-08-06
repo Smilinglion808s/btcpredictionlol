@@ -389,10 +389,18 @@ export function inferV6(
   );
 
   // Exact-distance tie goes to broad.
+  const broadDistanceFromNeutral = Math.abs(broadPercentile - 0.5);
+  const anchorDistanceFromNeutral = Math.abs(anchorPercentile - 0.5);
   const finalScore =
-    Math.abs(broadPercentile - 0.5) >= Math.abs(anchorPercentile - 0.5)
-      ? broadPercentile
-      : anchorPercentile;
+    broadDistanceFromNeutral >= anchorDistanceFromNeutral ? broadPercentile : anchorPercentile;
+  // V6-r3 persists the controlling component straight from the frozen core.
+  const selectedComponent: "BROAD" | "ANCHOR" | "NONE" =
+    !Number.isFinite(broadPercentile) || !Number.isFinite(anchorPercentile)
+      ? "NONE"
+      : broadDistanceFromNeutral >= anchorDistanceFromNeutral
+        ? "BROAD"
+        : "ANCHOR";
+
 
   const basePrediction = baseDirection(finalScore, model);
 
