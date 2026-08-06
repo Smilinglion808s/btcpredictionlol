@@ -368,11 +368,16 @@ function StatsPage() {
         />
 
 
+        <V6BroadConflictPanel stats={v6Stats} />
+
+        <V6BroadRedReliabilityPanel stats={v6Stats} />
+
         <V6RegimeInverterPanel
           state={(v6InverterQ.data as Record<string, any> | null) ?? null}
           stats={v6Stats}
           pending={v6Pending}
         />
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
