@@ -905,6 +905,7 @@ function V6Card({
   stats,
   pending,
   warmup,
+  inverter,
   fmt,
   onExport,
   exporting,
@@ -914,6 +915,7 @@ function V6Card({
   stats: Record<string, any>;
   pending: Record<string, any> | null;
   warmup: Record<string, any> | null;
+  inverter: Record<string, any> | null;
   fmt: (n: unknown, digits?: number) => string;
   onExport: () => void;
   exporting: boolean;
@@ -921,8 +923,21 @@ function V6Card({
   resetting: boolean;
 }) {
 
+  const invWins = Number(stats.inverter_shadow_wins ?? 0);
+  const invLosses = Number(stats.inverter_shadow_losses ?? 0);
+  const invTotal = invWins + invLosses;
+  const invWr = invTotal ? (invWins / invTotal) * 100 : 0;
+  const invReady = Boolean(inverter?.regime_inverter_ready);
+  const invCount = Number(inverter?.regime_inverter_history_count ?? 0);
+  const broadRedLabel = stats.broad_red_reliability_active
+    ? "vetoed"
+    : stats.broad_red_reliability_ready
+      ? "active"
+      : `warming ${Number(stats.broad_red_history_count ?? 0)}/12`;
+
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
+
   const rawNet = Number(stats.raw_net ?? 0);
   const wins = Number(stats.wins ?? 0);
   const losses = Number(stats.losses ?? 0);
