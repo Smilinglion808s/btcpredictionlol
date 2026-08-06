@@ -360,6 +360,7 @@ function StatsPage() {
           stats={v6Stats}
           pending={v6Pending}
           warmup={(v6WarmupQ.data as Record<string, any> | null) ?? null}
+          inverter={(v6InverterQ.data as Record<string, any> | null) ?? null}
           fmt={v6Fmt}
           onExport={downloadV6Csv}
           exporting={exportingV6}
@@ -367,16 +368,6 @@ function StatsPage() {
           resetting={resettingV6}
         />
 
-
-        <V6BroadConflictPanel stats={v6Stats} />
-
-        <V6BroadRedReliabilityPanel stats={v6Stats} />
-
-        <V6RegimeInverterPanel
-          state={(v6InverterQ.data as Record<string, any> | null) ?? null}
-          stats={v6Stats}
-          pending={v6Pending}
-        />
 
       </div>
 
@@ -914,6 +905,7 @@ function V6Card({
   stats,
   pending,
   warmup,
+  inverter,
   fmt,
   onExport,
   exporting,
@@ -923,6 +915,7 @@ function V6Card({
   stats: Record<string, any>;
   pending: Record<string, any> | null;
   warmup: Record<string, any> | null;
+  inverter: Record<string, any> | null;
   fmt: (n: unknown, digits?: number) => string;
   onExport: () => void;
   exporting: boolean;
@@ -930,8 +923,21 @@ function V6Card({
   resetting: boolean;
 }) {
 
+  const invWins = Number(stats.inverter_shadow_wins ?? 0);
+  const invLosses = Number(stats.inverter_shadow_losses ?? 0);
+  const invTotal = invWins + invLosses;
+  const invWr = invTotal ? (invWins / invTotal) * 100 : 0;
+  const invReady = Boolean(inverter?.regime_inverter_ready);
+  const invCount = Number(inverter?.regime_inverter_history_count ?? 0);
+  const broadRedLabel = stats.broad_red_reliability_active
+    ? "vetoed"
+    : stats.broad_red_reliability_ready
+      ? "active"
+      : `warming ${Number(stats.broad_red_history_count ?? 0)}/12`;
+
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
+
   const rawNet = Number(stats.raw_net ?? 0);
   const wins = Number(stats.wins ?? 0);
   const losses = Number(stats.losses ?? 0);
@@ -1065,6 +1071,32 @@ function V6Card({
           <V6Stat label="Regime inversion" value={Number(stats.inverter_trigger_count ?? 0)} tone="violet" />
         </V6Section>
 
+        <V6Section title="Broad conflict veto · band [0.025, 0.075)">
+          <V6Stat label="Candidates" value={Number(stats.broad_conflict_candidates ?? 0)} />
+          <V6Stat label="Vetoes" value={Number(stats.broad_conflict_vetoes ?? 0)} />
+          <V6Stat label="Avoided losses" value={Number(stats.broad_conflict_avoided_losses ?? 0)} tone="bull" />
+          <V6Stat label="Sacrificed wins" value={Number(stats.broad_conflict_sacrificed_wins ?? 0)} tone="bear" />
+        </V6Section>
+
+        <V6Section title={`BROAD_RED reliability · ${broadRedLabel}`}>
+          <V6Stat label="History" value={`${Number(stats.broad_red_history_count ?? 0)} / 12`} />
+          <V6Stat
+            label="Last-12 W/L"
+            value={`${Number(stats.broad_red_last12_wins ?? 0)}/${Number(stats.broad_red_last12_losses ?? 0)}`}
+          />
+          <V6Stat label="Vetoes" value={Number(stats.broad_red_vetoes ?? 0)} />
+          <V6Stat label="Avoided losses" value={Number(stats.broad_red_avoided_losses ?? 0)} tone="bull" />
+        </V6Section>
+
+        <V6Section title="Regime inverter · shadow only">
+          <V6Stat label="Would-be win rate" value={invTotal ? `${invWr.toFixed(1)}%` : "—"} tone="violet" />
+          <V6Stat label="Would-be W/L" value={`${invWins}/${invLosses}`} />
+          <V6Stat label="Would-have-fired" value={Number(stats.inverter_would_trigger_count ?? 0)} />
+          <V6Stat label="Ready" value={invReady ? "YES" : `${invCount}/20`} />
+        </V6Section>
+
+
+
 
 
       </div>
@@ -1095,142 +1127,8 @@ function V6Card({
   );
 }
 
-/** V6-r3 broad mild-anchor-conflict veto audit. */
-function V6BroadConflictPanel({ stats }: { stats: Record<string, any> }) {
-  const n = (k: string) => Number(stats[k] ?? 0);
-  return (
-    <Card className="relative overflow-hidden border-violet/30">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.12),transparent_60%)]" />
-      <CardHeader className="relative pb-2">
-        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
-          <span className="flex items-center gap-2">
-            V6 Broad Conflict Veto
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              V6-r3 · band [0.025, 0.075)
-            </span>
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="relative grid grid-cols-3 gap-3">
-        <MiniStat label="Candidates" value={String(n("broad_conflict_candidates"))} />
-        <MiniStat label="Vetoes" value={String(n("broad_conflict_vetoes"))} />
-        <MiniStat label="Avoided losses" value={String(n("broad_conflict_avoided_losses"))} />
-        <MiniStat label="Sacrificed wins" value={String(n("broad_conflict_sacrificed_wins"))} />
-        <MiniStat label="Raw contribution" value={n("broad_conflict_raw").toFixed(2)} />
-        <MiniStat label="Adj. contribution" value={n("broad_conflict_adjusted").toFixed(2)} />
-        <MiniStat
-          label="Last anchor distance"
-          value={n("broad_conflict_last_anchor_distance").toFixed(4)}
-        />
-      </CardContent>
-    </Card>
-  );
-}
 
-/** V6-r3 BROAD_RED reliability governor — 12-signal shadow window, threshold ≤ -2.0. */
-function V6BroadRedReliabilityPanel({ stats }: { stats: Record<string, any> }) {
-  const n = (k: string) => Number(stats[k] ?? 0);
-  const ready = Boolean(stats.broad_red_reliability_ready);
-  const active = Boolean(stats.broad_red_reliability_active);
-  const count = n("broad_red_history_count");
-  const tone = active
-    ? "border-bear/50 text-bear bg-bear/10"
-    : ready
-      ? "border-bull/50 text-bull bg-bull/10"
-      : "border-violet/40 text-violet bg-violet/10";
-  const label = active ? "VETOED" : ready ? "ACTIVE" : `WARMING ${count}/12`;
-  return (
-    <Card className="relative overflow-hidden border-violet/30">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.12),transparent_60%)]" />
-      <CardHeader className="relative pb-2">
-        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
-          <span className="flex items-center gap-2">
-            V6 BROAD_RED Reliability
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              V6-r3 · threshold ≤ -2.0
-            </span>
-          </span>
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${tone}`}>
-            {label}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="relative grid grid-cols-3 gap-3">
-        <MiniStat label="History" value={`${count} / 12`} />
-        <MiniStat
-          label="Last-12 W/L"
-          value={`${n("broad_red_last12_wins")}/${n("broad_red_last12_losses")}`}
-        />
-        <MiniStat label="Last-12 adj. net" value={n("broad_red_last12_adjusted_net").toFixed(2)} />
-        <MiniStat
-          label="Shadow W/L"
-          value={`${n("broad_red_shadow_wins")}/${n("broad_red_shadow_losses")}`}
-        />
-        <MiniStat label="Vetoes" value={String(n("broad_red_vetoes"))} />
-        <MiniStat label="Avoided losses" value={String(n("broad_red_avoided_losses"))} />
-        <MiniStat label="Sacrificed wins" value={String(n("broad_red_sacrificed_wins"))} />
-        <MiniStat label="Adj. contribution" value={n("broad_red_adjusted").toFixed(2)} />
-      </CardContent>
-    </Card>
-  );
-}
 
-/** Regime Inverter — SHADOW ONLY under V6-r3. It never changes publication. */
-function V6RegimeInverterPanel({
-  state,
-  stats,
-}: {
-  state: Record<string, any> | null;
-  stats: Record<string, any>;
-  pending?: Record<string, any> | null;
-}) {
-  const ready = Boolean(state?.regime_inverter_ready);
-  const active = Boolean(state?.regime_inverter_active);
-  const count = Number(state?.regime_inverter_history_count ?? 0);
-
-  return (
-    <Card className="relative overflow-hidden border-violet/30">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_10%_0%,hsl(var(--violet)/0.14),transparent_60%)]" />
-      <CardHeader className="relative pb-2">
-        <CardTitle className="text-base flex items-center justify-between gap-2 font-heading">
-          <span className="flex items-center gap-2">
-            V6 Regime Inverter
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              V6-r3 · audit layer
-            </span>
-          </span>
-          <span className="rounded-full border border-muted-foreground/40 bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Shadow only — does not change publication
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="relative">
-        {(() => {
-          const w = Number(stats.inverter_shadow_wins ?? 0);
-          const l = Number(stats.inverter_shadow_losses ?? 0);
-          const total = w + l;
-          const wr = total ? (w / total) * 100 : 0;
-          return (
-            <div className="grid grid-cols-3 gap-3">
-              <MiniStat label="Would-be win rate" value={total ? `${wr.toFixed(1)}%` : "—"} />
-              <MiniStat label="Would-be W/L" value={`${w}/${l}`} />
-              <MiniStat
-                label="Would-have-triggered"
-                value={String(Number(stats.inverter_would_trigger_count ?? 0))}
-              />
-              <MiniStat label="Ready" value={ready ? "YES" : `${count}/20`} />
-              <MiniStat label="Active" value={active ? "YES" : "NO"} />
-              <MiniStat
-                label="Would-be adj. contribution"
-                value={Number(stats.inverter_shadow_adjusted_contribution ?? 0).toFixed(2)}
-              />
-            </div>
-          );
-        })()}
-      </CardContent>
-    </Card>
-  );
-}
 
 
 
