@@ -208,10 +208,10 @@ describe("BROAD_RED reliability governor", () => {
     for (let i = 0; i < 6; i += 1) {
       history = appendBroadRedEntry(history, {
         target_candle_ts: `2026-08-06T04:${String(i).padStart(2, "0")}:00.000Z`,
-        prediction: "RED",
+        broad_red_shadow_prediction: "RED",
         actual_direction: "RED",
-        raw: 1,
-        adjusted: 0.8,
+        broad_red_shadow_raw_score: 1,
+        broad_red_shadow_adjusted_score: 0.8,
       });
     }
     summary = summarizeBroadRed(history);
