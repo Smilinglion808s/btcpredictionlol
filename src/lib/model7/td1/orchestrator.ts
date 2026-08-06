@@ -301,12 +301,47 @@ export async function runTd1RcForA2Combined(
     });
 
     const finalRow = shapeRow(decision);
+
+    // --- TD2-r2: Opposing Drift Recovery (active TD2 shadow policy) ---
+    // Recovery only ever converts an incremental compressed-risk abstention back
+    // into the exact previous-policy direction. Never reverses.
+    const r2 = evaluateTd2R2({
+      r1Decision: td2Decision.externalFinalDecision,
+      r1WouldTrade: td2Decision.wouldTrade,
+      r1SkipReason: td2Decision.primarySkipReason,
+      compressedRiskVetoFired: td2Decision.compressedRiskVetoFired,
+      previousPolicy: td2Decision.previousPolicy,
+      opposingDrift4: built.features.opposing_drift_4,
+      timingValid: ctx.leakageCheckPassed === true,
+    });
+    const td2Base = shapeRow(td2Decision);
     const td2Row = {
-      ...shapeRow(td2Decision),
+      ...td2Base,
       variant: TD2_VARIANT,
-      prospective_test_id: TD2_PROSPECTIVE_TEST_ID,
+      prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
       td1_policy_version: TD1_RC_POLICY_VERSION,
+      external_final_decision: r2.decision,
+      would_trade: r2.wouldTrade,
+      skip_reason: r2.skipReason,
+      all_veto_reasons_json: r2.vetoReasons,
+      td2_policy_version: TD2_R2_POLICY_VERSION,
+      td2_prospective_test_id: TD2_R2_PROSPECTIVE_TEST_ID,
+      td2_policy_activation_ts: TD2_R2_ACTIVATION_TS,
+      td2_recovery_feature_name: TD2_RECOVERY_FEATURE_NAME,
+      td2_recovery_feature_value: r2.featureValue,
+      td2_recovery_threshold: TD2_RECOVERY_THRESHOLD,
+      td2_recovery_evaluable: r2.evaluable,
+      td2_recovery_condition: r2.condition,
+      td2_recovery_fired: r2.fired,
+      td2_recovery_reason: r2.reason,
+      td2_recovery_direction: r2.direction,
+      td2_recovery_source_feature_cutoff_ts: built.featureCutoffTs,
+      td2_r1_counterfactual_decision: r2.r1Decision,
+      td2_r1_counterfactual_would_trade: r2.r1WouldTrade,
+      td2_r1_counterfactual_skip_reason: r2.r1SkipReason,
+      td2_recovery_value_class: r2.fired ? "UNRESOLVED" : "NO_CHANGE",
     };
+
     await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
     return { td1Row: finalRow, td2Row };
   } catch (e) {
