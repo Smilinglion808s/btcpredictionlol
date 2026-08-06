@@ -286,14 +286,37 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const priorBasePredictions = livePrior.length === 7 ? livePrior : warm.priorBasePredictions;
     const inf = inferV6(current, previous1, previous4, { priorBasePredictions });
 
-    // Step 10-11: rolling shadow state, then the Regime Inverter applied AFTER
-    // every existing Armor rule. The unresolved target never enters the history.
-    const inverterState = await ensureInverterState(sb, targetTs);
-    const inverter = applyRegimeInverter(
-      inf.finalPrediction,
-      inf.predictionSource,
-      inverterState.summary,
+    // --- V6-r3 steps 14-18 -------------------------------------------------
+    // 14/15. Broad mild-anchor-conflict veto.
+    const conflict = applyBroadConflictVeto(
+      inf.predictionAfterWeakRedRecovery,
+      inf.predictionSourceAfterWeakRedRecovery,
+      inf.selectedComponent,
+      inf.anchorPercentile,
     );
+    // 16/17/18. BROAD_RED reliability governor. The unresolved target never
+    // enters the shadow history before publication.
+    const broadRedState = await ensureBroadRedState(sb, targetTs);
+    const reliability = applyBroadRedReliabilityVeto(
+      conflict.prediction,
+      conflict.predictionSource,
+      inf.selectedComponent,
+      broadRedState.summary,
+    );
+    const r3Prediction = reliability.prediction;
+    const r3Source = reliability.predictionSource;
+
+    // 20. Regime Inverter — SHADOW ONLY under r3. It still computes everything
+    // it used to, but it can no longer change publication.
+    const inverterState = await ensureInverterState(sb, targetTs);
+    const inverter = applyRegimeInverter(r3Prediction, r3Source, inverterState.summary);
+
+    const r3AbstainReason = conflict.triggered
+      ? BROAD_CONFLICT_VETO_REASON
+      : reliability.triggered
+        ? BROAD_RED_RELIABILITY_REASON
+        : inf.abstainReason;
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
