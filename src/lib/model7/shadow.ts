@@ -690,6 +690,7 @@ async function runA2Policies(
       // a decision (YES / NO / SKIP). If the layer failed catastrophically
       // (td2Row null), do not send a payload so the bot doesn't act on noise.
       const eligible =
+        TD2_WEBHOOKS_ENABLED &&
         td2Row != null &&
         (combinedTimingStatus === "ON_TIME" || combinedTimingStatus === "LATE_WARNING");
       if (!eligible) return;
