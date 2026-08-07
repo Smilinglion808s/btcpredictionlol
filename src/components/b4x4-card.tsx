@@ -38,6 +38,12 @@ export function B4x4Card({
 
   const upper = String(pending?.final_prediction ?? pending?.raw_direction ?? "—").toUpperCase();
   const traded = pending?.would_trade === true;
+  const candleMs = pending?.target_candle_ts ? new Date(String(pending.target_candle_ts)).getTime() : NaN;
+  const candleLabel = Number.isFinite(candleMs)
+    ? `${new Date(candleMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${new Date(
+        candleMs + 15 * 60 * 1000,
+      ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : null;
   const predTone =
     traded && upper === "GREEN"
       ? "border-bull/50 text-bull bg-bull/10"
