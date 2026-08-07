@@ -221,3 +221,30 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
   const body = rows.map((r) => columns.map((col) => csvEscape(r[col])).join(",")).join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
+
+/** Recent B4x4 rows for the Stats page history table. */
+export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("b4x4_predictions")
+    .select(
+      "id, target_candle_ts, final_prediction, raw_direction, would_trade, decision_reason, " +
+      "selected_route, grid_cell, p_correct, a2_probability_green, confidence, result, resolved_at, actual_close",
+    )
+    .eq("model_version", B4X4_MODEL_VERSION)
+    .eq("variant", B4X4_VARIANT)
+    .order("target_candle_ts", { ascending: false })
+    .limit(50);
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    id: String(r.id),
+    candle_ts: String(r.target_candle_ts),
+    prediction: r.would_trade === true ? String(r.final_prediction ?? "—") : "NO TRADE",
+    raw_direction: (r.raw_direction as string | null) ?? null,
+    grid_cell: (r.grid_cell as string | null) ?? null,
+    p_correct: r.p_correct != null ? Number(r.p_correct) : null,
+    route: (r.selected_route as string | null) ?? (r.decision_reason as string | null) ?? null,
+    confidence: r.confidence != null ? Number(r.confidence) : null,
+    actual_close: r.actual_close != null ? Number(r.actual_close) : null,
+    status: r.resolved_at ? String(r.result ?? "—") : r.would_trade === true ? "PENDING" : "SKIPPED",
+  }));
+});

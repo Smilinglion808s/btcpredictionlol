@@ -15,12 +15,11 @@ import {
   exportTd2RcShadow,
   resetTd2RcVisualStats,
   getTd1RcTrainingProgress,
-  listTd1RcRecent,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
-import { getB4x4Stats, getB4x4Pending, exportB4x4Csv } from "@/lib/b4x4.functions";
+import { getB4x4Stats, getB4x4Pending, exportB4x4Csv, listB4x4Recent } from "@/lib/b4x4.functions";
 import { B4x4Card } from "@/components/b4x4-card";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
@@ -219,10 +218,10 @@ function StatsPage() {
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
     refetchInterval: 15_000,
   });
-  const td1RecentFn = useServerFn(listTd1RcRecent);
+  const b4x4RecentFn = useServerFn(listB4x4Recent);
   const listQ = useQuery({
-    queryKey: ["td1-rc-recent-stats"],
-    queryFn: () => td1RecentFn(),
+    queryKey: ["b4x4-recent-stats"],
+    queryFn: () => b4x4RecentFn(),
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
     staleTime: 0,
@@ -422,7 +421,7 @@ function StatsPage() {
           <CardTitle className="text-base flex items-center gap-2 font-heading">
             Recent History
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              TD1-RC · Outcome follows TD1-RC
+              B4x4 · Outcome follows B4x4
             </span>
           </CardTitle>
         </CardHeader>
@@ -432,9 +431,10 @@ function StatsPage() {
               <thead className="text-xs text-muted-foreground border-b border-border">
                 <tr>
                   <th className="text-left px-3 py-2">Candle</th>
-                  <th className="text-left px-3 py-2">TD1-RC</th>
-                  <th className="text-left px-3 py-2">A2 Combined</th>
-                  <th className="text-left px-3 py-2">Conf</th>
+                  <th className="text-left px-3 py-2">B4x4</th>
+                  <th className="text-left px-3 py-2">Raw</th>
+                  <th className="text-left px-3 py-2">Cell</th>
+                  <th className="text-left px-3 py-2">p</th>
                   <th className="text-left px-3 py-2">Close</th>
                   <th className="text-left px-3 py-2">Outcome</th>
                 </tr>
@@ -444,10 +444,13 @@ function StatsPage() {
                   <tr key={p.id} className="border-b border-border/50 align-top">
                     <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
                     <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
-                    <td className="px-3 py-2"><PredictionBadge value={p.a2_combined ?? "—"} /></td>
-                    <td className="px-3 py-2">{Number(p.confidence).toFixed(0)}%</td>
+                    <td className="px-3 py-2"><PredictionBadge value={p.raw_direction ?? "—"} /></td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{p.grid_cell ?? "—"}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {p.actual_next_candle_close != null ? `$${Number(p.actual_next_candle_close).toLocaleString()}` : "—"}
+                      {p.p_correct != null ? Number(p.p_correct).toFixed(3) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {p.actual_close != null ? `$${Number(p.actual_close).toLocaleString()}` : "—"}
                     </td>
                     <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
                   </tr>
