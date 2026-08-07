@@ -19,7 +19,6 @@ import {
   INTRADAY_BRAKE_GRID_PERCENTILE_MIN,
   INTRADAY_BRAKE_P_CORRECT_MIN_EXCLUSIVE,
   INTRADAY_BRAKE_TRIGGER_NET,
-  MIN_GRID_RESOLVED_ROWS,
   MIN_SOURCE_HISTORY,
   SAME_SIDE_CONFIDENCE_LOOKBACK,
   b4x4LocalDate,
@@ -378,21 +377,13 @@ export function evaluateB4x4(
   }
 
   // ---- rolling 4x4 grid ----
+  // Grid training rows are [max(384, i - 768), i) filtered to resolved rows.
+  // There is no minimum resolved-count or cell-count gate; Beta(8,8) smooths.
+  const i = history.length;
+  const trainStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_TRAINING_LOOKBACK);
   const trainingPool = history
-    .slice(-GRID_TRAINING_LOOKBACK)
+    .slice(trainStart, i)
     .filter((h) => hasValidRanks(h) && h.correct != null);
-  if (trainingPool.length < MIN_GRID_RESOLVED_ROWS) {
-    return abstain(
-      {
-        ...withRanks,
-        gridTrainingResolvedCount: trainingPool.length,
-        gridTrainingStartTs: trainingPool[0]?.candleTs ?? null,
-        gridTrainingEndTs: trainingPool[trainingPool.length - 1]?.candleTs ?? null,
-      },
-      "ABSTAIN_WARMUP_GRID_HISTORY",
-      base,
-    );
-  }
 
   const cells = buildGrid(trainingPool);
   const key = cellKey(globalQuartile!, sameSideQuartile!);
@@ -413,14 +404,9 @@ export function evaluateB4x4(
   };
 
   // ---- grid quality percentile ----
-  const referencePool = history.filter(hasValidRanks).slice(-GRID_REFERENCE_LOOKBACK);
-  if (referencePool.length < GRID_REFERENCE_LOOKBACK) {
-    return abstain(
-      { ...withGrid, gridReferenceCount: referencePool.length },
-      "ABSTAIN_GRID_REFERENCE_INVALID",
-      base,
-    );
-  }
+  // Reference rows are [max(384, i - 384), i) and INCLUDE unresolved rows.
+  const refStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_REFERENCE_LOOKBACK);
+  const referencePool = history.slice(refStart, i).filter(hasValidRanks);
   const percentile = gridQualityPercentile(referencePool, cells, cell.pCorrect, qualityMean!);
   const withPercentile: Partial<B4x4Decision> = {
     ...withGrid,
@@ -430,6 +416,7 @@ export function evaluateB4x4(
   if (percentile == null) {
     return abstain(withPercentile, "ABSTAIN_GRID_REFERENCE_INVALID", base);
   }
+
 
   // ---- routes ----
   const coreEligible = globalRank! >= CORE_GLOBAL_RANK_MIN && sameSideRank! >= CORE_SAME_SIDE_RANK_MIN;

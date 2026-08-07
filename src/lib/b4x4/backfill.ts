@@ -7,7 +7,7 @@
 // webhook_eligible=false and can never emit a webhook.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { B4X4_MODEL_VERSION, B4X4_SOURCE_VARIANT, b4x4LocalDate } from "./config";
+import { B4X4_MODEL_VERSION, B4X4_SOURCE_EPOCH_TS, B4X4_SOURCE_VARIANT, b4x4LocalDate } from "./config";
 import { replayB4x4, brakeAttribution, type ActualDirection, type SourceRow } from "./engine";
 import { decisionToRow } from "./orchestrator";
 
@@ -39,6 +39,7 @@ export async function loadCanonicalSourceRows(
       .eq("variant", B4X4_SOURCE_VARIANT)
       .order("candle_ts", { ascending: true })
       .range(from, from + page - 1);
+    q = q.gte("candle_ts", B4X4_SOURCE_EPOCH_TS);
     if (opts.from) q = q.gte("candle_ts", opts.from);
     if (opts.upTo) q = q.lte("candle_ts", opts.upTo);
     const { data, error } = await q;
@@ -117,8 +118,10 @@ export function summarize(
       r.decision.decisionReason === "ABSTAIN_A2_TIMING_INVALID" ||
       r.decision.decisionReason === "ABSTAIN_A2_LEAKAGE_INVALID" ||
       r.decision.decisionReason === "ABSTAIN_INTERNAL_ERROR";
-    if (!operational) evaluable++;
+    // Evaluable = warm-ready AND resolved (unresolved outcomes are excluded).
+    if (!operational && r.row.actualDirection != null) evaluable++;
     if (!r.decision.wouldTrade) continue;
+
     trades++;
     if (firstPublishedTs == null) firstPublishedTs = r.row.candleTs;
     if (r.result === "WIN") wins++;

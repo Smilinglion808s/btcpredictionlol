@@ -75,3 +75,11 @@ export function b4x4LocalDate(iso: string | Date): string {
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
+
+/**
+ * Frozen source epoch. The B4x4 reference replay defines the valid source
+ * universe as beginning at this candle; earlier A2_Combined rows are excluded
+ * so zero-based source index i (and every window derived from it) matches the
+ * frozen oracle exactly.
+ */
+export const B4X4_SOURCE_EPOCH_TS = "2026-07-15T22:00:00.000Z";
