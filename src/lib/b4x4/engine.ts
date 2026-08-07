@@ -320,9 +320,14 @@ export function evaluateB4x4(
   const rawDirection: Direction = p >= 0.5 ? "GREEN" : "RED";
 
   // ---- ranks (strictly earlier history only) ----
+  // Global rank: previous 384 valid source rows.
+  // Same-side rank: previous 768 valid source rows, THEN filtered to this
+  // row's raw direction (not the previous 768 same-direction rows).
   const globalHistory = history.slice(-GLOBAL_CONFIDENCE_LOOKBACK);
-  const sameSideAll = history.filter((h) => h.direction === rawDirection);
-  const sameSideHistory = sameSideAll.slice(-SAME_SIDE_CONFIDENCE_LOOKBACK);
+  const sameSideHistory = history
+    .slice(-SAME_SIDE_CONFIDENCE_LOOKBACK)
+    .filter((h) => h.direction === rawDirection);
+
 
   const globalRank = empiricalRank(globalHistory.map((h) => h.confidence), confidence);
   const sameSideRank = empiricalRank(sameSideHistory.map((h) => h.confidence), confidence);
