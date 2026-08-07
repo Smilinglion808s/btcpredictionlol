@@ -122,12 +122,13 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     return out;
   }
 
-  const [live, arch, td1Rows, aas96Rows, a96Rows] = await Promise.all([
+  const [live, arch, td1Rows, aas96Rows, a96Rows, b4x4Rows] = await Promise.all([
     pageAll<Record<string, unknown>>("predictions", "candle_ts", 10000),
     pageAll<Record<string, unknown>>("predictions_archive", "candle_ts", 40000),
     pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000, "A2_Combined_TD1_RC"),
     pageAll<Record<string, unknown>>("model7_aas96_shadow", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("a96_predictions", "target_candle_ts", 20000),
+    pageAll<Record<string, unknown>>("b4x4_predictions", "target_candle_ts", 20000),
   ]);
 
   // Merge live + archive predictions (dedupe by id).
@@ -177,6 +178,7 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     td1Rows,
     aas96Rows,
     a96Rows,
+    b4x4Rows,
   });
 
   return { csv, manifest, stats };
