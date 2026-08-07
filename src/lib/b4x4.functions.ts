@@ -183,7 +183,7 @@ export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async ()
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as unknown as Row | null) ?? null;
+  return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
 });
 
 /** Audit-only shadow market-data coverage. Never affects B4x4 decisions. */
