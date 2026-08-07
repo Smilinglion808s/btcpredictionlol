@@ -855,6 +855,24 @@ export async function resolveShadowRowsFor(
     await resolveTd1RcRow(supabase, predictionId, actualDirection);
   } catch { /* never block */ }
 
+  // B4x4 resolution (independent active model). Never blocks the resolver.
+  try {
+    const { data: predRow } = await supabase
+      .from("predictions")
+      .select("candle_ts, actual_next_candle_open, actual_next_candle_high, actual_next_candle_low, actual_next_candle_close")
+      .eq("id", predictionId)
+      .maybeSingle();
+    if (predRow?.candle_ts) {
+      const { resolveB4x4Row } = await import("@/lib/b4x4/orchestrator");
+      await resolveB4x4Row(supabase, predRow.candle_ts as string, actualDirection, {
+        open: (predRow as { actual_next_candle_open: number | null }).actual_next_candle_open,
+        high: (predRow as { actual_next_candle_high: number | null }).actual_next_candle_high,
+        low: (predRow as { actual_next_candle_low: number | null }).actual_next_candle_low,
+        close: (predRow as { actual_next_candle_close: number | null }).actual_next_candle_close,
+      });
+    }
+  } catch { /* never block */ }
+
   // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.
   try {
     const { maybeRetrainTd1 } = await import("./td1/retrain");
