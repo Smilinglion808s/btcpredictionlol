@@ -64,7 +64,7 @@ export async function loadHistory(
     .lt("target_candle_ts", beforeCandleTs)
     .order("target_candle_ts", { ascending: false })
     .limit(HISTORY_FETCH);
-  const rows = ((data ?? []) as DbRow[]).slice().reverse();
+  const rows = ((data ?? []) as unknown as DbRow[]).slice().reverse();
   const out: HistoryEntry[] = [];
   for (const r of rows) {
     const dir = r.raw_direction as Direction | null;
@@ -104,7 +104,7 @@ export async function loadDailyState(
     .lt("target_candle_ts", candleTs);
   let net = 0;
   let count = 0;
-  for (const r of (data ?? []) as DbRow[]) {
+  for (const r of (data ?? []) as unknown as DbRow[]) {
     net += Number(r.result_score ?? 0);
     count++;
   }
@@ -208,7 +208,7 @@ export async function runB4x4ForA2Combined(
       .select("*")
       .maybeSingle();
     if (error) return null;
-    return (data as DbRow | null) ?? null;
+    return (data as unknown as DbRow | null) ?? null;
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -270,7 +270,7 @@ export async function resolveB4x4Row(
       .eq("model_version", B4X4_MODEL_VERSION)
       .eq("target_candle_ts", targetCandleTs)
       .maybeSingle();
-    const row = data as DbRow | null;
+    const row = data as unknown as DbRow | null;
     if (!row) return;
     if (row.resolved_at) return; // idempotent
 
