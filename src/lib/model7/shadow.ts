@@ -28,6 +28,9 @@ import {
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
+
+/** Master kill switch for TD2-RC outbound webhooks. B4x4 is the only sender. */
+export const TD2_WEBHOOKS_ENABLED = false;
 // Target: score AT or immediately AFTER the target-candle boundary.
 export const SCORE_NOT_BEFORE_DELAY_MS = 1500;
 // Bounded per-sleep cap so a worker never blocks longer than this at once.
