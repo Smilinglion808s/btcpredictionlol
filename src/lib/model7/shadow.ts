@@ -28,6 +28,9 @@ import {
 
 const HISTORY_DEPTH_CANDLES = 24;
 const TF_MS = 15 * 60 * 1000;
+
+/** Master kill switch for TD2-RC outbound webhooks. B4x4 is the only sender. */
+export const TD2_WEBHOOKS_ENABLED = false;
 // Target: score AT or immediately AFTER the target-candle boundary.
 export const SCORE_NOT_BEFORE_DELAY_MS = 1500;
 // Bounded per-sleep cap so a worker never blocks longer than this at once.
@@ -660,8 +663,8 @@ async function runA2Policies(
       } catch { /* never block */ }
     }));
 
-    // ---- TD2-RC is the ACTIVE webhook source. Runs on A2_Combined output. ----
-    // Emit the webhook AFTER TD2-RC decides so bot receives the gated signal.
+    // ---- TD2-RC outbound webhooks are DISABLED. B4x4 is the only sender. ----
+    // TD2-RC still runs, persists, resolves and reports; it just never emits.
     const combined = built.find((b) => b.policy === "A2_Combined")!;
     const combinedTimingStatus = String((inherited.timing_status as string | null) ?? "");
     const td1Promise = (async () => {
@@ -690,6 +693,7 @@ async function runA2Policies(
       // a decision (YES / NO / SKIP). If the layer failed catastrophically
       // (td2Row null), do not send a payload so the bot doesn't act on noise.
       const eligible =
+        TD2_WEBHOOKS_ENABLED &&
         td2Row != null &&
         (combinedTimingStatus === "ON_TIME" || combinedTimingStatus === "LATE_WARNING");
       if (!eligible) return;
