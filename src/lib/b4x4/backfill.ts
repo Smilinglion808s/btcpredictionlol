@@ -117,8 +117,10 @@ export function summarize(
       r.decision.decisionReason === "ABSTAIN_A2_TIMING_INVALID" ||
       r.decision.decisionReason === "ABSTAIN_A2_LEAKAGE_INVALID" ||
       r.decision.decisionReason === "ABSTAIN_INTERNAL_ERROR";
-    if (!operational) evaluable++;
+    // Evaluable = warm-ready AND resolved (unresolved outcomes are excluded).
+    if (!operational && r.row.actualDirection != null) evaluable++;
     if (!r.decision.wouldTrade) continue;
+
     trades++;
     if (firstPublishedTs == null) firstPublishedTs = r.row.candleTs;
     if (r.result === "WIN") wins++;
