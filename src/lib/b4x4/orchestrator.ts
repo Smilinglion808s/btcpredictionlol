@@ -30,6 +30,13 @@ import {
 /** First target boundary eligible for live webhooks. Rows before this never webhook. */
 export const B4X4_LIVE_STARTED_AT = "2026-08-07T04:00:00.000Z";
 
+/**
+ * Immutable webhook activation boundary (approved go-live).
+ * Only LIVE, published rows whose target candle opens at or after this exact
+ * 15-minute boundary may emit a directional webhook. Never change this value.
+ */
+export const B4X4_WEBHOOK_ACTIVATION_TS = "2026-08-07T04:45:00.000Z";
+
 const HISTORY_FETCH = GRID_TRAINING_LOOKBACK + 64;
 
 export interface B4x4Context {
