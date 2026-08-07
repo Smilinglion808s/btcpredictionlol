@@ -30,6 +30,13 @@ import {
 /** First target boundary eligible for live webhooks. Rows before this never webhook. */
 export const B4X4_LIVE_STARTED_AT = "2026-08-07T04:00:00.000Z";
 
+/**
+ * Immutable webhook activation boundary (approved go-live).
+ * Only LIVE, published rows whose target candle opens at or after this exact
+ * 15-minute boundary may emit a directional webhook. Never change this value.
+ */
+export const B4X4_WEBHOOK_ACTIVATION_TS = "2026-08-07T04:45:00.000Z";
+
 const HISTORY_FETCH = GRID_TRAINING_LOOKBACK + 64;
 
 export interface B4x4Context {
@@ -230,7 +237,7 @@ export async function runB4x4ForA2Combined(
  * Held OFF pending activation; engine, persistence, resolution, dashboard and
  * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
  */
-export const B4X4_WEBHOOKS_ENABLED = false;
+export const B4X4_WEBHOOKS_ENABLED = true;
 
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
@@ -241,9 +248,17 @@ export async function maybeSendB4x4Webhook(
     if (!B4X4_WEBHOOKS_ENABLED) return false;
     if (!row) return false;
     if (row.run_mode !== "LIVE") return false;
+    // final publish flag: the row must be an actually-published directional trade
     if (row.would_trade !== true) return false;
+    if (row.final_prediction !== "GREEN" && row.final_prediction !== "RED") return false;
     if (row.webhook_eligible !== true) return false;
     if (row.webhook_sent_at) return false;
+    // Hard activation-boundary gate: nothing before the approved boundary ships,
+    // which also blocks BACKFILL / replay / catch-up / historical rows.
+    const candleMs = new Date(String(row.target_candle_ts)).getTime();
+    if (!Number.isFinite(candleMs)) return false;
+    if (candleMs < new Date(B4X4_WEBHOOK_ACTIVATION_TS).getTime()) return false;
+
 
     // Claim the send atomically: only the first writer flips webhook_sent_at.
     const { data: claimed } = await supabase
