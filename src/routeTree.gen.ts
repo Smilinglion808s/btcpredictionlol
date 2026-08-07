@@ -25,6 +25,7 @@ import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/publ
 import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
+import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
 import { Route as ApiPublicHooksAas96PreloadRouteImport } from './routes/api/public/hooks/aas96-preload'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -115,6 +116,12 @@ const ApiPublicHooksDailyArchiveRoute =
     path: '/api/public/hooks/daily-archive',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksB4x4BackfillRoute =
+  ApiPublicHooksB4x4BackfillRouteImport.update({
+    id: '/api/public/hooks/b4x4-backfill',
+    path: '/api/public/hooks/b4x4-backfill',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksAas96PreloadRoute =
   ApiPublicHooksAas96PreloadRouteImport.update({
     id: '/api/public/hooks/aas96-preload',
@@ -130,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/stats': typeof AuthenticatedStatsRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
+  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
@@ -148,6 +156,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
+  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
@@ -168,6 +177,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
+  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/settings/model'
     | '/api/public/hooks/aas96-preload'
+    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/'
     | '/settings/model'
     | '/api/public/hooks/aas96-preload'
+    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
@@ -225,6 +237,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/settings/model'
     | '/api/public/hooks/aas96-preload'
+    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
@@ -239,6 +252,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiPublicHooksAas96PreloadRoute: typeof ApiPublicHooksAas96PreloadRoute
+  ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
@@ -364,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/b4x4-backfill': {
+      id: '/api/public/hooks/b4x4-backfill'
+      path: '/api/public/hooks/b4x4-backfill'
+      fullPath: '/api/public/hooks/b4x4-backfill'
+      preLoaderRoute: typeof ApiPublicHooksB4x4BackfillRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/aas96-preload': {
       id: '/api/public/hooks/aas96-preload'
       path: '/api/public/hooks/aas96-preload'
@@ -398,6 +419,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiPublicHooksAas96PreloadRoute: ApiPublicHooksAas96PreloadRoute,
+  ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
@@ -411,13 +433,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
