@@ -744,30 +744,7 @@ async function runA2Policies(
       }
     })();
 
-    // ---- B4x4 — independent active model over the same A2_Combined probability.
-    // Runs in parallel with TD1/TD2, never blocks or mutates them.
-    const b4x4Promise = (async () => {
-      try {
-        const { runB4x4ForA2Combined, maybeSendB4x4Webhook } = await import("@/lib/b4x4/orchestrator");
-        const row = await runB4x4ForA2Combined(supabase, {
-          predictionId: predictionRow.id,
-          candleTs: predictionRow.candle_ts,
-          a2RowId: null,
-          probabilityGreen: probability,
-          timingStatus: (inherited.timing_status as string | null) ?? null,
-          leakageCheckPassed: (inherited.leakage_check_passed as boolean | null) ?? null,
-          a2ModelFitId: (inherited.model_fit_id as string | null) ?? null,
-          a2ProductionModelVersion:
-            (predictionRow as { model_version?: string | null }).model_version ?? null,
-          featureCutoffTs: (inherited.feature_cutoff_ts as string | null) ?? null,
-          latestSourceCandleTs: (inherited.latest_source_candle_ts as string | null) ?? null,
-          runMode: "LIVE",
-        });
-        await maybeSendB4x4Webhook(supabase, row);
-      } catch { /* never block */ }
-    })();
-
-    await Promise.all([insertPromise, td1Promise, b4x4Promise]);
+    await Promise.all([b4x4Promise, insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
