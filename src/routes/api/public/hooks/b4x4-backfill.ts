@@ -19,16 +19,18 @@ export const Route = createFileRoute("/api/public/hooks/b4x4-backfill")({
           process.env.SUPABASE_SERVICE_ROLE_KEY!,
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
+        let from: string | undefined;
         let upTo: string | undefined;
         let persist = true;
         try {
-          const body = (await request.json()) as { up_to?: string; persist?: boolean } | null;
+          const body = (await request.json()) as { from?: string; up_to?: string; persist?: boolean } | null;
+          if (body?.from) from = body.from;
           if (body?.up_to) upTo = body.up_to;
           if (body?.persist === false) persist = false;
         } catch { /* empty body is fine */ }
 
         try {
-          const out = await runB4x4Backfill(supabase, { upTo, persist });
+          const out = await runB4x4Backfill(supabase, { from, upTo, persist });
           return new Response(JSON.stringify(out), {
             headers: { "content-type": "application/json" },
           });

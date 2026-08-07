@@ -24,7 +24,7 @@ export interface BackfillSourceRow extends SourceRow {
 /** Load every canonical A2_Combined observation, deduplicated by target candle. */
 export async function loadCanonicalSourceRows(
   supabase: SupabaseClient,
-  opts: { upTo?: string } = {},
+  opts: { from?: string; upTo?: string } = {},
 ): Promise<BackfillSourceRow[]> {
   const page = 1000;
   let from = 0;
@@ -39,6 +39,7 @@ export async function loadCanonicalSourceRows(
       .eq("variant", B4X4_SOURCE_VARIANT)
       .order("candle_ts", { ascending: true })
       .range(from, from + page - 1);
+    if (opts.from) q = q.gte("candle_ts", opts.from);
     if (opts.upTo) q = q.lte("candle_ts", opts.upTo);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
@@ -152,7 +153,7 @@ export function summarize(
  */
 export async function runB4x4Backfill(
   supabase: SupabaseClient,
-  opts: { upTo?: string; persist?: boolean } = {},
+  opts: { from?: string; upTo?: string; persist?: boolean } = {},
 ): Promise<{ summary: BackfillSummary; persisted: number }> {
   const source = await loadCanonicalSourceRows(supabase, opts);
   const results = replayB4x4(source);
