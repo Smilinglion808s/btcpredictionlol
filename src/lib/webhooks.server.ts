@@ -640,3 +640,60 @@ export async function deliverWebhook(
 
   return { delivered: withEvent.length };
 }
+
+// ── B4x4 (a2-core-grid40-brake80) — ACTIVE directional webhook source ────────
+// Emits ONLY for live, published (would_trade=true) rows. Backfilled rows,
+// abstentions, counterfactuals, shadow signals and resolutions never emit.
+export const B4X4_MODEL_ID = "B4x4";
+export const B4X4_DECISION_POLICY_VERSION = "b4x4-v1";
+
+export function buildB4x4WebhookPayload({ row }: { row: Record<string, any> }) {
+  const targetTs = String(row.target_candle_ts);
+  const startMs = new Date(targetTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+  const direction = row.final_prediction as "GREEN" | "RED";
+
+  return {
+    model_name: "B4x4",
+    model: B4X4_MODEL_ID,
+    model_version: "b4x4-v1",
+    variant: row.variant ?? "a2-core-grid40-brake80",
+    prospective_test_id: row.prospective_test_id ?? "B4X4_CORE_GRID40_BRAKE80_V1",
+    decision_policy_version: B4X4_DECISION_POLICY_VERSION,
+
+    prediction_id: row.id ?? null,
+    target_candle_ts: targetTs,
+    prediction: direction,
+    // Bot-compatible directional alias: GREEN → YES, RED → NO.
+    direction_label: direction === "GREEN" ? "YES" : "NO",
+    trade: true,
+
+    a2_probability_green: row.a2_probability_green != null ? Number(row.a2_probability_green) : null,
+    confidence: row.confidence != null ? Number(row.confidence) : null,
+    selected_route: row.selected_route ?? null,
+    global_rank: row.global_rank != null ? Number(row.global_rank) : null,
+    same_side_rank: row.same_side_rank != null ? Number(row.same_side_rank) : null,
+    grid_cell: row.grid_cell ?? null,
+    p_correct: row.p_correct != null ? Number(row.p_correct) : null,
+    grid_quality_percentile: row.grid_quality_percentile != null
+      ? Number(row.grid_quality_percentile) : null,
+    daily_net_before: row.daily_net_before != null ? Number(row.daily_net_before) : null,
+    intraday_brake_active: Boolean(row.intraday_brake_active),
+    decision_reason: row.decision_reason ?? null,
+
+    idempotency_key: `${row.id}:b4x4-v1`,
+    dedupe_key: `b4x4-BTC-USDT-15m-${startsAt}`,
+
+    candle_starts_at: startsAt,
+    candle_starts_at_mt: formatMountainTime(startsAt),
+    candle_ends_at: endsAt,
+    candle_ends_at_mt: formatMountainTime(endsAt),
+    target_candle_close_at: endsAt,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}
