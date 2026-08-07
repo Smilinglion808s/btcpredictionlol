@@ -225,17 +225,26 @@ export async function runB4x4ForA2Combined(
   }
 }
 
+/**
+ * Master kill switch for B4x4 outbound directional webhooks.
+ * Held OFF pending activation; engine, persistence, resolution, dashboard and
+ * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
+ */
+export const B4X4_WEBHOOKS_ENABLED = false;
+
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
   supabase: SupabaseClient,
   row: DbRow | null,
 ): Promise<boolean> {
   try {
+    if (!B4X4_WEBHOOKS_ENABLED) return false;
     if (!row) return false;
     if (row.run_mode !== "LIVE") return false;
     if (row.would_trade !== true) return false;
     if (row.webhook_eligible !== true) return false;
     if (row.webhook_sent_at) return false;
+
     // Claim the send atomically: only the first writer flips webhook_sent_at.
     const { data: claimed } = await supabase
       .from("b4x4_predictions")
