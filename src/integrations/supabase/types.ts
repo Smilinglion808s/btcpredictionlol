@@ -454,6 +454,353 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_predictions: {
+        Row: {
+          a2_model_fit_id: string | null
+          a2_probability_green: number | null
+          a2_production_model_version: string | null
+          a2_source_variant: string | null
+          actual_close: number | null
+          actual_direction: string | null
+          actual_high: number | null
+          actual_low: number | null
+          actual_open: number | null
+          base_candidate: boolean | null
+          base_no_brake_counterfactual_score: number | null
+          base_no_brake_counterfactual_trade: boolean | null
+          brake_attribution_class: string | null
+          brake_incremental_value: number | null
+          confidence: number | null
+          config_hash: string | null
+          core_eligible: boolean | null
+          core_only_counterfactual_score: number | null
+          core_only_counterfactual_trade: boolean | null
+          created_at: string
+          daily_net_before: number | null
+          daily_resolved_trade_count_before: number | null
+          data_invalid_reason: string | null
+          data_valid: boolean
+          decision_reason: string | null
+          expansion_eligible: boolean | null
+          expansion_only_counterfactual_score: number | null
+          expansion_only_counterfactual_trade: boolean | null
+          feature_cutoff_ts: string | null
+          final_prediction: string | null
+          global_history_count: number | null
+          global_history_end_ts: string | null
+          global_history_start_ts: string | null
+          global_rank: number | null
+          global_rank_quartile: number | null
+          grid_cell: string | null
+          grid_cell_losses: number | null
+          grid_cell_resolved_count: number | null
+          grid_cell_wins: number | null
+          grid_prior_alpha: number | null
+          grid_prior_beta: number | null
+          grid_quality_percentile: number | null
+          grid_reference_count: number | null
+          grid_snapshot_json: Json | null
+          grid_training_end_ts: string | null
+          grid_training_lookback: number | null
+          grid_training_resolved_count: number | null
+          grid_training_start_ts: string | null
+          id: string
+          intraday_brake_active: boolean | null
+          intraday_brake_veto_fired: boolean | null
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          latest_source_candle_ts: string | null
+          leakage_check_passed: boolean | null
+          local_date: string | null
+          model_name: string
+          model_version: string
+          p_correct: number | null
+          prospective_test_id: string
+          quality_mean: number | null
+          raw_a2_counterfactual_result: string | null
+          raw_direction: string | null
+          resolution_attempt_count: number
+          resolved_at: string | null
+          result: string | null
+          result_score: number | null
+          run_mode: string
+          same_side_history_count: number | null
+          same_side_history_end_ts: string | null
+          same_side_history_start_ts: string | null
+          same_side_rank: number | null
+          same_side_rank_quartile: number | null
+          selected_route: string | null
+          source_a2_row_id: string | null
+          source_prediction_id: string | null
+          target_candle_ts: string
+          timing_status: string | null
+          updated_at: string
+          variant: string
+          webhook_eligible: boolean
+          webhook_sent_at: string | null
+          would_trade: boolean
+        }
+        Insert: {
+          a2_model_fit_id?: string | null
+          a2_probability_green?: number | null
+          a2_production_model_version?: string | null
+          a2_source_variant?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          base_candidate?: boolean | null
+          base_no_brake_counterfactual_score?: number | null
+          base_no_brake_counterfactual_trade?: boolean | null
+          brake_attribution_class?: string | null
+          brake_incremental_value?: number | null
+          confidence?: number | null
+          config_hash?: string | null
+          core_eligible?: boolean | null
+          core_only_counterfactual_score?: number | null
+          core_only_counterfactual_trade?: boolean | null
+          created_at?: string
+          daily_net_before?: number | null
+          daily_resolved_trade_count_before?: number | null
+          data_invalid_reason?: string | null
+          data_valid?: boolean
+          decision_reason?: string | null
+          expansion_eligible?: boolean | null
+          expansion_only_counterfactual_score?: number | null
+          expansion_only_counterfactual_trade?: boolean | null
+          feature_cutoff_ts?: string | null
+          final_prediction?: string | null
+          global_history_count?: number | null
+          global_history_end_ts?: string | null
+          global_history_start_ts?: string | null
+          global_rank?: number | null
+          global_rank_quartile?: number | null
+          grid_cell?: string | null
+          grid_cell_losses?: number | null
+          grid_cell_resolved_count?: number | null
+          grid_cell_wins?: number | null
+          grid_prior_alpha?: number | null
+          grid_prior_beta?: number | null
+          grid_quality_percentile?: number | null
+          grid_reference_count?: number | null
+          grid_snapshot_json?: Json | null
+          grid_training_end_ts?: string | null
+          grid_training_lookback?: number | null
+          grid_training_resolved_count?: number | null
+          grid_training_start_ts?: string | null
+          id?: string
+          intraday_brake_active?: boolean | null
+          intraday_brake_veto_fired?: boolean | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          latest_source_candle_ts?: string | null
+          leakage_check_passed?: boolean | null
+          local_date?: string | null
+          model_name?: string
+          model_version?: string
+          p_correct?: number | null
+          prospective_test_id?: string
+          quality_mean?: number | null
+          raw_a2_counterfactual_result?: string | null
+          raw_direction?: string | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          same_side_history_count?: number | null
+          same_side_history_end_ts?: string | null
+          same_side_history_start_ts?: string | null
+          same_side_rank?: number | null
+          same_side_rank_quartile?: number | null
+          selected_route?: string | null
+          source_a2_row_id?: string | null
+          source_prediction_id?: string | null
+          target_candle_ts: string
+          timing_status?: string | null
+          updated_at?: string
+          variant?: string
+          webhook_eligible?: boolean
+          webhook_sent_at?: string | null
+          would_trade?: boolean
+        }
+        Update: {
+          a2_model_fit_id?: string | null
+          a2_probability_green?: number | null
+          a2_production_model_version?: string | null
+          a2_source_variant?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          base_candidate?: boolean | null
+          base_no_brake_counterfactual_score?: number | null
+          base_no_brake_counterfactual_trade?: boolean | null
+          brake_attribution_class?: string | null
+          brake_incremental_value?: number | null
+          confidence?: number | null
+          config_hash?: string | null
+          core_eligible?: boolean | null
+          core_only_counterfactual_score?: number | null
+          core_only_counterfactual_trade?: boolean | null
+          created_at?: string
+          daily_net_before?: number | null
+          daily_resolved_trade_count_before?: number | null
+          data_invalid_reason?: string | null
+          data_valid?: boolean
+          decision_reason?: string | null
+          expansion_eligible?: boolean | null
+          expansion_only_counterfactual_score?: number | null
+          expansion_only_counterfactual_trade?: boolean | null
+          feature_cutoff_ts?: string | null
+          final_prediction?: string | null
+          global_history_count?: number | null
+          global_history_end_ts?: string | null
+          global_history_start_ts?: string | null
+          global_rank?: number | null
+          global_rank_quartile?: number | null
+          grid_cell?: string | null
+          grid_cell_losses?: number | null
+          grid_cell_resolved_count?: number | null
+          grid_cell_wins?: number | null
+          grid_prior_alpha?: number | null
+          grid_prior_beta?: number | null
+          grid_quality_percentile?: number | null
+          grid_reference_count?: number | null
+          grid_snapshot_json?: Json | null
+          grid_training_end_ts?: string | null
+          grid_training_lookback?: number | null
+          grid_training_resolved_count?: number | null
+          grid_training_start_ts?: string | null
+          id?: string
+          intraday_brake_active?: boolean | null
+          intraday_brake_veto_fired?: boolean | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          latest_source_candle_ts?: string | null
+          leakage_check_passed?: boolean | null
+          local_date?: string | null
+          model_name?: string
+          model_version?: string
+          p_correct?: number | null
+          prospective_test_id?: string
+          quality_mean?: number | null
+          raw_a2_counterfactual_result?: string | null
+          raw_direction?: string | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          same_side_history_count?: number | null
+          same_side_history_end_ts?: string | null
+          same_side_history_start_ts?: string | null
+          same_side_rank?: number | null
+          same_side_rank_quartile?: number | null
+          selected_route?: string | null
+          source_a2_row_id?: string | null
+          source_prediction_id?: string | null
+          target_candle_ts?: string
+          timing_status?: string | null
+          updated_at?: string
+          variant?: string
+          webhook_eligible?: boolean
+          webhook_sent_at?: string | null
+          would_trade?: boolean
+        }
+        Relationships: []
+      }
+      b4x4_shadow_market_data: {
+        Row: {
+          attribution_json: Json | null
+          b4x4_prediction_id: string | null
+          collected_at: string
+          coverage_status: string | null
+          created_at: string
+          derivatives_json: Json | null
+          error_reason: string | null
+          feature_cutoff_ts: string | null
+          flow_3m_15m_coherent: boolean | null
+          flow_agrees_a2: boolean | null
+          flow_conflicts_a2: boolean | null
+          flow_direction_15m: string | null
+          flow_direction_3m: string | null
+          flow_json: Json | null
+          flow_strength_percentile: number | null
+          flow_strong_coherent: boolean | null
+          id: string
+          orderbook_json: Json | null
+          path_efficiency_4: number | null
+          path_efficiency_4_percentile: number | null
+          regime_json: Json | null
+          shadow_efficiency_not_mid: boolean | null
+          target_candle_ts: string
+          updated_at: string
+        }
+        Insert: {
+          attribution_json?: Json | null
+          b4x4_prediction_id?: string | null
+          collected_at?: string
+          coverage_status?: string | null
+          created_at?: string
+          derivatives_json?: Json | null
+          error_reason?: string | null
+          feature_cutoff_ts?: string | null
+          flow_3m_15m_coherent?: boolean | null
+          flow_agrees_a2?: boolean | null
+          flow_conflicts_a2?: boolean | null
+          flow_direction_15m?: string | null
+          flow_direction_3m?: string | null
+          flow_json?: Json | null
+          flow_strength_percentile?: number | null
+          flow_strong_coherent?: boolean | null
+          id?: string
+          orderbook_json?: Json | null
+          path_efficiency_4?: number | null
+          path_efficiency_4_percentile?: number | null
+          regime_json?: Json | null
+          shadow_efficiency_not_mid?: boolean | null
+          target_candle_ts: string
+          updated_at?: string
+        }
+        Update: {
+          attribution_json?: Json | null
+          b4x4_prediction_id?: string | null
+          collected_at?: string
+          coverage_status?: string | null
+          created_at?: string
+          derivatives_json?: Json | null
+          error_reason?: string | null
+          feature_cutoff_ts?: string | null
+          flow_3m_15m_coherent?: boolean | null
+          flow_agrees_a2?: boolean | null
+          flow_conflicts_a2?: boolean | null
+          flow_direction_15m?: string | null
+          flow_direction_3m?: string | null
+          flow_json?: Json | null
+          flow_strength_percentile?: number | null
+          flow_strong_coherent?: boolean | null
+          id?: string
+          orderbook_json?: Json | null
+          path_efficiency_4?: number | null
+          path_efficiency_4_percentile?: number | null
+          regime_json?: Json | null
+          shadow_efficiency_not_mid?: boolean | null
+          target_candle_ts?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "b4x4_shadow_market_data_b4x4_prediction_id_fkey"
+            columns: ["b4x4_prediction_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       candles: {
         Row: {
           candle_ts: string
