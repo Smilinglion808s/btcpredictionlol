@@ -45,9 +45,17 @@ export function B4x4Card({
         ? "border-bear/50 text-bear bg-bear/10"
         : "border-amber/40 text-amber bg-amber/10";
 
+  const gaugeR = 34;
+  const circumference = 2 * Math.PI * gaugeR;
+  const pct = Math.max(0, Math.min(100, wr));
+  const aboveBreakeven = wr >= 50;
+
   return (
     <Card className="b4-shell rounded-2xl p-6">
-      <div className="relative flex items-start justify-between gap-3 mb-5">
+      <span className="b4-orbit-ring" aria-hidden />
+      <span className="v6-sheen" aria-hidden />
+
+      <div className="relative flex items-start justify-between gap-3 mb-6">
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.28em] text-amber/80 mb-1">
             Active model · frozen B4x4-v1
@@ -57,31 +65,72 @@ export function B4x4Card({
             A2_Combined ranks · 4×4 correctness grid · loss brake
           </div>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs border-amber/30 hover:border-amber/60 shrink-0"
-          onClick={onExport}
-          disabled={exporting}
-        >
-          {exporting ? "…" : "CSV"}
-        </Button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-amber/30 hover:border-amber/60"
+            onClick={onExport}
+            disabled={exporting}
+          >
+            {exporting ? "…" : "CSV"}
+          </Button>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber/40 bg-amber/10 text-[10px] font-bold uppercase tracking-[0.16em] text-amber">
+            <span className="size-1.5 rounded-full bg-amber b4-live-dot" />
+            Live
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex items-center gap-5 mb-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
+            <circle
+              cx="40"
+              cy="40"
+              r={gaugeR}
+              fill="none"
+              stroke={aboveBreakeven ? "var(--bull)" : "var(--bear)"}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - pct / 100)}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">{wr.toFixed(1)}%</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">win rate</span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · primary</div>
+          <div
+            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${
+              net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-foreground"
+            }`}
+          >
+            {signed(net)}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+            break-even 50.00%
+            <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
+              {aboveBreakeven ? "▲ above" : "▼ below"}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        <Stat
-          label="Net"
-          value={signed(net)}
-          tone={net > 0 ? "text-bull" : net < 0 ? "text-bear" : ""}
-        />
-        <Stat label="Win rate" value={`${wr.toFixed(1)}%`} tone={wr >= 50 ? "text-bull" : "text-bear"} />
         <Stat label="W / L" value={`${wins} / ${losses}`} />
         <Stat label="Coverage" value={`${coverage.toFixed(1)}%`} />
+        <Stat label="Trades" value={String(stats.trades ?? 0)} />
+        <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
       </div>
 
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
-        <Stat label="Trades" value={String(stats.trades ?? 0)} />
-        <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
         <Stat
           label="Today"
           value={`${signed(Number(stats.today_net ?? 0))} · ${stats.today_trades ?? 0}t`}
@@ -93,6 +142,7 @@ export function B4x4Card({
           tone={stats.brake_active_now ? "text-bear" : "text-muted-foreground"}
         />
       </div>
+
 
       <div className="relative mb-5">
         <div className="flex items-center gap-2 mb-2">
