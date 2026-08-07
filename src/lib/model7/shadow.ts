@@ -660,8 +660,8 @@ async function runA2Policies(
       } catch { /* never block */ }
     }));
 
-    // ---- TD2-RC is the ACTIVE webhook source. Runs on A2_Combined output. ----
-    // Emit the webhook AFTER TD2-RC decides so bot receives the gated signal.
+    // ---- TD2-RC outbound webhooks are DISABLED. B4x4 is the only sender. ----
+    // TD2-RC still runs, persists, resolves and reports; it just never emits.
     const combined = built.find((b) => b.policy === "A2_Combined")!;
     const combinedTimingStatus = String((inherited.timing_status as string | null) ?? "");
     const td1Promise = (async () => {
