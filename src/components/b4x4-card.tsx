@@ -147,6 +147,9 @@ export function B4x4Card({
       <div className="relative mb-5">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Current candle</span>
+          {candleLabel ? (
+            <span className="text-[10px] font-mono text-amber tabular-nums">{candleLabel}</span>
+          ) : null}
           <span className="h-px flex-1 bg-gradient-to-r from-amber/40 to-transparent" />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
