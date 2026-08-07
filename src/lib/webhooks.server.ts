@@ -654,24 +654,38 @@ export function buildB4x4WebhookPayload({ row }: { row: Record<string, any> }) {
   const endsAt = new Date(startMs + TF_MS_15M).toISOString();
   const nowIso = new Date().toISOString();
   const direction = row.final_prediction as "GREEN" | "RED";
+  // Bot contract (same as TD1-RC): GREEN → YES, RED → NO.
+  const predictionLabel: "YES" | "NO" = direction === "GREEN" ? "YES" : "NO";
+  const pGreen = row.a2_probability_green != null ? Number(row.a2_probability_green) : null;
+  const confidence = pGreen == null
+    ? 0
+    : Math.round((predictionLabel === "YES" ? pGreen : 1 - pGreen) * 100);
 
   return {
-    model_name: "B4x4",
     model: B4X4_MODEL_ID,
+    model_name: "B4x4",
     model_version: "b4x4-v1",
+    decision_policy_version: B4X4_DECISION_POLICY_VERSION,
     variant: row.variant ?? "a2-core-grid40-brake80",
     prospective_test_id: row.prospective_test_id ?? "B4X4_CORE_GRID40_BRAKE80_V1",
-    decision_policy_version: B4X4_DECISION_POLICY_VERSION,
+    model_artifact_sha256: null,
+    model_fit_id: row.a2_model_fit_id ?? null,
+    setup_type: null,
 
-    prediction_id: row.id ?? null,
-    target_candle_ts: targetTs,
-    prediction: direction,
-    // Bot-compatible directional alias: GREEN → YES, RED → NO.
-    direction_label: direction === "GREEN" ? "YES" : "NO",
+    // --- TD1-RC compatible core contract ---
+    prediction: predictionLabel,
+    confidence,
+    decision: predictionLabel,
     trade: true,
+    probability_green: pGreen,
+    base_decision: row.raw_direction === "GREEN" ? "YES" : row.raw_direction === "RED" ? "NO" : null,
+    override_reasons: [],
 
-    a2_probability_green: row.a2_probability_green != null ? Number(row.a2_probability_green) : null,
-    confidence: row.confidence != null ? Number(row.confidence) : null,
+    // --- B4x4 specific audit fields ---
+    direction_label: predictionLabel,
+    raw_direction: row.raw_direction ?? null,
+    a2_probability_green: pGreen,
+    b4x4_confidence: row.confidence != null ? Number(row.confidence) : null,
     selected_route: row.selected_route ?? null,
     global_rank: row.global_rank != null ? Number(row.global_rank) : null,
     same_side_rank: row.same_side_rank != null ? Number(row.same_side_rank) : null,
@@ -683,14 +697,25 @@ export function buildB4x4WebhookPayload({ row }: { row: Record<string, any> }) {
     intraday_brake_active: Boolean(row.intraday_brake_active),
     decision_reason: row.decision_reason ?? null,
 
-    idempotency_key: `${row.id}:b4x4-v1`,
-    dedupe_key: `b4x4-BTC-USDT-15m-${startsAt}`,
-
     candle_starts_at: startsAt,
     candle_starts_at_mt: formatMountainTime(startsAt),
     candle_ends_at: endsAt,
     candle_ends_at_mt: formatMountainTime(endsAt),
     target_candle_close_at: endsAt,
+    target_candle_ts: targetTs,
+
+    dedupe_key: `BTC-USDT-15m-${startsAt}`,
+    idempotency_key: `${row.source_prediction_id ?? row.id}:b4x4-v1`,
+    prediction_id: row.source_prediction_id ?? row.id ?? null,
+    b4x4_row_id: row.id ?? null,
+    shadow_id: null,
+
+    btc_price_at_prediction: null,
+    market_condition: null,
+
+    timing_status: row.timing_status ?? null,
+    boundary_delta_ms: null,
+    scored_at: null,
 
     sent_at: nowIso,
     sent_at_mt: formatMountainTime(nowIso),
