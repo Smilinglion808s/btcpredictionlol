@@ -15,7 +15,6 @@ import {
   exportTd2RcShadow,
   resetTd2RcVisualStats,
   getTd1RcTrainingProgress,
-  listTd1RcRecent,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
