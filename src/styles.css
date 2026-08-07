@@ -308,3 +308,44 @@
 @utility td1-live-dot {
   animation: td1-pulse-ring 2.4s ease-out infinite;
 }
+
+/* ---- B4x4 grid card visuals (amber) ---- */
+@utility b4-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--amber) 34%, transparent);
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in oklab, var(--amber) 24%, transparent) 0%, transparent 58%),
+    radial-gradient(110% 80% at 105% 0%, color-mix(in oklab, var(--bull) 16%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 92%, var(--amber)) 0%, var(--card) 62%);
+  box-shadow:
+    0 26px 60px -28px color-mix(in oklab, var(--amber) 55%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--grid) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--grid) 55%, transparent) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(120% 90% at 50% 0%, black 0%, transparent 72%);
+    opacity: 0.55;
+  }
+}
+
+@utility b4-title {
+  background: linear-gradient(100deg, color-mix(in oklab, white 92%, var(--amber)) 0%, var(--amber) 48%, var(--bull) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility b4-chip {
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--amber) 18%, var(--border));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--amber) 8%, transparent), color-mix(in oklab, var(--card) 88%, transparent));
+}
