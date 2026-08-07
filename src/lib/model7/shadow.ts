@@ -715,7 +715,30 @@ async function runA2Policies(
       }
     })();
 
-    await Promise.all([insertPromise, td1Promise]);
+    // ---- B4x4 — independent active model over the same A2_Combined probability.
+    // Runs in parallel with TD1/TD2, never blocks or mutates them.
+    const b4x4Promise = (async () => {
+      try {
+        const { runB4x4ForA2Combined, maybeSendB4x4Webhook } = await import("@/lib/b4x4/orchestrator");
+        const row = await runB4x4ForA2Combined(supabase, {
+          predictionId: predictionRow.id,
+          candleTs: predictionRow.candle_ts,
+          a2RowId: null,
+          probabilityGreen: probability,
+          timingStatus: (inherited.timing_status as string | null) ?? null,
+          leakageCheckPassed: (inherited.leakage_check_passed as boolean | null) ?? null,
+          a2ModelFitId: (inherited.model_fit_id as string | null) ?? null,
+          a2ProductionModelVersion:
+            (predictionRow as { model_version?: string | null }).model_version ?? null,
+          featureCutoffTs: (inherited.feature_cutoff_ts as string | null) ?? null,
+          latestSourceCandleTs: (inherited.latest_source_candle_ts as string | null) ?? null,
+          runMode: "LIVE",
+        });
+        await maybeSendB4x4Webhook(supabase, row);
+      } catch { /* never block */ }
+    })();
+
+    await Promise.all([insertPromise, td1Promise, b4x4Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -830,6 +853,24 @@ export async function resolveShadowRowsFor(
   try {
     const { resolveTd1RcRow } = await import("./td1/orchestrator");
     await resolveTd1RcRow(supabase, predictionId, actualDirection);
+  } catch { /* never block */ }
+
+  // B4x4 resolution (independent active model). Never blocks the resolver.
+  try {
+    const { data: predRow } = await supabase
+      .from("predictions")
+      .select("candle_ts, actual_next_candle_open, actual_next_candle_high, actual_next_candle_low, actual_next_candle_close")
+      .eq("id", predictionId)
+      .maybeSingle();
+    if (predRow?.candle_ts) {
+      const { resolveB4x4Row } = await import("@/lib/b4x4/orchestrator");
+      await resolveB4x4Row(supabase, predRow.candle_ts as string, actualDirection, {
+        open: (predRow as { actual_next_candle_open: number | null }).actual_next_candle_open,
+        high: (predRow as { actual_next_candle_high: number | null }).actual_next_candle_high,
+        low: (predRow as { actual_next_candle_low: number | null }).actual_next_candle_low,
+        close: (predRow as { actual_next_candle_close: number | null }).actual_next_candle_close,
+      });
+    }
   } catch { /* never block */ }
 
   // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.

@@ -1,0 +1,223 @@
+// B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
+
+import { createServerFn } from "@tanstack/react-start";
+import { B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+
+async function admin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+
+const PAGE = 1000;
+
+type Row = Record<string, unknown>;
+
+async function pageAll(select: string): Promise<Row[]> {
+  const sb = await admin();
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_predictions")
+      .select(select)
+      .eq("model_version", B4X4_MODEL_VERSION)
+      .eq("variant", B4X4_VARIANT)
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...(data as unknown as Row[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+const OPERATIONAL = new Set([
+  "ABSTAIN_A2_PROBABILITY_INVALID", "ABSTAIN_A2_TIMING_INVALID", "ABSTAIN_A2_LEAKAGE_INVALID",
+  "ABSTAIN_SOURCE_HISTORY_INVALID", "ABSTAIN_WARMUP_SOURCE_HISTORY", "ABSTAIN_WARMUP_GRID_HISTORY",
+  "ABSTAIN_GRID_REFERENCE_INVALID", "ABSTAIN_INTERNAL_ERROR",
+]);
+
+/** Aggregate B4x4 performance for the dashboard panel. */
+export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await pageAll(
+    "target_candle_ts, run_mode, would_trade, final_prediction, raw_direction, decision_reason, " +
+    "selected_route, core_eligible, expansion_eligible, base_candidate, result, result_score, " +
+    "resolved_at, local_date, intraday_brake_active, intraday_brake_veto_fired, " +
+    "base_no_brake_counterfactual_score, core_only_counterfactual_score, " +
+    "expansion_only_counterfactual_score, brake_attribution_class, brake_incremental_value, " +
+    "grid_snapshot_json, grid_cell, p_correct, grid_quality_percentile, global_rank, same_side_rank",
+  );
+
+  const c = {
+    model_version: B4X4_MODEL_VERSION,
+    variant: B4X4_VARIANT,
+    total_opportunities: 0,
+    evaluable: 0,
+    trades: 0, wins: 0, losses: 0, pushes: 0, pending: 0,
+    net: 0, coverage: 0, win_rate: 0, max_drawdown: 0,
+    green_wins: 0, green_losses: 0, red_wins: 0, red_losses: 0,
+    core_only_net: 0, core_only_trades: 0,
+    expansion_only_net: 0, expansion_only_trades: 0,
+    core_and_expansion_trades: 0,
+    base_no_brake_net: 0, base_no_brake_trades: 0,
+    brake_avoided_losses: 0, brake_sacrificed_wins: 0, brake_incremental_net: 0,
+    operational_abstains: 0, strategic_abstains: 0,
+    block96_trades: 0, block96_wins: 0, block96_losses: 0, block96_net: 0,
+    today_local_date: "", today_net: 0, today_trades: 0, brake_active_now: false,
+    losing_days: 0, worst_day: 0,
+    last7: [] as Array<{ date: string; net: number; wins: number; losses: number; trades: number }>,
+    grid: [] as Array<{ cell: string; resolvedCount: number; wins: number; losses: number; pCorrect: number }>,
+  };
+
+  const daily = new Map<string, { net: number; wins: number; losses: number; trades: number }>();
+  let running = 0, peak = 0;
+
+  for (const r of rows) {
+    c.total_opportunities++;
+    const reason = String(r.decision_reason ?? "");
+    const traded = r.would_trade === true;
+    if (!OPERATIONAL.has(reason)) c.evaluable++;
+    if (!traded) {
+      if (OPERATIONAL.has(reason)) c.operational_abstains++;
+      else c.strategic_abstains++;
+    }
+    if (r.core_eligible === true) {
+      c.core_only_trades++;
+      c.core_only_net += Number(r.core_only_counterfactual_score ?? 0);
+    }
+    if (r.expansion_eligible === true) {
+      c.expansion_only_trades++;
+      c.expansion_only_net += Number(r.expansion_only_counterfactual_score ?? 0);
+    }
+    if (r.selected_route === "CORE_AND_EXPANSION") c.core_and_expansion_trades++;
+    if (r.base_candidate === true) {
+      c.base_no_brake_trades++;
+      c.base_no_brake_net += Number(r.base_no_brake_counterfactual_score ?? 0);
+    }
+    if (r.brake_attribution_class === "AVOIDED_LOSS") c.brake_avoided_losses++;
+    if (r.brake_attribution_class === "SACRIFICED_WIN") c.brake_sacrificed_wins++;
+    c.brake_incremental_net += Number(r.brake_incremental_value ?? 0);
+
+    if (!traded) continue;
+    c.trades++;
+    if (!r.resolved_at) { c.pending++; continue; }
+    const score = Number(r.result_score ?? 0);
+    const res = String(r.result ?? "");
+    if (res === "WIN") c.wins++;
+    else if (res === "LOSS") c.losses++;
+    else c.pushes++;
+    c.net += score;
+    running += score;
+    peak = Math.max(peak, running);
+    c.max_drawdown = Math.max(c.max_drawdown, peak - running);
+    if (r.final_prediction === "GREEN") { if (res === "WIN") c.green_wins++; else if (res === "LOSS") c.green_losses++; }
+    if (r.final_prediction === "RED") { if (res === "WIN") c.red_wins++; else if (res === "LOSS") c.red_losses++; }
+
+    const d = String(r.local_date ?? b4x4LocalDate(String(r.target_candle_ts)));
+    const cur = daily.get(d) ?? { net: 0, wins: 0, losses: 0, trades: 0 };
+    cur.net += score;
+    cur.trades++;
+    if (res === "WIN") cur.wins++;
+    else if (res === "LOSS") cur.losses++;
+    daily.set(d, cur);
+  }
+
+  c.coverage = c.evaluable ? (c.trades / c.evaluable) * 100 : 0;
+  c.win_rate = c.wins + c.losses ? (c.wins / (c.wins + c.losses)) * 100 : 0;
+
+  // Trailing 96-candle block (last 96 opportunities).
+  for (const r of rows.slice(-96)) {
+    if (r.would_trade !== true || !r.resolved_at) continue;
+    c.block96_trades++;
+    const res = String(r.result ?? "");
+    if (res === "WIN") c.block96_wins++;
+    else if (res === "LOSS") c.block96_losses++;
+    c.block96_net += Number(r.result_score ?? 0);
+  }
+
+  const dates = [...daily.keys()].sort();
+  c.last7 = dates.slice(-7).map((d) => ({ date: d, ...daily.get(d)! }));
+  for (const d of dates) {
+    const v = daily.get(d)!;
+    if (v.net < 0) c.losing_days++;
+    c.worst_day = Math.min(c.worst_day, v.net);
+  }
+
+  const today = b4x4LocalDate(new Date().toISOString());
+  c.today_local_date = today;
+  const todayStats = daily.get(today);
+  c.today_net = todayStats?.net ?? 0;
+  c.today_trades = todayStats?.trades ?? 0;
+  c.brake_active_now = c.today_net <= -2;
+
+  // Grid heatmap from the most recent prediction-time snapshot.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const snap = rows[i].grid_snapshot_json as
+      | Array<{ globalQuartile: number; sameSideQuartile: number; resolvedCount: number; wins: number; losses: number; pCorrect: number }>
+      | null;
+    if (Array.isArray(snap) && snap.length === 16) {
+      c.grid = snap.map((s) => ({
+        cell: `G${s.globalQuartile + 1}-S${s.sameSideQuartile + 1}`,
+        resolvedCount: s.resolvedCount,
+        wins: s.wins,
+        losses: s.losses,
+        pCorrect: s.pCorrect,
+      }));
+      break;
+    }
+  }
+
+  return c;
+});
+
+/** Most recent B4x4 row (its decision for the pending candle). */
+export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("b4x4_predictions")
+    .select(
+      "target_candle_ts, run_mode, raw_direction, final_prediction, would_trade, decision_reason, " +
+      "selected_route, global_rank, same_side_rank, grid_cell, p_correct, grid_quality_percentile, " +
+      "a2_probability_green, confidence, daily_net_before, intraday_brake_active, resolved_at, result",
+    )
+    .eq("model_version", B4X4_MODEL_VERSION)
+    .order("target_candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
+});
+
+/** Audit-only shadow market-data coverage. Never affects B4x4 decisions. */
+export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data } = await sb
+    .from("b4x4_shadow_market_data")
+    .select("coverage_status, error_reason, flow_agrees_a2, flow_conflicts_a2, flow_strong_coherent")
+    .order("target_candle_ts", { ascending: false })
+    .limit(1000);
+  const rows = (data ?? []) as unknown as Row[];
+  return {
+    rows: rows.length,
+    ok: rows.filter((r) => r.coverage_status === "OK").length,
+    stale: rows.filter((r) => r.coverage_status === "STALE").length,
+    errored: rows.filter((r) => r.error_reason != null).length,
+    flow_agreements: rows.filter((r) => r.flow_agrees_a2 === true).length,
+    flow_conflicts: rows.filter((r) => r.flow_conflicts_a2 === true).length,
+    strong_coherent: rows.filter((r) => r.flow_strong_coherent === true).length,
+  };
+});
+
+function csvEscape(v: unknown): string {
+  if (v == null) return "";
+  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+}
+
+/** Dedicated B4x4 CSV export — every tracked column, including grid snapshots. */
+export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await pageAll("*");
+  if (rows.length === 0) return { csv: "", rows: 0 };
+  const columns = Object.keys(rows[0]);
+  const header = columns.map((c) => `b4x4_${c}`).join(",");
+  const body = rows.map((r) => columns.map((col) => csvEscape(r[col])).join(",")).join("\n");
+  return { csv: `${header}\n${body}\n`, rows: rows.length };
+});

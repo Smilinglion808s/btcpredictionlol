@@ -20,6 +20,8 @@ import {
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
+import { getB4x4Stats, getB4x4Pending, exportB4x4Csv } from "@/lib/b4x4.functions";
+import { B4x4Card } from "@/components/b4x4-card";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -79,6 +81,24 @@ function StatsPage() {
   const exportV6Fn = useServerFn(exportV6Csv);
   const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
+
+  const b4x4Fn = useServerFn(getB4x4Stats);
+  const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const b4x4PendingFn = useServerFn(getB4x4Pending);
+  const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const exportB4x4Fn = useServerFn(exportB4x4Csv);
+  const [exportingB4x4, setExportingB4x4] = useState(false);
+
+  async function downloadB4x4Csv() {
+    try {
+      setExportingB4x4(true);
+      const res = await exportB4x4Fn();
+      if (!res || res.rows === 0) { alert("No B4x4 rows to export."); return; }
+      triggerDownload(res.csv, `B4x4-${stamp()}.csv`);
+    } finally {
+      setExportingB4x4(false);
+    }
+  }
 
   const [exportingV6, setExportingV6] = useState(false);
   const [resettingV6, setResettingV6] = useState(false);
@@ -386,6 +406,13 @@ function StatsPage() {
           exporting={exportingTd2}
           onReset={doResetTd2Stats}
           resetting={resettingTd2}
+        />
+
+        <B4x4Card
+          stats={(b4x4Q.data as any) ?? {}}
+          pending={(b4x4PendingQ.data as any) ?? null}
+          onExport={downloadB4x4Csv}
+          exporting={exportingB4x4}
         />
       </div>
 

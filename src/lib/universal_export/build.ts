@@ -33,6 +33,7 @@ export interface UniversalInput {
   td1Rows: readonly Row[]; // model7_td1_rc_shadow
   aas96Rows: readonly Row[]; // model7_aas96_shadow
   a96Rows: readonly Row[]; // a96_predictions
+  b4x4Rows?: readonly Row[]; // b4x4_predictions
 }
 
 export interface UniversalStats {
@@ -112,6 +113,7 @@ const LEGACY_RESOLUTION_META_NAMES = new Set<string>([
 
 export function buildUniversalExport(input: UniversalInput): UniversalOutput {
   const { predictions, candles, td1Rows, aas96Rows, a96Rows } = input;
+  const b4x4Rows: readonly Row[] = input.b4x4Rows ?? [];
 
   // 1. Determine spine range.
   const allTsSources: Array<number> = [];
@@ -174,6 +176,12 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
   for (const r of aas96Rows) {
     const key = toIsoBucket(r.target_candle_ts ?? r.candle_ts);
     if (key) aasBy.set(key, r);
+  }
+
+  const b4x4By = new Map<string, Row>();
+  for (const r of b4x4Rows) {
+    const key = toIsoBucket(r.target_candle_ts);
+    if (key) b4x4By.set(key, r);
   }
 
   const a96By = new Map<string, Row>();
@@ -468,6 +476,15 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     row.aas96_tracking_available = aas96Row !== null;
     row.a96_tracking_available = a96Row !== null;
 
+    // ---- B4x4 (active grid model) ---------------------------------------
+    const b4x4Row = b4x4By.get(boundary) ?? null;
+    const b4x4Pred = b4x4Row && (b4x4Row as Row).would_trade === true
+      ? normalizePrediction((b4x4Row as Row).final_prediction)
+      : null;
+    row.b4x4_canonical_prediction = b4x4Pred;
+    row.b4x4_canonical_result_score = canonicalScore(b4x4Pred, canonicalDirNorm, canonical.canonical_ground_truth_valid);
+    row.b4x4_tracking_available = b4x4Row !== null;
+
     // Attach per-model raw rows under prefixed keys (backward-compat with
     // the old exporter).  Values are stably serialized.
     if (td1Row) {
@@ -485,6 +502,12 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     if (a96Row) {
       for (const [k, v] of Object.entries(a96Row)) {
         const key = `a96_raw_${k}`;
+        row[key] = v && typeof v === "object" ? stableJson(v) : v;
+      }
+    }
+    if (b4x4Row) {
+      for (const [k, v] of Object.entries(b4x4Row)) {
+        const key = `b4x4_raw_${k}`;
         row[key] = v && typeof v === "object" ? stableJson(v) : v;
       }
     }
