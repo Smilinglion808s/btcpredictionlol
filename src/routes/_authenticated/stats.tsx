@@ -649,6 +649,7 @@ function TD1Card({
   title = "TD1-RC",
   eyebrow = "Active layer",
   showCompressedRisk = true,
+  slim = false,
   hero,
   resolved,
   pending,
@@ -661,6 +662,7 @@ function TD1Card({
   title?: string;
   eyebrow?: string;
   showCompressedRisk?: boolean;
+  slim?: boolean;
   hero: Record<string, any>;
   resolved: number;
   pending: Record<string, any> | null;
