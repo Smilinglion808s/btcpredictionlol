@@ -25,7 +25,7 @@ function replayed(sig: string, nowMs: number): boolean {
   return false;
 }
 
-async function loadSecret(supabase: ReturnType<typeof createClient>): Promise<string | null> {
+async function loadSecret(supabase: { from: (t: string) => any }): Promise<string | null> {
   const env = process.env["B4X4_OB_CAPTURE_SECRET"];
   const { data } = await supabase
     .from("b4x4_ob_capture_auth")
