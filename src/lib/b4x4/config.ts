@@ -83,13 +83,3 @@ export function b4x4LocalDate(iso: string | Date): string {
  * frozen oracle exactly.
  */
 export const B4X4_SOURCE_EPOCH_TS = "2026-07-15T22:00:00.000Z";
-
-/**
- * Correctness-repair revision (grid-768 absolute indexing + order-book
- * freshness + resolution-attempt accounting). Model identity, thresholds and
- * decision policy are unchanged; this only groups reporting by activation.
- */
-export const B4X4_IMPLEMENTATION_REVISION = "b4x4-v1-grid768-obfresh-fix1";
-export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_V1_GRID768_OBFRESH_FIX1";
-export const B4X4_REVISION_ACTIVATED_AT = "2026-08-08T20:30:00.000Z";
-

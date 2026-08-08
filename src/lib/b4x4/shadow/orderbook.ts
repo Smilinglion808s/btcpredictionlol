@@ -321,10 +321,6 @@ export function classifyCapture(input: {
   cutoffMs: number;
   sequenceGap?: boolean | null;
   bookComplete?: boolean | null;
-  /** Local receipt time of the response; must also be at or before the cutoff. */
-  localReceiptMs?: number | null;
-  /** Top-of-book crossed (best bid >= best ask) — never a valid capture. */
-  crossed?: boolean | null;
 }): { status: CaptureStatus; ageMs: number | null } {
   if (input.errorCode) return { status: "COLLECTOR_ERROR", ageMs: null };
   if (!input.hasSnapshot || input.eventTsMs == null) {
@@ -332,16 +328,9 @@ export function classifyCapture(input: {
   }
   // Leakage guard: an event at or after the cutoff can never be used.
   if (input.eventTsMs > input.cutoffMs) return { status: "NO_PREBOUNDARY_SNAPSHOT", ageMs: null };
-  // A response received after the cutoff may not be used either.
-  if (input.localReceiptMs != null && input.localReceiptMs > input.cutoffMs) {
-    return { status: "NO_PREBOUNDARY_SNAPSHOT", ageMs: null };
-  }
   const ageMs = input.cutoffMs - input.eventTsMs;
   if (input.sequenceGap === true) return { status: "CAPTURED_SEQUENCE_GAP", ageMs };
-  if (input.bookComplete === false || input.crossed === true) {
-    return { status: "CAPTURED_INCOMPLETE", ageMs };
-  }
+  if (input.bookComplete === false) return { status: "CAPTURED_INCOMPLETE", ageMs };
   if (ageMs > B4X4_OB_MAX_SNAPSHOT_AGE_MS) return { status: "CAPTURED_STALE", ageMs };
   return { status: "CAPTURED_VALID", ageMs };
 }
-

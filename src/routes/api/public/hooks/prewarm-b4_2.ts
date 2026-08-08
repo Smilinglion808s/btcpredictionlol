@@ -25,15 +25,13 @@ export const Route = createFileRoute("/api/public/hooks/prewarm-b4_2")({
           const targetMs = nextBoundaryMs(now);
           const msBefore = targetMs - now;
           const entry = await warmForBoundary(supabase, targetMs);
-          // Shadow-only order-book PRIMING capture (~60s out): fills the trade
-          // buffer. It can never count as a fresh final snapshot.
+          // Shadow-only order-book capture; failures never affect pre-warm.
           let obShadow: unknown = null;
           try {
             const { captureB4x4PreBoundarySnapshot } = await import(
               "@/lib/b4x4/shadow/collector.server"
             );
-            obShadow = await captureB4x4PreBoundarySnapshot(supabase, targetMs, { priming: true, noWait: true });
-
+            obShadow = await captureB4x4PreBoundarySnapshot(supabase, targetMs);
           } catch (e) {
             obShadow = { status: "COLLECTOR_ERROR", error: e instanceof Error ? e.message : String(e) };
           }

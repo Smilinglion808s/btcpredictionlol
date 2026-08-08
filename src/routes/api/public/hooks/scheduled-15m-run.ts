@@ -58,9 +58,9 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           }
           timings.align_ms = Date.now() - t0;
 
-          // Shadow-only B4x4 order-book priming pass. The freshness-critical
-          // final capture happens in the dedicated near-boundary attempt
-          // ladder; this pass never blocks the prediction path.
+          // Refresh the shadow-only B4x4 order-book snapshot inside the actual
+          // prediction window. The earlier pre-warm capture remains a fallback,
+          // while this pass normally supplies a much fresher pre-boundary book.
           const obStart = Date.now();
           try {
             const { captureB4x4PreBoundarySnapshot, nextTargetBoundaryMs } = await import(
@@ -69,9 +69,7 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
             results.b4x4_ob_shadow = await captureB4x4PreBoundarySnapshot(
               supabase,
               nextTargetBoundaryMs(Date.now()),
-              { priming: true, noWait: true },
             );
-
           } catch (e) {
             results.b4x4_ob_shadow_error = e instanceof Error ? e.message : String(e);
           }
