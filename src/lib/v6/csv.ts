@@ -80,6 +80,21 @@ export const V6_CSV_COLUMNS = [
   "regime_inverter_would_trigger","regime_inverter_would_publish",
   "regime_inverter_shadow_raw_score","regime_inverter_shadow_adjusted_score",
   "regime_inverter_counterfactual_raw_contribution","regime_inverter_counterfactual_adjusted_contribution",
+  // --- V6-r4 Structure Confirmation Gate ---
+  "path_efficiency_4",
+  "pre_structure_prediction","pre_structure_source",
+  "structure_confirmation_evaluable",
+  "structure_rejection_evaluable","structure_rejection_pass",
+  "structure_rejection_lower_wick_value","structure_rejection_lower_wick_threshold",
+  "structure_rejection_aligned_wick_value","structure_rejection_aligned_wick_threshold",
+  "structure_expansion_evaluable","structure_expansion_pass",
+  "structure_expansion_range_value","structure_expansion_range_threshold",
+  "structure_expansion_efficiency_value","structure_expansion_efficiency_threshold",
+  "structure_confirmation_pass","structure_confirmation_triggered","structure_confirmation_reason",
+  "prediction_after_structure_confirmation","prediction_source_after_structure_confirmation",
+  "structure_underlying_prediction","structure_underlying_actual_direction",
+  "structure_underlying_raw_score","structure_underlying_adjusted_score",
+  "structure_confirmation_raw_contribution","structure_confirmation_adjusted_contribution",
 ] as const;
 
 type Row = Record<string, unknown>;
