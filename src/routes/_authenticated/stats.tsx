@@ -446,6 +446,15 @@ function StatsPage() {
         />
       </div>
 
+      <B4x4ObShadowPanel
+        audit={(obAuditQ.data as any) ?? null}
+        onExport={downloadObShadowCsv}
+        exporting={exportingObShadow}
+        onBackfill={doBackfillObShadow}
+        backfilling={backfillingObShadow}
+      />
+
+
 
       <Card>
         <CardHeader className="pb-2">
