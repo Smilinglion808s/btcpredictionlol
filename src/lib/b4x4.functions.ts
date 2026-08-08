@@ -329,7 +329,11 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
   for (const s of shadowRows) {
     if (s.b4x4_prediction_id) shadowById.set(String(s.b4x4_prediction_id), s);
   }
-  const SHADOW_COLUMNS = shadowRows.length ? Object.keys(shadowRows[0]) : [];
+  // Union of keys across all shadow rows so no tracked field is dropped.
+  const shadowKeys = new Set<string>();
+  for (const s of shadowRows) for (const k of Object.keys(s)) shadowKeys.add(k);
+  const SHADOW_COLUMNS = [...shadowKeys];
+
 
   const header = [
     ...columns.map((c) => `b4x4_${c}`),
