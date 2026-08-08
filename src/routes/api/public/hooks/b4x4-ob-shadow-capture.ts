@@ -78,9 +78,10 @@ export const Route = createFileRoute("/api/public/hooks/b4x4-ob-shadow-capture")
             return new Response("Post-boundary request rejected", { status: 400 });
           }
 
-          const priming = targetMs - now > 20_000;
-          const res = await captureB4x4PreBoundarySnapshot(supabase, targetMs, { priming });
-          return Response.json({ ok: true, ms_before_boundary: targetMs - now, priming, ...res });
+          // Full near-boundary attempt ladder; the handler waits for its slots.
+          const res = await captureB4x4PreBoundarySnapshot(supabase, targetMs);
+          return Response.json({ ok: true, ms_before_boundary: targetMs - now, ...res });
+
         } catch (e) {
           return Response.json(
             { ok: false, error: e instanceof Error ? e.message : String(e) },
