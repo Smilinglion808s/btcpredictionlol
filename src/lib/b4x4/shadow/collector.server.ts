@@ -14,6 +14,10 @@ import {
 } from "./orderbook";
 
 const TF_MS = 15 * 60 * 1000;
+// A pre-warm request can arrive about one minute before the boundary. Keep
+// that snapshot as a fallback, but permit a later prediction-window request
+// to replace it with a materially fresher pre-cutoff event.
+const IMMUTABLE_CAPTURE_AGE_MS = 30_000;
 const OKX_BASE = () => process.env.OKX_REST_BASE_URL || "https://www.okx.com";
 
 export function nextTargetBoundaryMs(nowMs = Date.now()): number {
@@ -120,7 +124,9 @@ export async function captureB4x4PreBoundarySnapshot(
   const prior = existing as { id: string; event_ts: string | null; error_code: string | null } | null;
   if (prior?.event_ts && !prior.error_code) {
     const age = cutoff - new Date(prior.event_ts).getTime();
-    return { status: "already_captured", target: targetIso, event_ts: prior.event_ts, age_ms: age };
+    if (age >= 0 && age <= IMMUTABLE_CAPTURE_AGE_MS) {
+      return { status: "already_captured", target: targetIso, event_ts: prior.event_ts, age_ms: age };
+    }
   }
 
   let row: SnapshotRow = {

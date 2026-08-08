@@ -57,6 +57,23 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
             results.exchange_timing_error = e instanceof Error ? e.message : String(e);
           }
           timings.align_ms = Date.now() - t0;
+
+          // Refresh the shadow-only B4x4 order-book snapshot inside the actual
+          // prediction window. The earlier pre-warm capture remains a fallback,
+          // while this pass normally supplies a much fresher pre-boundary book.
+          const obStart = Date.now();
+          try {
+            const { captureB4x4PreBoundarySnapshot, nextTargetBoundaryMs } = await import(
+              "@/lib/b4x4/shadow/collector.server"
+            );
+            results.b4x4_ob_shadow = await captureB4x4PreBoundarySnapshot(
+              supabase,
+              nextTargetBoundaryMs(Date.now()),
+            );
+          } catch (e) {
+            results.b4x4_ob_shadow_error = e instanceof Error ? e.message : String(e);
+          }
+          timings.b4x4_ob_shadow_ms = Date.now() - obStart;
         }
 
         if (phase === "predict" || phase === "both" || phase === "resolve") {
