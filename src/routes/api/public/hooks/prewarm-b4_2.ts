@@ -25,10 +25,22 @@ export const Route = createFileRoute("/api/public/hooks/prewarm-b4_2")({
           const targetMs = nextBoundaryMs(now);
           const msBefore = targetMs - now;
           const entry = await warmForBoundary(supabase, targetMs);
+          // Shadow-only order-book capture; failures never affect pre-warm.
+          let obShadow: unknown = null;
+          try {
+            const { captureB4x4PreBoundarySnapshot } = await import(
+              "@/lib/b4x4/shadow/collector.server"
+            );
+            obShadow = await captureB4x4PreBoundarySnapshot(supabase, targetMs);
+          } catch (e) {
+            obShadow = { status: "COLLECTOR_ERROR", error: e instanceof Error ? e.message : String(e) };
+          }
           return Response.json({
             ok: true,
             target: new Date(targetMs).toISOString(),
             ms_before_boundary: msBefore,
+            ob_shadow: obShadow,
+
             history_rows: entry.history.length,
             variant_b_fit: entry.variantBFitReason,
             cache_size: warmCacheSize(),

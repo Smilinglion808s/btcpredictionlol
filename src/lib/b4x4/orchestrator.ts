@@ -215,7 +215,23 @@ export async function runB4x4ForA2Combined(
       .select("*")
       .maybeSingle();
     if (error) return null;
-    return (data as unknown as DbRow | null) ?? null;
+    const saved = (data as unknown as DbRow | null) ?? null;
+    // ---- Order-book shadow capture (shadow only, never blocks B4x4). ----
+    if (saved && saved.run_mode === "LIVE") {
+      try {
+        const { persistB4x4ShadowSafe } = await import("./shadow/persist.server");
+        persistB4x4ShadowSafe(supabase, {
+          id: String(saved.id),
+          target_candle_ts: String(saved.target_candle_ts),
+          run_mode: "LIVE",
+          raw_direction: (saved.raw_direction as string | null) ?? null,
+          final_prediction: (saved.final_prediction as string | null) ?? null,
+          would_trade: saved.would_trade === true,
+        });
+      } catch { /* shadow only */ }
+    }
+    return saved;
+
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -336,5 +352,16 @@ export async function resolveB4x4Row(
       } as never)
       .eq("id", row.id as string)
       .is("resolved_at", null);
+
+    // ---- Shadow attribution (never blocks resolution). ----
+    try {
+      const { resolveB4x4ShadowRow } = await import("./shadow/persist.server");
+      await resolveB4x4ShadowRow(supabase, targetCandleTs, actualDirection, {
+        result: row.would_trade === true ? (final.result ?? "PUSH") : "PUSH",
+        result_score: row.would_trade === true ? final.score : 0,
+        raw_direction: rawDir,
+        would_trade: row.would_trade === true,
+      });
+    } catch { /* shadow only */ }
   } catch { /* never block the resolver */ }
 }

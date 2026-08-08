@@ -454,6 +454,78 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_ob_snapshots: {
+        Row: {
+          book_complete: boolean | null
+          book_json: Json | null
+          captured_at: string
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          event_ts: string | null
+          feature_cutoff_ts: string | null
+          id: string
+          instrument: string
+          prev_seq_id: string | null
+          provider: string
+          seq_id: string | null
+          sequence_gap: boolean | null
+          sequence_gap_count: number | null
+          shadow_version: string
+          target_candle_ts: string
+          trade_event_count: number | null
+          trade_window_start_ts: string | null
+          trades_json: Json | null
+          updated_at: string
+        }
+        Insert: {
+          book_complete?: boolean | null
+          book_json?: Json | null
+          captured_at?: string
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          event_ts?: string | null
+          feature_cutoff_ts?: string | null
+          id?: string
+          instrument?: string
+          prev_seq_id?: string | null
+          provider?: string
+          seq_id?: string | null
+          sequence_gap?: boolean | null
+          sequence_gap_count?: number | null
+          shadow_version?: string
+          target_candle_ts: string
+          trade_event_count?: number | null
+          trade_window_start_ts?: string | null
+          trades_json?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          book_complete?: boolean | null
+          book_json?: Json | null
+          captured_at?: string
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          event_ts?: string | null
+          feature_cutoff_ts?: string | null
+          id?: string
+          instrument?: string
+          prev_seq_id?: string | null
+          provider?: string
+          seq_id?: string | null
+          sequence_gap?: boolean | null
+          sequence_gap_count?: number | null
+          shadow_version?: string
+          target_candle_ts?: string
+          trade_event_count?: number | null
+          trade_window_start_ts?: string | null
+          trades_json?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       b4x4_predictions: {
         Row: {
           a2_model_fit_id: string | null
@@ -714,82 +786,271 @@ export type Database = {
       }
       b4x4_shadow_market_data: {
         Row: {
+          actual_direction: string | null
+          add_cancel_add_total: number | null
+          add_cancel_cancel_total: number | null
+          add_cancel_imbalance: number | null
+          add_cancel_source_available: boolean | null
           attribution_json: Json | null
+          b4x4_final_prediction: string | null
           b4x4_prediction_id: string | null
+          b4x4_published: boolean | null
+          b4x4_raw_direction: string | null
+          b4x4_result: string | null
+          b4x4_result_score: number | null
+          best_ask_price: number | null
+          best_ask_qty: number | null
+          best_bid_price: number | null
+          best_bid_qty: number | null
+          book_complete: boolean | null
+          capture_status: string | null
           collected_at: string
+          collector_error_code: string | null
+          collector_error_message: string | null
           coverage_status: string | null
           created_at: string
+          cvd_3m: number | null
+          depth_imbalance_10bps: number | null
+          depth_imbalance_1bps: number | null
+          depth_imbalance_25bps: number | null
+          depth_imbalance_5bps: number | null
+          depth_json: Json | null
           derivatives_json: Json | null
           error_reason: string | null
           feature_cutoff_ts: string | null
           flow_3m_15m_coherent: boolean | null
           flow_agrees_a2: boolean | null
+          flow_coherent: boolean | null
+          flow_component_count: number | null
+          flow_composite_score: number | null
           flow_conflicts_a2: boolean | null
+          flow_direction: string | null
           flow_direction_15m: string | null
           flow_direction_3m: string | null
           flow_json: Json | null
+          flow_strength: number | null
           flow_strength_percentile: number | null
           flow_strong_coherent: boolean | null
           id: string
+          instrument: string | null
+          microprice: number | null
+          microprice_offset_bps: number | null
+          mid_price: number | null
+          missing_source_capabilities: string | null
           orderbook_json: Json | null
           path_efficiency_4: number | null
           path_efficiency_4_percentile: number | null
+          prev_seq_id: string | null
+          provider: string | null
+          queue_imbalance_top1: number | null
+          queue_imbalance_top20: number | null
+          queue_imbalance_top5: number | null
+          raw_direction_correct: boolean | null
+          raw_direction_relationship: string | null
           regime_json: Json | null
+          run_mode: string | null
+          sequence_gap: boolean | null
+          sequence_gap_count: number | null
           shadow_efficiency_not_mid: boolean | null
+          shadow_only: boolean
+          shadow_resolved_at: string | null
+          shadow_version: string | null
+          snapshot_age_ms: number | null
+          snapshot_event_ts: string | null
+          snapshot_persisted_at: string | null
+          snapshot_received_at: string | null
+          source_seq_id: string | null
+          spread_abs: number | null
+          spread_bps: number | null
+          taker_delta_15m: number | null
+          taker_delta_2m: number | null
+          taker_delta_30s: number | null
+          taker_delta_3m: number | null
+          taker_delta_5m: number | null
           target_candle_ts: string
+          trade_event_count: number | null
+          trade_flow_json: Json | null
+          trade_windows_complete: boolean | null
           updated_at: string
+          used_in_decision: boolean
         }
         Insert: {
+          actual_direction?: string | null
+          add_cancel_add_total?: number | null
+          add_cancel_cancel_total?: number | null
+          add_cancel_imbalance?: number | null
+          add_cancel_source_available?: boolean | null
           attribution_json?: Json | null
+          b4x4_final_prediction?: string | null
           b4x4_prediction_id?: string | null
+          b4x4_published?: boolean | null
+          b4x4_raw_direction?: string | null
+          b4x4_result?: string | null
+          b4x4_result_score?: number | null
+          best_ask_price?: number | null
+          best_ask_qty?: number | null
+          best_bid_price?: number | null
+          best_bid_qty?: number | null
+          book_complete?: boolean | null
+          capture_status?: string | null
           collected_at?: string
+          collector_error_code?: string | null
+          collector_error_message?: string | null
           coverage_status?: string | null
           created_at?: string
+          cvd_3m?: number | null
+          depth_imbalance_10bps?: number | null
+          depth_imbalance_1bps?: number | null
+          depth_imbalance_25bps?: number | null
+          depth_imbalance_5bps?: number | null
+          depth_json?: Json | null
           derivatives_json?: Json | null
           error_reason?: string | null
           feature_cutoff_ts?: string | null
           flow_3m_15m_coherent?: boolean | null
           flow_agrees_a2?: boolean | null
+          flow_coherent?: boolean | null
+          flow_component_count?: number | null
+          flow_composite_score?: number | null
           flow_conflicts_a2?: boolean | null
+          flow_direction?: string | null
           flow_direction_15m?: string | null
           flow_direction_3m?: string | null
           flow_json?: Json | null
+          flow_strength?: number | null
           flow_strength_percentile?: number | null
           flow_strong_coherent?: boolean | null
           id?: string
+          instrument?: string | null
+          microprice?: number | null
+          microprice_offset_bps?: number | null
+          mid_price?: number | null
+          missing_source_capabilities?: string | null
           orderbook_json?: Json | null
           path_efficiency_4?: number | null
           path_efficiency_4_percentile?: number | null
+          prev_seq_id?: string | null
+          provider?: string | null
+          queue_imbalance_top1?: number | null
+          queue_imbalance_top20?: number | null
+          queue_imbalance_top5?: number | null
+          raw_direction_correct?: boolean | null
+          raw_direction_relationship?: string | null
           regime_json?: Json | null
+          run_mode?: string | null
+          sequence_gap?: boolean | null
+          sequence_gap_count?: number | null
           shadow_efficiency_not_mid?: boolean | null
+          shadow_only?: boolean
+          shadow_resolved_at?: string | null
+          shadow_version?: string | null
+          snapshot_age_ms?: number | null
+          snapshot_event_ts?: string | null
+          snapshot_persisted_at?: string | null
+          snapshot_received_at?: string | null
+          source_seq_id?: string | null
+          spread_abs?: number | null
+          spread_bps?: number | null
+          taker_delta_15m?: number | null
+          taker_delta_2m?: number | null
+          taker_delta_30s?: number | null
+          taker_delta_3m?: number | null
+          taker_delta_5m?: number | null
           target_candle_ts: string
+          trade_event_count?: number | null
+          trade_flow_json?: Json | null
+          trade_windows_complete?: boolean | null
           updated_at?: string
+          used_in_decision?: boolean
         }
         Update: {
+          actual_direction?: string | null
+          add_cancel_add_total?: number | null
+          add_cancel_cancel_total?: number | null
+          add_cancel_imbalance?: number | null
+          add_cancel_source_available?: boolean | null
           attribution_json?: Json | null
+          b4x4_final_prediction?: string | null
           b4x4_prediction_id?: string | null
+          b4x4_published?: boolean | null
+          b4x4_raw_direction?: string | null
+          b4x4_result?: string | null
+          b4x4_result_score?: number | null
+          best_ask_price?: number | null
+          best_ask_qty?: number | null
+          best_bid_price?: number | null
+          best_bid_qty?: number | null
+          book_complete?: boolean | null
+          capture_status?: string | null
           collected_at?: string
+          collector_error_code?: string | null
+          collector_error_message?: string | null
           coverage_status?: string | null
           created_at?: string
+          cvd_3m?: number | null
+          depth_imbalance_10bps?: number | null
+          depth_imbalance_1bps?: number | null
+          depth_imbalance_25bps?: number | null
+          depth_imbalance_5bps?: number | null
+          depth_json?: Json | null
           derivatives_json?: Json | null
           error_reason?: string | null
           feature_cutoff_ts?: string | null
           flow_3m_15m_coherent?: boolean | null
           flow_agrees_a2?: boolean | null
+          flow_coherent?: boolean | null
+          flow_component_count?: number | null
+          flow_composite_score?: number | null
           flow_conflicts_a2?: boolean | null
+          flow_direction?: string | null
           flow_direction_15m?: string | null
           flow_direction_3m?: string | null
           flow_json?: Json | null
+          flow_strength?: number | null
           flow_strength_percentile?: number | null
           flow_strong_coherent?: boolean | null
           id?: string
+          instrument?: string | null
+          microprice?: number | null
+          microprice_offset_bps?: number | null
+          mid_price?: number | null
+          missing_source_capabilities?: string | null
           orderbook_json?: Json | null
           path_efficiency_4?: number | null
           path_efficiency_4_percentile?: number | null
+          prev_seq_id?: string | null
+          provider?: string | null
+          queue_imbalance_top1?: number | null
+          queue_imbalance_top20?: number | null
+          queue_imbalance_top5?: number | null
+          raw_direction_correct?: boolean | null
+          raw_direction_relationship?: string | null
           regime_json?: Json | null
+          run_mode?: string | null
+          sequence_gap?: boolean | null
+          sequence_gap_count?: number | null
           shadow_efficiency_not_mid?: boolean | null
+          shadow_only?: boolean
+          shadow_resolved_at?: string | null
+          shadow_version?: string | null
+          snapshot_age_ms?: number | null
+          snapshot_event_ts?: string | null
+          snapshot_persisted_at?: string | null
+          snapshot_received_at?: string | null
+          source_seq_id?: string | null
+          spread_abs?: number | null
+          spread_bps?: number | null
+          taker_delta_15m?: number | null
+          taker_delta_2m?: number | null
+          taker_delta_30s?: number | null
+          taker_delta_3m?: number | null
+          taker_delta_5m?: number | null
           target_candle_ts?: string
+          trade_event_count?: number | null
+          trade_flow_json?: Json | null
+          trade_windows_complete?: boolean | null
           updated_at?: string
+          used_in_decision?: boolean
         }
         Relationships: [
           {

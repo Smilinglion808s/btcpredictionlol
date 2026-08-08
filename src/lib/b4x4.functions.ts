@@ -197,13 +197,92 @@ export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(a
   const rows = (data ?? []) as unknown as Row[];
   return {
     rows: rows.length,
-    ok: rows.filter((r) => r.coverage_status === "OK").length,
-    stale: rows.filter((r) => r.coverage_status === "STALE").length,
+    ok: rows.filter((r) => r.coverage_status === "OK" || r.coverage_status === "CAPTURED_VALID").length,
+    stale: rows.filter((r) => r.coverage_status === "CAPTURED_STALE").length,
     errored: rows.filter((r) => r.error_reason != null).length,
     flow_agreements: rows.filter((r) => r.flow_agrees_a2 === true).length,
     flow_conflicts: rows.filter((r) => r.flow_conflicts_a2 === true).length,
     strong_coherent: rows.filter((r) => r.flow_strong_coherent === true).length,
   };
+});
+
+/**
+ * Order-book shadow audit panel data (b4x4-ob-shadow-v1).
+ * SHADOW ONLY — never used in B4x4 decisions.
+ */
+export const getB4x4ObShadowAudit = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const { data: preds } = await sb
+    .from("b4x4_predictions")
+    .select("id")
+    .eq("model_version", B4X4_MODEL_VERSION)
+    .eq("run_mode", "LIVE")
+    .limit(10000);
+  const expected = (preds ?? []).length;
+
+  const shadow: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_shadow_market_data")
+      .select(
+        "b4x4_prediction_id, capture_status, snapshot_age_ms, raw_direction_relationship, " +
+        "flow_strong_coherent, b4x4_result_score, b4x4_result, b4x4_published",
+      )
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    shadow.push(...(data as unknown as Row[]));
+    if (data.length < PAGE) break;
+  }
+
+  const count = (s: string) => shadow.filter((r) => r.capture_status === s).length;
+  const ages = shadow
+    .map((r) => (r.snapshot_age_ms == null ? null : Number(r.snapshot_age_ms)))
+    .filter((n): n is number => n != null && Number.isFinite(n))
+    .sort((a, b) => a - b);
+
+  const bucket = (pred: (r: Row) => boolean) => {
+    const rows = shadow.filter((r) => pred(r) && r.b4x4_published === true && r.b4x4_result != null);
+    const wins = rows.filter((r) => r.b4x4_result === "WIN").length;
+    const losses = rows.filter((r) => r.b4x4_result === "LOSS").length;
+    const net = rows.reduce((a, r) => a + Number(r.b4x4_result_score ?? 0), 0);
+    return {
+      observations: rows.length,
+      wins,
+      losses,
+      net,
+      win_rate: wins + losses ? (wins / (wins + losses)) * 100 : 0,
+    };
+  };
+
+  return {
+    shadow_version: "b4x4-ob-shadow-v1",
+    shadow_only: true,
+    expected_live_rows: expected,
+    shadow_rows: shadow.length,
+    missing_rows: Math.max(0, expected - shadow.length),
+    captured_valid: count("CAPTURED_VALID"),
+    captured_stale: count("CAPTURED_STALE"),
+    captured_incomplete: count("CAPTURED_INCOMPLETE"),
+    captured_sequence_gap: count("CAPTURED_SEQUENCE_GAP"),
+    no_preboundary_snapshot: count("NO_PREBOUNDARY_SNAPSHOT"),
+    collector_errors: count("COLLECTOR_ERROR"),
+    historical_placeholders: count("HISTORICAL_NOT_CAPTURED"),
+    median_age_ms: ages.length ? ages[Math.floor(ages.length / 2)] : null,
+    max_age_ms: ages.length ? ages[ages.length - 1] : null,
+    agree: bucket((r) => r.raw_direction_relationship === "AGREE"),
+    conflict: bucket((r) => r.raw_direction_relationship === "CONFLICT"),
+    neutral_count: shadow.filter((r) => r.raw_direction_relationship === "NEUTRAL").length,
+    unavailable_count: shadow.filter((r) => r.raw_direction_relationship === "UNAVAILABLE").length,
+    strong_coherent: bucket((r) => r.flow_strong_coherent === true),
+  };
+});
+
+/** Insert placeholder shadow rows for prior LIVE predictions with no capture. */
+export const backfillB4x4ShadowPlaceholders = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const { backfillHistoricalPlaceholders } = await import("./b4x4/shadow/persist.server");
+  return backfillHistoricalPlaceholders(sb);
 });
 
 function csvEscape(v: unknown): string {
@@ -212,15 +291,9 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-/** Dedicated B4x4 CSV export — every tracked column, plus shadow market data. */
-export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
-  const rows = await pageAll("*");
-  if (rows.length === 0) return { csv: "", rows: 0 };
-  const columns = Object.keys(rows[0]);
-
-  // Audit-only shadow market data, joined on target candle timestamp.
+async function loadShadowRows(): Promise<Row[]> {
   const sb = await admin();
-  const shadowByTs = new Map<string, Row>();
+  const out: Row[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data } = await sb
       .from("b4x4_shadow_market_data")
@@ -228,28 +301,43 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
       .order("target_candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
     if (!data || data.length === 0) break;
-    for (const r of data as unknown as Row[]) {
-      shadowByTs.set(new Date(String(r.target_candle_ts)).toISOString(), r);
-    }
+    out.push(...(data as unknown as Row[]));
     if (data.length < PAGE) break;
   }
+  return out;
+}
 
-  const SHADOW_COLUMNS = [
-    "id", "b4x4_prediction_id", "target_candle_ts", "collected_at", "feature_cutoff_ts",
-    "coverage_status", "error_reason", "orderbook_json", "flow_json", "regime_json",
-    "derivatives_json", "flow_direction_3m", "flow_direction_15m", "flow_3m_15m_coherent",
-    "flow_strength_percentile", "flow_strong_coherent", "flow_agrees_a2", "flow_conflicts_a2",
-    "path_efficiency_4", "path_efficiency_4_percentile", "shadow_efficiency_not_mid",
-    "attribution_json", "created_at", "updated_at",
-  ];
+/** Dedicated order-book shadow export: every capture, quality, label and resolution field. */
+export const exportB4x4ObShadowCsv = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await loadShadowRows();
+  if (rows.length === 0) return { csv: "", rows: 0 };
+  const columns = Object.keys(rows[0]);
+  const header = columns.join(",");
+  const body = rows.map((r) => columns.map((c) => csvEscape(r[c])).join(",")).join("\n");
+  return { csv: `${header}\n${body}\n`, rows: rows.length };
+});
+
+/** Dedicated B4x4 CSV export — every tracked column, plus order-book shadow join. */
+export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await pageAll("*");
+  if (rows.length === 0) return { csv: "", rows: 0 };
+  const columns = Object.keys(rows[0]);
+
+  // Audit-only shadow data, LEFT-joined on b4x4_prediction_id.
+  const shadowRows = await loadShadowRows();
+  const shadowById = new Map<string, Row>();
+  for (const s of shadowRows) {
+    if (s.b4x4_prediction_id) shadowById.set(String(s.b4x4_prediction_id), s);
+  }
+  const SHADOW_COLUMNS = shadowRows.length ? Object.keys(shadowRows[0]) : [];
 
   const header = [
     ...columns.map((c) => `b4x4_${c}`),
-    ...SHADOW_COLUMNS.map((c) => `b4x4_shadow_${c}`),
+    ...SHADOW_COLUMNS.map((c) => `b4x4_ob_${c}`),
   ].join(",");
   const body = rows
     .map((r) => {
-      const s = shadowByTs.get(new Date(String(r.target_candle_ts)).toISOString()) ?? {};
+      const s = shadowById.get(String(r.id)) ?? {};
       return [
         ...columns.map((col) => csvEscape(r[col])),
         ...SHADOW_COLUMNS.map((col) => csvEscape(s[col])),
@@ -258,6 +346,7 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
+
 
 
 /** Recent B4x4 rows for the Stats page history table. */
