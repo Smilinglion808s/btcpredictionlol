@@ -428,7 +428,20 @@ export async function resolveB4x4Row(
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
-    if (row.resolved_at) return; // idempotent
+    if (row.resolved_at) return; // idempotent no-op — not a real attempt
+
+    // Atomically count this real attempt before processing. An already-resolved
+    // row is reported back as a no-op and never re-scored.
+    try {
+      const { data: att } = await supabase.rpc("b4x4_begin_resolution_attempt", {
+        p_target_candle_ts: targetCandleTs,
+        p_model_version: B4X4_MODEL_VERSION,
+      } as never);
+      const a = att as { found?: boolean; already_resolved?: boolean } | null;
+      if (a && a.found === false) return;
+      if (a?.already_resolved) return;
+    } catch { /* accounting must never block resolution */ }
+
 
     const rawDir = (row.raw_direction as Direction | null) ?? null;
     const final = scoreAgainst((row.final_prediction as Direction | null) ?? null, actualDirection);
