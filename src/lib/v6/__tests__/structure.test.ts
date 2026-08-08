@@ -166,3 +166,27 @@ describe("Structure confirmation accounting", () => {
     expect(structureContribution(true, "RED", "PUSH").adjusted).toBe(0);
   });
 });
+
+describe("Structure gate must not contaminate the inverter shadow", () => {
+  it("grades the underlying V6_BASE direction even when structure vetoes it", async () => {
+    const { buildShadowHistory, summarizeShadow } = await import("../regimeInverter");
+    // Original V6_BASE = RED, structure FAIL → published ABSTAIN, actual GREEN.
+    const history = buildShadowHistory([
+      {
+        target_candle_ts: "2026-08-08T09:00:00.000Z",
+        prediction_source: "V6_BASE", // effective base source, not the published one
+        original_v6_base_prediction: "RED",
+        operational_status: "OK",
+        canonical_ground_truth_valid: true,
+        actual_direction: "GREEN",
+      },
+    ]);
+    expect(history).toHaveLength(1);
+    expect(history[0].original_v6_base_prediction).toBe("RED");
+    expect(history[0].original_v6_shadow_raw_score).toBe(-1);
+    expect(summarizeShadow(history).losses).toBe(1);
+
+    // Published r4 scores zero while structure takes the +1 credit.
+    expect(structureContribution(true, "RED", "GREEN")).toMatchObject({ raw: 1, adjusted: 1 });
+  });
+});

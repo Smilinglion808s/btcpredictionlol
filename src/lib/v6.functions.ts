@@ -103,6 +103,9 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     structure_avoided_losses: 0, structure_sacrificed_wins: 0,
     structure_raw: 0, structure_adjusted: 0,
     structure_scored_directional_candidates: 0,
+    structure_rejection_only_wins: 0, structure_rejection_only_losses: 0,
+    structure_expansion_only_wins: 0, structure_expansion_only_losses: 0,
+    structure_both_wins: 0, structure_both_losses: 0,
     // Regime Inverter — shadow only (V6-r3)
     inverter_would_trigger_count: 0, inverter_shadow_wins: 0, inverter_shadow_losses: 0,
     inverter_shadow_raw_contribution: 0, inverter_shadow_adjusted_contribution: 0,
@@ -283,6 +286,14 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       else c.broad_red_shadow_losses += 1;
     }
     if (r.structure_confirmation_evaluable) c.structure_scored_directional_candidates += 1;
+    if (r.structure_confirmation_evaluable && !r.structure_confirmation_triggered && raw !== 0) {
+      const won = raw > 0;
+      const rej = Boolean(r.structure_rejection_pass);
+      const exp = Boolean(r.structure_expansion_pass);
+      if (rej && exp) { if (won) c.structure_both_wins += 1; else c.structure_both_losses += 1; }
+      else if (rej) { if (won) c.structure_rejection_only_wins += 1; else c.structure_rejection_only_losses += 1; }
+      else if (exp) { if (won) c.structure_expansion_only_wins += 1; else c.structure_expansion_only_losses += 1; }
+    }
     if (r.structure_confirmation_triggered) {
       const sr = Number(r.structure_confirmation_raw_contribution ?? 0);
       c.structure_raw += sr;
