@@ -31,6 +31,8 @@ export interface ShadowPredictionRef {
 
 export interface SnapshotInput {
   event_ts?: string | null;
+  local_receipt_ts?: string | null;
+  cutoff_ts?: string | null;
   book_json?: Book | null;
   trades_json?: Trade[] | null;
   seq_id?: string | null;
@@ -39,7 +41,12 @@ export interface SnapshotInput {
   sequence_gap?: boolean | null;
   sequence_gap_count?: number | null;
   trade_window_start_ts?: string | null;
+  trade_window_complete?: boolean | null;
   captured_at?: string | null;
+  capture_attempt_count?: number | null;
+  capture_attempts_json?: unknown;
+  chosen_attempt_id?: string | null;
+  capture_error_list?: unknown;
   error_code?: string | null;
   error_message?: string | null;
 }
@@ -51,6 +58,7 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
   const targetMs = new Date(pred.target_candle_ts).getTime();
   const cutoffMs = targetMs - 1;
   const eventMs = snap?.event_ts ? new Date(snap.event_ts).getTime() : null;
+  const receiptMs = snap?.local_receipt_ts ? new Date(snap.local_receipt_ts).getTime() : null;
   const { status, ageMs } = classifyCapture({
     hasSnapshot: !!snap && !!snap.book_json,
     errorCode: snap?.error_code ?? null,
@@ -58,7 +66,9 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
     cutoffMs,
     sequenceGap: snap?.sequence_gap ?? null,
     bookComplete: snap?.book_complete ?? null,
+    localReceiptMs: receiptMs,
   });
+
 
   const base: Row = {
     b4x4_prediction_id: pred.id,
