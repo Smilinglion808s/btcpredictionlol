@@ -336,19 +336,32 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       inf.selectedComponent,
       broadRedState.summary,
     );
-    const r3Prediction = reliability.prediction;
-    const r3Source = reliability.predictionSource;
 
-    // 20. Regime Inverter — SHADOW ONLY under r3. It still computes everything
-    // it used to, but it can no longer change publication.
+    // --- V6-r4 steps 13-17: Structure Confirmation Gate --------------------
+    // Applies to EVERY surviving directional r3 publication regardless of the
+    // source. It may only convert a direction to ABSTAIN.
+    const structure = applyStructureConfirmation(r3Prediction, r3Source, {
+      lower_wick_pct: inf.ridgeFeatures.lower_wick_pct,
+      aligned_wick_pressure_4: inf.ridgeFeatures.aligned_wick_pressure_4,
+      range_expansion_vs_avg20: inf.ridgeFeatures.range_expansion_vs_avg20,
+      path_efficiency_4: inf.ridgeFeatures.path_efficiency_4,
+    });
+    const r4Prediction = structure.prediction;
+    const r4Source = structure.predictionSource;
+
+    // 18. Regime Inverter — SHADOW ONLY. It reads the published r4 decision but
+    // can never modify it.
     const inverterState = await ensureInverterState(sb, targetTs);
-    const inverter = applyRegimeInverter(r3Prediction, r3Source, inverterState.summary);
+    const inverter = applyRegimeInverter(r4Prediction, r4Source, inverterState.summary);
 
     const r3AbstainReason = conflict.triggered
       ? BROAD_CONFLICT_VETO_REASON
       : reliability.triggered
         ? BROAD_RED_RELIABILITY_REASON
         : inf.abstainReason;
+    const r4AbstainReason = structure.triggered
+      ? structure.reason
+      : r3AbstainReason;
 
 
     const timing = timingPosture(targetTs);
