@@ -38,8 +38,6 @@ import {
 import {
   applyRegimeInverter,
   inverterContribution,
-  V6_MODEL_REVISION,
-  V6_MODEL_REVISION_ACTIVATED_AT,
   V6_REGIME_INVERTER_THRESHOLD,
 
 } from "./regimeInverter";
@@ -437,7 +435,7 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
 
       // --- V6-r2 weak-RED coverage recovery (prediction-time, immutable) ---
-      model_revision_activated_at: V6_MODEL_REVISION_ACTIVATED_AT,
+      model_revision_activated_at: V6_R4_ACTIVATED_AT,
       weak_red_veto_candidate: inf.weakRedVetoCandidate,
       weak_red_veto_original_prediction: inf.weakRedVetoOriginalPrediction,
       weak_red_veto_broad_percentile: inf.weakRedVetoBroadPercentile,
@@ -540,7 +538,7 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
       regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
-      final_prediction_source: accepted ? r3Source : "OP_FAIL",
+      final_prediction_source: accepted ? r4Source : "OP_FAIL",
 
     };
 
