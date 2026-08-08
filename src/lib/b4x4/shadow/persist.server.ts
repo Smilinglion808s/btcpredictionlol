@@ -125,12 +125,17 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
   const bufferStart = snap?.trade_window_start_ts
     ? new Date(snap.trade_window_start_ts).getTime()
     : null;
-  const flow = computeTradeFlow(snap?.trades_json ?? [], cutoffMs, bufferStart);
+  // Trade-window completeness is independent from book validity: never
+  // fabricate trade-derived fields when no trade buffer was captured.
+  const tradesAvailable = Array.isArray(snap?.trades_json);
+  const flow = tradesAvailable
+    ? computeTradeFlow(snap?.trades_json ?? [], cutoffMs, bufferStart)
+    : null;
   const labels = computeFlowLabels({
     micropriceOffsetBps: top.microprice_offset_bps,
     spreadBps: top.spread_bps,
     queueImbalanceTop5: depth.queue_imbalance_top5,
-    takerDelta3m: flow.taker_delta_3m,
+    takerDelta3m: flow?.taker_delta_3m ?? null,
   });
   const relationship = flowRelationship(labels.flow_direction, pred.raw_direction);
 
@@ -146,28 +151,30 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
     depth_imbalance_5bps: depth.depth_imbalance_5bps,
     depth_imbalance_10bps: depth.depth_imbalance_10bps,
     depth_imbalance_25bps: depth.depth_imbalance_25bps,
-    flow_json: flow.windows,
-    trade_flow_json: flow.windows,
-    taker_delta_30s: flow.taker_delta_30s,
-    taker_delta_2m: flow.taker_delta_2m,
-    taker_delta_3m: flow.taker_delta_3m,
-    taker_delta_5m: flow.taker_delta_5m,
-    taker_delta_15m: flow.taker_delta_15m,
-    cvd_3m: flow.cvd_3m,
-    trade_event_count: flow.trade_event_count,
-    trade_windows_complete: flow.all_windows_complete,
+    flow_json: flow?.windows ?? null,
+    trade_flow_json: flow?.windows ?? null,
+    taker_delta_30s: flow?.taker_delta_30s ?? null,
+    taker_delta_2m: flow?.taker_delta_2m ?? null,
+    taker_delta_3m: flow?.taker_delta_3m ?? null,
+    taker_delta_5m: flow?.taker_delta_5m ?? null,
+    taker_delta_15m: flow?.taker_delta_15m ?? null,
+    cvd_3m: flow?.cvd_3m ?? null,
+    trade_event_count: flow?.trade_event_count ?? null,
+    trade_windows_complete: flow?.all_windows_complete ?? false,
+    trade_window_complete: snap?.trade_window_complete ?? (flow?.all_windows_complete ?? false),
     flow_component_count: labels.flow_component_count,
     flow_composite_score: labels.flow_composite_score,
     flow_direction: labels.flow_direction,
     flow_strength: labels.flow_strength,
     flow_coherent: labels.flow_coherent,
     flow_strong_coherent: labels.flow_strong_coherent,
-    flow_direction_3m: flow.taker_delta_3m == null ? null : flow.taker_delta_3m > 0 ? "GREEN" : flow.taker_delta_3m < 0 ? "RED" : "NEUTRAL",
-    flow_direction_15m: flow.taker_delta_15m == null ? null : flow.taker_delta_15m > 0 ? "GREEN" : flow.taker_delta_15m < 0 ? "RED" : "NEUTRAL",
+    flow_direction_3m: flow?.taker_delta_3m == null ? null : flow.taker_delta_3m > 0 ? "GREEN" : flow.taker_delta_3m < 0 ? "RED" : "NEUTRAL",
+    flow_direction_15m: flow?.taker_delta_15m == null ? null : flow.taker_delta_15m > 0 ? "GREEN" : flow.taker_delta_15m < 0 ? "RED" : "NEUTRAL",
     raw_direction_relationship: relationship,
     flow_agrees_a2: relationship === "AGREE",
     flow_conflicts_a2: relationship === "CONFLICT",
   };
+
 }
 
 /**
