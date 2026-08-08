@@ -6,15 +6,20 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  B4X4_IMPLEMENTATION_REVISION,
   B4X4_MODEL_NAME,
   B4X4_MODEL_VERSION,
   B4X4_PROSPECTIVE_TEST_ID,
+  B4X4_REVISION_ACTIVATED_AT,
+  B4X4_REVISION_PROSPECTIVE_TEST_ID,
+  B4X4_SOURCE_EPOCH_TS,
   B4X4_SOURCE_VARIANT,
   B4X4_VARIANT,
   GRID_TRAINING_LOOKBACK,
   b4x4ConfigHash,
   b4x4LocalDate,
 } from "./config";
+
 import {
   brakeAttribution,
   evaluateB4x4,
@@ -68,9 +73,13 @@ export async function loadHistory(
     )
     .eq("model_version", B4X4_MODEL_VERSION)
     .eq("data_valid", true)
+    .in("raw_direction", ["GREEN", "RED"])
+    .not("confidence", "is", null)
+    .gte("target_candle_ts", B4X4_SOURCE_EPOCH_TS)
     .lt("target_candle_ts", beforeCandleTs)
     .order("target_candle_ts", { ascending: false })
     .limit(HISTORY_FETCH);
+
   const rows = ((data ?? []) as unknown as DbRow[]).slice().reverse();
   const out: HistoryEntry[] = [];
   for (const r of rows) {
@@ -93,6 +102,81 @@ export async function loadHistory(
     });
   }
   return out;
+}
+
+/**
+ * Absolute zero-based source position of the row for `candleTs` among valid
+ * canonical source rows since the frozen epoch. Counted in the database over
+ * the SAME universe as `loadHistory` — never derived from a bounded slice.
+ */
+export async function loadSourceIndexAbsolute(
+  supabase: SupabaseClient,
+  beforeCandleTs: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from("b4x4_predictions")
+    .select("id", { count: "exact", head: true })
+    .eq("model_version", B4X4_MODEL_VERSION)
+    .eq("data_valid", true)
+    .in("raw_direction", ["GREEN", "RED"])
+    .not("confidence", "is", null)
+    .gte("target_candle_ts", B4X4_SOURCE_EPOCH_TS)
+    .lt("target_candle_ts", beforeCandleTs);
+  return Number(count ?? 0);
+}
+
+export type CatchUpStatus =
+  | "RESOLVED"
+  | "ALREADY_RESOLVED"
+  | "NO_PRIOR_ROW"
+  | "PRIOR_OHLC_UNAVAILABLE"
+  | "ERROR";
+
+/**
+ * Idempotent resolver catch-up for target T−15m using canonical confirmed OKX
+ * OHLC already persisted in `candles`. Never issues a blocking external call.
+ */
+export async function catchUpPriorResolution(
+  supabase: SupabaseClient,
+  candleTs: string,
+): Promise<{ status: CatchUpStatus; error: string | null }> {
+  try {
+    const prevTs = new Date(new Date(candleTs).getTime() - 15 * 60 * 1000).toISOString();
+    const { data: prev } = await supabase
+      .from("b4x4_predictions")
+      .select("id, resolved_at")
+      .eq("model_version", B4X4_MODEL_VERSION)
+      .eq("target_candle_ts", prevTs)
+      .maybeSingle();
+    const prow = prev as unknown as DbRow | null;
+    if (!prow) return { status: "NO_PRIOR_ROW", error: null };
+    if (prow.resolved_at) return { status: "ALREADY_RESOLVED", error: null };
+
+    const { data: candle } = await supabase
+      .from("candles")
+      .select("open, high, low, close")
+      .eq("symbol", "BTC-USDT")
+      .eq("timeframe", "15m")
+      .eq("candle_ts", prevTs)
+      .maybeSingle();
+    const c = candle as unknown as DbRow | null;
+    if (!c || c.open == null || c.close == null) {
+      return { status: "PRIOR_OHLC_UNAVAILABLE", error: "no_confirmed_candle" };
+    }
+    const open = Number(c.open);
+    const close = Number(c.close);
+    const dir: ActualDirection = close > open ? "GREEN" : close < open ? "RED" : "PUSH";
+    await resolveB4x4Row(supabase, prevTs, dir, {
+      open,
+      high: c.high == null ? null : Number(c.high),
+      low: c.low == null ? null : Number(c.low),
+      close,
+    });
+    return { status: "RESOLVED", error: null };
+  } catch (e) {
+    return { status: "ERROR", error: e instanceof Error ? e.message : String(e) };
+  }
+
 }
 
 /** Resolved, published day net for the local (America/Boise) date. */
@@ -118,7 +202,11 @@ export async function loadDailyState(
   return { localDate, dailyNetBefore: net, dailyResolvedTradeCountBefore: count };
 }
 
-export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
+export function decisionToRow(
+  ctx: B4x4Context,
+  d: B4x4Decision,
+  audit?: { catchUpStatus?: CatchUpStatus | null; catchUpError?: string | null },
+): DbRow {
   const runMode = ctx.runMode ?? "LIVE";
   return {
     source_a2_row_id: ctx.a2RowId ?? null,
@@ -127,7 +215,21 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     model_name: B4X4_MODEL_NAME,
     model_version: B4X4_MODEL_VERSION,
     variant: B4X4_VARIANT,
-    prospective_test_id: B4X4_PROSPECTIVE_TEST_ID,
+    prospective_test_id: B4X4_REVISION_PROSPECTIVE_TEST_ID || B4X4_PROSPECTIVE_TEST_ID,
+    implementation_revision: B4X4_IMPLEMENTATION_REVISION,
+    revision_activated_at: B4X4_REVISION_ACTIVATED_AT,
+    source_index_absolute: d.sourceIndexAbsolute,
+    grid_training_source_count: d.gridTrainingSourceCount,
+    grid_training_start_index: d.gridTrainingStartIndex,
+    grid_training_end_index: d.gridTrainingEndIndex,
+    grid_reference_source_count: d.gridReferenceSourceCount,
+    grid_reference_start_index: d.gridReferenceStartIndex,
+    grid_reference_end_index: d.gridReferenceEndIndex,
+    grid_reference_start_ts: d.gridReferenceStartTs,
+    grid_reference_end_ts: d.gridReferenceEndTs,
+    catchup_resolution_status: audit?.catchUpStatus ?? null,
+    catchup_resolution_error: audit?.catchUpError ?? null,
+
     config_hash: b4x4ConfigHash(),
     run_mode: runMode,
     webhook_eligible:
@@ -198,8 +300,16 @@ export async function runB4x4ForA2Combined(
   ctx: B4x4Context,
 ): Promise<DbRow | null> {
   try {
-    const history = await loadHistory(supabase, ctx.candleTs);
-    const daily = await loadDailyState(supabase, ctx.candleTs);
+    // Idempotent catch-up of the immediately prior outcome so the training
+    // window can count it as resolved. Uses already-persisted canonical OHLC.
+    const catchUp = ctx.runMode === "BACKFILL"
+      ? { status: null as CatchUpStatus | null, error: null as string | null }
+      : await catchUpPriorResolution(supabase, ctx.candleTs);
+    const [history, absoluteIndex, daily] = await Promise.all([
+      loadHistory(supabase, ctx.candleTs),
+      loadSourceIndexAbsolute(supabase, ctx.candleTs),
+      loadDailyState(supabase, ctx.candleTs),
+    ]);
     const source: SourceRow = {
       candleTs: ctx.candleTs,
       probabilityGreen: ctx.probabilityGreen,
@@ -207,8 +317,12 @@ export async function runB4x4ForA2Combined(
       leakageCheckPassed: ctx.leakageCheckPassed,
       actualDirection: null,
     };
-    const decision = evaluateB4x4(source, history, daily);
-    const row = decisionToRow(ctx, decision);
+    const decision = evaluateB4x4(source, history, daily, { absoluteIndex });
+    const row = decisionToRow(ctx, decision, {
+      catchUpStatus: catchUp.status,
+      catchUpError: catchUp.error,
+    });
+
     const { data, error } = await supabase
       .from("b4x4_predictions")
       .upsert(row as never, { onConflict: "target_candle_ts,model_version", ignoreDuplicates: true })
