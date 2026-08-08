@@ -38,8 +38,6 @@ import {
 import {
   applyRegimeInverter,
   inverterContribution,
-  V6_MODEL_REVISION,
-  V6_MODEL_REVISION_ACTIVATED_AT,
   V6_REGIME_INVERTER_THRESHOLD,
 
 } from "./regimeInverter";
@@ -57,6 +55,16 @@ import {
   REGIME_INVERTER_SHADOW_ONLY,
 } from "./r3";
 import { ensureBroadRedState, recordResolvedBroadRedSignal } from "./broadRedStore";
+import {
+  applyStructureConfirmation,
+  structureContribution,
+  STRUCTURE_EXPANSION_EFFICIENCY_MIN,
+  STRUCTURE_EXPANSION_RANGE_MIN,
+  STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
+  STRUCTURE_REJECTION_LOWER_WICK_MIN,
+  V6_R4_ACTIVATED_AT,
+  V6_R4_MODEL_REVISION,
+} from "./structure";
 
 
 const TF_MS = 15 * 60 * 1000;
@@ -218,13 +226,22 @@ function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown
     feature_valid: false,
     final_prediction: "OP_FAIL",
     final_prediction_source: "OP_FAIL",
-    model_revision: V6_MODEL_REVISION,
+    model_revision: V6_R4_MODEL_REVISION,
+    model_revision_activated_at: V6_R4_ACTIVATED_AT,
     regime_inverter_evaluable: false,
     regime_inverter_triggered: false,
     regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
     abstain_status: null,
     red_threshold: V6_RED_THRESHOLD,
     green_threshold: V6_GREEN_THRESHOLD,
+    // V6-r4: the structure gate never evaluates an operational failure.
+    structure_confirmation_evaluable: false,
+    structure_confirmation_triggered: false,
+    structure_confirmation_pass: false,
+    structure_rejection_lower_wick_threshold: STRUCTURE_REJECTION_LOWER_WICK_MIN,
+    structure_rejection_aligned_wick_threshold: STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
+    structure_expansion_range_threshold: STRUCTURE_EXPANSION_RANGE_MIN,
+    structure_expansion_efficiency_threshold: STRUCTURE_EXPANSION_EFFICIENCY_MIN,
     ...extra,
   };
 }
@@ -320,16 +337,31 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     const r3Prediction = reliability.prediction;
     const r3Source = reliability.predictionSource;
 
-    // 20. Regime Inverter — SHADOW ONLY under r3. It still computes everything
-    // it used to, but it can no longer change publication.
+    // --- V6-r4 steps 13-17: Structure Confirmation Gate --------------------
+    // Applies to EVERY surviving directional r3 publication regardless of the
+    // source. It may only convert a direction to ABSTAIN.
+    const structure = applyStructureConfirmation(r3Prediction, r3Source, {
+      lower_wick_pct: inf.ridgeFeatures.lower_wick_pct,
+      aligned_wick_pressure_4: inf.ridgeFeatures.aligned_wick_pressure_4,
+      range_expansion_vs_avg20: inf.ridgeFeatures.range_expansion_vs_avg20,
+      path_efficiency_4: inf.ridgeFeatures.path_efficiency_4,
+    });
+    const r4Prediction = structure.prediction;
+    const r4Source = structure.predictionSource;
+
+    // 18. Regime Inverter — SHADOW ONLY. It reads the published r4 decision but
+    // can never modify it.
     const inverterState = await ensureInverterState(sb, targetTs);
-    const inverter = applyRegimeInverter(r3Prediction, r3Source, inverterState.summary);
+    const inverter = applyRegimeInverter(r4Prediction, r4Source, inverterState.summary);
 
     const r3AbstainReason = conflict.triggered
       ? BROAD_CONFLICT_VETO_REASON
       : reliability.triggered
         ? BROAD_RED_RELIABILITY_REASON
         : inf.abstainReason;
+    const r4AbstainReason = structure.triggered
+      ? structure.reason
+      : r3AbstainReason;
 
 
     const timing = timingPosture(targetTs);
@@ -403,7 +435,7 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
 
       // --- V6-r2 weak-RED coverage recovery (prediction-time, immutable) ---
-      model_revision_activated_at: V6_MODEL_REVISION_ACTIVATED_AT,
+      model_revision_activated_at: V6_R4_ACTIVATED_AT,
       weak_red_veto_candidate: inf.weakRedVetoCandidate,
       weak_red_veto_original_prediction: inf.weakRedVetoOriginalPrediction,
       weak_red_veto_broad_percentile: inf.weakRedVetoBroadPercentile,
@@ -453,17 +485,41 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_after_broad_red_reliability: r3Prediction,
       prediction_source_after_broad_red_reliability: r3Source,
 
-      final_prediction: accepted ? r3Prediction : "OP_FAIL",
-      // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && r3Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted ? r3AbstainReason : null,
+      // --- V6-r4 Structure Confirmation Gate (prediction-time, immutable) ---
+      path_efficiency_4: inf.ridgeFeatures.path_efficiency_4 ?? null,
+      pre_structure_prediction: structure.preStructurePrediction,
+      pre_structure_source: structure.preStructureSource,
+      structure_confirmation_evaluable: accepted && structure.evaluable,
+      structure_rejection_evaluable: structure.rejection.evaluable,
+      structure_rejection_pass: structure.rejection.pass,
+      structure_rejection_lower_wick_value: structure.values.lower_wick,
+      structure_rejection_lower_wick_threshold: STRUCTURE_REJECTION_LOWER_WICK_MIN,
+      structure_rejection_aligned_wick_value: structure.values.aligned_wick,
+      structure_rejection_aligned_wick_threshold: STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
+      structure_expansion_evaluable: structure.expansion.evaluable,
+      structure_expansion_pass: structure.expansion.pass,
+      structure_expansion_range_value: structure.values.range_expansion,
+      structure_expansion_range_threshold: STRUCTURE_EXPANSION_RANGE_MIN,
+      structure_expansion_efficiency_value: structure.values.path_efficiency,
+      structure_expansion_efficiency_threshold: STRUCTURE_EXPANSION_EFFICIENCY_MIN,
+      structure_confirmation_pass: accepted ? structure.pass : false,
+      structure_confirmation_triggered: accepted && structure.triggered,
+      structure_confirmation_reason: accepted ? structure.reason : null,
+      prediction_after_structure_confirmation: accepted ? r4Prediction : "OP_FAIL",
+      prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
+      structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      // --- Regime Inverter — SHADOW ONLY (V6-r3) ---
-      model_revision: V6_MODEL_REVISION,
+      final_prediction: accepted ? r4Prediction : "OP_FAIL",
+      // Strategic ABSTAIN is never an operational failure and vice versa.
+      abstain_status: accepted && r4Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted ? r4AbstainReason : null,
+
+      // --- Regime Inverter — SHADOW ONLY (V6-r3 / r4) ---
+      model_revision: V6_R4_MODEL_REVISION,
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
-      pre_inverter_prediction: r3Prediction,
-      pre_inverter_prediction_source: r3Source,
+      pre_inverter_prediction: r4Prediction,
+      pre_inverter_prediction_source: r4Source,
       regime_inverter_shadow_only: REGIME_INVERTER_SHADOW_ONLY,
       regime_inverter_publication_enabled: REGIME_INVERTER_PUBLICATION_ENABLED,
       regime_inverter_evaluable: inverter.evaluable,
@@ -482,7 +538,7 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
       regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
-      final_prediction_source: accepted ? r3Source : "OP_FAIL",
+      final_prediction_source: accepted ? r4Source : "OP_FAIL",
 
     };
 
@@ -500,7 +556,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -594,6 +650,17 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         actual,
       );
 
+      // --- V6-r4 Structure Confirmation counterfactual (independent layer) ---
+      const structureTriggered = Boolean(r.structure_confirmation_triggered) && !opFail;
+      const structureUnderlying =
+        (r.structure_underlying_prediction as Direction | null) ??
+        (structureTriggered ? ((r.pre_structure_prediction as Direction | null) ?? null) : null);
+      const structureContrib = structureContribution(
+        structureTriggered,
+        structureUnderlying,
+        actual,
+      );
+
       // --- V6-r3 BROAD_RED shadow membership (original frozen signal only) ---
       const selectedComponent =
         (r.selected_component as string | null) ??
@@ -678,6 +745,15 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             reliabilityUnderlying ? adjustedScore(reliabilityUnderlying, actual) : null,
           broad_red_reliability_raw_contribution: reliabilityContrib.raw,
           broad_red_reliability_adjusted_contribution: reliabilityContrib.adjusted,
+
+          structure_underlying_prediction: structureUnderlying,
+          structure_underlying_actual_direction: structureTriggered ? actual : null,
+          structure_underlying_raw_score:
+            structureUnderlying ? rawScore(structureUnderlying, actual) : null,
+          structure_underlying_adjusted_score:
+            structureUnderlying ? adjustedScore(structureUnderlying, actual) : null,
+          structure_confirmation_raw_contribution: structureContrib.raw,
+          structure_confirmation_adjusted_contribution: structureContrib.adjusted,
 
           broad_red_shadow_prediction: broadRedEligible ? "RED" : null,
           broad_red_shadow_adjusted_score: broadRedEligible ? adjustedScore("RED", actual) : null,

@@ -4439,16 +4439,20 @@ export type Database = {
           original_v6_base_source: string | null
           original_v6_shadow_adjusted_score: number | null
           original_v6_shadow_raw_score: number | null
+          path_efficiency_4: number | null
           pickup_conflict: boolean
           pre_inverter_adjusted_score: number | null
           pre_inverter_prediction: string | null
           pre_inverter_prediction_source: string | null
           pre_inverter_raw_score: number | null
+          pre_structure_prediction: string | null
+          pre_structure_source: string | null
           pre_weak_red_veto_adjusted_score: number | null
           pre_weak_red_veto_prediction: string | null
           pre_weak_red_veto_raw_score: number | null
           prediction_after_broad_conflict_veto: string | null
           prediction_after_broad_red_reliability: string | null
+          prediction_after_structure_confirmation: string | null
           prediction_after_weak_red_recovery: string | null
           prediction_created_at: string
           prediction_created_before_target: boolean
@@ -4456,6 +4460,7 @@ export type Database = {
           prediction_source: string | null
           prediction_source_after_broad_conflict_veto: string | null
           prediction_source_after_broad_red_reliability: string | null
+          prediction_source_after_structure_confirmation: string | null
           prediction_source_after_weak_red_recovery: string | null
           prior_candle_ids_json: Json | null
           provider: string
@@ -4501,6 +4506,28 @@ export type Database = {
           saturation_veto_sacrificed_win: boolean | null
           saturation_veto_triggered: boolean
           selected_component: string | null
+          structure_confirmation_adjusted_contribution: number | null
+          structure_confirmation_evaluable: boolean | null
+          structure_confirmation_pass: boolean | null
+          structure_confirmation_raw_contribution: number | null
+          structure_confirmation_reason: string | null
+          structure_confirmation_triggered: boolean | null
+          structure_expansion_efficiency_threshold: number | null
+          structure_expansion_efficiency_value: number | null
+          structure_expansion_evaluable: boolean | null
+          structure_expansion_pass: boolean | null
+          structure_expansion_range_threshold: number | null
+          structure_expansion_range_value: number | null
+          structure_rejection_aligned_wick_threshold: number | null
+          structure_rejection_aligned_wick_value: number | null
+          structure_rejection_evaluable: boolean | null
+          structure_rejection_lower_wick_threshold: number | null
+          structure_rejection_lower_wick_value: number | null
+          structure_rejection_pass: boolean | null
+          structure_underlying_actual_direction: string | null
+          structure_underlying_adjusted_score: number | null
+          structure_underlying_prediction: string | null
+          structure_underlying_raw_score: number | null
           symbol: string
           target_candle_ts: string
           timeframe: string
@@ -4633,16 +4660,20 @@ export type Database = {
           original_v6_base_source?: string | null
           original_v6_shadow_adjusted_score?: number | null
           original_v6_shadow_raw_score?: number | null
+          path_efficiency_4?: number | null
           pickup_conflict?: boolean
           pre_inverter_adjusted_score?: number | null
           pre_inverter_prediction?: string | null
           pre_inverter_prediction_source?: string | null
           pre_inverter_raw_score?: number | null
+          pre_structure_prediction?: string | null
+          pre_structure_source?: string | null
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
           prediction_after_broad_conflict_veto?: string | null
           prediction_after_broad_red_reliability?: string | null
+          prediction_after_structure_confirmation?: string | null
           prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
@@ -4650,6 +4681,7 @@ export type Database = {
           prediction_source?: string | null
           prediction_source_after_broad_conflict_veto?: string | null
           prediction_source_after_broad_red_reliability?: string | null
+          prediction_source_after_structure_confirmation?: string | null
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
@@ -4695,6 +4727,28 @@ export type Database = {
           saturation_veto_sacrificed_win?: boolean | null
           saturation_veto_triggered?: boolean
           selected_component?: string | null
+          structure_confirmation_adjusted_contribution?: number | null
+          structure_confirmation_evaluable?: boolean | null
+          structure_confirmation_pass?: boolean | null
+          structure_confirmation_raw_contribution?: number | null
+          structure_confirmation_reason?: string | null
+          structure_confirmation_triggered?: boolean | null
+          structure_expansion_efficiency_threshold?: number | null
+          structure_expansion_efficiency_value?: number | null
+          structure_expansion_evaluable?: boolean | null
+          structure_expansion_pass?: boolean | null
+          structure_expansion_range_threshold?: number | null
+          structure_expansion_range_value?: number | null
+          structure_rejection_aligned_wick_threshold?: number | null
+          structure_rejection_aligned_wick_value?: number | null
+          structure_rejection_evaluable?: boolean | null
+          structure_rejection_lower_wick_threshold?: number | null
+          structure_rejection_lower_wick_value?: number | null
+          structure_rejection_pass?: boolean | null
+          structure_underlying_actual_direction?: string | null
+          structure_underlying_adjusted_score?: number | null
+          structure_underlying_prediction?: string | null
+          structure_underlying_raw_score?: number | null
           symbol?: string
           target_candle_ts: string
           timeframe?: string
@@ -4827,16 +4881,20 @@ export type Database = {
           original_v6_base_source?: string | null
           original_v6_shadow_adjusted_score?: number | null
           original_v6_shadow_raw_score?: number | null
+          path_efficiency_4?: number | null
           pickup_conflict?: boolean
           pre_inverter_adjusted_score?: number | null
           pre_inverter_prediction?: string | null
           pre_inverter_prediction_source?: string | null
           pre_inverter_raw_score?: number | null
+          pre_structure_prediction?: string | null
+          pre_structure_source?: string | null
           pre_weak_red_veto_adjusted_score?: number | null
           pre_weak_red_veto_prediction?: string | null
           pre_weak_red_veto_raw_score?: number | null
           prediction_after_broad_conflict_veto?: string | null
           prediction_after_broad_red_reliability?: string | null
+          prediction_after_structure_confirmation?: string | null
           prediction_after_weak_red_recovery?: string | null
           prediction_created_at?: string
           prediction_created_before_target?: boolean
@@ -4844,6 +4902,7 @@ export type Database = {
           prediction_source?: string | null
           prediction_source_after_broad_conflict_veto?: string | null
           prediction_source_after_broad_red_reliability?: string | null
+          prediction_source_after_structure_confirmation?: string | null
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
@@ -4889,6 +4948,28 @@ export type Database = {
           saturation_veto_sacrificed_win?: boolean | null
           saturation_veto_triggered?: boolean
           selected_component?: string | null
+          structure_confirmation_adjusted_contribution?: number | null
+          structure_confirmation_evaluable?: boolean | null
+          structure_confirmation_pass?: boolean | null
+          structure_confirmation_raw_contribution?: number | null
+          structure_confirmation_reason?: string | null
+          structure_confirmation_triggered?: boolean | null
+          structure_expansion_efficiency_threshold?: number | null
+          structure_expansion_efficiency_value?: number | null
+          structure_expansion_evaluable?: boolean | null
+          structure_expansion_pass?: boolean | null
+          structure_expansion_range_threshold?: number | null
+          structure_expansion_range_value?: number | null
+          structure_rejection_aligned_wick_threshold?: number | null
+          structure_rejection_aligned_wick_value?: number | null
+          structure_rejection_evaluable?: boolean | null
+          structure_rejection_lower_wick_threshold?: number | null
+          structure_rejection_lower_wick_value?: number | null
+          structure_rejection_pass?: boolean | null
+          structure_underlying_actual_direction?: string | null
+          structure_underlying_adjusted_score?: number | null
+          structure_underlying_prediction?: string | null
+          structure_underlying_raw_score?: number | null
           symbol?: string
           target_candle_ts?: string
           timeframe?: string
