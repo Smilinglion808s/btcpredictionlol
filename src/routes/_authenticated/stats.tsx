@@ -988,15 +988,6 @@ function V6Card({
 
   const invWins = Number(stats.inverter_shadow_wins ?? 0);
   const invLosses = Number(stats.inverter_shadow_losses ?? 0);
-  const invTotal = invWins + invLosses;
-  const invWr = invTotal ? (invWins / invTotal) * 100 : 0;
-  const invReady = Boolean(inverter?.regime_inverter_ready);
-  const invCount = Number(inverter?.regime_inverter_history_count ?? 0);
-  const broadRedLabel = stats.broad_red_reliability_active
-    ? "vetoed"
-    : stats.broad_red_reliability_ready
-      ? "active"
-      : `warming ${Number(stats.broad_red_history_count ?? 0)}/12`;
 
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
@@ -1098,112 +1089,28 @@ function V6Card({
         <Daily3d days={(stats.daily_3d ?? []) as Array<Record<string, any>>} accent="cyan" />
       </div>
 
+      {/* Slimmed tile: high-level W/L only. Full rule-by-rule diagnostics,
+          per-branch audits and current-candle internals stay in the V6 CSV. */}
       <div className="relative">
         <V6Section title="Forward test">
           <V6Stat label="Coverage" value={`${Number(stats.coverage ?? 0)}%`} />
-          <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
-          <V6Stat label="Operational failures" value={Number(stats.op_fails ?? 0)} />
-          <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
           <V6Stat label="GREEN W/L" value={`${Number(stats.green_wins ?? 0)}/${Number(stats.green_losses ?? 0)}`} />
           <V6Stat label="RED W/L" value={`${Number(stats.red_wins ?? 0)}/${Number(stats.red_losses ?? 0)}`} />
+          <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
           <V6Stat label="Max raw drawdown" value={fmt(stats.max_raw_drawdown)} tone="bear" />
           <V6Stat label="Rolling 96 raw net" value={fmt(stats.rolling96_raw_net)} />
-
-          <V6Stat label="Rolling 96 coverage" value={`${Number(stats.rolling96_coverage ?? 0)}%`} />
         </V6Section>
 
-        <V6Section title="Current candle">
-          <V6Stat label="Base V6" value={pending?.base_v6_prediction ?? "—"} />
-          <V6Stat label="Source" value={pending?.prediction_source ?? "—"} />
-          <V6Stat label="Final score" value={fmt(pending?.final_score, 6)} />
-          <V6Stat
-            label="Thresholds"
-            value={pending ? `${fmt(pending.red_threshold, 4)} / ${fmt(pending.green_threshold, 4)}` : "—"}
-          />
-          <V6Stat label="Ridge pct" value={fmt(pending?.ridge_percentile, 4)} />
-          <V6Stat label="Boosted pct" value={fmt(pending?.gb_percentile, 4)} />
-          <V6Stat label="Broad pct" value={fmt(pending?.broad_percentile, 4)} />
-          <V6Stat label="Anchor pct" value={fmt(pending?.anchor_percentile, 4)} />
-        </V6Section>
-
-        <V6Section title="Rule activity · times fired">
-          <V6Stat label="GREEN saturation veto" value={Number(stats.saturation_veto_count ?? 0)} />
-          <V6Stat label="Weak-broad RED veto" value={Number(stats.weak_red_veto_count ?? 0)} />
-          <V6Stat label="Consensus RED pickup" value={Number(stats.red_pickup_count ?? 0)} />
-          <V6Stat label="Momentum GREEN pickup" value={Number(stats.green_pickup_count ?? 0)} />
-          <V6Stat label="Weak RED recovery" value={Number(stats.weak_red_restored ?? 0)} tone="bear" />
-          <V6Stat label="Regime inversion" value={Number(stats.inverter_trigger_count ?? 0)} tone="violet" />
-        </V6Section>
-
-        <V6Section title="Broad conflict veto · band [0.025, 0.075)">
-          <V6Stat label="Candidates" value={Number(stats.broad_conflict_candidates ?? 0)} />
-          <V6Stat label="Vetoes" value={Number(stats.broad_conflict_vetoes ?? 0)} />
-          <V6Stat label="Avoided losses" value={Number(stats.broad_conflict_avoided_losses ?? 0)} tone="bull" />
-          <V6Stat label="Sacrificed wins" value={Number(stats.broad_conflict_sacrificed_wins ?? 0)} tone="bear" />
-        </V6Section>
-
-        <V6Section title={`BROAD_RED reliability · ${broadRedLabel}`}>
-          <V6Stat label="History" value={`${Number(stats.broad_red_history_count ?? 0)} / 12`} />
-          <V6Stat
-            label="Last-12 W/L"
-            value={`${Number(stats.broad_red_last12_wins ?? 0)}/${Number(stats.broad_red_last12_losses ?? 0)}`}
-          />
-          <V6Stat label="Vetoes" value={Number(stats.broad_red_vetoes ?? 0)} />
-          <V6Stat label="Avoided losses" value={Number(stats.broad_red_avoided_losses ?? 0)} tone="bull" />
-        </V6Section>
-
-        <V6Section title="Structure confirmation · V6-r4">
-          <V6Stat label="Directional candidates" value={Number(stats.structure_candidates ?? 0)} />
-          <V6Stat label="Passed structure" value={Number(stats.structure_passed ?? 0)} tone="bull" />
-          <V6Stat label="Vetoed by structure" value={Number(stats.structure_vetoes ?? 0)} tone="bear" />
-          <V6Stat label="Pass rate" value={`${Number(stats.structure_pass_rate ?? 0)}%`} />
-          <V6Stat label="Rejection passes" value={Number(stats.structure_rejection_passes ?? 0)} />
-          <V6Stat label="Expansion passes" value={Number(stats.structure_expansion_passes ?? 0)} />
-          <V6Stat label="Both structures" value={Number(stats.structure_both_passes ?? 0)} />
+        <V6Section title="Selectivity · V6-r4">
+          <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
+          <V6Stat label="Structure vetoes" value={Number(stats.structure_vetoes ?? 0)} />
           <V6Stat label="Avoided losses" value={Number(stats.structure_avoided_losses ?? 0)} tone="bull" />
           <V6Stat label="Sacrificed wins" value={Number(stats.structure_sacrificed_wins ?? 0)} tone="bear" />
-          <V6Stat label="Raw contribution" value={fmt(stats.structure_raw)} />
-          <V6Stat label="Adjusted contribution" value={fmt(stats.structure_adjusted)} />
-          <V6Stat label="Coverage before gate" value={`${Number(stats.coverage_before_structure_gate ?? 0)}%`} />
-          <V6Stat label="Coverage after gate" value={`${Number(stats.coverage_after_structure_gate ?? 0)}%`} />
-          <V6Stat label="Rejection rule" value="wick ≥ 0.40 · aligned ≥ 0.00" />
-          <V6Stat label="Expansion rule" value="range ≥ 0.80 · eff ≥ 0.30" />
-          <V6Stat
-            label="Current rejection"
-            value={pending?.structure_rejection_pass == null ? "—" : pending.structure_rejection_pass ? "PASS" : "FAIL"}
-            tone={pending?.structure_rejection_pass ? "bull" : "bear"}
-          />
-          <V6Stat
-            label="Current expansion"
-            value={pending?.structure_expansion_pass == null ? "—" : pending.structure_expansion_pass ? "PASS" : "FAIL"}
-            tone={pending?.structure_expansion_pass ? "bull" : "bear"}
-          />
-          <V6Stat
-            label="Structure confirmation"
-            value={
-              pending?.structure_confirmation_evaluable
-                ? pending.structure_confirmation_pass
-                  ? "PASS"
-                  : "VETO"
-                : "—"
-            }
-            tone={pending?.structure_confirmation_pass ? "bull" : "bear"}
-          />
-          <V6Stat label="Pre-structure call" value={pending?.pre_structure_prediction ?? "—"} />
+          <V6Stat label="Inverter shadow W/L" value={`${invWins}/${invLosses}`} tone="violet" />
+          <V6Stat label="Operational failures" value={Number(stats.op_fails ?? 0)} />
         </V6Section>
-
-        <V6Section title="Regime inverter · shadow only">
-          <V6Stat label="Would-be win rate" value={invTotal ? `${invWr.toFixed(1)}%` : "—"} tone="violet" />
-          <V6Stat label="Would-be W/L" value={`${invWins}/${invLosses}`} />
-          <V6Stat label="Would-have-fired" value={Number(stats.inverter_would_trigger_count ?? 0)} />
-          <V6Stat label="Ready" value={invReady ? "YES" : `${invCount}/20`} />
-        </V6Section>
-
-
-
-
-
       </div>
+
 
       <V6WarmupPanel warmup={warmup} />
 
