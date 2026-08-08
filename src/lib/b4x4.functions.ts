@@ -212,15 +212,53 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-/** Dedicated B4x4 CSV export — every tracked column, including grid snapshots. */
+/** Dedicated B4x4 CSV export — every tracked column, plus shadow market data. */
 export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
   const columns = Object.keys(rows[0]);
-  const header = columns.map((c) => `b4x4_${c}`).join(",");
-  const body = rows.map((r) => columns.map((col) => csvEscape(r[col])).join(",")).join("\n");
+
+  // Audit-only shadow market data, joined on target candle timestamp.
+  const sb = await admin();
+  const shadowByTs = new Map<string, Row>();
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_shadow_market_data")
+      .select("*")
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data as unknown as Row[]) {
+      shadowByTs.set(new Date(String(r.target_candle_ts)).toISOString(), r);
+    }
+    if (data.length < PAGE) break;
+  }
+
+  const SHADOW_COLUMNS = [
+    "id", "b4x4_prediction_id", "target_candle_ts", "collected_at", "feature_cutoff_ts",
+    "coverage_status", "error_reason", "orderbook_json", "flow_json", "regime_json",
+    "derivatives_json", "flow_direction_3m", "flow_direction_15m", "flow_3m_15m_coherent",
+    "flow_strength_percentile", "flow_strong_coherent", "flow_agrees_a2", "flow_conflicts_a2",
+    "path_efficiency_4", "path_efficiency_4_percentile", "shadow_efficiency_not_mid",
+    "attribution_json", "created_at", "updated_at",
+  ];
+
+  const header = [
+    ...columns.map((c) => `b4x4_${c}`),
+    ...SHADOW_COLUMNS.map((c) => `b4x4_shadow_${c}`),
+  ].join(",");
+  const body = rows
+    .map((r) => {
+      const s = shadowByTs.get(new Date(String(r.target_candle_ts)).toISOString()) ?? {};
+      return [
+        ...columns.map((col) => csvEscape(r[col])),
+        ...SHADOW_COLUMNS.map((col) => csvEscape(s[col])),
+      ].join(",");
+    })
+    .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
+
 
 /** Recent B4x4 rows for the Stats page history table. */
 export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async () => {
