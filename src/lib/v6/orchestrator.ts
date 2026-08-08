@@ -228,13 +228,22 @@ function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown
     feature_valid: false,
     final_prediction: "OP_FAIL",
     final_prediction_source: "OP_FAIL",
-    model_revision: V6_MODEL_REVISION,
+    model_revision: V6_R4_MODEL_REVISION,
+    model_revision_activated_at: V6_R4_ACTIVATED_AT,
     regime_inverter_evaluable: false,
     regime_inverter_triggered: false,
     regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
     abstain_status: null,
     red_threshold: V6_RED_THRESHOLD,
     green_threshold: V6_GREEN_THRESHOLD,
+    // V6-r4: the structure gate never evaluates an operational failure.
+    structure_confirmation_evaluable: false,
+    structure_confirmation_triggered: false,
+    structure_confirmation_pass: false,
+    structure_rejection_lower_wick_threshold: STRUCTURE_REJECTION_LOWER_WICK_MIN,
+    structure_rejection_aligned_wick_threshold: STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
+    structure_expansion_range_threshold: STRUCTURE_EXPANSION_RANGE_MIN,
+    structure_expansion_efficiency_threshold: STRUCTURE_EXPANSION_EFFICIENCY_MIN,
     ...extra,
   };
 }
