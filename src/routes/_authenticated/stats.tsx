@@ -19,9 +19,8 @@ import {
 } from "@/lib/predictions.functions";
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
-import { getB4x4Stats, getB4x4Pending, exportB4x4Csv, listB4x4Recent, getB4x4ObShadowAudit, exportB4x4ObShadowCsv, backfillB4x4ShadowPlaceholders } from "@/lib/b4x4.functions";
+import { getB4x4Stats, getB4x4Pending, exportB4x4Csv, listB4x4Recent } from "@/lib/b4x4.functions";
 import { B4x4Card } from "@/components/b4x4-card";
-import { B4x4ObShadowPanel } from "@/components/b4x4-ob-shadow-panel";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
