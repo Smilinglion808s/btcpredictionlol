@@ -401,6 +401,7 @@ function StatsPage() {
           title="TD2-RC"
           eyebrow="Shadow layer · compressed-risk gate"
           showCompressedRisk
+          slim
           hero={td2Hero}
           resolved={td2Resolved}
           pending={td2PendingQ.data as any}
