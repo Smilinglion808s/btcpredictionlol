@@ -68,7 +68,14 @@ export function validateHistory(value: unknown): ShadowEntry[] | null {
 function rowToCandidate(r: Record<string, unknown>): ShadowCandidate {
   return {
     target_candle_ts: String(r.target_candle_ts),
-    prediction_source: (r.prediction_source as string | null) ?? null,
+    // Original base source wins: under V6-r4 the published `prediction_source`
+    // becomes ABSTAIN when the structure gate vetoes, but the underlying
+    // V6_BASE signal must still be graded by the inverter shadow.
+    prediction_source:
+      (r.original_v6_base_source as string | null) ??
+      (r.pre_structure_source as string | null) ??
+      (r.prediction_source as string | null) ??
+      null,
     // Legacy rows predate `original_v6_base_prediction`; the base decision is
     // the original uninverted V6 direction for those rows by construction.
     original_v6_base_prediction:
@@ -82,7 +89,7 @@ function rowToCandidate(r: Record<string, unknown>): ShadowCandidate {
 }
 
 const SELECT =
-  "target_candle_ts, prediction_source, original_v6_base_prediction, base_v6_prediction, operational_status, canonical_ground_truth_valid, canonical_actual_direction, pre_weak_red_veto_prediction";
+  "target_candle_ts, prediction_source, original_v6_base_source, pre_structure_source, original_v6_base_prediction, base_v6_prediction, operational_status, canonical_ground_truth_valid, canonical_actual_direction, pre_weak_red_veto_prediction";
 
 /** Latest eligible resolved ORIGINAL V6_BASE signals, oldest → newest. */
 export async function replayShadowHistory(
@@ -93,7 +100,11 @@ export async function replayShadowHistory(
     .from("v6_predictions")
     .select(SELECT)
     .eq("model_version", V6_MODEL_VERSION)
-    .eq("prediction_source", "V6_BASE")
+    .or(
+      "original_v6_base_source.eq.V6_BASE," +
+        "and(original_v6_base_source.is.null,pre_structure_source.eq.V6_BASE)," +
+        "and(original_v6_base_source.is.null,pre_structure_source.is.null,prediction_source.eq.V6_BASE)",
+    )
     .eq("operational_status", "OK")
     .eq("canonical_ground_truth_valid", true)
     .in("canonical_actual_direction", ["GREEN", "RED"])

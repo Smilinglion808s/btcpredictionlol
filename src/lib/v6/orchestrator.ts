@@ -352,7 +352,10 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     // 18. Regime Inverter — SHADOW ONLY. It reads the published r4 decision but
     // can never modify it.
     const inverterState = await ensureInverterState(sb, targetTs);
-    const inverter = applyRegimeInverter(r4Prediction, r4Source, inverterState.summary);
+    // The inverter is a diagnostic on the underlying V6 directional
+    // relationship, so it grades the PRE-STRUCTURE (r3) call. The structure
+    // gate must never contaminate the inverter's shadow history.
+    const inverter = applyRegimeInverter(r3Prediction, r3Source, inverterState.summary);
 
     const r3AbstainReason = conflict.triggered
       ? BROAD_CONFLICT_VETO_REASON
@@ -518,8 +521,8 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       model_revision: V6_R4_MODEL_REVISION,
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
-      pre_inverter_prediction: r4Prediction,
-      pre_inverter_prediction_source: r4Source,
+      pre_inverter_prediction: r3Prediction,
+      pre_inverter_prediction_source: r3Source,
       regime_inverter_shadow_only: REGIME_INVERTER_SHADOW_ONLY,
       regime_inverter_publication_enabled: REGIME_INVERTER_PUBLICATION_ENABLED,
       regime_inverter_evaluable: inverter.evaluable,
@@ -556,7 +559,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -615,8 +618,15 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         ((r.pre_inverter_prediction as Direction | null) ?? final) ?? "ABSTAIN";
       const inverterTriggered = Boolean(r.regime_inverter_triggered) && !opFail;
       const inverterContrib = inverterContribution(inverterTriggered, preInverter, final, actual);
+      // Eligibility follows the ORIGINAL base source, not the published one:
+      // a structure-vetoed row publishes ABSTAIN but its underlying V6_BASE
+      // signal still belongs in the inverter's diagnostic window.
+      const effectiveBaseSource =
+        (r.original_v6_base_source as string | null) ??
+        (r.pre_structure_source as string | null) ??
+        (r.prediction_source as string | null);
       const shadowEligible =
-        !opFail && r.prediction_source === "V6_BASE" &&
+        !opFail && effectiveBaseSource === "V6_BASE" &&
         (originalBase === "GREEN" || originalBase === "RED") &&
         (actual === "GREEN" || actual === "RED");
       // --- V6-r3 shadow inverter accounting ---
@@ -670,8 +680,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             ? "BROAD"
             : "ANCHOR"
           : "NONE");
-      const baseSource =
-        (r.original_v6_base_source as string | null) ?? (r.prediction_source as string | null);
+      const baseSource = effectiveBaseSource;
       const broadRedEligible =
         !opFail &&
         selectedComponent === "BROAD" &&
