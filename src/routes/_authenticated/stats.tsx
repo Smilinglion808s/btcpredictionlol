@@ -988,15 +988,6 @@ function V6Card({
 
   const invWins = Number(stats.inverter_shadow_wins ?? 0);
   const invLosses = Number(stats.inverter_shadow_losses ?? 0);
-  const invTotal = invWins + invLosses;
-  const invWr = invTotal ? (invWins / invTotal) * 100 : 0;
-  const invReady = Boolean(inverter?.regime_inverter_ready);
-  const invCount = Number(inverter?.regime_inverter_history_count ?? 0);
-  const broadRedLabel = stats.broad_red_reliability_active
-    ? "vetoed"
-    : stats.broad_red_reliability_ready
-      ? "active"
-      : `warming ${Number(stats.broad_red_history_count ?? 0)}/12`;
 
   const winRate = Number(stats.win_rate ?? 0);
   const breakeven = 50;
