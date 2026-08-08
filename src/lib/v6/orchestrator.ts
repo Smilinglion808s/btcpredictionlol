@@ -57,6 +57,16 @@ import {
   REGIME_INVERTER_SHADOW_ONLY,
 } from "./r3";
 import { ensureBroadRedState, recordResolvedBroadRedSignal } from "./broadRedStore";
+import {
+  applyStructureConfirmation,
+  structureContribution,
+  STRUCTURE_EXPANSION_EFFICIENCY_MIN,
+  STRUCTURE_EXPANSION_RANGE_MIN,
+  STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
+  STRUCTURE_REJECTION_LOWER_WICK_MIN,
+  V6_R4_ACTIVATED_AT,
+  V6_R4_MODEL_REVISION,
+} from "./structure";
 
 
 const TF_MS = 15 * 60 * 1000;
