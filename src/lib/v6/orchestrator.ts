@@ -556,7 +556,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -650,6 +650,17 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         actual,
       );
 
+      // --- V6-r4 Structure Confirmation counterfactual (independent layer) ---
+      const structureTriggered = Boolean(r.structure_confirmation_triggered) && !opFail;
+      const structureUnderlying =
+        (r.structure_underlying_prediction as Direction | null) ??
+        (structureTriggered ? ((r.pre_structure_prediction as Direction | null) ?? null) : null);
+      const structureContrib = structureContribution(
+        structureTriggered,
+        structureUnderlying,
+        actual,
+      );
+
       // --- V6-r3 BROAD_RED shadow membership (original frozen signal only) ---
       const selectedComponent =
         (r.selected_component as string | null) ??
@@ -734,6 +745,15 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             reliabilityUnderlying ? adjustedScore(reliabilityUnderlying, actual) : null,
           broad_red_reliability_raw_contribution: reliabilityContrib.raw,
           broad_red_reliability_adjusted_contribution: reliabilityContrib.adjusted,
+
+          structure_underlying_prediction: structureUnderlying,
+          structure_underlying_actual_direction: structureTriggered ? actual : null,
+          structure_underlying_raw_score:
+            structureUnderlying ? rawScore(structureUnderlying, actual) : null,
+          structure_underlying_adjusted_score:
+            structureUnderlying ? adjustedScore(structureUnderlying, actual) : null,
+          structure_confirmation_raw_contribution: structureContrib.raw,
+          structure_confirmation_adjusted_contribution: structureContrib.adjusted,
 
           broad_red_shadow_prediction: broadRedEligible ? "RED" : null,
           broad_red_shadow_adjusted_score: broadRedEligible ? adjustedScore("RED", actual) : null,
