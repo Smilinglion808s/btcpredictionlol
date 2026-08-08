@@ -29,6 +29,7 @@ function isDirectional(v: unknown): v is Directional {
 }
 
 function finite(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 }
