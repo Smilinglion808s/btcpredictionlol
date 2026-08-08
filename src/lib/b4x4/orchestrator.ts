@@ -219,8 +219,8 @@ export async function runB4x4ForA2Combined(
     // ---- Order-book shadow capture (shadow only, never blocks B4x4). ----
     if (saved && saved.run_mode === "LIVE") {
       try {
-        const { persistB4x4ShadowSafe } = await import("./shadow/persist.server");
-        persistB4x4ShadowSafe(supabase, {
+        const { persistB4x4Shadow } = await import("./shadow/persist.server");
+        await persistB4x4Shadow(supabase, {
           id: String(saved.id),
           target_candle_ts: String(saved.target_candle_ts),
           run_mode: "LIVE",
