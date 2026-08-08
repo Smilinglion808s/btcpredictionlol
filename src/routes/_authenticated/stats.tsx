@@ -1151,6 +1151,46 @@ function V6Card({
           <V6Stat label="Avoided losses" value={Number(stats.broad_red_avoided_losses ?? 0)} tone="bull" />
         </V6Section>
 
+        <V6Section title="Structure confirmation · V6-r4">
+          <V6Stat label="Directional candidates" value={Number(stats.structure_candidates ?? 0)} />
+          <V6Stat label="Passed structure" value={Number(stats.structure_passed ?? 0)} tone="bull" />
+          <V6Stat label="Vetoed by structure" value={Number(stats.structure_vetoes ?? 0)} tone="bear" />
+          <V6Stat label="Pass rate" value={`${Number(stats.structure_pass_rate ?? 0)}%`} />
+          <V6Stat label="Rejection passes" value={Number(stats.structure_rejection_passes ?? 0)} />
+          <V6Stat label="Expansion passes" value={Number(stats.structure_expansion_passes ?? 0)} />
+          <V6Stat label="Both structures" value={Number(stats.structure_both_passes ?? 0)} />
+          <V6Stat label="Avoided losses" value={Number(stats.structure_avoided_losses ?? 0)} tone="bull" />
+          <V6Stat label="Sacrificed wins" value={Number(stats.structure_sacrificed_wins ?? 0)} tone="bear" />
+          <V6Stat label="Raw contribution" value={fmt(stats.structure_raw)} />
+          <V6Stat label="Adjusted contribution" value={fmt(stats.structure_adjusted)} />
+          <V6Stat label="Coverage before gate" value={`${Number(stats.coverage_before_structure_gate ?? 0)}%`} />
+          <V6Stat label="Coverage after gate" value={`${Number(stats.coverage_after_structure_gate ?? 0)}%`} />
+          <V6Stat label="Rejection rule" value="wick ≥ 0.40 · aligned ≥ 0.00" />
+          <V6Stat label="Expansion rule" value="range ≥ 0.80 · eff ≥ 0.30" />
+          <V6Stat
+            label="Current rejection"
+            value={pending?.structure_rejection_pass == null ? "—" : pending.structure_rejection_pass ? "PASS" : "FAIL"}
+            tone={pending?.structure_rejection_pass ? "bull" : "bear"}
+          />
+          <V6Stat
+            label="Current expansion"
+            value={pending?.structure_expansion_pass == null ? "—" : pending.structure_expansion_pass ? "PASS" : "FAIL"}
+            tone={pending?.structure_expansion_pass ? "bull" : "bear"}
+          />
+          <V6Stat
+            label="Structure confirmation"
+            value={
+              pending?.structure_confirmation_evaluable
+                ? pending.structure_confirmation_pass
+                  ? "PASS"
+                  : "VETO"
+                : "—"
+            }
+            tone={pending?.structure_confirmation_pass ? "bull" : "bear"}
+          />
+          <V6Stat label="Pre-structure call" value={pending?.pre_structure_prediction ?? "—"} />
+        </V6Section>
+
         <V6Section title="Regime inverter · shadow only">
           <V6Stat label="Would-be win rate" value={invTotal ? `${invWr.toFixed(1)}%` : "—"} tone="violet" />
           <V6Stat label="Would-be W/L" value={`${invWins}/${invLosses}`} />
