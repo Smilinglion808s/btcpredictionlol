@@ -364,10 +364,12 @@ export async function runB4x4ForA2Combined(
 
 /**
  * Master kill switch for B4x4 outbound directional webhooks.
- * Held OFF pending activation; engine, persistence, resolution, dashboard and
- * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
+ * Disabled for the b4x4-v1-grid768-obfresh-fix1 repair: stays OFF until live
+ * acceptance checks pass and re-enabling is explicitly authorized.
+ * Engine, persistence, resolution, dashboard and CSV logging are unaffected.
  */
-export const B4X4_WEBHOOKS_ENABLED = true;
+export const B4X4_WEBHOOKS_ENABLED = false;
+
 
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
