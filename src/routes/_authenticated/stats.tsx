@@ -1030,6 +1030,7 @@ function V6Card({
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.28em] text-violet/80 mb-1">Frozen forward test</div>
           <h3 className="v6-title text-4xl font-bold font-heading tracking-tight leading-none">V6</h3>
+          <div className="text-[10px] text-muted-foreground mt-1">V6-r4 Structure Confirmation</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
