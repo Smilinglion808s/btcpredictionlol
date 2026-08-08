@@ -31,6 +31,8 @@ export interface ShadowPredictionRef {
 
 export interface SnapshotInput {
   event_ts?: string | null;
+  local_receipt_ts?: string | null;
+  cutoff_ts?: string | null;
   book_json?: Book | null;
   trades_json?: Trade[] | null;
   seq_id?: string | null;
@@ -39,7 +41,12 @@ export interface SnapshotInput {
   sequence_gap?: boolean | null;
   sequence_gap_count?: number | null;
   trade_window_start_ts?: string | null;
+  trade_window_complete?: boolean | null;
   captured_at?: string | null;
+  capture_attempt_count?: number | null;
+  capture_attempts_json?: unknown;
+  chosen_attempt_id?: string | null;
+  capture_error_list?: unknown;
   error_code?: string | null;
   error_message?: string | null;
 }
@@ -51,6 +58,7 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
   const targetMs = new Date(pred.target_candle_ts).getTime();
   const cutoffMs = targetMs - 1;
   const eventMs = snap?.event_ts ? new Date(snap.event_ts).getTime() : null;
+  const receiptMs = snap?.local_receipt_ts ? new Date(snap.local_receipt_ts).getTime() : null;
   const { status, ageMs } = classifyCapture({
     hasSnapshot: !!snap && !!snap.book_json,
     errorCode: snap?.error_code ?? null,
@@ -58,7 +66,9 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
     cutoffMs,
     sequenceGap: snap?.sequence_gap ?? null,
     bookComplete: snap?.book_complete ?? null,
+    localReceiptMs: receiptMs,
   });
+
 
   const base: Row = {
     b4x4_prediction_id: pred.id,
@@ -74,8 +84,16 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
     coverage_status: status,
     snapshot_event_ts: snap?.event_ts ?? null,
     snapshot_received_at: snap?.captured_at ?? null,
+    snapshot_local_receipt_ts: snap?.local_receipt_ts ?? null,
+    snapshot_cutoff_ts: snap?.cutoff_ts ?? new Date(cutoffMs).toISOString(),
     snapshot_persisted_at: new Date().toISOString(),
     snapshot_age_ms: ageMs,
+    capture_attempt_count: snap?.capture_attempt_count ?? null,
+    capture_attempts_json: snap?.capture_attempts_json ?? null,
+    chosen_attempt_id: snap?.chosen_attempt_id ?? null,
+    capture_error_list: snap?.capture_error_list ?? null,
+    trade_window_complete: snap?.trade_window_complete ?? null,
+
     source_seq_id: snap?.seq_id ?? null,
     prev_seq_id: snap?.prev_seq_id ?? null,
     sequence_gap: snap?.sequence_gap ?? null,
@@ -107,12 +125,17 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
   const bufferStart = snap?.trade_window_start_ts
     ? new Date(snap.trade_window_start_ts).getTime()
     : null;
-  const flow = computeTradeFlow(snap?.trades_json ?? [], cutoffMs, bufferStart);
+  // Trade-window completeness is independent from book validity: never
+  // fabricate trade-derived fields when no trade buffer was captured.
+  const tradesAvailable = Array.isArray(snap?.trades_json);
+  const flow = tradesAvailable
+    ? computeTradeFlow(snap?.trades_json ?? [], cutoffMs, bufferStart)
+    : null;
   const labels = computeFlowLabels({
     micropriceOffsetBps: top.microprice_offset_bps,
     spreadBps: top.spread_bps,
     queueImbalanceTop5: depth.queue_imbalance_top5,
-    takerDelta3m: flow.taker_delta_3m,
+    takerDelta3m: flow?.taker_delta_3m ?? null,
   });
   const relationship = flowRelationship(labels.flow_direction, pred.raw_direction);
 
@@ -128,28 +151,30 @@ export function buildShadowRow(pred: ShadowPredictionRef, snap: SnapshotInput | 
     depth_imbalance_5bps: depth.depth_imbalance_5bps,
     depth_imbalance_10bps: depth.depth_imbalance_10bps,
     depth_imbalance_25bps: depth.depth_imbalance_25bps,
-    flow_json: flow.windows,
-    trade_flow_json: flow.windows,
-    taker_delta_30s: flow.taker_delta_30s,
-    taker_delta_2m: flow.taker_delta_2m,
-    taker_delta_3m: flow.taker_delta_3m,
-    taker_delta_5m: flow.taker_delta_5m,
-    taker_delta_15m: flow.taker_delta_15m,
-    cvd_3m: flow.cvd_3m,
-    trade_event_count: flow.trade_event_count,
-    trade_windows_complete: flow.all_windows_complete,
+    flow_json: flow?.windows ?? null,
+    trade_flow_json: flow?.windows ?? null,
+    taker_delta_30s: flow?.taker_delta_30s ?? null,
+    taker_delta_2m: flow?.taker_delta_2m ?? null,
+    taker_delta_3m: flow?.taker_delta_3m ?? null,
+    taker_delta_5m: flow?.taker_delta_5m ?? null,
+    taker_delta_15m: flow?.taker_delta_15m ?? null,
+    cvd_3m: flow?.cvd_3m ?? null,
+    trade_event_count: flow?.trade_event_count ?? null,
+    trade_windows_complete: flow?.all_windows_complete ?? false,
+    trade_window_complete: snap?.trade_window_complete ?? (flow?.all_windows_complete ?? false),
     flow_component_count: labels.flow_component_count,
     flow_composite_score: labels.flow_composite_score,
     flow_direction: labels.flow_direction,
     flow_strength: labels.flow_strength,
     flow_coherent: labels.flow_coherent,
     flow_strong_coherent: labels.flow_strong_coherent,
-    flow_direction_3m: flow.taker_delta_3m == null ? null : flow.taker_delta_3m > 0 ? "GREEN" : flow.taker_delta_3m < 0 ? "RED" : "NEUTRAL",
-    flow_direction_15m: flow.taker_delta_15m == null ? null : flow.taker_delta_15m > 0 ? "GREEN" : flow.taker_delta_15m < 0 ? "RED" : "NEUTRAL",
+    flow_direction_3m: flow?.taker_delta_3m == null ? null : flow.taker_delta_3m > 0 ? "GREEN" : flow.taker_delta_3m < 0 ? "RED" : "NEUTRAL",
+    flow_direction_15m: flow?.taker_delta_15m == null ? null : flow.taker_delta_15m > 0 ? "GREEN" : flow.taker_delta_15m < 0 ? "RED" : "NEUTRAL",
     raw_direction_relationship: relationship,
     flow_agrees_a2: relationship === "AGREE",
     flow_conflicts_a2: relationship === "CONFLICT",
   };
+
 }
 
 /**

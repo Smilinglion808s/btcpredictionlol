@@ -38,6 +38,7 @@ export type DecisionReason =
   | "ABSTAIN_SOURCE_HISTORY_INVALID"
   | "ABSTAIN_WARMUP_SOURCE_HISTORY"
   | "ABSTAIN_WARMUP_GRID_HISTORY"
+  | "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE"
   | "ABSTAIN_GRID_REFERENCE_INVALID"
   | "ABSTAIN_NO_ACTIVE_ROUTE"
   | "ABSTAIN_INTRADAY_BRAKE"
@@ -50,9 +51,11 @@ export const OPERATIONAL_ABSTAIN_REASONS = new Set<string>([
   "ABSTAIN_SOURCE_HISTORY_INVALID",
   "ABSTAIN_WARMUP_SOURCE_HISTORY",
   "ABSTAIN_WARMUP_GRID_HISTORY",
+  "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE",
   "ABSTAIN_GRID_REFERENCE_INVALID",
   "ABSTAIN_INTERNAL_ERROR",
 ]);
+
 
 /** One canonical A2_Combined observation, ordered oldest → newest by caller. */
 export interface SourceRow {
@@ -119,6 +122,12 @@ export interface B4x4Decision {
   sameSideRankQuartile: number | null;
   qualityMean: number | null;
   // grid
+  /** Absolute zero-based source position of THIS row since the frozen epoch. */
+  sourceIndexAbsolute: number;
+  /** Source positions contained in the training window [max(384, i-768), i). */
+  gridTrainingSourceCount: number;
+  gridTrainingStartIndex: number | null;
+  gridTrainingEndIndex: number | null;
   gridTrainingResolvedCount: number;
   gridTrainingStartTs: string | null;
   gridTrainingEndTs: string | null;
@@ -128,8 +137,14 @@ export interface B4x4Decision {
   gridCellLosses: number | null;
   pCorrect: number | null;
   gridReferenceCount: number;
+  gridReferenceSourceCount: number;
+  gridReferenceStartIndex: number | null;
+  gridReferenceEndIndex: number | null;
+  gridReferenceStartTs: string | null;
+  gridReferenceEndTs: string | null;
   gridQualityPercentile: number | null;
   gridSnapshot: GridCell[] | null;
+
   // decision
   coreEligible: boolean;
   expansionEligible: boolean;
@@ -238,16 +253,32 @@ function abstain(
   return { ...base, ...partial, finalPrediction: null, wouldTrade: false, decisionReason: reason };
 }
 
+/** Optional absolute-position context. Never derived from a bounded slice. */
+export interface B4x4IndexContext {
+  /**
+   * Absolute zero-based position of THIS row among valid canonical source rows
+   * since the frozen source epoch. Defaults to `history.length` (full replay).
+   */
+  absoluteIndex?: number;
+}
+
 /**
  * Evaluate one source row against its strictly-earlier history.
  * `history` must be ordered oldest → newest and contain only valid prior rows.
+ * When `history` is a bounded tail slice, `ctx.absoluteIndex` MUST be supplied:
+ * every window is computed on absolute source positions and then mapped into
+ * the local array. Never apply the window formula to a local array index.
  */
 export function evaluateB4x4(
   row: SourceRow,
   history: HistoryEntry[],
   daily: DailyState,
+  ctx: B4x4IndexContext = {},
 ): B4x4Decision {
   const localDate = daily.localDate || b4x4LocalDate(row.candleTs);
+  const iAbs = ctx.absoluteIndex ?? history.length;
+  // Absolute position of history[0]; 0 when the full history is present.
+  const historyBase = iAbs - history.length;
   const base: B4x4Decision = {
     probabilityGreen: row.probabilityGreen,
     rawDirection: null,
@@ -265,6 +296,10 @@ export function evaluateB4x4(
     globalRankQuartile: null,
     sameSideRankQuartile: null,
     qualityMean: null,
+    sourceIndexAbsolute: iAbs,
+    gridTrainingSourceCount: 0,
+    gridTrainingStartIndex: null,
+    gridTrainingEndIndex: null,
     gridTrainingResolvedCount: 0,
     gridTrainingStartTs: null,
     gridTrainingEndTs: null,
@@ -274,8 +309,14 @@ export function evaluateB4x4(
     gridCellLosses: null,
     pCorrect: null,
     gridReferenceCount: 0,
+    gridReferenceSourceCount: 0,
+    gridReferenceStartIndex: null,
+    gridReferenceEndIndex: null,
+    gridReferenceStartTs: null,
+    gridReferenceEndTs: null,
     gridQualityPercentile: null,
     gridSnapshot: null,
+
     coreEligible: false,
     expansionEligible: false,
     baseCandidate: false,
@@ -368,8 +409,8 @@ export function evaluateB4x4(
     historyEntry,
   };
 
-  // ---- warmup: total prior valid source rows ----
-  if (history.length < MIN_SOURCE_HISTORY) {
+  // ---- warmup: total prior valid source rows (ABSOLUTE position) ----
+  if (iAbs < MIN_SOURCE_HISTORY) {
     return abstain(withRanks, "ABSTAIN_WARMUP_SOURCE_HISTORY", base);
   }
   if (globalRank == null || sameSideRank == null || qualityMean == null) {
@@ -377,13 +418,22 @@ export function evaluateB4x4(
   }
 
   // ---- rolling 4x4 grid ----
-  // Grid training rows are [max(384, i - 768), i) filtered to resolved rows.
+  // Grid training rows are the ABSOLUTE source positions
+  // [max(384, i - 768), i), filtered to resolved rows.
   // There is no minimum resolved-count or cell-count gate; Beta(8,8) smooths.
-  const i = history.length;
-  const trainStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_TRAINING_LOOKBACK);
-  const trainingPool = history
-    .slice(trainStart, i)
-    .filter((h) => hasValidRanks(h) && h.correct != null);
+  const trainStartAbs = Math.max(GRID_REFERENCE_LOOKBACK, iAbs - GRID_TRAINING_LOOKBACK);
+  const trainStartLocal = trainStartAbs - historyBase;
+  const iLocal = iAbs - historyBase;
+  if (trainStartLocal < 0 || iLocal > history.length) {
+    // The supplied slice does not cover the full frozen source window.
+    return abstain(
+      { ...withRanks, gridTrainingStartIndex: trainStartAbs, gridTrainingEndIndex: iAbs },
+      "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE",
+      base,
+    );
+  }
+  const trainingSource = history.slice(trainStartLocal, iLocal);
+  const trainingPool = trainingSource.filter((h) => hasValidRanks(h) && h.correct != null);
 
   const cells = buildGrid(trainingPool);
   const key = cellKey(globalQuartile!, sameSideQuartile!);
@@ -392,9 +442,12 @@ export function evaluateB4x4(
 
   const withGrid: Partial<B4x4Decision> = {
     ...withRanks,
+    gridTrainingSourceCount: trainingSource.length,
+    gridTrainingStartIndex: trainStartAbs,
+    gridTrainingEndIndex: iAbs,
     gridTrainingResolvedCount: trainingPool.length,
-    gridTrainingStartTs: trainingPool[0]?.candleTs ?? null,
-    gridTrainingEndTs: trainingPool[trainingPool.length - 1]?.candleTs ?? null,
+    gridTrainingStartTs: trainingSource[0]?.candleTs ?? null,
+    gridTrainingEndTs: trainingSource[trainingSource.length - 1]?.candleTs ?? null,
     gridCell: key,
     gridCellResolvedCount: cell.resolvedCount,
     gridCellWins: cell.wins,
@@ -404,15 +457,23 @@ export function evaluateB4x4(
   };
 
   // ---- grid quality percentile ----
-  // Reference rows are [max(384, i - 384), i) and INCLUDE unresolved rows.
-  const refStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_REFERENCE_LOOKBACK);
-  const referencePool = history.slice(refStart, i).filter(hasValidRanks);
+  // Reference rows are absolute positions [max(384, i - 384), i) and INCLUDE
+  // unresolved rows.
+  const refStartAbs = Math.max(GRID_REFERENCE_LOOKBACK, iAbs - GRID_REFERENCE_LOOKBACK);
+  const referenceSource = history.slice(refStartAbs - historyBase, iLocal);
+  const referencePool = referenceSource.filter(hasValidRanks);
   const percentile = gridQualityPercentile(referencePool, cells, cell.pCorrect, qualityMean!);
   const withPercentile: Partial<B4x4Decision> = {
     ...withGrid,
     gridReferenceCount: referencePool.length,
+    gridReferenceSourceCount: referenceSource.length,
+    gridReferenceStartIndex: refStartAbs,
+    gridReferenceEndIndex: iAbs,
+    gridReferenceStartTs: referenceSource[0]?.candleTs ?? null,
+    gridReferenceEndTs: referenceSource[referenceSource.length - 1]?.candleTs ?? null,
     gridQualityPercentile: percentile,
   };
+
   if (percentile == null) {
     return abstain(withPercentile, "ABSTAIN_GRID_REFERENCE_INVALID", base);
   }

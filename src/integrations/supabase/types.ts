@@ -458,14 +458,20 @@ export type Database = {
         Row: {
           book_complete: boolean | null
           book_json: Json | null
+          capture_attempt_count: number | null
+          capture_attempts_json: Json | null
+          capture_error_list: Json | null
           captured_at: string
+          chosen_attempt_id: string | null
           created_at: string
+          cutoff_ts: string | null
           error_code: string | null
           error_message: string | null
           event_ts: string | null
           feature_cutoff_ts: string | null
           id: string
           instrument: string
+          local_receipt_ts: string | null
           prev_seq_id: string | null
           provider: string
           seq_id: string | null
@@ -474,6 +480,7 @@ export type Database = {
           shadow_version: string
           target_candle_ts: string
           trade_event_count: number | null
+          trade_window_complete: boolean | null
           trade_window_start_ts: string | null
           trades_json: Json | null
           updated_at: string
@@ -481,14 +488,20 @@ export type Database = {
         Insert: {
           book_complete?: boolean | null
           book_json?: Json | null
+          capture_attempt_count?: number | null
+          capture_attempts_json?: Json | null
+          capture_error_list?: Json | null
           captured_at?: string
+          chosen_attempt_id?: string | null
           created_at?: string
+          cutoff_ts?: string | null
           error_code?: string | null
           error_message?: string | null
           event_ts?: string | null
           feature_cutoff_ts?: string | null
           id?: string
           instrument?: string
+          local_receipt_ts?: string | null
           prev_seq_id?: string | null
           provider?: string
           seq_id?: string | null
@@ -497,6 +510,7 @@ export type Database = {
           shadow_version?: string
           target_candle_ts: string
           trade_event_count?: number | null
+          trade_window_complete?: boolean | null
           trade_window_start_ts?: string | null
           trades_json?: Json | null
           updated_at?: string
@@ -504,14 +518,20 @@ export type Database = {
         Update: {
           book_complete?: boolean | null
           book_json?: Json | null
+          capture_attempt_count?: number | null
+          capture_attempts_json?: Json | null
+          capture_error_list?: Json | null
           captured_at?: string
+          chosen_attempt_id?: string | null
           created_at?: string
+          cutoff_ts?: string | null
           error_code?: string | null
           error_message?: string | null
           event_ts?: string | null
           feature_cutoff_ts?: string | null
           id?: string
           instrument?: string
+          local_receipt_ts?: string | null
           prev_seq_id?: string | null
           provider?: string
           seq_id?: string | null
@@ -520,6 +540,7 @@ export type Database = {
           shadow_version?: string
           target_candle_ts?: string
           trade_event_count?: number | null
+          trade_window_complete?: boolean | null
           trade_window_start_ts?: string | null
           trades_json?: Json | null
           updated_at?: string
@@ -542,6 +563,8 @@ export type Database = {
           base_no_brake_counterfactual_trade: boolean | null
           brake_attribution_class: string | null
           brake_incremental_value: number | null
+          catchup_resolution_error: string | null
+          catchup_resolution_status: string | null
           confidence: number | null
           config_hash: string | null
           core_eligible: boolean | null
@@ -571,12 +594,21 @@ export type Database = {
           grid_prior_beta: number | null
           grid_quality_percentile: number | null
           grid_reference_count: number | null
+          grid_reference_end_index: number | null
+          grid_reference_end_ts: string | null
+          grid_reference_source_count: number | null
+          grid_reference_start_index: number | null
+          grid_reference_start_ts: string | null
           grid_snapshot_json: Json | null
+          grid_training_end_index: number | null
           grid_training_end_ts: string | null
           grid_training_lookback: number | null
           grid_training_resolved_count: number | null
+          grid_training_source_count: number | null
+          grid_training_start_index: number | null
           grid_training_start_ts: string | null
           id: string
+          implementation_revision: string | null
           intraday_brake_active: boolean | null
           intraday_brake_veto_fired: boolean | null
           last_resolution_attempt_at: string | null
@@ -595,6 +627,7 @@ export type Database = {
           resolved_at: string | null
           result: string | null
           result_score: number | null
+          revision_activated_at: string | null
           run_mode: string
           same_side_history_count: number | null
           same_side_history_end_ts: string | null
@@ -603,6 +636,7 @@ export type Database = {
           same_side_rank_quartile: number | null
           selected_route: string | null
           source_a2_row_id: string | null
+          source_index_absolute: number | null
           source_prediction_id: string | null
           target_candle_ts: string
           timing_status: string | null
@@ -627,6 +661,8 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          catchup_resolution_error?: string | null
+          catchup_resolution_status?: string | null
           confidence?: number | null
           config_hash?: string | null
           core_eligible?: boolean | null
@@ -656,12 +692,21 @@ export type Database = {
           grid_prior_beta?: number | null
           grid_quality_percentile?: number | null
           grid_reference_count?: number | null
+          grid_reference_end_index?: number | null
+          grid_reference_end_ts?: string | null
+          grid_reference_source_count?: number | null
+          grid_reference_start_index?: number | null
+          grid_reference_start_ts?: string | null
           grid_snapshot_json?: Json | null
+          grid_training_end_index?: number | null
           grid_training_end_ts?: string | null
           grid_training_lookback?: number | null
           grid_training_resolved_count?: number | null
+          grid_training_source_count?: number | null
+          grid_training_start_index?: number | null
           grid_training_start_ts?: string | null
           id?: string
+          implementation_revision?: string | null
           intraday_brake_active?: boolean | null
           intraday_brake_veto_fired?: boolean | null
           last_resolution_attempt_at?: string | null
@@ -680,6 +725,7 @@ export type Database = {
           resolved_at?: string | null
           result?: string | null
           result_score?: number | null
+          revision_activated_at?: string | null
           run_mode?: string
           same_side_history_count?: number | null
           same_side_history_end_ts?: string | null
@@ -688,6 +734,7 @@ export type Database = {
           same_side_rank_quartile?: number | null
           selected_route?: string | null
           source_a2_row_id?: string | null
+          source_index_absolute?: number | null
           source_prediction_id?: string | null
           target_candle_ts: string
           timing_status?: string | null
@@ -712,6 +759,8 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          catchup_resolution_error?: string | null
+          catchup_resolution_status?: string | null
           confidence?: number | null
           config_hash?: string | null
           core_eligible?: boolean | null
@@ -741,12 +790,21 @@ export type Database = {
           grid_prior_beta?: number | null
           grid_quality_percentile?: number | null
           grid_reference_count?: number | null
+          grid_reference_end_index?: number | null
+          grid_reference_end_ts?: string | null
+          grid_reference_source_count?: number | null
+          grid_reference_start_index?: number | null
+          grid_reference_start_ts?: string | null
           grid_snapshot_json?: Json | null
+          grid_training_end_index?: number | null
           grid_training_end_ts?: string | null
           grid_training_lookback?: number | null
           grid_training_resolved_count?: number | null
+          grid_training_source_count?: number | null
+          grid_training_start_index?: number | null
           grid_training_start_ts?: string | null
           id?: string
+          implementation_revision?: string | null
           intraday_brake_active?: boolean | null
           intraday_brake_veto_fired?: boolean | null
           last_resolution_attempt_at?: string | null
@@ -765,6 +823,7 @@ export type Database = {
           resolved_at?: string | null
           result?: string | null
           result_score?: number | null
+          revision_activated_at?: string | null
           run_mode?: string
           same_side_history_count?: number | null
           same_side_history_end_ts?: string | null
@@ -773,6 +832,7 @@ export type Database = {
           same_side_rank_quartile?: number | null
           selected_route?: string | null
           source_a2_row_id?: string | null
+          source_index_absolute?: number | null
           source_prediction_id?: string | null
           target_candle_ts?: string
           timing_status?: string | null
@@ -803,7 +863,11 @@ export type Database = {
           best_bid_price: number | null
           best_bid_qty: number | null
           book_complete: boolean | null
+          capture_attempt_count: number | null
+          capture_attempts_json: Json | null
+          capture_error_list: Json | null
           capture_status: string | null
+          chosen_attempt_id: string | null
           collected_at: string
           collector_error_code: string | null
           collector_error_message: string | null
@@ -856,7 +920,9 @@ export type Database = {
           shadow_resolved_at: string | null
           shadow_version: string | null
           snapshot_age_ms: number | null
+          snapshot_cutoff_ts: string | null
           snapshot_event_ts: string | null
+          snapshot_local_receipt_ts: string | null
           snapshot_persisted_at: string | null
           snapshot_received_at: string | null
           source_seq_id: string | null
@@ -870,6 +936,7 @@ export type Database = {
           target_candle_ts: string
           trade_event_count: number | null
           trade_flow_json: Json | null
+          trade_window_complete: boolean | null
           trade_windows_complete: boolean | null
           updated_at: string
           used_in_decision: boolean
@@ -892,7 +959,11 @@ export type Database = {
           best_bid_price?: number | null
           best_bid_qty?: number | null
           book_complete?: boolean | null
+          capture_attempt_count?: number | null
+          capture_attempts_json?: Json | null
+          capture_error_list?: Json | null
           capture_status?: string | null
+          chosen_attempt_id?: string | null
           collected_at?: string
           collector_error_code?: string | null
           collector_error_message?: string | null
@@ -945,7 +1016,9 @@ export type Database = {
           shadow_resolved_at?: string | null
           shadow_version?: string | null
           snapshot_age_ms?: number | null
+          snapshot_cutoff_ts?: string | null
           snapshot_event_ts?: string | null
+          snapshot_local_receipt_ts?: string | null
           snapshot_persisted_at?: string | null
           snapshot_received_at?: string | null
           source_seq_id?: string | null
@@ -959,6 +1032,7 @@ export type Database = {
           target_candle_ts: string
           trade_event_count?: number | null
           trade_flow_json?: Json | null
+          trade_window_complete?: boolean | null
           trade_windows_complete?: boolean | null
           updated_at?: string
           used_in_decision?: boolean
@@ -981,7 +1055,11 @@ export type Database = {
           best_bid_price?: number | null
           best_bid_qty?: number | null
           book_complete?: boolean | null
+          capture_attempt_count?: number | null
+          capture_attempts_json?: Json | null
+          capture_error_list?: Json | null
           capture_status?: string | null
+          chosen_attempt_id?: string | null
           collected_at?: string
           collector_error_code?: string | null
           collector_error_message?: string | null
@@ -1034,7 +1112,9 @@ export type Database = {
           shadow_resolved_at?: string | null
           shadow_version?: string | null
           snapshot_age_ms?: number | null
+          snapshot_cutoff_ts?: string | null
           snapshot_event_ts?: string | null
+          snapshot_local_receipt_ts?: string | null
           snapshot_persisted_at?: string | null
           snapshot_received_at?: string | null
           source_seq_id?: string | null
@@ -1048,6 +1128,7 @@ export type Database = {
           target_candle_ts?: string
           trade_event_count?: number | null
           trade_flow_json?: Json | null
+          trade_window_complete?: boolean | null
           trade_windows_complete?: boolean | null
           updated_at?: string
           used_in_decision?: boolean
@@ -5304,6 +5385,10 @@ export type Database = {
       }
       arm_b4_2_probe: {
         Args: { p_date_mt: string; p_prediction_id: string }
+        Returns: Json
+      }
+      b4x4_begin_resolution_attempt: {
+        Args: { p_model_version: string; p_target_candle_ts: string }
         Returns: Json
       }
       consume_td1_containment_slot: {
