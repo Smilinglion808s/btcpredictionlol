@@ -336,6 +336,8 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       inf.selectedComponent,
       broadRedState.summary,
     );
+    const r3Prediction = reliability.prediction;
+    const r3Source = reliability.predictionSource;
 
     // --- V6-r4 steps 13-17: Structure Confirmation Gate --------------------
     // Applies to EVERY surviving directional r3 publication regardless of the
