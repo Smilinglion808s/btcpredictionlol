@@ -401,6 +401,7 @@ function StatsPage() {
           title="TD2-RC"
           eyebrow="Shadow layer · compressed-risk gate"
           showCompressedRisk
+          slim
           hero={td2Hero}
           resolved={td2Resolved}
           pending={td2PendingQ.data as any}
@@ -648,6 +649,7 @@ function TD1Card({
   title = "TD1-RC",
   eyebrow = "Active layer",
   showCompressedRisk = true,
+  slim = false,
   hero,
   resolved,
   pending,
@@ -660,6 +662,7 @@ function TD1Card({
   title?: string;
   eyebrow?: string;
   showCompressedRisk?: boolean;
+  slim?: boolean;
   hero: Record<string, any>;
   resolved: number;
   pending: Record<string, any> | null;
@@ -794,8 +797,20 @@ function TD1Card({
       {(() => {
         const rc = (hero as Record<string, any>).recovery as Record<string, any> | null;
         if (!rc || !showCompressedRisk) return null;
-        const r1 = (rc.r1_counterfactual ?? {}) as Record<string, any>;
         const inc = Number(rc.incremental_net ?? 0);
+        if (slim) {
+          return (
+            <div className="relative mt-4">
+              <TD1Section title={`Recovery · ${rc.policy_version}`}>
+                <TD1Stat label="Recovered" value={Number(rc.recovered ?? 0)} tone="bull" />
+                <TD1Stat label="Recovered W/L" value={`${Number(rc.recovered_wins ?? 0)}/${Number(rc.recovered_losses ?? 0)}`} />
+                <TD1Stat label="Incremental net" value={`${inc > 0 ? "+" : ""}${inc}`} tone={inc >= 0 ? "bull" : "bear"} />
+                <TD1Stat label="Evaluable" value={Number(rc.evaluable ?? 0)} />
+              </TD1Section>
+            </div>
+          );
+        }
+        const r1 = (rc.r1_counterfactual ?? {}) as Record<string, any>;
         return (
           <div className="relative mt-4">
             <TD1Section title={`Opposing drift recovery · ${rc.policy_version} · ${rc.feature} ≥ ${rc.threshold}`}>
@@ -817,12 +832,25 @@ function TD1Card({
 
       {(() => {
         const cr = hero.compressed_risk as Record<string, any> | null;
-
         if (!cr || !showCompressedRisk) return null;
         const cur = (cr.current_policy ?? {}) as Record<string, any>;
         const prev = (cr.previous_policy ?? {}) as Record<string, any>;
         const nog = (cr.no_global_veto_policy ?? {}) as Record<string, any>;
         const daily = (cr.daily ?? []) as Array<Record<string, any>>;
+        if (slim) {
+          return (
+            <div className="relative mt-4">
+              <TD1Section title={`Compressed-risk · ${cr.policy_version}`}>
+                <TD1Stat label="Veto rate" value={`${Number(cr.veto_rate ?? 0).toFixed(1)}%`} />
+                <TD1Stat label="Avoided losses" value={Number(cr.avoided_losses ?? 0)} tone="bull" />
+                <TD1Stat label="Sacrificed wins" value={Number(cr.sacrificed_wins ?? 0)} tone="bear" />
+                <TD1Stat label="Net veto value" value={Number(cr.net_veto_value ?? 0)} tone={Number(cr.net_veto_value ?? 0) >= 0 ? "bull" : "bear"} />
+                <TD1Stat label="Live net" value={`${Number(cur.net ?? 0) > 0 ? "+" : ""}${Number(cur.net ?? 0)}`} tone={Number(cur.net ?? 0) >= 0 ? "bull" : "bear"} />
+                <TD1Stat label="Prev net" value={`${Number(prev.net ?? 0) > 0 ? "+" : ""}${Number(prev.net ?? 0)}`} tone={Number(prev.net ?? 0) >= 0 ? "bull" : "bear"} />
+              </TD1Section>
+            </div>
+          );
+        }
         return (
           <div className="relative mt-4">
             <TD1Section title={`Compressed-risk audit · ${cr.policy_version} · ≥ ${cr.threshold} · ${cr.attribution_version ?? "policy-delta-v2"}`}>
