@@ -53,7 +53,7 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
   const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
-    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution",
+    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution, structure_confirmation_evaluable, structure_rejection_pass, structure_expansion_pass, structure_confirmation_pass, structure_confirmation_triggered, structure_confirmation_raw_contribution, structure_confirmation_adjusted_contribution, pre_structure_prediction",
     resetAt,
   );
 
@@ -97,6 +97,12 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     broad_red_vetoes: 0, broad_red_avoided_losses: 0, broad_red_sacrificed_wins: 0,
     broad_red_raw: 0, broad_red_adjusted: 0,
     broad_red_shadow_wins: 0, broad_red_shadow_losses: 0,
+    // Structure Confirmation Gate (V6-r4)
+    structure_candidates: 0, structure_passed: 0, structure_vetoes: 0,
+    structure_rejection_passes: 0, structure_expansion_passes: 0, structure_both_passes: 0,
+    structure_avoided_losses: 0, structure_sacrificed_wins: 0,
+    structure_raw: 0, structure_adjusted: 0,
+    structure_scored_directional_candidates: 0,
     // Regime Inverter — shadow only (V6-r3)
     inverter_would_trigger_count: 0, inverter_shadow_wins: 0, inverter_shadow_losses: 0,
     inverter_shadow_raw_contribution: 0, inverter_shadow_adjusted_contribution: 0,
@@ -151,6 +157,18 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       c.broad_conflict_last_anchor_distance = Number(r.broad_conflict_anchor_distance);
     }
     if (r.broad_red_reliability_veto_triggered) c.broad_red_vetoes += 1;
+
+    // --- V6-r4 Structure Confirmation (prediction-time) ---
+    if (r.structure_confirmation_evaluable) {
+      c.structure_candidates += 1;
+      if (r.structure_confirmation_triggered) c.structure_vetoes += 1;
+      else c.structure_passed += 1;
+      const rej = Boolean(r.structure_rejection_pass);
+      const exp = Boolean(r.structure_expansion_pass);
+      if (rej) c.structure_rejection_passes += 1;
+      if (exp) c.structure_expansion_passes += 1;
+      if (rej && exp) c.structure_both_passes += 1;
+    }
     // Governor state is a running value; the newest row carries the live status.
     if (r.broad_red_history_count != null) {
       c.broad_red_history_count = Number(r.broad_red_history_count);
@@ -264,6 +282,14 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       if (Number(r.broad_red_shadow_adjusted_score ?? 0) > 0) c.broad_red_shadow_wins += 1;
       else c.broad_red_shadow_losses += 1;
     }
+    if (r.structure_confirmation_evaluable) c.structure_scored_directional_candidates += 1;
+    if (r.structure_confirmation_triggered) {
+      const sr = Number(r.structure_confirmation_raw_contribution ?? 0);
+      c.structure_raw += sr;
+      c.structure_adjusted += Number(r.structure_confirmation_adjusted_contribution ?? 0);
+      if (sr > 0) c.structure_avoided_losses += 1;
+      else if (sr < 0) c.structure_sacrificed_wins += 1;
+    }
     if (r.regime_inverter_would_trigger) {
       c.inverter_would_trigger_count += 1;
       if (Number(r.regime_inverter_shadow_raw_score ?? 0) > 0) c.inverter_shadow_wins += 1;
@@ -331,7 +357,23 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
       scored > 0 ? Math.round(((wl - c.weak_red_restored_scored) / scored) * 10000) / 100 : 0,
     coverage_added_by_weak_red_recovery:
       scored > 0 ? Math.round((c.weak_red_restored_scored / scored) * 10000) / 100 : 0,
-    model_revision: "V6-r2-regime-inverter-red-recovery",
+    structure_raw: round2(c.structure_raw),
+    structure_adjusted: round2(c.structure_adjusted),
+    structure_pass_rate: c.structure_candidates
+      ? Math.round((c.structure_passed / c.structure_candidates) * 10000) / 100
+      : 0,
+    structure_rejection_lower_wick_threshold: 0.4,
+    structure_rejection_aligned_wick_threshold: 0,
+    structure_expansion_range_threshold: 0.8,
+    structure_expansion_efficiency_threshold: 0.3,
+    // Coverage: directional publications / valid opportunities, before and after
+    // the structure gate. Structure abstentions stay in the denominator.
+    coverage_after_structure_gate: scored > 0 ? Math.round((wl / scored) * 10000) / 100 : 0,
+    coverage_before_structure_gate:
+      scored > 0
+        ? Math.round(((wl + c.structure_vetoes) / scored) * 10000) / 100
+        : 0,
+    model_revision: "V6-r4-structure-confirmation",
     breakeven_win_rate: 55.5555556,
   };
 });
@@ -342,7 +384,7 @@ export const getV6Pending = createServerFn({ method: "GET" }).handler(async () =
   const { data } = await sb
     .from("v6_predictions")
     .select(
-      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp, model_revision, original_v6_base_prediction, pre_inverter_prediction, pre_inverter_prediction_source, final_prediction_source, regime_inverter_ready, regime_inverter_active, regime_inverter_triggered, regime_inverter_history_count, regime_inverter_last20_wins, regime_inverter_last20_losses, regime_inverter_last20_adjusted_net, regime_inverter_activation_threshold",
+      "target_candle_ts, final_prediction, base_v6_prediction, prediction_source, abstain_status, abstain_reason, operational_status, operational_error, final_score, red_threshold, green_threshold, ridge_p_green, ridge_percentile, gb_p_green, gb_percentile, broad_score, broad_percentile, anchor_score, anchor_percentile, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, canonical_actual_direction, resolution_timestamp, model_revision, original_v6_base_prediction, pre_inverter_prediction, pre_inverter_prediction_source, final_prediction_source, regime_inverter_ready, regime_inverter_active, regime_inverter_triggered, regime_inverter_history_count, regime_inverter_last20_wins, regime_inverter_last20_losses, regime_inverter_last20_adjusted_net, regime_inverter_activation_threshold, pre_structure_prediction, pre_structure_source, structure_confirmation_evaluable, structure_rejection_pass, structure_expansion_pass, structure_confirmation_pass, structure_confirmation_triggered, structure_confirmation_reason, structure_rejection_lower_wick_value, structure_rejection_aligned_wick_value, structure_expansion_range_value, structure_expansion_efficiency_value",
     )
     .order("target_candle_ts", { ascending: false })
     .limit(1)
