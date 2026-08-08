@@ -89,6 +89,36 @@ function StatsPage() {
   const exportB4x4Fn = useServerFn(exportB4x4Csv);
   const [exportingB4x4, setExportingB4x4] = useState(false);
 
+  const obAuditFn = useServerFn(getB4x4ObShadowAudit);
+  const obAuditQ = useQuery({ queryKey: ["b4x4-ob-shadow-audit"], queryFn: () => obAuditFn(), refetchInterval: 60_000, staleTime: 0 });
+  const exportObShadowFn = useServerFn(exportB4x4ObShadowCsv);
+  const backfillObShadowFn = useServerFn(backfillB4x4ShadowPlaceholders);
+  const [exportingObShadow, setExportingObShadow] = useState(false);
+  const [backfillingObShadow, setBackfillingObShadow] = useState(false);
+
+  async function downloadObShadowCsv() {
+    try {
+      setExportingObShadow(true);
+      const res = await exportObShadowFn();
+      if (!res || res.rows === 0) { alert("No shadow rows to export."); return; }
+      triggerDownload(res.csv, `B4x4-ob-shadow-${stamp()}.csv`);
+    } finally {
+      setExportingObShadow(false);
+    }
+  }
+
+  async function doBackfillObShadow() {
+    try {
+      setBackfillingObShadow(true);
+      const res = await backfillObShadowFn();
+      alert(`Shadow placeholders inserted: ${(res as { inserted?: number })?.inserted ?? 0}`);
+      await obAuditQ.refetch();
+    } finally {
+      setBackfillingObShadow(false);
+    }
+  }
+
+
   async function downloadB4x4Csv() {
     try {
       setExportingB4x4(true);
