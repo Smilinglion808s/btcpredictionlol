@@ -307,10 +307,15 @@ export async function captureB4x4PreBoundarySnapshot(
     const offset = offsets[n]!;
     const fireAt = targetMs - offset;
     if (!opts.noWait) {
-      const wait = fireAt - Date.now();
-      // Skip an attempt slot whose window has already passed by a wide margin.
-      if (wait > 0) await sleep(Math.min(wait, 30_000));
+      // Wait until this attempt's slot, in bounded steps (cron can call us up
+      // to ~60s before the boundary).
+      let wait = fireAt - Date.now();
+      while (wait > 0 && wait <= 120_000) {
+        await sleep(Math.min(wait, 5_000));
+        wait = fireAt - Date.now();
+      }
     }
+
     if (Date.now() > cutoff) break;
     const outcome = await runCaptureAttempt(`a${n + 1}`, cutoff, opts.priming ? null : offset);
     audits.push(outcome.audit);

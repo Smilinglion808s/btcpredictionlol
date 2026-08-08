@@ -454,6 +454,30 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_ob_capture_auth: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          secret: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          secret: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          secret?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       b4x4_ob_snapshots: {
         Row: {
           book_complete: boolean | null
@@ -5391,6 +5415,7 @@ export type Database = {
         Args: { p_model_version: string; p_target_candle_ts: string }
         Returns: Json
       }
+      b4x4_ob_capture_call: { Args: never; Returns: undefined }
       consume_td1_containment_slot: {
         Args: { p_base_variant: string; p_side: string }
         Returns: Json
