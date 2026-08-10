@@ -377,6 +377,7 @@ function StatsPage() {
           exporting={exportingTd1}
           onReset={doResetTd1Stats}
           resetting={resettingTd1}
+          dailyCount={7}
         />
 
 
