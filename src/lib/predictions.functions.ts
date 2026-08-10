@@ -694,7 +694,7 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
 /** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant).
  *  Visual stats honor td1_rc_visual_stats_reset.reset_at so users can refresh
  *  the Stats page without deleting audit rows (CSV export stays full). */
-async function td1RcStatsFor(variant: string, resetId: number) {
+async function td1RcStatsFor(variant: string, resetId: number, dayCount = 3) {
   const sb = await admin();
   const PAGE = 1000;
   const { data: resetRow } = await sb
@@ -842,7 +842,7 @@ async function td1RcStatsFor(variant: string, resetId: number) {
     buckets[k] ??= { wins: 0, losses: 0 };
     if (r.result === "WIN") buckets[k].wins += 1; else buckets[k].losses += 1;
   }
-  const daily_3d = [0, 1, 2].map((back) => {
+  const daily_3d = Array.from({ length: dayCount }, (_, back) => back).map((back) => {
     const d = new Date(Date.now() - back * 86400000);
     const key = dayKey(d.toISOString());
     const b = buckets[key] ?? { wins: 0, losses: 0 };
@@ -921,7 +921,7 @@ async function td1RcStatsFor(variant: string, resetId: number) {
 
 
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcStatsFor(TD1_VARIANT, 1),
+  td1RcStatsFor(TD1_VARIANT, 1, 7),
 );
 
 export const getTd2RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
