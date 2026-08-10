@@ -780,7 +780,7 @@ function TD1Card({
       </div>
 
       <div className="relative">
-        <Daily3d days={hero.daily_3d ?? []} />
+        <Daily3d days={hero.daily_3d ?? []} count={dailyCount} />
       </div>
 
 
