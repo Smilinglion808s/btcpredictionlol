@@ -587,14 +587,15 @@ function TD1Stat({ label, value, tone }: { label: string; value: string | number
   );
 }
 
-/** Last 3 calendar days (Mountain Time): win rate + net wins per day. */
-function Daily3d({ days, accent = "bear" }: { days: Array<Record<string, any>>; accent?: "bear" | "cyan" }) {
-  const rows = (days ?? []).slice(0, 3);
+/** Last N calendar days (Mountain Time): win rate + net wins per day. */
+function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<string, any>>; accent?: "bear" | "cyan"; count?: number }) {
+  const rows = (days ?? []).slice(0, count);
   if (rows.length === 0) return null;
+  const compact = count > 3;
   const line = accent === "cyan" ? "from-cyan-400/40" : "from-bear/40";
   const label = (dateKey: string, i: number) => {
     if (i === 0) return "Today";
-    if (i === 1) return "Yesterday";
+    if (i === 1) return "Yest";
     const [y, m, d] = dateKey.split("-").map(Number);
     return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1)).toLocaleDateString("en-US", {
       timeZone: "UTC", month: "short", day: "numeric",
@@ -603,24 +604,24 @@ function Daily3d({ days, accent = "bear" }: { days: Array<Record<string, any>>; 
   return (
     <div className="mt-5">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Last 3 days</span>
+        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Last {count} days</span>
         <span className={`h-px flex-1 bg-gradient-to-r ${line} to-transparent`} />
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${compact ? "grid-cols-4 sm:grid-cols-7" : "grid-cols-3"}`}>
         {rows.map((d, i) => {
           const net = Number(d.net ?? 0);
           const trades = Number(d.trades ?? 0);
           const netCls = net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-muted-foreground";
           return (
-            <div key={String(d.date ?? i)} className="td1-chip px-3 py-2">
-              <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground truncate">
+            <div key={String(d.date ?? i)} className={`td1-chip ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
+              <div className={`uppercase tracking-[0.12em] text-muted-foreground truncate ${compact ? "text-[8px]" : "text-[9px]"}`}>
                 {label(String(d.date ?? ""), i)}
               </div>
-              <div className="font-mono text-sm font-semibold mt-0.5 tabular-nums">
+              <div className={`font-mono font-semibold tabular-nums ${compact ? "text-xs mt-0.5" : "text-sm mt-0.5"}`}>
                 {trades === 0 ? "—" : `${Number(d.win_rate ?? 0).toFixed(1)}%`}
               </div>
-              <div className={`font-mono text-[10px] mt-0.5 tabular-nums ${netCls}`}>
-                {trades === 0 ? "no trades" : `${net > 0 ? "+" : ""}${net} net · ${d.wins}W-${d.losses}L`}
+              <div className={`font-mono tabular-nums ${netCls} ${compact ? "text-[9px] mt-0.5" : "text-[10px] mt-0.5"}`}>
+                {trades === 0 ? "no trades" : `${net > 0 ? "+" : ""}${net} · ${d.wins}-${d.losses}`}
               </div>
             </div>
           );
