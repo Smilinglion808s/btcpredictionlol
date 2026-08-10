@@ -657,6 +657,7 @@ function TD1Card({
   exporting,
   onReset,
   resetting,
+  dailyCount = 3,
 }: {
   title?: string;
   eyebrow?: string;
@@ -669,6 +670,7 @@ function TD1Card({
   exporting: boolean;
   onReset: () => void;
   resetting: boolean;
+  dailyCount?: number;
 }) {
   const winRate = Number(hero.win_rate ?? 0);
   const wins = Number(hero.wins ?? 0);
