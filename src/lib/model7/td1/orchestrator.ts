@@ -576,4 +576,109 @@ export async function resolveTd1RcRow(
       });
     } catch { /* ignore */ }
   }
+
+  // Self-healing sweep: grade any TD3 row that is still pending while its
+  // sibling TD1 row is already resolved. Never re-scores resolved rows.
+  try {
+    await backfillPendingTd3(supabase);
+  } catch { /* ignore */ }
+}
+
+/**
+ * Grade TD3 rows left pending after their TD1 sibling resolved.
+ * Idempotent: only touches rows with resolved_at IS NULL.
+ */
+export async function backfillPendingTd3(supabase: SupabaseClient): Promise<number> {
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+
+  const { data: pendingData } = await supabase
+    .from("model7_td1_rc_shadow")
+    .select(
+      "id, prediction_id, candle_ts, a2_original_decision, external_final_decision, " +
+      "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_prev_policy_would_trade, " +
+      "td1_prev_policy_skip_reason, td1_no_global_veto_decision, " +
+      "td3_policy_version, td3_pre_veto_decision, td3_toxic_drift_veto_fired, td3_final_decision",
+    )
+    .eq("variant", TD3_VARIANT)
+    .is("resolved_at", null)
+    .gte("candle_ts", since);
+  const pending = ((pendingData ?? []) as unknown) as Record<string, unknown>[];
+  if (pending.length === 0) return 0;
+
+  const { data: siblingData } = await supabase
+    .from("model7_td1_rc_shadow")
+    .select("prediction_id, actual_direction")
+    .eq("variant", VARIANT)
+    .not("actual_direction", "is", null)
+    .in("prediction_id", pending.map((r) => r.prediction_id as string));
+  const actualByPrediction = new Map<string, "GREEN" | "RED">();
+  for (const s of ((siblingData ?? []) as unknown) as Record<string, unknown>[]) {
+    const dir = s.actual_direction as "GREEN" | "RED" | null;
+    if (dir === "GREEN" || dir === "RED") {
+      actualByPrediction.set(s.prediction_id as string, dir);
+    }
+  }
+
+  let healed = 0;
+  for (const row of pending) {
+    const actualDirection = actualByPrediction.get(row.prediction_id as string);
+    if (!actualDirection) continue;
+    const a2 = row.a2_original_decision as "YES" | "NO" | null;
+    const cfResult = (a2 === "YES" && actualDirection === "GREEN") ||
+      (a2 === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+    const ext = row.external_final_decision as string | null;
+    let result: "WIN" | "LOSS" | "PUSH" = "PUSH";
+    if (ext === "YES" || ext === "NO") {
+      result = (ext === "YES" && actualDirection === "GREEN") ||
+        (ext === "NO" && actualDirection === "RED") ? "WIN" : "LOSS";
+    }
+
+    const compressedVeto = row.td1_compressed_risk_veto_fired === true;
+    const cf = attributeCompressedRisk({
+      vetoFired: compressedVeto,
+      previousPolicyDecision: (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+      previousPolicyWouldTrade: (row.td1_prev_policy_would_trade as boolean | null) ?? null,
+      previousPolicySkipReason: (row.td1_prev_policy_skip_reason as string | null) ?? null,
+      actualDirection,
+    });
+    const prev = scoreDecision(
+      (row.td1_prev_policy_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+      actualDirection,
+    );
+    const noGlobal = scoreDecision(
+      (row.td1_no_global_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+      actualDirection,
+    );
+    const td3Final = scoreTd3Decision(
+      (row.td3_final_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+      actualDirection,
+    );
+    const underlyingDecision = (row.td3_pre_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+    const underlying = scoreTd3Decision(underlyingDecision, actualDirection);
+
+    const { error } = await supabase.from("model7_td1_rc_shadow").update({
+      a2_counterfactual_result: a2 === "YES" || a2 === "NO" ? cfResult : null,
+      actual_direction: actualDirection,
+      result,
+      resolved_at: new Date().toISOString(),
+      td1_compressed_risk_counterfactual_direction: compressedVeto ? a2 : null,
+      td1_compressed_risk_counterfactual_result: cf.classification,
+      td1_compressed_risk_counterfactual_score: cf.counterfactualScore,
+      td1_compressed_risk_veto_value: cf.vetoValue,
+      td1_compressed_risk_incremental_change: cf.incrementalChange,
+      td1_compressed_risk_attribution_version: cf.attributionVersion,
+      td1_prev_policy_result: prev.result,
+      td1_prev_policy_score: prev.score,
+      td1_no_global_veto_result: noGlobal.result,
+      td1_no_global_veto_score: noGlobal.score,
+      td3_result: td3Final.result,
+      td3_raw_score: td3Final.score,
+      td3_underlying_td1_decision: underlyingDecision,
+      td3_underlying_td1_result: underlying.result,
+      td3_underlying_td1_score: underlying.score,
+      td3_toxic_drift_veto_value: td3VetoValue(row.td3_toxic_drift_veto_fired === true, underlying.result),
+    } as never).eq("id", row.id as string).is("resolved_at", null);
+    if (!error) healed += 1;
+  }
+  return healed;
 }
