@@ -1,7 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
