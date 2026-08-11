@@ -331,6 +331,10 @@ function StatsPage() {
           dailyCount={7}
         />
 
+        <TD3Card stats={(td3Q.data as any) ?? {}} />
+
+
+
 
 
         <V6Card
