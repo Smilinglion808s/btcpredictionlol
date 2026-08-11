@@ -793,6 +793,23 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         baseSource === "V6_BASE" &&
         (actual === "GREEN" || actual === "RED");
 
+      // --- V6-r5 branch grading. Every candidate branch is graded
+      // independently of what the router published, so shadow branches carry a
+      // real forward record. Op-fail rows are excluded from all scoring.
+      const gradeable = opFail ? null : actual;
+      const r5Green = gradeBranch(Boolean(r.r5_green_candidate), "GREEN", gradeable);
+      const r5Anchor = gradeBranch(Boolean(r.r5_red_anchor_candidate), "RED", gradeable);
+      const r5Broad = gradeBranch(Boolean(r.r5_red_broad_candidate), "RED", gradeable);
+      const r5Conflicted = Boolean(r.r5_conflict) && !opFail;
+      const r5Wick = gradeBranch(
+        Boolean(r.r5_aligned_wick_red_shadow_candidate),
+        "RED",
+        gradeable,
+      );
+      const legacyR4 = r.legacy_r4_shadow_prediction as string | null;
+      const consensusRed = r.consensus_red_shadow_prediction as string | null;
+      const momentumGreen = r.momentum_green_shadow_prediction as string | null;
+      const finalDirectional = !opFail && (final === "GREEN" || final === "RED");
 
       await sb
         .from("v6_predictions")
