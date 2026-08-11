@@ -151,9 +151,6 @@ export async function sweepUnresolvedRows(
     }
   } catch (e) {
     errors.push(`td1: ${e instanceof Error ? e.message : String(e)}`);
-
-  } catch (e) {
-    errors.push(`td1: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   return {
@@ -162,6 +159,8 @@ export async function sweepUnresolvedRows(
     b4x4_targets: b4Targets,
     td1_resolved: tdTargets.length,
     td1_targets: tdTargets,
+    td1_closed_ineligible: tdClosedIneligible,
     errors,
   };
 }
+
