@@ -53,6 +53,8 @@ function StatsPage() {
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td3Fn = useServerFn(getTd3ShadowStats);
+  const td3Q = useQuery({ queryKey: ["td3-shadow-stats"], queryFn: () => td3Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const td1PendingFn = useServerFn(getTd1RcShadowPending);
   const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
