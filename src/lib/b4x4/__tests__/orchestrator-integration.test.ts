@@ -8,6 +8,11 @@ import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION } from "../config";
 import { decisionToRow, resolveB4x4Row, runB4x4ForA2Combined } from "../orchestrator";
 import type { B4x4Decision } from "../engine";
 
+// Canonical source loading is exercised by the external fixture parity test;
+// here the orchestrator wiring itself is under test.
+vi.mock("../backfill", () => ({ loadCanonicalSourceRows: async () => [] }));
+
+
 function fakeDecision(): B4x4Decision {
   return {
     decisionReason: "ABSTAIN_A2_PROBABILITY_INVALID",
