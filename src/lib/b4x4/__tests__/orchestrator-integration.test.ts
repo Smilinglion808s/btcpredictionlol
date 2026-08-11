@@ -37,20 +37,33 @@ describe("B4x4 orchestrator integration", () => {
 
   it("returns the pre-existing row instead of overwriting it (target-row protection)", async () => {
     const existing = { id: "row-1", target_candle_ts: "2026-08-10T00:00:00.000Z", run_mode: "BACKFILL", would_trade: false };
-    const select = vi.fn();
+    let upserted = false;
+    // Chainable query stub: any builder method returns the chain, and the
+    // chain resolves to the stubbed result set.
+    const chain = (result: unknown): unknown =>
+      new Proxy(
+        {
+          then: (res: (v: unknown) => void) => res(result),
+          maybeSingle: async () => result,
+        } as Record<string, unknown>,
+        {
+          get(target, prop) {
+            if (prop in target) return target[prop as string];
+            return () => chain(result);
+          },
+        },
+      );
     const supabase = {
       from: vi.fn(() => ({
-        upsert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-        select: (...args: unknown[]) => {
-          select(...args);
-          const chain: Record<string, unknown> = {};
-          chain.eq = () => chain;
-          chain.maybeSingle = async () => ({ data: existing });
-          return chain;
+        upsert: () => {
+          upserted = true;
+          return chain({ data: null, error: null });
         },
+        select: () => chain({ data: existing }),
         insert: async () => ({}),
       })),
     } as never;
+
 
     const saved = await runB4x4ForA2Combined(supabase, {
       predictionId: "p1",
