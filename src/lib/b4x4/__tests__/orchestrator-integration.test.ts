@@ -73,6 +73,7 @@ describe("B4x4 orchestrator integration", () => {
       leakageCheckPassed: null,
       runMode: "BACKFILL",
     });
+    expect(upserted).toBe(true);
     expect(saved).toEqual(existing);
   });
 
