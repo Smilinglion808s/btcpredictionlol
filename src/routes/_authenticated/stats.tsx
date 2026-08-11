@@ -339,7 +339,8 @@ function StatsPage() {
           dailyCount={7}
         />
 
-        <TD3Card stats={(td3Q.data as any) ?? {}} />
+        <TD3Card stats={(td3Q.data as any) ?? {}} pending={(td3PendingQ.data as any) ?? null} />
+
 
 
 
