@@ -28,6 +28,15 @@ import {
   attributeTd2R2,
   evaluateTd2R2,
 } from "./td2r2";
+import {
+  TD3_POLICY_VERSION,
+  TD3_VARIANT,
+  TD3_VETO_REASON,
+  evaluateTd3,
+  scoreTd3Decision,
+  td3PredictionColumns,
+  td3VetoValue,
+} from "./td3";
 import type { Candle } from "../featurize";
 
 
