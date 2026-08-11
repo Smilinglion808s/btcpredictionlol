@@ -402,7 +402,13 @@ export async function runTd1RcForA2Combined(
       td2_recovery_value_class: r2.fired ? "UNRESOLVED" : "NO_CHANGE",
     };
 
-    await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
+    const { data: inserted } = await supabase
+      .from("model7_td1_rc_shadow")
+      .insert([finalRow, td2Row] as never)
+      .select("id, variant");
+    const td1RowId = ((inserted ?? []) as { id: string; variant: string }[])
+      .find((r) => r.variant === VARIANT)?.id ?? null;
+    await writeTd3Row(supabase, finalRow, td1RowId);
     return { td1Row: finalRow, td2Row };
   } catch (e) {
     try {
