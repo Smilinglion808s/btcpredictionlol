@@ -8,6 +8,7 @@ import {
   listPredictions,
   listModelVersions,
   getTd1RcShadowStats,
+  getTd3ShadowStats,
   getTd1RcShadowPending,
   exportTd1RcShadow,
   getTd1RcTrainingProgress,
