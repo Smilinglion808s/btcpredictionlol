@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TF_MS = 15 * 60 * 1000;
-const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+const LOOKBACK_MS = 60 * 24 * 60 * 60 * 1000;
 
 type Dir = "GREEN" | "RED" | "PUSH";
 
@@ -60,6 +60,8 @@ export interface SweepResult {
   b4x4_targets: string[];
   td1_resolved: number;
   td1_targets: string[];
+  td1_closed_ineligible: number;
+
   errors: string[];
 }
 
@@ -110,25 +112,47 @@ export async function sweepUnresolvedRows(
     errors.push(`b4x4: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // ---- TD1 / TD2 / TD3: resolve closed directional candles only. ----
+  // ---- TD1 / TD2 / TD3 ----
+  // Gradeable rows (A2 gave a direction) go through the normal resolver.
+  // Rows where A2 itself was ineligible can never be graded; close them out
+  // against the confirmed candle as PUSH so they stop re-appearing forever.
   const tdTargets: string[] = [];
+  let tdClosedIneligible = 0;
   try {
     const { data } = await supabase
       .from("model7_td1_rc_shadow")
-      .select("prediction_id, candle_ts")
+      .select("id, prediction_id, candle_ts, a2_original_decision")
       .is("resolved_at", null)
       .gte("candle_ts", sinceIso)
       .lte("candle_ts", cutoffIso)
       .order("candle_ts", { ascending: true })
-      .limit(500);
+      .limit(1000);
     const { resolveTd1RcRow } = await import("@/lib/model7/td1/orchestrator");
     const seen = new Set<string>();
-    for (const r of (data ?? []) as unknown as Array<{ prediction_id: string | null; candle_ts: string }>) {
-      if (!r.prediction_id || seen.has(r.prediction_id)) continue;
+    type TdRow = { id: string; prediction_id: string | null; candle_ts: string; a2_original_decision: string | null };
+    for (const r of (data ?? []) as unknown as TdRow[]) {
       const c = candles.get(new Date(r.candle_ts).toISOString());
-      if (!c || c.dir === "PUSH") continue;
+      if (!c) continue;
+      // Ungradeable: A2 never produced a direction, or the candle was a doji
+      // (open == close), which no directional policy can win or lose.
+      const gradeable =
+        (r.a2_original_decision === "YES" || r.a2_original_decision === "NO") && c.dir !== "PUSH";
+      if (!gradeable) {
+        await supabase
+          .from("model7_td1_rc_shadow")
+          .update({
+            actual_direction: c.dir,
+            result: "PUSH",
+            resolved_at: new Date().toISOString(),
+          } as never)
+          .eq("id", r.id);
+        tdClosedIneligible += 1;
+        continue;
+      }
+      if (!r.prediction_id || seen.has(r.prediction_id)) continue;
+
       seen.add(r.prediction_id);
-      await resolveTd1RcRow(supabase, r.prediction_id, c.dir);
+      await resolveTd1RcRow(supabase, r.prediction_id, c.dir as "GREEN" | "RED");
       tdTargets.push(new Date(r.candle_ts).toISOString());
     }
   } catch (e) {
@@ -141,6 +165,8 @@ export async function sweepUnresolvedRows(
     b4x4_targets: b4Targets,
     td1_resolved: tdTargets.length,
     td1_targets: tdTargets,
+    td1_closed_ineligible: tdClosedIneligible,
     errors,
   };
 }
+
