@@ -228,6 +228,7 @@ export async function runB4x4ForA2Combined(
   supabase: SupabaseClient,
   ctx: B4x4Context,
 ): Promise<DbRow | null> {
+  const runStartedAt = new Date().toISOString();
   try {
     const history = await loadHistory(supabase, ctx.candleTs);
     const daily = await loadDailyState(supabase, ctx.candleTs);
@@ -239,14 +240,38 @@ export async function runB4x4ForA2Combined(
       actualDirection: null,
     };
     const decision = evaluateB4x4(source, history, daily);
-    const row = decisionToRow(ctx, decision);
+    const row = {
+      ...decisionToRow(ctx, decision),
+      run_started_at: runStartedAt,
+      run_finished_at: new Date().toISOString(),
+    };
     const { data, error } = await supabase
       .from("b4x4_predictions")
       .upsert(row as never, { onConflict: "target_candle_ts,model_version", ignoreDuplicates: true })
       .select("*")
       .maybeSingle();
     if (error) return null;
-    const saved = (data as unknown as DbRow | null) ?? null;
+    let saved = (data as unknown as DbRow | null) ?? null;
+    if (!saved) {
+      // Target-row protection: an existing row for this target is never
+      // overwritten, but it must still be returned so downstream shadow
+      // capture and auditing run exactly once per target.
+      const { data: existing } = await supabase
+        .from("b4x4_predictions")
+        .select("*")
+        .eq("model_version", B4X4_MODEL_VERSION)
+        .eq("target_candle_ts", ctx.candleTs)
+        .maybeSingle();
+      saved = (existing as unknown as DbRow | null) ?? null;
+    }
+    // ---- Reporting-only policy shadows (never influence the active model). ----
+    if (saved) {
+      try {
+        const { persistB4x4PolicyShadows } = await import("./shadow/policy-shadows.server");
+        await persistB4x4PolicyShadows(supabase, saved, decision, history);
+      } catch { /* reporting only */ }
+    }
+
     // ---- Order-book shadow capture (shadow only, never blocks B4x4). ----
     if (saved && saved.run_mode === "LIVE") {
       try {
