@@ -360,7 +360,27 @@ export const exportB4x4ObShadowCsv = createServerFn({ method: "GET" }).handler(a
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
 
-/** Dedicated B4x4 CSV export — every tracked column, plus order-book shadow join. */
+/** All reporting-only policy shadow rows (Shadow A and Shadow B). */
+export async function loadPolicyShadowRows(): Promise<Row[]> {
+  const sb = await admin();
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_policy_shadows")
+      .select("*")
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...(data as unknown as Row[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Dedicated B4x4 CSV export — every tracked column, plus the order-book shadow
+ * join and both reporting-only policy shadows (Shadow A / Shadow B).
+ */
 export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
@@ -377,22 +397,38 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
   for (const s of shadowRows) for (const k of Object.keys(s)) shadowKeys.add(k);
   const SHADOW_COLUMNS = [...shadowKeys];
 
+  // Reporting-only policy shadows, LEFT-joined per prediction and variant.
+  const policyRows = await loadPolicyShadowRows();
+  const policyKeys = new Set<string>();
+  for (const s of policyRows) for (const k of Object.keys(s)) policyKeys.add(k);
+  const POLICY_COLUMNS = [...policyKeys];
+  const policyByPred = new Map<string, Row>();
+  for (const s of policyRows) {
+    policyByPred.set(`${String(s.b4x4_prediction_id)}|${String(s.shadow_variant)}`, s);
+  }
 
   const header = [
     ...columns.map((c) => `b4x4_${c}`),
     ...SHADOW_COLUMNS.map((c) => `b4x4_ob_${c}`),
+    ...POLICY_COLUMNS.map((c) => `b4x4_shadow_a_${c}`),
+    ...POLICY_COLUMNS.map((c) => `b4x4_shadow_b_${c}`),
   ].join(",");
   const body = rows
     .map((r) => {
       const s = shadowById.get(String(r.id)) ?? {};
+      const a = policyByPred.get(`${String(r.id)}|${SHADOW_A_VARIANT}`) ?? {};
+      const b = policyByPred.get(`${String(r.id)}|${SHADOW_B_VARIANT}`) ?? {};
       return [
         ...columns.map((col) => csvEscape(r[col])),
         ...SHADOW_COLUMNS.map((col) => csvEscape(s[col])),
+        ...POLICY_COLUMNS.map((col) => csvEscape((a as Row)[col])),
+        ...POLICY_COLUMNS.map((col) => csvEscape((b as Row)[col])),
       ].join(",");
     })
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
+
 
 
 
