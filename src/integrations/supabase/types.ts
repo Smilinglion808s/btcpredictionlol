@@ -4747,6 +4747,7 @@ export type Database = {
           anchor_distance_from_neutral: number | null
           anchor_percentile: number | null
           anchor_score: number | null
+          b4x4_direction_at_send: string | null
           base_green_count_last8: number | null
           base_predictions_last8_json: Json | null
           base_v6_adjusted_score: number | null
@@ -5035,6 +5036,10 @@ export type Database = {
           weak_red_veto_broad_percentile: number | null
           weak_red_veto_candidate: boolean | null
           weak_red_veto_original_prediction: string | null
+          webhook_conflict_with_b4x4: boolean | null
+          webhook_eligible: boolean | null
+          webhook_sent_at: string | null
+          webhook_suppressed_reason: string | null
         }
         Insert: {
           abstain_reason?: string | null
@@ -5043,6 +5048,7 @@ export type Database = {
           anchor_distance_from_neutral?: number | null
           anchor_percentile?: number | null
           anchor_score?: number | null
+          b4x4_direction_at_send?: string | null
           base_green_count_last8?: number | null
           base_predictions_last8_json?: Json | null
           base_v6_adjusted_score?: number | null
@@ -5331,6 +5337,10 @@ export type Database = {
           weak_red_veto_broad_percentile?: number | null
           weak_red_veto_candidate?: boolean | null
           weak_red_veto_original_prediction?: string | null
+          webhook_conflict_with_b4x4?: boolean | null
+          webhook_eligible?: boolean | null
+          webhook_sent_at?: string | null
+          webhook_suppressed_reason?: string | null
         }
         Update: {
           abstain_reason?: string | null
@@ -5339,6 +5349,7 @@ export type Database = {
           anchor_distance_from_neutral?: number | null
           anchor_percentile?: number | null
           anchor_score?: number | null
+          b4x4_direction_at_send?: string | null
           base_green_count_last8?: number | null
           base_predictions_last8_json?: Json | null
           base_v6_adjusted_score?: number | null
@@ -5627,6 +5638,10 @@ export type Database = {
           weak_red_veto_broad_percentile?: number | null
           weak_red_veto_candidate?: boolean | null
           weak_red_veto_original_prediction?: string | null
+          webhook_conflict_with_b4x4?: boolean | null
+          webhook_eligible?: boolean | null
+          webhook_sent_at?: string | null
+          webhook_suppressed_reason?: string | null
         }
         Relationships: []
       }
