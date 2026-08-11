@@ -317,7 +317,7 @@ export async function runB4x4ForA2Combined(
  * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
  */
 // Held OFF for the b4x4-v1-runtime-integrity-r1 repair rollout.
-export const B4X4_WEBHOOKS_ENABLED = false;
+export const B4X4_WEBHOOKS_ENABLED = true;
 
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
