@@ -58,12 +58,6 @@ function StatsPage() {
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
 
-  const td2Fn = useServerFn(getTd2RcShadowStats);
-  const td2Q = useQuery({ queryKey: ["td2-rc-shadow-stats"], queryFn: () => td2Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const td2PendingFn = useServerFn(getTd2RcShadowPending);
-  const td2PendingQ = useQuery({ queryKey: ["td2-rc-shadow-pending"], queryFn: () => td2PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const exportTd2Fn = useServerFn(exportTd2RcShadow);
-  const resetTd2Fn = useServerFn(resetTd2RcVisualStats);
 
   const v6Fn = useServerFn(getV6Stats);
   const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
