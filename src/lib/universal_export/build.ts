@@ -544,6 +544,21 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
       }
     }
 
+    // Reporting-only B4x4 policy shadows (never part of any active decision).
+    for (const [prefix, variant] of [
+      ["b4x4_shadow_a", B4X4_SHADOW_A_VARIANT],
+      ["b4x4_shadow_b", B4X4_SHADOW_B_VARIANT],
+    ] as const) {
+      const sRow = b4x4ShadowBy.get(`${boundary}|${variant}`) ?? null;
+      row[`${prefix}_tracking_available`] = sRow !== null;
+      if (sRow) {
+        for (const [k, v] of Object.entries(sRow)) {
+          row[`${prefix}_${k}`] = v && typeof v === "object" ? stableJson(v) : v;
+        }
+      }
+    }
+
+
     for (const k of Object.keys(row)) emittedColumnSet.add(k);
     outRows.push(row);
     previousBoundary = boundary;
