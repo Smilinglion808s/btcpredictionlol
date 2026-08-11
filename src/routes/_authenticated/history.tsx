@@ -455,6 +455,7 @@ function CsvDataPage() {
   const listFn = useServerFn(listAllPredictionsForHistory);
   const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
   const exportTd1 = useServerFn(exportTd1RcShadow);
+  const exportTd3 = useServerFn(exportTd3Shadow);
   const exportAas96 = useServerFn(exportAas96Shadow);
   const exportA96 = useServerFn(exportA96Csv);
   const exportV6 = useServerFn(exportV6Csv);
