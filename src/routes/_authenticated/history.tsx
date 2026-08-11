@@ -574,6 +574,17 @@ function CsvDataPage() {
             variant="secondary"
             className="gap-2"
             onClick={async () => {
+              const rows = (await exportTd3().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_td3_toxic_drift");
+            }}
+          >
+            <Download className="size-4" /> TD3 CSV
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
               const rows = (await exportA96().catch(() => [])) as any[];
               downloadJsonRowsAsCsv(rows, "btc15m_a96");
             }}
