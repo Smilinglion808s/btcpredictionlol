@@ -191,6 +191,8 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     aas96Rows,
     a96Rows,
     b4x4Rows,
+    b4x4PolicyShadowRows,
+
   });
 
   return { csv, manifest, stats };
