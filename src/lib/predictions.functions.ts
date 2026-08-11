@@ -965,6 +965,34 @@ export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async
   const vetoes = rows.filter((r) => r.td3_toxic_drift_veto_fired === true).length;
   const avoided_losses = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) > 0).length;
   const sacrificed_wins = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) < 0).length;
+
+  // Last 3 calendar days (reporting timezone): win rate + net wins per day.
+  const REPORT_TZ = "America/Denver";
+  const dayKey = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(iso));
+  const buckets: Record<string, { wins: number; losses: number; date: string }> = {};
+  for (const r of traded) {
+    if (!r.candle_ts) continue;
+    if (r.result !== "WIN" && r.result !== "LOSS") continue;
+    const d = dayKey(String(r.candle_ts));
+    buckets[d] ??= { wins: 0, losses: 0, date: d };
+    if (r.result === "WIN") buckets[d].wins += 1;
+    else buckets[d].losses += 1;
+  }
+  const daily_3d = Object.values(buckets)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 3)
+    .map((d) => ({
+      date: d.date,
+      win_rate: d.wins + d.losses === 0 ? 0 : Math.round((d.wins / (d.wins + d.losses)) * 10000) / 100,
+      net: d.wins - d.losses,
+      wins: d.wins,
+      losses: d.losses,
+      trades: d.wins + d.losses,
+    }));
+
   return {
     total: traded.length,
     wins,
@@ -976,8 +1004,14 @@ export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async
     vetoes,
     avoided_losses,
     sacrificed_wins,
+    daily_3d,
   };
 });
+
+export const getTd3ShadowPending = createServerFn({ method: "GET" }).handler(async () =>
+  td1RcPendingFor(TD3_VARIANT),
+);
+
 
 
 
