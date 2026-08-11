@@ -139,18 +139,30 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     global_history_count: d.globalHistoryCount,
     global_history_start_ts: d.globalHistoryStartTs,
     global_history_end_ts: d.globalHistoryEndTs,
+    global_history_start_index: d.globalHistoryStartIndex,
+    global_history_end_index: d.globalHistoryEndIndex,
     same_side_rank: d.sameSideRank,
     same_side_history_count: d.sameSideHistoryCount,
     same_side_history_start_ts: d.sameSideHistoryStartTs,
     same_side_history_end_ts: d.sameSideHistoryEndTs,
+    same_side_history_start_index: d.sameSideHistoryStartIndex,
+    same_side_history_end_index: d.sameSideHistoryEndIndex,
+    same_side_input_source_count: d.sameSideInputSourceCount,
+    same_side_filtered_count: d.sameSideFilteredCount,
+    same_side_raw_direction_filter: d.sameSideRawDirectionFilter,
     global_rank_quartile: d.globalRankQuartile,
     same_side_rank_quartile: d.sameSideRankQuartile,
     quality_mean: d.qualityMean,
 
     grid_training_lookback: GRID_TRAINING_LOOKBACK,
     grid_training_resolved_count: d.gridTrainingResolvedCount,
+    grid_training_source_count: d.gridTrainingSourceCount,
     grid_training_start_ts: d.gridTrainingStartTs,
     grid_training_end_ts: d.gridTrainingEndTs,
+    grid_training_start_index: d.gridTrainingStartIndex,
+    grid_training_end_index: d.gridTrainingEndIndex,
+    grid_window_integrity_passed: d.gridWindowIntegrityPassed,
+    grid_window_integrity_reason: d.gridWindowIntegrityReason,
     grid_prior_alpha: 8,
     grid_prior_beta: 8,
     grid_cell: d.gridCell,
@@ -159,6 +171,11 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     grid_cell_losses: d.gridCellLosses,
     p_correct: d.pCorrect,
     grid_reference_count: d.gridReferenceCount,
+    grid_reference_source_count: d.gridReferenceSourceCount,
+    grid_reference_start_index: d.gridReferenceStartIndex,
+    grid_reference_end_index: d.gridReferenceEndIndex,
+    grid_reference_start_ts: d.gridReferenceStartTs,
+    grid_reference_end_ts: d.gridReferenceEndTs,
     grid_quality_percentile: d.gridQualityPercentile,
     grid_snapshot_json: d.gridSnapshot,
 
@@ -174,8 +191,23 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     final_prediction: d.finalPrediction,
     would_trade: d.wouldTrade,
     decision_reason: d.decisionReason,
+
+    // ---- runtime-integrity audit identity ----
+    implementation_revision: B4X4_IMPLEMENTATION_REVISION,
+    source_index_absolute: d.sourceIndexAbsolute,
+    source_index_version: B4X4_SOURCE_INDEX_VERSION,
+    source_epoch_ts: B4X4_SOURCE_EPOCH_TS,
+    source_target_ts: ctx.candleTs,
+    resolver_version: B4X4_RESOLVER_VERSION,
+    canonical_candle_source: B4X4_CANONICAL_CANDLE_SOURCE,
+    legacy_resolution_counter_unreliable: false,
+    scheduler_invocation_id: ctx.schedulerInvocationId ?? null,
+    catchup_target_ts: ctx.catchupTargetTs ?? null,
+    operational_gap_status: ctx.operationalGapStatus ?? "NONE",
+    operational_gap_reason: ctx.operationalGapReason ?? null,
   };
 }
+
 
 /**
  * Live B4x4 run. Never throws — any failure is persisted as an operational
