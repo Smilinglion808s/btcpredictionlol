@@ -145,6 +145,9 @@ export function td3VetoValue(
 export function td3PredictionColumns(args: {
   evaluation: Td3Evaluation;
   runMode: Td3RunMode;
+  preVetoDecision: Td3Decision | null;
+  preVetoWouldTrade: boolean;
+  preVetoSkipReason: string | null;
   sourceTd1RowId: string | null;
   sourceTd1PolicyVersion: string | null;
   sourceTd1FitId: string | null;
