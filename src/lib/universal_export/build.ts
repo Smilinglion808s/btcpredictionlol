@@ -497,6 +497,18 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
 
     // Attach per-model raw rows under prefixed keys (backward-compat with
     // the old exporter).  Values are stably serialized.
+    // TD3 (TD1 clone + toxic opposing drift veto) — appended, never replacing TD1.
+    const td3Row = td3By.get(boundary) ?? null;
+    const td3Pred = td3Row ? normalizePrediction((td3Row as Row).td3_final_decision ?? (td3Row as Row).external_final_decision) : null;
+    row.td3_canonical_prediction = td3Pred;
+    row.td3_canonical_result_score = canonicalScore(td3Pred, canonicalDirNorm, canonical.canonical_ground_truth_valid);
+    row.td3_tracking_available = td3Row !== null;
+    if (td3Row) {
+      for (const [k, v] of Object.entries(td3Row)) {
+        row[`td3_raw_${k}`] = v && typeof v === "object" ? stableJson(v) : v;
+      }
+    }
+
     if (td1Row) {
       for (const [k, v] of Object.entries(td1Row)) {
         const key = `td1_raw_${k}`;
