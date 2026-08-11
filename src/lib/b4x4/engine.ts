@@ -109,30 +109,51 @@ export interface B4x4Decision {
   confidence: number | null;
   dataValid: boolean;
   dataInvalidReason: string | null;
+  /** Absolute zero-based position among valid canonical source rows since epoch. */
+  sourceIndexAbsolute: number;
   // ranks
   globalRank: number | null;
   globalHistoryCount: number;
   globalHistoryStartTs: string | null;
   globalHistoryEndTs: string | null;
+  globalHistoryStartIndex: number | null;
+  globalHistoryEndIndex: number | null;
   sameSideRank: number | null;
   sameSideHistoryCount: number;
   sameSideHistoryStartTs: string | null;
   sameSideHistoryEndTs: string | null;
+  /** Source rows taken BEFORE the direction filter (expected 768 when mature). */
+  sameSideInputSourceCount: number;
+  sameSideFilteredCount: number;
+  sameSideHistoryStartIndex: number | null;
+  sameSideHistoryEndIndex: number | null;
+  sameSideRawDirectionFilter: Direction | null;
   globalRankQuartile: number | null;
   sameSideRankQuartile: number | null;
   qualityMean: number | null;
   // grid
   gridTrainingResolvedCount: number;
+  gridTrainingSourceCount: number;
+  gridTrainingStartIndex: number | null;
+  gridTrainingEndIndex: number | null;
   gridTrainingStartTs: string | null;
   gridTrainingEndTs: string | null;
+  gridWindowIntegrityPassed: boolean | null;
+  gridWindowIntegrityReason: string | null;
   gridCell: string | null;
   gridCellResolvedCount: number | null;
   gridCellWins: number | null;
   gridCellLosses: number | null;
   pCorrect: number | null;
   gridReferenceCount: number;
+  gridReferenceSourceCount: number;
+  gridReferenceStartIndex: number | null;
+  gridReferenceEndIndex: number | null;
+  gridReferenceStartTs: string | null;
+  gridReferenceEndTs: string | null;
   gridQualityPercentile: number | null;
   gridSnapshot: GridCell[] | null;
+
   // decision
   coreEligible: boolean;
   expansionEligible: boolean;
