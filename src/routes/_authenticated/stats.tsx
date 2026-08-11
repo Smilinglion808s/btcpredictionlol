@@ -10,8 +10,6 @@ import {
   getTd1RcShadowStats,
   getTd1RcShadowPending,
   exportTd1RcShadow,
-  getTd1RcShadowPending,
-  exportTd1RcShadow,
   getTd1RcTrainingProgress,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
