@@ -55,45 +55,33 @@ export interface B4x4Context {
 
 type DbRow = Record<string, unknown>;
 
-/** Load prior ranked B4x4 rows (own persisted rank/grid audit) as history. */
+/**
+ * Build the complete canonical B4x4 history since the frozen source epoch.
+ *
+ * The history MUST come from the canonical A2_Combined source stream (the same
+ * stream the reference replay uses), not from previously persisted B4x4 rows —
+ * a persisted-row loader silently truncates the absolute window and produces
+ * short (445–448 row) grids. Every prior valid source row is replayed with the
+ * frozen engine so ranks, quartiles and correctness are contemporaneous.
+ */
 export async function loadHistory(
   supabase: SupabaseClient,
   beforeCandleTs: string,
 ): Promise<HistoryEntry[]> {
-  const { data } = await supabase
-    .from("b4x4_predictions")
-    .select(
-      "target_candle_ts, confidence, raw_direction, global_rank, same_side_rank, " +
-      "global_rank_quartile, same_side_rank_quartile, quality_mean, actual_direction, data_valid",
-    )
-    .eq("model_version", B4X4_MODEL_VERSION)
-    .eq("data_valid", true)
-    .lt("target_candle_ts", beforeCandleTs)
-    .order("target_candle_ts", { ascending: false })
-    .limit(HISTORY_FETCH);
-  const rows = ((data ?? []) as unknown as DbRow[]).slice().reverse();
+  const { loadCanonicalSourceRows } = await import("./backfill");
+  const before = new Date(beforeCandleTs).getTime();
+  const source = (await loadCanonicalSourceRows(supabase, { upTo: beforeCandleTs })).filter(
+    (r) => new Date(r.candleTs).getTime() < before,
+  );
+  const { replayB4x4 } = await import("./engine");
+  const replay = replayB4x4(source);
   const out: HistoryEntry[] = [];
-  for (const r of rows) {
-    const dir = r.raw_direction as Direction | null;
-    const conf = r.confidence == null ? null : Number(r.confidence);
-    if (dir !== "GREEN" && dir !== "RED") continue;
-    if (conf == null || !Number.isFinite(conf)) continue;
-    const actual = (r.actual_direction as ActualDirection | null) ?? null;
-    out.push({
-      candleTs: String(r.target_candle_ts),
-      confidence: conf,
-      direction: dir,
-      globalRank: r.global_rank == null ? null : Number(r.global_rank),
-      sameSideRank: r.same_side_rank == null ? null : Number(r.same_side_rank),
-      globalQuartile: r.global_rank_quartile == null ? null : Number(r.global_rank_quartile),
-      sameSideQuartile: r.same_side_rank_quartile == null ? null : Number(r.same_side_rank_quartile),
-      qualityMean: r.quality_mean == null ? null : Number(r.quality_mean),
-      actualDirection: actual,
-      correct: actual === "GREEN" || actual === "RED" ? dir === actual : null,
-    });
+  for (const r of replay) {
+    if (r.decision.historyEntry) out.push(r.decision.historyEntry);
   }
   return out;
 }
+
 
 /** Resolved, published day net for the local (America/Boise) date. */
 export async function loadDailyState(
