@@ -82,8 +82,59 @@ async function writeSkipRow(
     td2_r1_counterfactual_skip_reason: reason,
     td2_recovery_value_class: "NO_CHANGE",
   };
-  await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
+  const { data: inserted } = await supabase
+    .from("model7_td1_rc_shadow")
+    .insert([row, td2Row] as never)
+    .select("id, variant");
+  const td1RowId = ((inserted ?? []) as { id: string; variant: string }[])
+    .find((r) => r.variant === VARIANT)?.id ?? null;
+  await writeTd3Row(supabase, row, td1RowId);
   return { td1Row: row, td2Row };
+}
+
+/** TD3 = exact TD1 row + one final Toxic Opposing Drift Veto. Never mutates TD1. */
+async function writeTd3Row(
+  supabase: SupabaseClient,
+  td1Row: Record<string, unknown>,
+  td1RowId: string | null,
+): Promise<void> {
+  const features = (td1Row.feature_values_json as Record<string, unknown> | null) ?? null;
+  const preVetoDecision = (td1Row.external_final_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+  const evaluation = evaluateTd3({
+    preVetoDecision,
+    preVetoWouldTrade: td1Row.would_trade === true,
+    preVetoSkipReason: (td1Row.skip_reason as string | null) ?? null,
+    currentDirectionalConfidence: features?.current_directional_confidence as number | undefined,
+    opposingDrift4: features?.opposing_drift_4 as number | undefined,
+    sameDirectionRunLength: features?.same_direction_run_length as number | undefined,
+  });
+  const td3Row = {
+    ...td1Row,
+    variant: TD3_VARIANT,
+    prospective_test_id: TD3_POLICY_VERSION,
+    external_final_decision: evaluation.finalDecision,
+    would_trade: evaluation.wouldTrade,
+    skip_reason: evaluation.skipReason,
+    all_veto_reasons_json: evaluation.vetoFired
+      ? [...((td1Row.all_veto_reasons_json as string[] | null) ?? []), TD3_VETO_REASON]
+      : ((td1Row.all_veto_reasons_json as string[] | null) ?? []),
+    ...td3PredictionColumns({
+      evaluation,
+      runMode: "LIVE",
+      preVetoDecision,
+      preVetoWouldTrade: td1Row.would_trade === true,
+      preVetoSkipReason: (td1Row.skip_reason as string | null) ?? null,
+      sourceTd1RowId: td1RowId,
+      sourceTd1PolicyVersion: (td1Row.td1_policy_version as string | null) ?? null,
+      sourceTd1FitId: (td1Row.td1_fit_id as string | null) ?? null,
+      sourceTd1ArtifactSha256: (td1Row.td1_artifact_sha256 as string | null) ?? null,
+      featureCutoffTs: (td1Row.td1_feature_cutoff_ts as string | null) ?? null,
+      latestSourceCandleTs: (td1Row.td1_latest_source_candle_ts as string | null) ?? null,
+      timingStatus: (td1Row.timing_status as string | null) ?? null,
+      leakageCheckPassed: (td1Row.leakage_check_passed as boolean | null) ?? null,
+    }),
+  };
+  await supabase.from("model7_td1_rc_shadow").insert(td3Row as never);
 }
 
 
