@@ -163,9 +163,9 @@ export function td3PredictionColumns(args: {
     td3_source_td1_policy_version: args.sourceTd1PolicyVersion,
     td3_source_td1_fit_id: args.sourceTd1FitId,
     td3_source_td1_artifact_sha256: args.sourceTd1ArtifactSha256,
-    td3_pre_veto_decision: e.finalDecision === "SKIP" && e.vetoFired
-      ? (e.wouldTrade ? e.finalDecision : undefined)
-      : undefined,
+    td3_pre_veto_decision: args.preVetoDecision,
+    td3_pre_veto_would_trade: args.preVetoWouldTrade,
+    td3_pre_veto_skip_reason: args.preVetoSkipReason,
     td3_toxic_drift_evaluable: e.evaluable,
     td3_current_directional_confidence: e.confidence,
     td3_current_directional_confidence_threshold: TD3_TOXIC_CONFIDENCE_MAX,
