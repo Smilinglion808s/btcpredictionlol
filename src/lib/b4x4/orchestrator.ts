@@ -119,7 +119,12 @@ export async function loadDailyState(
 
 export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
   const runMode = ctx.runMode ?? "LIVE";
+  const build = b4x4BuildIdentity();
   return {
+    build_identifier: build.build_identifier,
+    build_commit_sha: build.build_commit_sha,
+    deploy_environment: build.deploy_environment,
+
     source_a2_row_id: ctx.a2RowId ?? null,
     source_prediction_id: ctx.predictionId ?? null,
     target_candle_ts: ctx.candleTs,
