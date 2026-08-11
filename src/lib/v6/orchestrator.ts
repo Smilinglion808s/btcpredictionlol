@@ -399,6 +399,24 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       ? structure.reason
       : r3AbstainReason;
 
+    // --- V6-r5 Selective Core Router — the ONLY live publication authority ---
+    // Steps 7-11: evaluated independently of every legacy layer above. The
+    // legacy stack (pickups, broad conflict, BROAD_RED reliability, structure
+    // confirmation, regime inverter) remains fully computed but shadow-only.
+    const r5 = evaluateR5Router(
+      inf.predictionAfterWeakRedRecovery,
+      inf.predictionSourceAfterWeakRedRecovery,
+      inf.selectedComponent,
+      {
+        stoch_spread: inf.gbFeatures.stoch_spread ?? inf.ridgeFeatures.stoch_spread,
+        d1_mean_body_to_range_2: inf.gbFeatures.d1_mean_body_to_range_2,
+        d1_close_position_in_range: inf.gbFeatures.d1_close_position_in_range,
+        close_slope_8: inf.gbFeatures.close_slope_8 ?? inf.ridgeFeatures.close_slope_8,
+        bb_width_pct: inf.gbFeatures.bb_width_pct ?? inf.ridgeFeatures.bb_width_pct,
+        aligned_wick_pressure_4: inf.ridgeFeatures.aligned_wick_pressure_4,
+      },
+    );
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
