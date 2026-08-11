@@ -113,7 +113,19 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
             results.b4x4_catchup_error = e instanceof Error ? e.message : String(e);
           }
           timings.b4x4_catchup_ms = Date.now() - cuStart;
+
+          // Straggler sweep: close out downstream rows (V6 / B4x4 / TD*) whose
+          // base prediction never resolved or resolved as a PUSH.
+          const swStart = Date.now();
+          try {
+            const { sweepUnresolvedRows } = await import("@/lib/resolutionSweeper.server");
+            results.resolution_sweep = await sweepUnresolvedRows(supabase);
+          } catch (e) {
+            results.resolution_sweep_error = e instanceof Error ? e.message : String(e);
+          }
+          timings.resolution_sweep_ms = Date.now() - swStart;
         }
+
 
         if (phase === "predict" || phase === "both") {
           const t0 = Date.now();
