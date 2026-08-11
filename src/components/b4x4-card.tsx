@@ -141,6 +141,19 @@ export function B4x4Card({
         <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
       </div>
 
+      {hist && Number(hist.trades ?? 0) > 0 ? (
+        <div className="relative b4-chip px-3 py-2 mb-4 opacity-70">
+          <div className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            Pre-repair historical segment · excluded from headline
+          </div>
+          <div className="text-[11px] font-mono tabular-nums mt-0.5">
+            {Number(hist.trades ?? 0)} trades · {Number(hist.wins ?? 0)}W / {Number(hist.losses ?? 0)}L ·
+            net {signed(Number(hist.net ?? 0))} · {Number(hist.win_rate ?? 0).toFixed(1)}%
+          </div>
+        </div>
+      ) : null}
+
+
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
         <Stat
           label="Today"
