@@ -119,10 +119,13 @@
 @utility text-bear { color: var(--bear); }
 @utility text-warn { color: var(--warn); }
 @utility text-info { color: var(--info); }
+@utility text-emerald { color: var(--emerald); }
 @utility bg-bull { background-color: var(--bull); }
 @utility bg-bear { background-color: var(--bear); }
 @utility bg-warn { background-color: var(--warn); }
 @utility bg-info { background-color: var(--info); }
+@utility bg-emerald { background-color: var(--emerald); }
+
 
 /* ---- V6 hero card visuals ---- */
 @keyframes v6-sheen {
