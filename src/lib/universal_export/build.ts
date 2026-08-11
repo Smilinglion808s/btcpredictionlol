@@ -4,6 +4,11 @@
 // Pure function.  Callers do the IO.
 
 import {
+  SHADOW_A_VARIANT as B4X4_SHADOW_A_VARIANT,
+  SHADOW_B_VARIANT as B4X4_SHADOW_B_VARIANT,
+} from "../b4x4/shadows";
+import {
+
   buildManifest,
   NEW_COLUMNS,
   UNIVERSAL_SCHEMA_VERSION,
