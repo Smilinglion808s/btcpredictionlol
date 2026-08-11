@@ -506,6 +506,26 @@ export async function resolveTd1RcRow(
         };
       }
 
+      // --- TD3 toxic-drift attribution (TD3 rows only) ---
+      let td3Patch: Record<string, unknown> = {};
+      if (row.variant === TD3_VARIANT && row.td3_policy_version) {
+        const td3Final = scoreTd3Decision(
+          (row.td3_final_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          actualDirection,
+        );
+        const underlyingDecision = (row.td3_pre_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+        const underlying = scoreTd3Decision(underlyingDecision, actualDirection);
+        const vetoFired = row.td3_toxic_drift_veto_fired === true;
+        td3Patch = {
+          td3_result: td3Final.result,
+          td3_raw_score: td3Final.score,
+          td3_underlying_td1_decision: underlyingDecision,
+          td3_underlying_td1_result: underlying.result,
+          td3_underlying_td1_score: underlying.score,
+          td3_toxic_drift_veto_value: td3VetoValue(vetoFired, underlying.result),
+        };
+      }
+
       await supabase.from("model7_td1_rc_shadow").update({
         a2_counterfactual_result: cfResult,
         actual_direction: actualDirection,
