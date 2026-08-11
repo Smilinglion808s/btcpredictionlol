@@ -152,7 +152,7 @@ export async function sweepUnresolvedRows(
       if (!r.prediction_id || seen.has(r.prediction_id)) continue;
 
       seen.add(r.prediction_id);
-      await resolveTd1RcRow(supabase, r.prediction_id, c.dir);
+      await resolveTd1RcRow(supabase, r.prediction_id, c.dir as "GREEN" | "RED");
       tdTargets.push(new Date(r.candle_ts).toISOString());
     }
   } catch (e) {
