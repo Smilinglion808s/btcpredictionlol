@@ -138,7 +138,9 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     pageAll<Record<string, unknown>>("model7_aas96_shadow", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("a96_predictions", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("b4x4_predictions", "target_candle_ts", 20000),
+    pageAll<Record<string, unknown>>("b4x4_policy_shadows", "target_candle_ts", 40000),
   ]);
+
 
   // Merge live + archive predictions (dedupe by id).
   const seen = new Set<string>();
