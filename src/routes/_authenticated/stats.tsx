@@ -109,8 +109,6 @@ function StatsPage() {
 
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
-  const [resettingTd2, setResettingTd2] = useState(false);
-  const [exportingTd2, setExportingTd2] = useState(false);
 
 
   async function downloadV6Csv() {
@@ -147,27 +145,6 @@ function StatsPage() {
     }
   }
 
-  async function doResetTd2Stats() {
-    if (!confirm("Reset TD2-RC visual stats to zero? The CSV export will keep all historical rows.")) return;
-    try {
-      setResettingTd2(true);
-      await resetTd2Fn();
-      qc.invalidateQueries({ queryKey: ["td2-rc-shadow-stats"] });
-    } finally {
-      setResettingTd2(false);
-    }
-  }
-
-  async function downloadTd2Csv() {
-    try {
-      setExportingTd2(true);
-      const rows = await exportTd2Fn();
-      if (rows.length === 0) { alert("No TD2-RC shadow rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `td2-rc-shadow-${stamp()}.csv`);
-    } finally {
-      setExportingTd2(false);
-    }
-  }
 
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
@@ -279,23 +256,6 @@ function StatsPage() {
     daily_3d: (td1Stats.daily_3d ?? []) as Array<Record<string, any>>,
 
   };
-  const td2Stats = (td2Q.data ?? {}) as Record<string, any>;
-  const td2Hero = {
-    total: Number(td2Stats.total ?? 0),
-    wins: Number(td2Stats.wins ?? 0),
-    losses: Number(td2Stats.losses ?? 0),
-    pushes: Number(td2Stats.pushes ?? 0),
-    pending: Number(td2Stats.pending ?? 0),
-    win_rate: Number(td2Stats.win_rate ?? 0),
-    td1_vetoes: Number(td2Stats.td1_vetoes ?? 0),
-    containment_vetoes: Number(td2Stats.containment_vetoes ?? 0),
-    compressed_risk: (td2Stats.compressed_risk ?? null) as Record<string, any> | null,
-    recovery: (td2Stats.recovery ?? null) as Record<string, any> | null,
-    daily_3d: (td2Stats.daily_3d ?? []) as Array<Record<string, any>>,
-
-
-  };
-  const td2Resolved = td2Hero.wins + td2Hero.losses + td2Hero.pushes;
 
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
@@ -387,21 +347,7 @@ function StatsPage() {
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <TD1Card
-          title="TD2-RC"
-          eyebrow="Shadow layer · compressed-risk gate"
-          showCompressedRisk
-          hero={td2Hero}
-          resolved={td2Resolved}
-          pending={td2PendingQ.data as any}
-          progress={td1ProgressQ.data as any}
-          onExport={downloadTd2Csv}
-          exporting={exportingTd2}
-          onReset={doResetTd2Stats}
-          resetting={resettingTd2}
-        />
-
+      <div className="grid grid-cols-1 gap-5">
         <B4x4Card
           stats={(b4x4Q.data as any) ?? {}}
           pending={(b4x4PendingQ.data as any) ?? null}
