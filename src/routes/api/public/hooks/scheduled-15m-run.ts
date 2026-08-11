@@ -101,6 +101,18 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
             results.resolve_error = e instanceof Error ? e.message : String(e);
           }
           timings.resolve_ms = Date.now() - t0;
+
+          // B4x4 watchdog: fill any target that never produced a row.
+          const cuStart = Date.now();
+          try {
+            const { catchUpMissingB4x4Rows } = await import("@/lib/b4x4/orchestrator");
+            results.b4x4_catchup = await catchUpMissingB4x4Rows(supabase, {
+              schedulerInvocationId: `cron-${overallStart}`,
+            });
+          } catch (e) {
+            results.b4x4_catchup_error = e instanceof Error ? e.message : String(e);
+          }
+          timings.b4x4_catchup_ms = Date.now() - cuStart;
         }
 
         if (phase === "predict" || phase === "both") {

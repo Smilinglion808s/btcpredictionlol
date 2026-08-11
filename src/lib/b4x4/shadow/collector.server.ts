@@ -17,8 +17,14 @@ const TF_MS = 15 * 60 * 1000;
 // A pre-warm request can arrive about one minute before the boundary. Keep
 // that snapshot as a fallback, but permit a later prediction-window request
 // to replace it with a materially fresher pre-cutoff event.
-const IMMUTABLE_CAPTURE_AGE_MS = 30_000;
+const IMMUTABLE_CAPTURE_AGE_MS = 5_000;
+/** A replacement must beat the stored snapshot by at least this much. */
+const FRESHER_BY_MS = 1_000;
+/** Target freshness for a prediction-window capture. */
+const TARGET_FRESH_AGE_MS = 3_000;
+const FRESHNESS_RETRIES = 2;
 const OKX_BASE = () => process.env.OKX_REST_BASE_URL || "https://www.okx.com";
+
 
 export function nextTargetBoundaryMs(nowMs = Date.now()): number {
   return Math.ceil(nowMs / TF_MS) * TF_MS;
@@ -151,7 +157,22 @@ export async function captureB4x4PreBoundarySnapshot(
   };
 
   try {
-    const [book, trades] = await Promise.all([fetchOkxBook(), fetchOkxTrades()]);
+    // Poll for a genuinely fresh pre-cutoff book: OKX can echo a book whose
+    // event timestamp is seconds old, which is the whole failure mode this
+    // collector exists to avoid. Retry briefly until the event is close to
+    // the cutoff or the attempt budget is spent.
+    let book = null as Awaited<ReturnType<typeof fetchOkxBook>>;
+    let trades: Trade[] | null = null;
+    for (let attempt = 0; attempt <= FRESHNESS_RETRIES; attempt++) {
+      const [b, t] = await Promise.all([fetchOkxBook(), fetchOkxTrades()]);
+      if (b && (t != null || trades == null)) {
+        book = b;
+        trades = t;
+      }
+      const age = book ? Date.now() - book.eventTsMs : Number.POSITIVE_INFINITY;
+      if (book && age <= TARGET_FRESH_AGE_MS) break;
+      if (attempt < FRESHNESS_RETRIES) await new Promise((r) => setTimeout(r, 400));
+    }
     if (!book) {
       row.error_message = "okx_book_unreachable";
     } else if (book.eventTsMs > cutoff) {
@@ -186,9 +207,25 @@ export async function captureB4x4PreBoundarySnapshot(
     row.error_message = e instanceof Error ? e.message : String(e);
   }
 
+  // Never regress an existing valid snapshot: only a strictly fresher
+  // pre-cutoff capture may replace it.
+  if (prior?.event_ts && !prior.error_code) {
+    const priorAge = cutoff - new Date(prior.event_ts).getTime();
+    const newAge = row.event_ts ? cutoff - new Date(row.event_ts).getTime() : null;
+    if (newAge == null || newAge < 0 || newAge > priorAge - FRESHER_BY_MS) {
+      return {
+        status: "kept_existing",
+        target: targetIso,
+        event_ts: prior.event_ts,
+        age_ms: priorAge,
+      };
+    }
+  }
+
   await supabase
     .from("b4x4_ob_snapshots")
     .upsert(row as never, { onConflict: "target_candle_ts" });
+
 
   return {
     status: row.error_code ?? "captured",

@@ -9,6 +9,21 @@ export const B4X4_SOURCE_VARIANT = "A2_Combined";
 export const B4X4_TIMEFRAME = "15m";
 export const B4X4_TIMEZONE = "America/Boise";
 
+/**
+ * Runtime-integrity repair identity. The predictive policy is unchanged
+ * (still B4x4-v1); only the implementation was corrected.
+ */
+export const B4X4_IMPLEMENTATION_REVISION = "b4x4-v1-runtime-integrity-r1";
+export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_V1_RUNTIME_INTEGRITY_R1";
+/** Reporting label for rows produced before the repair. */
+export const B4X4_PRE_REPAIR_SEGMENT = "B4X4_V1_PRE_RUNTIME_REPAIR";
+/** Absolute source index scheme version. */
+export const B4X4_SOURCE_INDEX_VERSION = "abs-epoch-v1";
+/** Resolver accounting version. */
+export const B4X4_RESOLVER_VERSION = "b4x4-resolver-r1";
+export const B4X4_CANONICAL_CANDLE_SOURCE = "OKX:BTC-USDT:15m:confirmed";
+
+
 export const GLOBAL_CONFIDENCE_LOOKBACK = 384;
 export const SAME_SIDE_CONFIDENCE_LOOKBACK = 768;
 
@@ -55,6 +70,9 @@ export const B4X4_CONFIG = {
   INTRADAY_BRAKE_TRIGGER_NET,
   INTRADAY_BRAKE_GRID_PERCENTILE_MIN,
   INTRADAY_BRAKE_P_CORRECT_MIN_EXCLUSIVE,
+  implementation_revision: B4X4_IMPLEMENTATION_REVISION,
+  revision_prospective_test_id: B4X4_REVISION_PROSPECTIVE_TEST_ID,
+  source_index_version: B4X4_SOURCE_INDEX_VERSION,
 } as const;
 
 let _hash: string | null = null;
@@ -62,6 +80,14 @@ export function b4x4ConfigHash(): string {
   if (!_hash) _hash = createHash("sha256").update(JSON.stringify(B4X4_CONFIG)).digest("hex");
   return _hash;
 }
+
+/** Deterministic hash for a shadow policy identity + its frozen parameters. */
+export function b4x4ShadowConfigHash(variant: string, params: Record<string, unknown>): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ base: B4X4_CONFIG, shadow_variant: variant, params }))
+    .digest("hex");
+}
+
 
 /** Local calendar date (America/Boise) for an ISO timestamp. */
 export function b4x4LocalDate(iso: string | Date): string {

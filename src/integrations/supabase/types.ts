@@ -571,6 +571,110 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_policy_shadows: {
+        Row: {
+          actual_direction: string | null
+          b4x4_prediction_id: string
+          base_route: string | null
+          brake_active: boolean
+          brake_veto_fired: boolean
+          config_hash: string
+          created_at: string
+          daily_net_before: number
+          decision_reason: string | null
+          final_prediction: string | null
+          gate_fired: boolean
+          gate_inputs_json: Json | null
+          id: string
+          implementation_revision: string | null
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          local_date: string | null
+          prospective_test_id: string
+          raw_direction: string | null
+          resolution_attempt_count: number
+          resolved_at: string | null
+          result: string | null
+          result_score: number | null
+          run_mode: string
+          shadow_variant: string
+          target_candle_ts: string
+          updated_at: string
+          webhook_eligible: boolean
+          would_trade: boolean
+        }
+        Insert: {
+          actual_direction?: string | null
+          b4x4_prediction_id: string
+          base_route?: string | null
+          brake_active?: boolean
+          brake_veto_fired?: boolean
+          config_hash: string
+          created_at?: string
+          daily_net_before?: number
+          decision_reason?: string | null
+          final_prediction?: string | null
+          gate_fired?: boolean
+          gate_inputs_json?: Json | null
+          id?: string
+          implementation_revision?: string | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          local_date?: string | null
+          prospective_test_id: string
+          raw_direction?: string | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          shadow_variant: string
+          target_candle_ts: string
+          updated_at?: string
+          webhook_eligible?: boolean
+          would_trade?: boolean
+        }
+        Update: {
+          actual_direction?: string | null
+          b4x4_prediction_id?: string
+          base_route?: string | null
+          brake_active?: boolean
+          brake_veto_fired?: boolean
+          config_hash?: string
+          created_at?: string
+          daily_net_before?: number
+          decision_reason?: string | null
+          final_prediction?: string | null
+          gate_fired?: boolean
+          gate_inputs_json?: Json | null
+          id?: string
+          implementation_revision?: string | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          local_date?: string | null
+          prospective_test_id?: string
+          raw_direction?: string | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          shadow_variant?: string
+          target_candle_ts?: string
+          updated_at?: string
+          webhook_eligible?: boolean
+          would_trade?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "b4x4_policy_shadows_b4x4_prediction_id_fkey"
+            columns: ["b4x4_prediction_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       b4x4_predictions: {
         Row: {
           a2_model_fit_id: string | null
@@ -587,8 +691,11 @@ export type Database = {
           base_no_brake_counterfactual_trade: boolean | null
           brake_attribution_class: string | null
           brake_incremental_value: number | null
+          canonical_candle_source: string | null
+          catchup_completed_at: string | null
           catchup_resolution_error: string | null
           catchup_resolution_status: string | null
+          catchup_target_ts: string | null
           confidence: number | null
           config_hash: string | null
           core_eligible: boolean | null
@@ -606,7 +713,9 @@ export type Database = {
           feature_cutoff_ts: string | null
           final_prediction: string | null
           global_history_count: number | null
+          global_history_end_index: number | null
           global_history_end_ts: string | null
+          global_history_start_index: number | null
           global_history_start_ts: string | null
           global_rank: number | null
           global_rank_quartile: number | null
@@ -631,6 +740,8 @@ export type Database = {
           grid_training_source_count: number | null
           grid_training_start_index: number | null
           grid_training_start_ts: string | null
+          grid_window_integrity_passed: boolean | null
+          grid_window_integrity_reason: string | null
           id: string
           implementation_revision: string | null
           intraday_brake_active: boolean | null
@@ -639,9 +750,12 @@ export type Database = {
           last_resolution_error: string | null
           latest_source_candle_ts: string | null
           leakage_check_passed: boolean | null
+          legacy_resolution_counter_unreliable: boolean | null
           local_date: string | null
           model_name: string
           model_version: string
+          operational_gap_reason: string | null
+          operational_gap_status: string | null
           p_correct: number | null
           prospective_test_id: string
           quality_mean: number | null
@@ -649,23 +763,36 @@ export type Database = {
           raw_direction: string | null
           resolution_attempt_count: number
           resolved_at: string | null
+          resolver_version: string | null
           result: string | null
           result_score: number | null
           revision_activated_at: string | null
+          run_finished_at: string | null
           run_mode: string
+          run_started_at: string | null
+          same_side_filtered_count: number | null
           same_side_history_count: number | null
+          same_side_history_end_index: number | null
           same_side_history_end_ts: string | null
+          same_side_history_start_index: number | null
           same_side_history_start_ts: string | null
+          same_side_input_source_count: number | null
           same_side_rank: number | null
           same_side_rank_quartile: number | null
+          same_side_raw_direction_filter: string | null
+          scheduler_invocation_id: string | null
           selected_route: string | null
           source_a2_row_id: string | null
+          source_epoch_ts: string | null
           source_index_absolute: number | null
+          source_index_version: string | null
           source_prediction_id: string | null
+          source_target_ts: string | null
           target_candle_ts: string
           timing_status: string | null
           updated_at: string
           variant: string
+          watchdog_detected_at: string | null
           webhook_eligible: boolean
           webhook_sent_at: string | null
           would_trade: boolean
@@ -685,8 +812,11 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          canonical_candle_source?: string | null
+          catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
           catchup_resolution_status?: string | null
+          catchup_target_ts?: string | null
           confidence?: number | null
           config_hash?: string | null
           core_eligible?: boolean | null
@@ -704,7 +834,9 @@ export type Database = {
           feature_cutoff_ts?: string | null
           final_prediction?: string | null
           global_history_count?: number | null
+          global_history_end_index?: number | null
           global_history_end_ts?: string | null
+          global_history_start_index?: number | null
           global_history_start_ts?: string | null
           global_rank?: number | null
           global_rank_quartile?: number | null
@@ -729,6 +861,8 @@ export type Database = {
           grid_training_source_count?: number | null
           grid_training_start_index?: number | null
           grid_training_start_ts?: string | null
+          grid_window_integrity_passed?: boolean | null
+          grid_window_integrity_reason?: string | null
           id?: string
           implementation_revision?: string | null
           intraday_brake_active?: boolean | null
@@ -737,9 +871,12 @@ export type Database = {
           last_resolution_error?: string | null
           latest_source_candle_ts?: string | null
           leakage_check_passed?: boolean | null
+          legacy_resolution_counter_unreliable?: boolean | null
           local_date?: string | null
           model_name?: string
           model_version?: string
+          operational_gap_reason?: string | null
+          operational_gap_status?: string | null
           p_correct?: number | null
           prospective_test_id?: string
           quality_mean?: number | null
@@ -747,23 +884,36 @@ export type Database = {
           raw_direction?: string | null
           resolution_attempt_count?: number
           resolved_at?: string | null
+          resolver_version?: string | null
           result?: string | null
           result_score?: number | null
           revision_activated_at?: string | null
+          run_finished_at?: string | null
           run_mode?: string
+          run_started_at?: string | null
+          same_side_filtered_count?: number | null
           same_side_history_count?: number | null
+          same_side_history_end_index?: number | null
           same_side_history_end_ts?: string | null
+          same_side_history_start_index?: number | null
           same_side_history_start_ts?: string | null
+          same_side_input_source_count?: number | null
           same_side_rank?: number | null
           same_side_rank_quartile?: number | null
+          same_side_raw_direction_filter?: string | null
+          scheduler_invocation_id?: string | null
           selected_route?: string | null
           source_a2_row_id?: string | null
+          source_epoch_ts?: string | null
           source_index_absolute?: number | null
+          source_index_version?: string | null
           source_prediction_id?: string | null
+          source_target_ts?: string | null
           target_candle_ts: string
           timing_status?: string | null
           updated_at?: string
           variant?: string
+          watchdog_detected_at?: string | null
           webhook_eligible?: boolean
           webhook_sent_at?: string | null
           would_trade?: boolean
@@ -783,8 +933,11 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          canonical_candle_source?: string | null
+          catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
           catchup_resolution_status?: string | null
+          catchup_target_ts?: string | null
           confidence?: number | null
           config_hash?: string | null
           core_eligible?: boolean | null
@@ -802,7 +955,9 @@ export type Database = {
           feature_cutoff_ts?: string | null
           final_prediction?: string | null
           global_history_count?: number | null
+          global_history_end_index?: number | null
           global_history_end_ts?: string | null
+          global_history_start_index?: number | null
           global_history_start_ts?: string | null
           global_rank?: number | null
           global_rank_quartile?: number | null
@@ -827,6 +982,8 @@ export type Database = {
           grid_training_source_count?: number | null
           grid_training_start_index?: number | null
           grid_training_start_ts?: string | null
+          grid_window_integrity_passed?: boolean | null
+          grid_window_integrity_reason?: string | null
           id?: string
           implementation_revision?: string | null
           intraday_brake_active?: boolean | null
@@ -835,9 +992,12 @@ export type Database = {
           last_resolution_error?: string | null
           latest_source_candle_ts?: string | null
           leakage_check_passed?: boolean | null
+          legacy_resolution_counter_unreliable?: boolean | null
           local_date?: string | null
           model_name?: string
           model_version?: string
+          operational_gap_reason?: string | null
+          operational_gap_status?: string | null
           p_correct?: number | null
           prospective_test_id?: string
           quality_mean?: number | null
@@ -845,23 +1005,36 @@ export type Database = {
           raw_direction?: string | null
           resolution_attempt_count?: number
           resolved_at?: string | null
+          resolver_version?: string | null
           result?: string | null
           result_score?: number | null
           revision_activated_at?: string | null
+          run_finished_at?: string | null
           run_mode?: string
+          run_started_at?: string | null
+          same_side_filtered_count?: number | null
           same_side_history_count?: number | null
+          same_side_history_end_index?: number | null
           same_side_history_end_ts?: string | null
+          same_side_history_start_index?: number | null
           same_side_history_start_ts?: string | null
+          same_side_input_source_count?: number | null
           same_side_rank?: number | null
           same_side_rank_quartile?: number | null
+          same_side_raw_direction_filter?: string | null
+          scheduler_invocation_id?: string | null
           selected_route?: string | null
           source_a2_row_id?: string | null
+          source_epoch_ts?: string | null
           source_index_absolute?: number | null
+          source_index_version?: string | null
           source_prediction_id?: string | null
+          source_target_ts?: string | null
           target_candle_ts?: string
           timing_status?: string | null
           updated_at?: string
           variant?: string
+          watchdog_detected_at?: string | null
           webhook_eligible?: boolean
           webhook_sent_at?: string | null
           would_trade?: boolean

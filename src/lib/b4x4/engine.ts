@@ -39,6 +39,7 @@ export type DecisionReason =
   | "ABSTAIN_WARMUP_SOURCE_HISTORY"
   | "ABSTAIN_WARMUP_GRID_HISTORY"
   | "ABSTAIN_GRID_REFERENCE_INVALID"
+  | "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE"
   | "ABSTAIN_NO_ACTIVE_ROUTE"
   | "ABSTAIN_INTRADAY_BRAKE"
   | "ABSTAIN_INTERNAL_ERROR";
@@ -51,8 +52,10 @@ export const OPERATIONAL_ABSTAIN_REASONS = new Set<string>([
   "ABSTAIN_WARMUP_SOURCE_HISTORY",
   "ABSTAIN_WARMUP_GRID_HISTORY",
   "ABSTAIN_GRID_REFERENCE_INVALID",
+  "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE",
   "ABSTAIN_INTERNAL_ERROR",
 ]);
+
 
 /** One canonical A2_Combined observation, ordered oldest → newest by caller. */
 export interface SourceRow {
@@ -106,30 +109,51 @@ export interface B4x4Decision {
   confidence: number | null;
   dataValid: boolean;
   dataInvalidReason: string | null;
+  /** Absolute zero-based position among valid canonical source rows since epoch. */
+  sourceIndexAbsolute: number;
   // ranks
   globalRank: number | null;
   globalHistoryCount: number;
   globalHistoryStartTs: string | null;
   globalHistoryEndTs: string | null;
+  globalHistoryStartIndex: number | null;
+  globalHistoryEndIndex: number | null;
   sameSideRank: number | null;
   sameSideHistoryCount: number;
   sameSideHistoryStartTs: string | null;
   sameSideHistoryEndTs: string | null;
+  /** Source rows taken BEFORE the direction filter (expected 768 when mature). */
+  sameSideInputSourceCount: number;
+  sameSideFilteredCount: number;
+  sameSideHistoryStartIndex: number | null;
+  sameSideHistoryEndIndex: number | null;
+  sameSideRawDirectionFilter: Direction | null;
   globalRankQuartile: number | null;
   sameSideRankQuartile: number | null;
   qualityMean: number | null;
   // grid
   gridTrainingResolvedCount: number;
+  gridTrainingSourceCount: number;
+  gridTrainingStartIndex: number | null;
+  gridTrainingEndIndex: number | null;
   gridTrainingStartTs: string | null;
   gridTrainingEndTs: string | null;
+  gridWindowIntegrityPassed: boolean | null;
+  gridWindowIntegrityReason: string | null;
   gridCell: string | null;
   gridCellResolvedCount: number | null;
   gridCellWins: number | null;
   gridCellLosses: number | null;
   pCorrect: number | null;
   gridReferenceCount: number;
+  gridReferenceSourceCount: number;
+  gridReferenceStartIndex: number | null;
+  gridReferenceEndIndex: number | null;
+  gridReferenceStartTs: string | null;
+  gridReferenceEndTs: string | null;
   gridQualityPercentile: number | null;
   gridSnapshot: GridCell[] | null;
+
   // decision
   coreEligible: boolean;
   expansionEligible: boolean;
@@ -254,28 +278,47 @@ export function evaluateB4x4(
     confidence: null,
     dataValid: true,
     dataInvalidReason: null,
+    sourceIndexAbsolute: history.length,
     globalRank: null,
     globalHistoryCount: 0,
     globalHistoryStartTs: null,
     globalHistoryEndTs: null,
+    globalHistoryStartIndex: null,
+    globalHistoryEndIndex: null,
     sameSideRank: null,
     sameSideHistoryCount: 0,
     sameSideHistoryStartTs: null,
     sameSideHistoryEndTs: null,
+    sameSideInputSourceCount: 0,
+    sameSideFilteredCount: 0,
+    sameSideHistoryStartIndex: null,
+    sameSideHistoryEndIndex: null,
+    sameSideRawDirectionFilter: null,
     globalRankQuartile: null,
     sameSideRankQuartile: null,
     qualityMean: null,
     gridTrainingResolvedCount: 0,
+    gridTrainingSourceCount: 0,
+    gridTrainingStartIndex: null,
+    gridTrainingEndIndex: null,
     gridTrainingStartTs: null,
     gridTrainingEndTs: null,
+    gridWindowIntegrityPassed: null,
+    gridWindowIntegrityReason: null,
     gridCell: null,
     gridCellResolvedCount: null,
     gridCellWins: null,
     gridCellLosses: null,
     pCorrect: null,
     gridReferenceCount: 0,
+    gridReferenceSourceCount: 0,
+    gridReferenceStartIndex: null,
+    gridReferenceEndIndex: null,
+    gridReferenceStartTs: null,
+    gridReferenceEndTs: null,
     gridQualityPercentile: null,
     gridSnapshot: null,
+
     coreEligible: false,
     expansionEligible: false,
     baseCandidate: false,
@@ -319,14 +362,18 @@ export function evaluateB4x4(
   const rawDirection: Direction = p >= 0.5 ? "GREEN" : "RED";
 
   // ---- ranks (strictly earlier history only) ----
-  // Global rank: previous 384 valid source rows.
-  // Same-side rank: previous 768 valid source rows, THEN filtered to this
-  // row's raw direction (not the previous 768 same-direction rows).
-  const globalHistory = history.slice(-GLOBAL_CONFIDENCE_LOOKBACK);
-  const sameSideHistory = history
-    .slice(-SAME_SIDE_CONFIDENCE_LOOKBACK)
-    .filter((h) => h.direction === rawDirection);
-
+  // `history` MUST be the complete valid canonical source stream since the
+  // frozen epoch, oldest → newest, so history.length is the absolute source
+  // position i of the current row and every window below is absolute.
+  const iAbs = history.length;
+  // Global rank: previous 384 valid source positions [i-384, i).
+  const globalStartIdx = Math.max(0, iAbs - GLOBAL_CONFIDENCE_LOOKBACK);
+  const globalHistory = history.slice(globalStartIdx, iAbs);
+  // Same-side rank: previous 768 valid source positions [i-768, i), THEN
+  // filtered to this row's raw direction.
+  const sameSideStartIdx = Math.max(0, iAbs - SAME_SIDE_CONFIDENCE_LOOKBACK);
+  const sameSideWindow = history.slice(sameSideStartIdx, iAbs);
+  const sameSideHistory = sameSideWindow.filter((h) => h.direction === rawDirection);
 
   const globalRank = empiricalRank(globalHistory.map((h) => h.confidence), confidence);
   const sameSideRank = empiricalRank(sameSideHistory.map((h) => h.confidence), confidence);
@@ -358,10 +405,17 @@ export function evaluateB4x4(
     globalHistoryCount: globalHistory.length,
     globalHistoryStartTs: globalHistory[0]?.candleTs ?? null,
     globalHistoryEndTs: globalHistory[globalHistory.length - 1]?.candleTs ?? null,
+    globalHistoryStartIndex: globalHistory.length ? globalStartIdx : null,
+    globalHistoryEndIndex: globalHistory.length ? iAbs - 1 : null,
     sameSideRank,
     sameSideHistoryCount: sameSideHistory.length,
     sameSideHistoryStartTs: sameSideHistory[0]?.candleTs ?? null,
     sameSideHistoryEndTs: sameSideHistory[sameSideHistory.length - 1]?.candleTs ?? null,
+    sameSideInputSourceCount: sameSideWindow.length,
+    sameSideFilteredCount: sameSideHistory.length,
+    sameSideHistoryStartIndex: sameSideWindow.length ? sameSideStartIdx : null,
+    sameSideHistoryEndIndex: sameSideWindow.length ? iAbs - 1 : null,
+    sameSideRawDirectionFilter: rawDirection,
     globalRankQuartile: globalQuartile,
     sameSideRankQuartile: sameSideQuartile,
     qualityMean,
@@ -369,7 +423,7 @@ export function evaluateB4x4(
   };
 
   // ---- warmup: total prior valid source rows ----
-  if (history.length < MIN_SOURCE_HISTORY) {
+  if (iAbs < MIN_SOURCE_HISTORY) {
     return abstain(withRanks, "ABSTAIN_WARMUP_SOURCE_HISTORY", base);
   }
   if (globalRank == null || sameSideRank == null || qualityMean == null) {
@@ -377,24 +431,32 @@ export function evaluateB4x4(
   }
 
   // ---- rolling 4x4 grid ----
-  // Grid training rows are [max(384, i - 768), i) filtered to resolved rows.
-  // There is no minimum resolved-count or cell-count gate; Beta(8,8) smooths.
-  const i = history.length;
+  // Absolute training window [max(384, i - 768), i), filtered to resolved rows
+  // for outcomes only. Beta(8,8) smooths; there is no cell-count gate.
+  const i = iAbs;
   const trainStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_TRAINING_LOOKBACK);
-  const trainingPool = history
-    .slice(trainStart, i)
-    .filter((h) => hasValidRanks(h) && h.correct != null);
+  const trainingWindow = history.slice(trainStart, i);
+  const trainingPool = trainingWindow.filter((h) => hasValidRanks(h) && h.correct != null);
 
   const cells = buildGrid(trainingPool);
   const key = cellKey(globalQuartile!, sameSideQuartile!);
   const cell = cells.get(key)!;
   const snapshot = gridSnapshotArray(cells);
 
+  const expectedTrainingSources = i - trainStart;
+  const integrityPassed = trainingWindow.length === expectedTrainingSources;
   const withGrid: Partial<B4x4Decision> = {
     ...withRanks,
     gridTrainingResolvedCount: trainingPool.length,
-    gridTrainingStartTs: trainingPool[0]?.candleTs ?? null,
-    gridTrainingEndTs: trainingPool[trainingPool.length - 1]?.candleTs ?? null,
+    gridTrainingSourceCount: trainingWindow.length,
+    gridTrainingStartIndex: trainingWindow.length ? trainStart : null,
+    gridTrainingEndIndex: trainingWindow.length ? i - 1 : null,
+    gridTrainingStartTs: trainingWindow[0]?.candleTs ?? null,
+    gridTrainingEndTs: trainingWindow[trainingWindow.length - 1]?.candleTs ?? null,
+    gridWindowIntegrityPassed: integrityPassed,
+    gridWindowIntegrityReason: integrityPassed
+      ? null
+      : `grid_training_source_count=${trainingWindow.length} expected=${expectedTrainingSources}`,
     gridCell: key,
     gridCellResolvedCount: cell.resolvedCount,
     gridCellWins: cell.wins,
@@ -403,18 +465,29 @@ export function evaluateB4x4(
     gridSnapshot: snapshot,
   };
 
+  if (!integrityPassed) {
+    return abstain(withGrid, "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE", base);
+  }
+
   // ---- grid quality percentile ----
   // Reference rows are [max(384, i - 384), i) and INCLUDE unresolved rows.
   const refStart = Math.max(GRID_REFERENCE_LOOKBACK, i - GRID_REFERENCE_LOOKBACK);
-  const referencePool = history.slice(refStart, i).filter(hasValidRanks);
+  const referenceWindow = history.slice(refStart, i);
+  const referencePool = referenceWindow.filter(hasValidRanks);
   const percentile = gridQualityPercentile(referencePool, cells, cell.pCorrect, qualityMean!);
   const withPercentile: Partial<B4x4Decision> = {
     ...withGrid,
     gridReferenceCount: referencePool.length,
+    gridReferenceSourceCount: referenceWindow.length,
+    gridReferenceStartIndex: referenceWindow.length ? refStart : null,
+    gridReferenceEndIndex: referenceWindow.length ? i - 1 : null,
+    gridReferenceStartTs: referenceWindow[0]?.candleTs ?? null,
+    gridReferenceEndTs: referenceWindow[referenceWindow.length - 1]?.candleTs ?? null,
     gridQualityPercentile: percentile,
   };
   if (percentile == null) {
     return abstain(withPercentile, "ABSTAIN_GRID_REFERENCE_INVALID", base);
+
   }
 
 

@@ -6,9 +6,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  B4X4_CANONICAL_CANDLE_SOURCE,
+  B4X4_IMPLEMENTATION_REVISION,
   B4X4_MODEL_NAME,
   B4X4_MODEL_VERSION,
   B4X4_PROSPECTIVE_TEST_ID,
+  B4X4_RESOLVER_VERSION,
+  B4X4_SOURCE_EPOCH_TS,
+  B4X4_SOURCE_INDEX_VERSION,
   B4X4_SOURCE_VARIANT,
   B4X4_VARIANT,
   GRID_TRAINING_LOOKBACK,
@@ -51,49 +56,43 @@ export interface B4x4Context {
   featureCutoffTs?: string | null;
   latestSourceCandleTs?: string | null;
   runMode?: "LIVE" | "BACKFILL";
+  /** Scheduler run identity, for gap/watchdog auditing. */
+  schedulerInvocationId?: string | null;
+  /** Set when this row is produced by a catch-up pass for a missed boundary. */
+  catchupTargetTs?: string | null;
+  operationalGapStatus?: string | null;
+  operationalGapReason?: string | null;
 }
 
 type DbRow = Record<string, unknown>;
 
-/** Load prior ranked B4x4 rows (own persisted rank/grid audit) as history. */
+/**
+ * Build the complete canonical B4x4 history since the frozen source epoch.
+ *
+ * The history MUST come from the canonical A2_Combined source stream (the same
+ * stream the reference replay uses), not from previously persisted B4x4 rows —
+ * a persisted-row loader silently truncates the absolute window and produces
+ * short (445–448 row) grids. Every prior valid source row is replayed with the
+ * frozen engine so ranks, quartiles and correctness are contemporaneous.
+ */
 export async function loadHistory(
   supabase: SupabaseClient,
   beforeCandleTs: string,
 ): Promise<HistoryEntry[]> {
-  const { data } = await supabase
-    .from("b4x4_predictions")
-    .select(
-      "target_candle_ts, confidence, raw_direction, global_rank, same_side_rank, " +
-      "global_rank_quartile, same_side_rank_quartile, quality_mean, actual_direction, data_valid",
-    )
-    .eq("model_version", B4X4_MODEL_VERSION)
-    .eq("data_valid", true)
-    .lt("target_candle_ts", beforeCandleTs)
-    .order("target_candle_ts", { ascending: false })
-    .limit(HISTORY_FETCH);
-  const rows = ((data ?? []) as unknown as DbRow[]).slice().reverse();
+  const { loadCanonicalSourceRows } = await import("./backfill");
+  const before = new Date(beforeCandleTs).getTime();
+  const source = (await loadCanonicalSourceRows(supabase, { upTo: beforeCandleTs })).filter(
+    (r) => new Date(r.candleTs).getTime() < before,
+  );
+  const { replayB4x4 } = await import("./engine");
+  const replay = replayB4x4(source);
   const out: HistoryEntry[] = [];
-  for (const r of rows) {
-    const dir = r.raw_direction as Direction | null;
-    const conf = r.confidence == null ? null : Number(r.confidence);
-    if (dir !== "GREEN" && dir !== "RED") continue;
-    if (conf == null || !Number.isFinite(conf)) continue;
-    const actual = (r.actual_direction as ActualDirection | null) ?? null;
-    out.push({
-      candleTs: String(r.target_candle_ts),
-      confidence: conf,
-      direction: dir,
-      globalRank: r.global_rank == null ? null : Number(r.global_rank),
-      sameSideRank: r.same_side_rank == null ? null : Number(r.same_side_rank),
-      globalQuartile: r.global_rank_quartile == null ? null : Number(r.global_rank_quartile),
-      sameSideQuartile: r.same_side_rank_quartile == null ? null : Number(r.same_side_rank_quartile),
-      qualityMean: r.quality_mean == null ? null : Number(r.quality_mean),
-      actualDirection: actual,
-      correct: actual === "GREEN" || actual === "RED" ? dir === actual : null,
-    });
+  for (const r of replay) {
+    if (r.decision.historyEntry) out.push(r.decision.historyEntry);
   }
   return out;
 }
+
 
 /** Resolved, published day net for the local (America/Boise) date. */
 export async function loadDailyState(
@@ -151,18 +150,30 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     global_history_count: d.globalHistoryCount,
     global_history_start_ts: d.globalHistoryStartTs,
     global_history_end_ts: d.globalHistoryEndTs,
+    global_history_start_index: d.globalHistoryStartIndex,
+    global_history_end_index: d.globalHistoryEndIndex,
     same_side_rank: d.sameSideRank,
     same_side_history_count: d.sameSideHistoryCount,
     same_side_history_start_ts: d.sameSideHistoryStartTs,
     same_side_history_end_ts: d.sameSideHistoryEndTs,
+    same_side_history_start_index: d.sameSideHistoryStartIndex,
+    same_side_history_end_index: d.sameSideHistoryEndIndex,
+    same_side_input_source_count: d.sameSideInputSourceCount,
+    same_side_filtered_count: d.sameSideFilteredCount,
+    same_side_raw_direction_filter: d.sameSideRawDirectionFilter,
     global_rank_quartile: d.globalRankQuartile,
     same_side_rank_quartile: d.sameSideRankQuartile,
     quality_mean: d.qualityMean,
 
     grid_training_lookback: GRID_TRAINING_LOOKBACK,
     grid_training_resolved_count: d.gridTrainingResolvedCount,
+    grid_training_source_count: d.gridTrainingSourceCount,
     grid_training_start_ts: d.gridTrainingStartTs,
     grid_training_end_ts: d.gridTrainingEndTs,
+    grid_training_start_index: d.gridTrainingStartIndex,
+    grid_training_end_index: d.gridTrainingEndIndex,
+    grid_window_integrity_passed: d.gridWindowIntegrityPassed,
+    grid_window_integrity_reason: d.gridWindowIntegrityReason,
     grid_prior_alpha: 8,
     grid_prior_beta: 8,
     grid_cell: d.gridCell,
@@ -171,6 +182,11 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     grid_cell_losses: d.gridCellLosses,
     p_correct: d.pCorrect,
     grid_reference_count: d.gridReferenceCount,
+    grid_reference_source_count: d.gridReferenceSourceCount,
+    grid_reference_start_index: d.gridReferenceStartIndex,
+    grid_reference_end_index: d.gridReferenceEndIndex,
+    grid_reference_start_ts: d.gridReferenceStartTs,
+    grid_reference_end_ts: d.gridReferenceEndTs,
     grid_quality_percentile: d.gridQualityPercentile,
     grid_snapshot_json: d.gridSnapshot,
 
@@ -186,8 +202,23 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     final_prediction: d.finalPrediction,
     would_trade: d.wouldTrade,
     decision_reason: d.decisionReason,
+
+    // ---- runtime-integrity audit identity ----
+    implementation_revision: B4X4_IMPLEMENTATION_REVISION,
+    source_index_absolute: d.sourceIndexAbsolute,
+    source_index_version: B4X4_SOURCE_INDEX_VERSION,
+    source_epoch_ts: B4X4_SOURCE_EPOCH_TS,
+    source_target_ts: ctx.candleTs,
+    resolver_version: B4X4_RESOLVER_VERSION,
+    canonical_candle_source: B4X4_CANONICAL_CANDLE_SOURCE,
+    legacy_resolution_counter_unreliable: false,
+    scheduler_invocation_id: ctx.schedulerInvocationId ?? null,
+    catchup_target_ts: ctx.catchupTargetTs ?? null,
+    operational_gap_status: ctx.operationalGapStatus ?? "NONE",
+    operational_gap_reason: ctx.operationalGapReason ?? null,
   };
 }
+
 
 /**
  * Live B4x4 run. Never throws — any failure is persisted as an operational
@@ -197,6 +228,7 @@ export async function runB4x4ForA2Combined(
   supabase: SupabaseClient,
   ctx: B4x4Context,
 ): Promise<DbRow | null> {
+  const runStartedAt = new Date().toISOString();
   try {
     const history = await loadHistory(supabase, ctx.candleTs);
     const daily = await loadDailyState(supabase, ctx.candleTs);
@@ -208,14 +240,38 @@ export async function runB4x4ForA2Combined(
       actualDirection: null,
     };
     const decision = evaluateB4x4(source, history, daily);
-    const row = decisionToRow(ctx, decision);
+    const row = {
+      ...decisionToRow(ctx, decision),
+      run_started_at: runStartedAt,
+      run_finished_at: new Date().toISOString(),
+    };
     const { data, error } = await supabase
       .from("b4x4_predictions")
       .upsert(row as never, { onConflict: "target_candle_ts,model_version", ignoreDuplicates: true })
       .select("*")
       .maybeSingle();
     if (error) return null;
-    const saved = (data as unknown as DbRow | null) ?? null;
+    let saved = (data as unknown as DbRow | null) ?? null;
+    if (!saved) {
+      // Target-row protection: an existing row for this target is never
+      // overwritten, but it must still be returned so downstream shadow
+      // capture and auditing run exactly once per target.
+      const { data: existing } = await supabase
+        .from("b4x4_predictions")
+        .select("*")
+        .eq("model_version", B4X4_MODEL_VERSION)
+        .eq("target_candle_ts", ctx.candleTs)
+        .maybeSingle();
+      saved = (existing as unknown as DbRow | null) ?? null;
+    }
+    // ---- Reporting-only policy shadows (never influence the active model). ----
+    if (saved) {
+      try {
+        const { persistB4x4PolicyShadows } = await import("./shadow/policy-shadows.server");
+        await persistB4x4PolicyShadows(supabase, saved, decision, history);
+      } catch { /* reporting only */ }
+    }
+
     // ---- Order-book shadow capture (shadow only, never blocks B4x4). ----
     if (saved && saved.run_mode === "LIVE") {
       try {
@@ -253,7 +309,8 @@ export async function runB4x4ForA2Combined(
  * Held OFF pending activation; engine, persistence, resolution, dashboard and
  * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
  */
-export const B4X4_WEBHOOKS_ENABLED = true;
+// Held OFF for the b4x4-v1-runtime-integrity-r1 repair rollout.
+export const B4X4_WEBHOOKS_ENABLED = false;
 
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
@@ -300,20 +357,24 @@ export async function resolveB4x4Row(
   actualDirection: ActualDirection,
   ohlc?: { open?: number | null; high?: number | null; low?: number | null; close?: number | null },
 ): Promise<void> {
+  let rowId: string | null = null;
   try {
     const { data } = await supabase
       .from("b4x4_predictions")
       .select(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
-        "expansion_eligible, intraday_brake_veto_fired, resolved_at",
+        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
       )
       .eq("model_version", B4X4_MODEL_VERSION)
       .eq("target_candle_ts", targetCandleTs)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
+    rowId = String(row.id);
     if (row.resolved_at) return; // idempotent
 
+    // Every genuine resolution attempt is counted, successful or not.
+    const attempts = Number(row.resolution_attempt_count ?? 0) + 1;
     const rawDir = (row.raw_direction as Direction | null) ?? null;
     const final = scoreAgainst((row.final_prediction as Direction | null) ?? null, actualDirection);
     const baseNoBrake = scoreAgainst(row.base_candidate === true ? rawDir : null, actualDirection);
@@ -338,8 +399,11 @@ export async function resolveB4x4Row(
         result: row.would_trade === true ? (final.result ?? "PUSH") : "PUSH",
         result_score: row.would_trade === true ? final.score : 0,
         resolved_at: new Date().toISOString(),
+        resolution_attempt_count: attempts,
         last_resolution_attempt_at: new Date().toISOString(),
         last_resolution_error: null,
+        resolver_version: B4X4_RESOLVER_VERSION,
+        legacy_resolution_counter_unreliable: false,
         raw_a2_counterfactual_result: rawCf.result,
         core_only_counterfactual_trade: row.core_eligible === true,
         core_only_counterfactual_score: coreOnly.score,
@@ -353,7 +417,7 @@ export async function resolveB4x4Row(
       .eq("id", row.id as string)
       .is("resolved_at", null);
 
-    // ---- Shadow attribution (never blocks resolution). ----
+    // ---- Order-book shadow attribution (never blocks resolution). ----
     try {
       const { resolveB4x4ShadowRow } = await import("./shadow/persist.server");
       await resolveB4x4ShadowRow(supabase, targetCandleTs, actualDirection, {
@@ -363,5 +427,110 @@ export async function resolveB4x4Row(
         would_trade: row.would_trade === true,
       });
     } catch { /* shadow only */ }
-  } catch { /* never block the resolver */ }
+
+    // ---- Reporting-only policy shadows (independent scoring). ----
+    try {
+      const { resolveB4x4PolicyShadows } = await import("./shadow/policy-shadows.server");
+      await resolveB4x4PolicyShadows(supabase, targetCandleTs, actualDirection);
+    } catch { /* reporting only */ }
+  } catch (e) {
+    // Record the failed attempt so resolution health is auditable.
+    try {
+      if (rowId) {
+        await supabase
+          .from("b4x4_predictions")
+          .update({
+            last_resolution_attempt_at: new Date().toISOString(),
+            last_resolution_error: e instanceof Error ? e.message : String(e),
+            resolver_version: B4X4_RESOLVER_VERSION,
+          } as never)
+          .eq("id", rowId)
+          .is("resolved_at", null);
+      }
+    } catch { /* never block the resolver */ }
+  }
+}
+
+
+/**
+ * Catch-up pass: create the missing B4x4 row for any canonical source target
+ * that was never evaluated (missed scheduler run, deploy, outage).
+ *
+ * Catch-up rows are audit rows: they are marked with the gap status, are never
+ * webhook-eligible, and are written with `ignoreDuplicates` so no existing
+ * historical row is ever mutated.
+ */
+export async function catchUpMissingB4x4Rows(
+  supabase: SupabaseClient,
+  opts: { lookbackTargets?: number; schedulerInvocationId?: string | null } = {},
+): Promise<{ checked: number; created: number; targets: string[] }> {
+  const lookback = opts.lookbackTargets ?? 96;
+  try {
+    const { loadCanonicalSourceRows } = await import("./backfill");
+    const { replayB4x4 } = await import("./engine");
+    const all = await loadCanonicalSourceRows(supabase);
+    if (!all.length) return { checked: 0, created: 0, targets: [] };
+
+    const recent = all.slice(-lookback);
+    const { data: existingRows } = await supabase
+      .from("b4x4_predictions")
+      .select("target_candle_ts")
+      .eq("model_version", B4X4_MODEL_VERSION)
+      .gte("target_candle_ts", recent[0]!.candleTs);
+    const have = new Set(
+      ((existingRows ?? []) as unknown as DbRow[]).map((r) =>
+        new Date(String(r.target_candle_ts)).toISOString(),
+      ),
+    );
+    const missing = recent.filter((r) => !have.has(r.candleTs));
+    if (!missing.length) return { checked: recent.length, created: 0, targets: [] };
+
+    // Replay the full stream so every catch-up row keeps the absolute window.
+    const results = replayB4x4(all);
+    const byTs = new Map(results.map((r) => [r.row.candleTs, r]));
+    const rows: DbRow[] = [];
+    for (const src of missing) {
+      const r = byTs.get(src.candleTs);
+      if (!r) continue;
+      const row = decisionToRow(
+        {
+          predictionId: src.predictionId ?? "",
+          candleTs: src.candleTs,
+          a2RowId: src.sourceRowId,
+          probabilityGreen: src.probabilityGreen,
+          timingStatus: src.timingStatus,
+          leakageCheckPassed: src.leakageCheckPassed,
+          a2ModelFitId: src.a2ModelFitId,
+          a2ProductionModelVersion: src.a2ProductionModelVersion,
+          runMode: "LIVE",
+          schedulerInvocationId: opts.schedulerInvocationId ?? null,
+          catchupTargetTs: src.candleTs,
+          operationalGapStatus: "CATCHUP",
+          operationalGapReason: "MISSING_SCHEDULED_RUN",
+        },
+        r.decision,
+      );
+      row.webhook_eligible = false;
+      row.catchup_resolution_status = "CATCHUP_CREATED";
+      row.catchup_completed_at = new Date().toISOString();
+      row.watchdog_detected_at = new Date().toISOString();
+      rows.push(row);
+    }
+    if (!rows.length) return { checked: recent.length, created: 0, targets: [] };
+
+    const { error } = await supabase
+      .from("b4x4_predictions")
+      .upsert(rows as never, {
+        onConflict: "target_candle_ts,model_version",
+        ignoreDuplicates: true,
+      });
+    if (error) return { checked: recent.length, created: 0, targets: [] };
+    return {
+      checked: recent.length,
+      created: rows.length,
+      targets: rows.map((r) => String(r.target_candle_ts)),
+    };
+  } catch {
+    return { checked: 0, created: 0, targets: [] };
+  }
 }
