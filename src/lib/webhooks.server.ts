@@ -722,3 +722,76 @@ export function buildB4x4WebhookPayload({ row }: { row: Record<string, any> }) {
     timezone: "America/Denver",
   };
 }
+
+// ── V6 (v6-r5 selective core router) — secondary directional webhook source ──
+// Emits only for live, published GREEN/RED rows, and only when B4x4 has not
+// published an opposing direction for the same target candle (B4x4 wins).
+export const V6_MODEL_ID = "V6";
+export const V6_DECISION_POLICY_VERSION = "v6-r5-selective-core-router";
+
+export function buildV6WebhookPayload({ row }: { row: Record<string, any> }) {
+  const targetTs = String(row.target_candle_ts);
+  const startMs = new Date(targetTs).getTime();
+  const startsAt = new Date(startMs).toISOString();
+  const endsAt = new Date(startMs + TF_MS_15M).toISOString();
+  const nowIso = new Date().toISOString();
+  const direction = row.final_prediction as "GREEN" | "RED";
+  const predictionLabel: "YES" | "NO" = direction === "GREEN" ? "YES" : "NO";
+  const broad = row.broad_percentile != null ? Number(row.broad_percentile) : null;
+  const anchor = row.anchor_percentile != null ? Number(row.anchor_percentile) : null;
+  const strength = [broad, anchor]
+    .filter((v): v is number => v != null && Number.isFinite(v))
+    .reduce((best, v) => Math.max(best, Math.abs(v - 0.5)), 0);
+  const confidence = Math.round((0.5 + strength) * 100);
+
+  return {
+    model: V6_MODEL_ID,
+    model_name: "V6",
+    model_version: row.model_version ?? "v6",
+    decision_policy_version: V6_DECISION_POLICY_VERSION,
+    variant: row.r5_router_version ?? "v6-r5",
+    prospective_test_id: "V6_R5_SELECTIVE_CORE_ROUTER",
+    model_artifact_sha256: row.model_artifact_sha256 ?? null,
+    model_fit_id: row.fit_id ?? null,
+    setup_type: null,
+
+    prediction: predictionLabel,
+    confidence,
+    decision: predictionLabel,
+    trade: true,
+    probability_green: null,
+    base_decision:
+      row.base_v6_prediction === "GREEN" ? "YES" : row.base_v6_prediction === "RED" ? "NO" : null,
+    override_reasons: [],
+
+    direction_label: predictionLabel,
+    raw_direction: row.base_v6_prediction ?? null,
+    selected_route: row.r5_router_source ?? null,
+    selected_component: row.selected_component ?? null,
+    broad_percentile: broad,
+    anchor_percentile: anchor,
+    decision_reason: row.r5_router_reason ?? row.final_reason ?? null,
+    b4x4_direction_at_send: row.b4x4_direction_at_send ?? null,
+
+    candle_starts_at: startsAt,
+    candle_ends_at: endsAt,
+    target_candle_ts: targetTs,
+
+    dedupe_key: `BTC-USDT-15m-${startsAt}-v6`,
+    idempotency_key: `${row.prediction_id}:v6-r5`,
+    prediction_id: row.prediction_id ?? null,
+    v6_row_id: row.prediction_id ?? null,
+    shadow_id: null,
+
+    btc_price_at_prediction: null,
+    market_condition: null,
+
+    timing_status: row.timing_valid === false ? "LATE" : "ON_TIME",
+    boundary_delta_ms: null,
+    scored_at: null,
+
+    sent_at: nowIso,
+    sent_at_mt: formatMountainTime(nowIso),
+    timezone: "America/Denver",
+  };
+}

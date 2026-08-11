@@ -650,8 +650,19 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
     };
 
 
-    const { error } = await sb.from("v6_predictions").insert(row as never);
+    const { data: saved, error } = await sb
+      .from("v6_predictions")
+      .insert(row as never)
+      .select("*")
+      .maybeSingle();
     if (error && !String(error.message).includes("duplicate key")) throw error;
+
+    // Outbound directional webhook. B4x4 wins any direction conflict.
+    try {
+      const { maybeSendV6Webhook } = await import("./webhook.server");
+      await maybeSendV6Webhook(sb, (saved ?? null) as Record<string, unknown> | null);
+    } catch { /* never block the prediction path */ }
+
   } catch (e) {
     await logError(sb, "v6-prediction-error", { target_candle_ts: targetTs.toISOString() }, e);
   }
