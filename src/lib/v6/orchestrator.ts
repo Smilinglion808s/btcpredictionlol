@@ -62,9 +62,27 @@ import {
   STRUCTURE_EXPANSION_RANGE_MIN,
   STRUCTURE_REJECTION_ALIGNED_WICK_MIN,
   STRUCTURE_REJECTION_LOWER_WICK_MIN,
-  V6_R4_ACTIVATED_AT,
   V6_R4_MODEL_REVISION,
 } from "./structure";
+import {
+  evaluateR5Router,
+  gradeBranch,
+  BROAD_CONFLICT_PUBLICATION_ENABLED,
+  BROAD_RED_RELIABILITY_PUBLICATION_ENABLED,
+  LEGACY_PICKUP_PUBLICATION_ENABLED,
+  R5_ALIGNED_WICK_RED_SHADOW_MIN,
+  R5_GREEN_D1_MEAN_BODY_RANGE_MAX,
+  R5_GREEN_STOCH_SPREAD_MAX,
+  R5_RED_ANCHOR_D1_CLOSE_POSITION_MAX,
+  R5_RED_BROAD_BB_WIDTH_MAX,
+  R5_RED_BROAD_CLOSE_SLOPE_MIN,
+  STRUCTURE_CONFIRMATION_PUBLICATION_ENABLED,
+  STRUCTURE_CONFIRMATION_SHADOW_ONLY,
+  V6_R5_ACTIVATED_AT,
+  V6_R5_MODEL_REVISION,
+  V6_R5_ROUTER_VERSION,
+} from "./r5";
+
 
 
 const TF_MS = 15 * 60 * 1000;
@@ -226,8 +244,23 @@ function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown
     feature_valid: false,
     final_prediction: "OP_FAIL",
     final_prediction_source: "OP_FAIL",
-    model_revision: V6_R4_MODEL_REVISION,
-    model_revision_activated_at: V6_R4_ACTIVATED_AT,
+    final_reason: "OP_FAIL",
+    model_revision: V6_R5_MODEL_REVISION,
+    model_revision_activated_at: V6_R5_ACTIVATED_AT,
+    r5_router_version: V6_R5_ROUTER_VERSION,
+    r5_green_evaluable: false,
+    r5_green_candidate: false,
+    r5_red_feeder_evaluable: false,
+    r5_red_feeder_pass: false,
+    r5_red_anchor_evaluable: false,
+    r5_red_anchor_candidate: false,
+    r5_red_broad_evaluable: false,
+    r5_red_broad_candidate: false,
+    r5_red_candidate: false,
+    r5_conflict: false,
+    r5_router_decision: "OP_FAIL",
+    r5_router_source: "OP_FAIL",
+    r5_router_reason: "OP_FAIL",
     regime_inverter_evaluable: false,
     regime_inverter_triggered: false,
     regime_inverter_activation_threshold: V6_REGIME_INVERTER_THRESHOLD,
@@ -366,6 +399,24 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       ? structure.reason
       : r3AbstainReason;
 
+    // --- V6-r5 Selective Core Router — the ONLY live publication authority ---
+    // Steps 7-11: evaluated independently of every legacy layer above. The
+    // legacy stack (pickups, broad conflict, BROAD_RED reliability, structure
+    // confirmation, regime inverter) remains fully computed but shadow-only.
+    const r5 = evaluateR5Router(
+      inf.predictionAfterWeakRedRecovery,
+      inf.predictionSourceAfterWeakRedRecovery,
+      inf.selectedComponent,
+      {
+        stoch_spread: inf.gbFeatures.stoch_spread ?? inf.ridgeFeatures.stoch_spread,
+        d1_mean_body_to_range_2: inf.gbFeatures.d1_mean_body_to_range_2,
+        d1_close_position_in_range: inf.gbFeatures.d1_close_position_in_range,
+        close_slope_8: inf.gbFeatures.close_slope_8 ?? inf.ridgeFeatures.close_slope_8,
+        bb_width_pct: inf.gbFeatures.bb_width_pct ?? inf.ridgeFeatures.bb_width_pct,
+        aligned_wick_pressure_4: inf.ridgeFeatures.aligned_wick_pressure_4,
+      },
+    );
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
@@ -438,7 +489,7 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       weak_broad_red_veto_triggered: inf.weakBroadRedVetoTriggered,
 
       // --- V6-r2 weak-RED coverage recovery (prediction-time, immutable) ---
-      model_revision_activated_at: V6_R4_ACTIVATED_AT,
+      model_revision_activated_at: V6_R5_ACTIVATED_AT,
       weak_red_veto_candidate: inf.weakRedVetoCandidate,
       weak_red_veto_original_prediction: inf.weakRedVetoOriginalPrediction,
       weak_red_veto_broad_percentile: inf.weakRedVetoBroadPercentile,
@@ -512,13 +563,68 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
       structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      final_prediction: accepted ? r4Prediction : "OP_FAIL",
+      // --- V6-r5 publication (the router is the only live authority) -------
+      final_prediction: accepted ? r5.decision : "OP_FAIL",
+      final_prediction_source: accepted ? r5.source : "OP_FAIL",
+      final_reason: accepted ? r5.reason : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && r4Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted ? r4AbstainReason : null,
+      abstain_status: accepted && r5.decision === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted && r5.decision === "ABSTAIN" ? r5.reason : null,
 
-      // --- Regime Inverter — SHADOW ONLY (V6-r3 / r4) ---
-      model_revision: V6_R4_MODEL_REVISION,
+      model_revision: V6_R5_MODEL_REVISION,
+      r5_router_version: r5.routerVersion,
+      r5_green_evaluable: r5.greenEvaluable,
+      r5_green_candidate: accepted && r5.greenCandidate,
+      r5_green_stoch_spread: r5.greenStochSpread,
+      r5_green_stoch_spread_threshold: R5_GREEN_STOCH_SPREAD_MAX,
+      r5_green_stoch_condition: r5.greenStochCondition,
+      r5_green_d1_mean_body_to_range_2: r5.greenD1MeanBodyToRange2,
+      r5_green_d1_mean_body_to_range_2_threshold: R5_GREEN_D1_MEAN_BODY_RANGE_MAX,
+      r5_green_body_condition: r5.greenBodyCondition,
+      r5_red_feeder_evaluable: r5.redFeederEvaluable,
+      r5_red_feeder_pass: r5.redFeederPass,
+      r5_red_feeder_prediction: r5.redFeederPrediction,
+      r5_red_feeder_source: r5.redFeederSource,
+      r5_red_anchor_evaluable: r5.redAnchorEvaluable,
+      r5_red_anchor_candidate: accepted && r5.redAnchorCandidate,
+      r5_red_anchor_d1_close_position: r5.redAnchorD1ClosePosition,
+      r5_red_anchor_d1_close_position_threshold: R5_RED_ANCHOR_D1_CLOSE_POSITION_MAX,
+      r5_red_anchor_condition: r5.redAnchorCondition,
+      r5_red_broad_evaluable: r5.redBroadEvaluable,
+      r5_red_broad_candidate: accepted && r5.redBroadCandidate,
+      r5_red_broad_close_slope_8: r5.redBroadCloseSlope8,
+      r5_red_broad_close_slope_threshold: R5_RED_BROAD_CLOSE_SLOPE_MIN,
+      r5_red_broad_slope_condition: r5.redBroadSlopeCondition,
+      r5_red_broad_bb_width_pct: r5.redBroadBbWidthPct,
+      r5_red_broad_bb_width_threshold: R5_RED_BROAD_BB_WIDTH_MAX,
+      r5_red_broad_bb_condition: r5.redBroadBbCondition,
+      r5_red_candidate: accepted && r5.redCandidate,
+      r5_conflict: accepted && r5.conflict,
+      r5_router_decision: accepted ? r5.decision : "OP_FAIL",
+      r5_router_source: accepted ? r5.source : "OP_FAIL",
+      r5_router_reason: accepted ? r5.reason : "OP_FAIL",
+
+      // Experimental aligned-wick RED branch — SHADOW ONLY, never publishes.
+      r5_aligned_wick_red_shadow_evaluable: r5.wickShadowEvaluable,
+      r5_aligned_wick_red_shadow_candidate: accepted && r5.wickShadowCandidate,
+      r5_aligned_wick_red_shadow_value: r5.wickShadowValue,
+      r5_aligned_wick_red_shadow_threshold: R5_ALIGNED_WICK_RED_SHADOW_MIN,
+
+      // Publication authority of every legacy layer under r5.
+      legacy_pickup_publication_enabled: LEGACY_PICKUP_PUBLICATION_ENABLED,
+      broad_conflict_publication_enabled: BROAD_CONFLICT_PUBLICATION_ENABLED,
+      broad_red_reliability_publication_enabled: BROAD_RED_RELIABILITY_PUBLICATION_ENABLED,
+      structure_confirmation_publication_enabled: STRUCTURE_CONFIRMATION_PUBLICATION_ENABLED,
+      structure_confirmation_shadow_only: STRUCTURE_CONFIRMATION_SHADOW_ONLY,
+
+      // Complete legacy r4 stack, retained as a counterfactual shadow only.
+      legacy_r4_shadow_prediction: accepted ? r4Prediction : "OP_FAIL",
+      legacy_r4_shadow_source: accepted ? r4Source : "OP_FAIL",
+      legacy_r4_shadow_reason: accepted ? r4AbstainReason : "OP_FAIL",
+      consensus_red_shadow_prediction: accepted && inf.redPickupTriggered ? "RED" : null,
+      momentum_green_shadow_prediction: accepted && inf.greenPickupTriggered ? "GREEN" : null,
+
+      // --- Regime Inverter — SHADOW ONLY (V6-r3 / r4 / r5) ---
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
       pre_inverter_prediction: r3Prediction,
@@ -541,9 +647,8 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
       regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
-      final_prediction_source: accepted ? r4Source : "OP_FAIL",
-
     };
+
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
     if (error && !String(error.message).includes("duplicate key")) throw error;
@@ -559,7 +664,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -688,6 +793,25 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         baseSource === "V6_BASE" &&
         (actual === "GREEN" || actual === "RED");
 
+      // --- V6-r5 branch grading. Every candidate branch is graded
+      // independently of what the router published, so shadow branches carry a
+      // real forward record. Op-fail rows are excluded from all scoring.
+      const gradeable = opFail ? null : actual;
+      const r5Green = gradeBranch(Boolean(r.r5_green_candidate), "GREEN", gradeable);
+      const r5Anchor = gradeBranch(Boolean(r.r5_red_anchor_candidate), "RED", gradeable);
+      const r5Broad = gradeBranch(Boolean(r.r5_red_broad_candidate), "RED", gradeable);
+      const r5Conflicted = Boolean(r.r5_conflict) && !opFail;
+      const r5Wick = gradeBranch(
+        Boolean(r.r5_aligned_wick_red_shadow_candidate),
+        "RED",
+        gradeable,
+      );
+      type ScoreArg = Parameters<typeof rawScore>[0];
+      const asDir = (v: unknown): ScoreArg => (v == null ? "ABSTAIN" : String(v)) as ScoreArg;
+      const legacyR4 = r.legacy_r4_shadow_prediction as string | null;
+      const consensusRed = r.consensus_red_shadow_prediction as string | null;
+      const momentumGreen = r.momentum_green_shadow_prediction as string | null;
+      const finalDirectional = !opFail && (final === "GREEN" || final === "RED");
 
       await sb
         .from("v6_predictions")
@@ -771,6 +895,55 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           regime_inverter_shadow_adjusted_score: inverterShadowAdj,
           regime_inverter_counterfactual_raw_contribution: inverterCounterfactual.raw,
           regime_inverter_counterfactual_adjusted_contribution: inverterCounterfactual.adjusted,
+
+          // --- V6-r5 published outcome and per-branch shadow outcomes ---
+          r5_final_result: finalDirectional
+            ? (final === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS")
+            : opFail ? null : "ABSTAIN",
+          r5_final_raw_score: opFail ? null : rawScore(final, actual),
+          r5_final_adjusted_score: opFail ? null : adjustedScore(final, actual),
+
+          r5_green_shadow_prediction: r5Green.prediction,
+          r5_green_shadow_result: r5Green.result,
+          r5_green_shadow_raw_score: r5Green.raw,
+          r5_green_shadow_adjusted_score: r5Green.adjusted,
+
+          r5_red_anchor_shadow_prediction: r5Anchor.prediction,
+          r5_red_anchor_shadow_result: r5Anchor.result,
+          r5_red_anchor_shadow_raw_score: r5Anchor.raw,
+          r5_red_anchor_shadow_adjusted_score: r5Anchor.adjusted,
+
+          r5_red_broad_shadow_prediction: r5Broad.prediction,
+          r5_red_broad_shadow_result: r5Broad.result,
+          r5_red_broad_shadow_raw_score: r5Broad.raw,
+          r5_red_broad_shadow_adjusted_score: r5Broad.adjusted,
+
+          // Conflict attribution: what each blocked side would have produced.
+          r5_conflict_green_result: r5Conflicted ? r5Green.result : null,
+          r5_conflict_red_result: r5Conflicted
+            ? (r5Anchor.result ?? r5Broad.result)
+            : null,
+
+          r5_aligned_wick_red_shadow_result: r5Wick.result,
+          r5_aligned_wick_red_shadow_raw_score: r5Wick.raw,
+          r5_aligned_wick_red_shadow_adjusted_score: r5Wick.adjusted,
+
+          // Legacy stack, graded as pure counterfactual shadows.
+          legacy_r4_shadow_result: opFail || !legacyR4 || legacyR4 === "ABSTAIN"
+            ? null
+            : legacyR4 === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          legacy_r4_shadow_raw_score: opFail ? null : rawScore(asDir(legacyR4), actual),
+          legacy_r4_shadow_adjusted_score: opFail ? null : adjustedScore(asDir(legacyR4), actual),
+          consensus_red_shadow_result: opFail || !consensusRed
+            ? null
+            : consensusRed === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          consensus_red_shadow_raw_score: consensusRed ? rawScore(asDir(consensusRed), actual) : null,
+          consensus_red_shadow_adjusted_score: consensusRed ? adjustedScore(asDir(consensusRed), actual) : null,
+          momentum_green_shadow_result: opFail || !momentumGreen
+            ? null
+            : momentumGreen === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          momentum_green_shadow_raw_score: momentumGreen ? rawScore(asDir(momentumGreen), actual) : null,
+          momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(asDir(momentumGreen), actual) : null,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row

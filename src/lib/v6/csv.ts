@@ -95,7 +95,38 @@ export const V6_CSV_COLUMNS = [
   "structure_underlying_prediction","structure_underlying_actual_direction",
   "structure_underlying_raw_score","structure_underlying_adjusted_score",
   "structure_confirmation_raw_contribution","structure_confirmation_adjusted_contribution",
+
+  // --- V6-r5 Selective Core Router ---
+  "r5_router_version","r5_router_decision","r5_router_source","r5_router_reason","final_reason",
+  "r5_green_evaluable","r5_green_candidate",
+  "r5_green_stoch_spread","r5_green_stoch_spread_threshold","r5_green_stoch_condition",
+  "r5_green_d1_mean_body_to_range_2","r5_green_d1_mean_body_to_range_2_threshold","r5_green_body_condition",
+  "r5_red_feeder_evaluable","r5_red_feeder_pass","r5_red_feeder_prediction","r5_red_feeder_source",
+  "r5_red_anchor_evaluable","r5_red_anchor_candidate",
+  "r5_red_anchor_d1_close_position","r5_red_anchor_d1_close_position_threshold","r5_red_anchor_condition",
+  "r5_red_broad_evaluable","r5_red_broad_candidate",
+  "r5_red_broad_close_slope_8","r5_red_broad_close_slope_threshold","r5_red_broad_slope_condition",
+  "r5_red_broad_bb_width_pct","r5_red_broad_bb_width_threshold","r5_red_broad_bb_condition",
+  "r5_red_candidate","r5_conflict","r5_conflict_green_result","r5_conflict_red_result",
+  "r5_final_result","r5_final_raw_score","r5_final_adjusted_score",
+  "r5_green_shadow_prediction","r5_green_shadow_result","r5_green_shadow_raw_score","r5_green_shadow_adjusted_score",
+  "r5_red_anchor_shadow_prediction","r5_red_anchor_shadow_result","r5_red_anchor_shadow_raw_score","r5_red_anchor_shadow_adjusted_score",
+  "r5_red_broad_shadow_prediction","r5_red_broad_shadow_result","r5_red_broad_shadow_raw_score","r5_red_broad_shadow_adjusted_score",
+  "r5_aligned_wick_red_shadow_evaluable","r5_aligned_wick_red_shadow_candidate",
+  "r5_aligned_wick_red_shadow_value","r5_aligned_wick_red_shadow_threshold",
+  "r5_aligned_wick_red_shadow_result","r5_aligned_wick_red_shadow_raw_score","r5_aligned_wick_red_shadow_adjusted_score",
+  "legacy_pickup_publication_enabled","broad_conflict_publication_enabled",
+  "broad_red_reliability_publication_enabled","structure_confirmation_publication_enabled",
+  "structure_confirmation_shadow_only",
+  "legacy_r4_shadow_prediction","legacy_r4_shadow_source","legacy_r4_shadow_reason",
+  "legacy_r4_shadow_result","legacy_r4_shadow_raw_score","legacy_r4_shadow_adjusted_score",
+  "consensus_red_shadow_prediction","consensus_red_shadow_result",
+  "consensus_red_shadow_raw_score","consensus_red_shadow_adjusted_score",
+  "momentum_green_shadow_prediction","momentum_green_shadow_result",
+  "momentum_green_shadow_raw_score","momentum_green_shadow_adjusted_score",
+  "r5_cumulative_raw_net","r5_cumulative_adjusted_net","r5_trade_index",
 ] as const;
+
 
 type Row = Record<string, unknown>;
 
@@ -119,6 +150,10 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
   let streak = 0;
   let maxStreak = 0;
   const window: Array<{ raw: number; adj: number; directional: boolean }> = [];
+  // r5-only running totals: they advance only on rows published by the r5 router.
+  let r5Raw = 0;
+  let r5Adj = 0;
+  let r5Trades = 0;
 
   return rowsOldestFirst.map((r) => {
     const raw = num(r.final_raw_score);
@@ -146,6 +181,15 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       if (window.length > 96) window.shift();
     }
 
+    const r5Raw1 = num(r.r5_final_raw_score);
+    const r5Adj1 = num(r.r5_final_adjusted_score);
+    const r5Published = r.r5_router_decision === "GREEN" || r.r5_router_decision === "RED";
+    if (r5Published && r5Raw1 !== null && r5Adj1 !== null) {
+      r5Raw += r5Raw1;
+      r5Adj += r5Adj1;
+      r5Trades += 1;
+    }
+
     const rollingDirectional = window.filter((w) => w.directional).length;
     return {
       ...r,
@@ -165,6 +209,9 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       actual_direction: r.canonical_actual_direction ?? null,
       rolling96_raw_net: window.reduce((s, w) => s + w.raw, 0),
       rolling96_adjusted_net: window.reduce((s, w) => s + w.adj, 0),
+      r5_cumulative_raw_net: r5Trades ? r5Raw : null,
+      r5_cumulative_adjusted_net: r5Trades ? r5Adj : null,
+      r5_trade_index: r5Published ? r5Trades : null,
     };
   });
 }
