@@ -43,7 +43,7 @@ describe("B4x4 orchestrator integration", () => {
     const chain = (result: unknown): unknown =>
       new Proxy(
         {
-          then: (res: (v: unknown) => void) => res(result),
+          then: (res: (v: unknown) => void) => res({ data: [] }),
           maybeSingle: async () => result,
         } as Record<string, unknown>,
         {
