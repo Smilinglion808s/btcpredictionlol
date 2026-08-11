@@ -20,6 +20,8 @@ import {
   b4x4ConfigHash,
   b4x4LocalDate,
 } from "./config";
+import { b4x4BuildIdentity } from "./build-identity";
+
 import {
   brakeAttribution,
   evaluateB4x4,
@@ -119,7 +121,12 @@ export async function loadDailyState(
 
 export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
   const runMode = ctx.runMode ?? "LIVE";
+  const build = b4x4BuildIdentity();
   return {
+    build_identifier: build.build_identifier,
+    build_commit_sha: build.build_commit_sha,
+    deploy_environment: build.deploy_environment,
+
     source_a2_row_id: ctx.a2RowId ?? null,
     source_prediction_id: ctx.predictionId ?? null,
     target_candle_ts: ctx.candleTs,
@@ -359,6 +366,20 @@ export async function resolveB4x4Row(
 ): Promise<void> {
   let rowId: string | null = null;
   try {
+    // Atomically claim and count this genuine resolution attempt BEFORE any
+    // scoring work. The DB function locks the row, skips already-resolved
+    // rows, and increments resolution_attempt_count exactly once per attempt.
+    const { data: begin, error: beginError } = await supabase.rpc(
+      "b4x4_begin_resolution_attempt" as never,
+      { p_target_candle_ts: targetCandleTs, p_model_version: B4X4_MODEL_VERSION } as never,
+    );
+    if (beginError) throw beginError;
+    const claim = (begin ?? {}) as { found?: boolean; already_resolved?: boolean; id?: string; attempt_count?: number };
+    if (!claim.found) return;
+    if (claim.already_resolved) return; // idempotent
+    rowId = claim.id ? String(claim.id) : null;
+    const attempts = Number(claim.attempt_count ?? 1);
+
     const { data } = await supabase
       .from("b4x4_predictions")
       .select(
@@ -373,8 +394,7 @@ export async function resolveB4x4Row(
     rowId = String(row.id);
     if (row.resolved_at) return; // idempotent
 
-    // Every genuine resolution attempt is counted, successful or not.
-    const attempts = Number(row.resolution_attempt_count ?? 0) + 1;
+
     const rawDir = (row.raw_direction as Direction | null) ?? null;
     const final = scoreAgainst((row.final_prediction as Direction | null) ?? null, actualDirection);
     const baseNoBrake = scoreAgainst(row.base_candidate === true ? rawDir : null, actualDirection);

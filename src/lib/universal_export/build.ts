@@ -4,6 +4,11 @@
 // Pure function.  Callers do the IO.
 
 import {
+  SHADOW_A_VARIANT as B4X4_SHADOW_A_VARIANT,
+  SHADOW_B_VARIANT as B4X4_SHADOW_B_VARIANT,
+} from "../b4x4/shadows";
+import {
+
   buildManifest,
   NEW_COLUMNS,
   UNIVERSAL_SCHEMA_VERSION,
@@ -35,6 +40,8 @@ export interface UniversalInput {
   aas96Rows: readonly Row[]; // model7_aas96_shadow
   a96Rows: readonly Row[]; // a96_predictions
   b4x4Rows?: readonly Row[]; // b4x4_predictions
+  b4x4PolicyShadowRows?: readonly Row[]; // b4x4_policy_shadows (reporting only)
+
 }
 
 export interface UniversalStats {
@@ -193,6 +200,14 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     const key = toIsoBucket(r.target_candle_ts);
     if (key) b4x4By.set(key, r);
   }
+
+  // Reporting-only B4x4 policy shadows, keyed by boundary + shadow variant.
+  const b4x4ShadowBy = new Map<string, Row>();
+  for (const r of input.b4x4PolicyShadowRows ?? []) {
+    const key = toIsoBucket(r.target_candle_ts);
+    if (key) b4x4ShadowBy.set(`${key}|${String(r.shadow_variant)}`, r);
+  }
+
 
   const a96By = new Map<string, Row>();
   for (const r of a96Rows) {
@@ -533,6 +548,21 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
         row[key] = v && typeof v === "object" ? stableJson(v) : v;
       }
     }
+
+    // Reporting-only B4x4 policy shadows (never part of any active decision).
+    for (const [prefix, variant] of [
+      ["b4x4_shadow_a", B4X4_SHADOW_A_VARIANT],
+      ["b4x4_shadow_b", B4X4_SHADOW_B_VARIANT],
+    ] as const) {
+      const sRow = b4x4ShadowBy.get(`${boundary}|${variant}`) ?? null;
+      row[`${prefix}_tracking_available`] = sRow !== null;
+      if (sRow) {
+        for (const [k, v] of Object.entries(sRow)) {
+          row[`${prefix}_${k}`] = v && typeof v === "object" ? stableJson(v) : v;
+        }
+      }
+    }
+
 
     for (const k of Object.keys(row)) emittedColumnSet.add(k);
     outRows.push(row);

@@ -691,6 +691,8 @@ export type Database = {
           base_no_brake_counterfactual_trade: boolean | null
           brake_attribution_class: string | null
           brake_incremental_value: number | null
+          build_commit_sha: string | null
+          build_identifier: string | null
           canonical_candle_source: string | null
           catchup_completed_at: string | null
           catchup_resolution_error: string | null
@@ -707,6 +709,7 @@ export type Database = {
           data_invalid_reason: string | null
           data_valid: boolean
           decision_reason: string | null
+          deploy_environment: string | null
           expansion_eligible: boolean | null
           expansion_only_counterfactual_score: number | null
           expansion_only_counterfactual_trade: boolean | null
@@ -812,6 +815,8 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          build_commit_sha?: string | null
+          build_identifier?: string | null
           canonical_candle_source?: string | null
           catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
@@ -828,6 +833,7 @@ export type Database = {
           data_invalid_reason?: string | null
           data_valid?: boolean
           decision_reason?: string | null
+          deploy_environment?: string | null
           expansion_eligible?: boolean | null
           expansion_only_counterfactual_score?: number | null
           expansion_only_counterfactual_trade?: boolean | null
@@ -933,6 +939,8 @@ export type Database = {
           base_no_brake_counterfactual_trade?: boolean | null
           brake_attribution_class?: string | null
           brake_incremental_value?: number | null
+          build_commit_sha?: string | null
+          build_identifier?: string | null
           canonical_candle_source?: string | null
           catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
@@ -949,6 +957,7 @@ export type Database = {
           data_invalid_reason?: string | null
           data_valid?: boolean
           decision_reason?: string | null
+          deploy_environment?: string | null
           expansion_eligible?: boolean | null
           expansion_only_counterfactual_score?: number | null
           expansion_only_counterfactual_trade?: boolean | null

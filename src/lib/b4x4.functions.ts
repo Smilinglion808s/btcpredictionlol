@@ -1,7 +1,9 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
+
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -36,18 +38,8 @@ const OPERATIONAL = new Set([
   "ABSTAIN_GRID_REFERENCE_INVALID", "ABSTAIN_INTERNAL_ERROR",
 ]);
 
-/** Aggregate B4x4 performance for the dashboard panel. */
-export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () => {
-  const rows = await pageAll(
-    "target_candle_ts, run_mode, would_trade, final_prediction, raw_direction, decision_reason, " +
-    "selected_route, core_eligible, expansion_eligible, base_candidate, result, result_score, " +
-    "resolved_at, local_date, intraday_brake_active, intraday_brake_veto_fired, " +
-    "base_no_brake_counterfactual_score, core_only_counterfactual_score, " +
-    "expansion_only_counterfactual_score, brake_attribution_class, brake_incremental_value, " +
-    "grid_snapshot_json, grid_cell, p_correct, grid_quality_percentile, global_rank, same_side_rank",
-  );
-
-  const c = {
+function emptyCounters() {
+  return {
     model_version: B4X4_MODEL_VERSION,
     variant: B4X4_VARIANT,
     total_opportunities: 0,
@@ -64,10 +56,15 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
     block96_trades: 0, block96_wins: 0, block96_losses: 0, block96_net: 0,
     today_local_date: "", today_net: 0, today_trades: 0, brake_active_now: false,
     losing_days: 0, worst_day: 0,
+    segment: "" as string,
+    implementation_revision: null as string | null,
     last7: [] as Array<{ date: string; net: number; wins: number; losses: number; trades: number }>,
     grid: [] as Array<{ cell: string; resolvedCount: number; wins: number; losses: number; pCorrect: number }>,
   };
+}
 
+function aggregate(rows: Row[]) {
+  const c = emptyCounters();
   const daily = new Map<string, { net: number; wins: number; losses: number; trades: number }>();
   let running = 0, peak = 0;
 
@@ -165,9 +162,57 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
       break;
     }
   }
-
   return c;
+}
+
+/**
+ * Aggregate B4x4 performance for the dashboard panel.
+ *
+ * The headline is filtered to the current implementation revision only; every
+ * pre-repair row is reported separately as a labeled historical segment and
+ * never blended into the active forward test.
+ */
+export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await pageAll(
+    "target_candle_ts, run_mode, would_trade, final_prediction, raw_direction, decision_reason, " +
+    "selected_route, core_eligible, expansion_eligible, base_candidate, result, result_score, " +
+    "resolved_at, local_date, intraday_brake_active, intraday_brake_veto_fired, " +
+    "base_no_brake_counterfactual_score, core_only_counterfactual_score, " +
+    "expansion_only_counterfactual_score, brake_attribution_class, brake_incremental_value, " +
+    "grid_snapshot_json, grid_cell, p_correct, grid_quality_percentile, global_rank, same_side_rank, " +
+    "implementation_revision, build_identifier, deploy_environment",
+  );
+
+  const repaired = rows.filter((r) => r.implementation_revision === B4X4_IMPLEMENTATION_REVISION);
+  const legacy = rows.filter((r) => r.implementation_revision !== B4X4_IMPLEMENTATION_REVISION);
+
+  const c = aggregate(repaired);
+  c.segment = "ACTIVE_REVISION";
+  c.implementation_revision = B4X4_IMPLEMENTATION_REVISION;
+  const historical = aggregate(legacy);
+  historical.segment = "PRE_REPAIR_HISTORICAL";
+
+  const lastBuild = [...repaired].reverse().find((r) => r.build_identifier != null);
+
+  return {
+    ...c,
+    build_identifier: (lastBuild?.build_identifier as string | null) ?? null,
+    deploy_environment: (lastBuild?.deploy_environment as string | null) ?? null,
+    // Pre-repair rows are preserved and reported, but kept out of the headline.
+    historical: {
+      segment: historical.segment,
+      total_opportunities: historical.total_opportunities,
+      trades: historical.trades,
+      wins: historical.wins,
+      losses: historical.losses,
+      pushes: historical.pushes,
+      net: historical.net,
+      win_rate: historical.win_rate,
+      coverage: historical.coverage,
+    },
+  };
 });
+
 
 /** Most recent B4x4 row (its decision for the pending candle). */
 export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async () => {
@@ -317,7 +362,27 @@ export const exportB4x4ObShadowCsv = createServerFn({ method: "GET" }).handler(a
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
 
-/** Dedicated B4x4 CSV export — every tracked column, plus order-book shadow join. */
+/** All reporting-only policy shadow rows (Shadow A and Shadow B). */
+export async function loadPolicyShadowRows(): Promise<Row[]> {
+  const sb = await admin();
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_policy_shadows")
+      .select("*")
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...(data as unknown as Row[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Dedicated B4x4 CSV export — every tracked column, plus the order-book shadow
+ * join and both reporting-only policy shadows (Shadow A / Shadow B).
+ */
 export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
@@ -334,22 +399,38 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
   for (const s of shadowRows) for (const k of Object.keys(s)) shadowKeys.add(k);
   const SHADOW_COLUMNS = [...shadowKeys];
 
+  // Reporting-only policy shadows, LEFT-joined per prediction and variant.
+  const policyRows = await loadPolicyShadowRows();
+  const policyKeys = new Set<string>();
+  for (const s of policyRows) for (const k of Object.keys(s)) policyKeys.add(k);
+  const POLICY_COLUMNS = [...policyKeys];
+  const policyByPred = new Map<string, Row>();
+  for (const s of policyRows) {
+    policyByPred.set(`${String(s.b4x4_prediction_id)}|${String(s.shadow_variant)}`, s);
+  }
 
   const header = [
     ...columns.map((c) => `b4x4_${c}`),
     ...SHADOW_COLUMNS.map((c) => `b4x4_ob_${c}`),
+    ...POLICY_COLUMNS.map((c) => `b4x4_shadow_a_${c}`),
+    ...POLICY_COLUMNS.map((c) => `b4x4_shadow_b_${c}`),
   ].join(",");
   const body = rows
     .map((r) => {
       const s = shadowById.get(String(r.id)) ?? {};
+      const a = policyByPred.get(`${String(r.id)}|${SHADOW_A_VARIANT}`) ?? {};
+      const b = policyByPred.get(`${String(r.id)}|${SHADOW_B_VARIANT}`) ?? {};
       return [
         ...columns.map((col) => csvEscape(r[col])),
         ...SHADOW_COLUMNS.map((col) => csvEscape(s[col])),
+        ...POLICY_COLUMNS.map((col) => csvEscape((a as Row)[col])),
+        ...POLICY_COLUMNS.map((col) => csvEscape((b as Row)[col])),
       ].join(",");
     })
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
+
 
 
 
