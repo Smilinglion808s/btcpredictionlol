@@ -17,8 +17,14 @@ const TF_MS = 15 * 60 * 1000;
 // A pre-warm request can arrive about one minute before the boundary. Keep
 // that snapshot as a fallback, but permit a later prediction-window request
 // to replace it with a materially fresher pre-cutoff event.
-const IMMUTABLE_CAPTURE_AGE_MS = 30_000;
+const IMMUTABLE_CAPTURE_AGE_MS = 5_000;
+/** A replacement must beat the stored snapshot by at least this much. */
+const FRESHER_BY_MS = 1_000;
+/** Target freshness for a prediction-window capture. */
+const TARGET_FRESH_AGE_MS = 3_000;
+const FRESHNESS_RETRIES = 2;
 const OKX_BASE = () => process.env.OKX_REST_BASE_URL || "https://www.okx.com";
+
 
 export function nextTargetBoundaryMs(nowMs = Date.now()): number {
   return Math.ceil(nowMs / TF_MS) * TF_MS;
