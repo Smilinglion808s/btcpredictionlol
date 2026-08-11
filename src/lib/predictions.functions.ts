@@ -1239,6 +1239,122 @@ export const exportTd2RcShadow = createServerFn({ method: "GET" }).handler(async
   buildTd1RcExport(TD2_VARIANT),
 );
 
+/** Dedicated TD3 (TD1 clone + Toxic Opposing Drift Veto) export. */
+export const exportTd3Shadow = createServerFn({ method: "GET" }).handler(async () =>
+  buildTd1RcExport(TD3_VARIANT),
+);
+
+/**
+ * Counterfactual TD3 backfill over historical TD1 rows. Uses only the
+ * prediction-time feature snapshot already stored on the TD1 row; never reads
+ * future candles. Inserted rows are marked td3_run_mode = BACKFILL and are
+ * excluded from live-forward TD3 statistics.
+ */
+export const backfillTd3 = createServerFn({ method: "POST" }).handler(async () => {
+  const sb = await admin();
+  const PAGE = 1000;
+
+  const fetchAll = async (variant: string) => {
+    const out: Record<string, unknown>[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await sb
+        .from("model7_td1_rc_shadow")
+        .select("*")
+        .eq("variant", variant)
+        .order("candle_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      const batch = (data ?? []) as Record<string, unknown>[];
+      out.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    return out;
+  };
+
+  const td1Rows = await fetchAll(TD1_VARIANT);
+  const existing = await fetchAll(TD3_VARIANT);
+  const have = new Set(existing.map((r) => String(r.prediction_id)));
+
+  const inserts: Record<string, unknown>[] = [];
+  let td1Wins = 0, td1Losses = 0, td3Wins = 0, td3Losses = 0, vetoed = 0, avoidedLosses = 0, sacrificedWins = 0;
+
+  for (const r of td1Rows) {
+    const features = (r.feature_values_json as Record<string, unknown> | null) ?? null;
+    const preVetoDecision = (r.external_final_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+    const evaluation = evaluateTd3({
+      preVetoDecision,
+      preVetoWouldTrade: r.would_trade === true,
+      preVetoSkipReason: (r.skip_reason as string | null) ?? null,
+      currentDirectionalConfidence: features?.current_directional_confidence as number | undefined,
+      opposingDrift4: features?.opposing_drift_4 as number | undefined,
+      sameDirectionRunLength: features?.same_direction_run_length as number | undefined,
+    });
+    const actual = (r.actual_direction as "GREEN" | "RED" | null) ?? null;
+    const td3Final = scoreTd3Decision(evaluation.finalDecision, actual);
+    const underlying = scoreTd3Decision(preVetoDecision, actual);
+
+    if (underlying.result === "WIN") td1Wins++;
+    if (underlying.result === "LOSS") td1Losses++;
+    if (td3Final.result === "WIN") td3Wins++;
+    if (td3Final.result === "LOSS") td3Losses++;
+    if (evaluation.vetoFired) {
+      vetoed++;
+      if (underlying.result === "LOSS") avoidedLosses++;
+      if (underlying.result === "WIN") sacrificedWins++;
+    }
+
+    if (have.has(String(r.prediction_id))) continue;
+
+    const { id: _id, created_at: _c, updated_at: _u, ...clone } = r as Record<string, unknown>;
+    inserts.push({
+      ...clone,
+      variant: TD3_VARIANT,
+      prospective_test_id: TD3_POLICY_VERSION,
+      external_final_decision: evaluation.finalDecision,
+      would_trade: evaluation.wouldTrade,
+      skip_reason: evaluation.skipReason,
+      ...td3PredictionColumns({
+        evaluation,
+        runMode: "BACKFILL",
+        preVetoDecision,
+        preVetoWouldTrade: r.would_trade === true,
+        preVetoSkipReason: (r.skip_reason as string | null) ?? null,
+        sourceTd1RowId: (r.id as string | null) ?? null,
+        sourceTd1PolicyVersion: (r.td1_policy_version as string | null) ?? null,
+        sourceTd1FitId: (r.td1_fit_id as string | null) ?? null,
+        sourceTd1ArtifactSha256: (r.td1_artifact_sha256 as string | null) ?? null,
+        featureCutoffTs: (r.td1_feature_cutoff_ts as string | null) ?? null,
+        latestSourceCandleTs: (r.td1_latest_source_candle_ts as string | null) ?? null,
+        timingStatus: (r.timing_status as string | null) ?? null,
+        leakageCheckPassed: (r.leakage_check_passed as boolean | null) ?? null,
+      }),
+      result: td3Final.result,
+      td3_result: td3Final.result,
+      td3_raw_score: td3Final.score,
+      td3_underlying_td1_decision: preVetoDecision,
+      td3_underlying_td1_result: underlying.result,
+      td3_underlying_td1_score: underlying.score,
+      td3_toxic_drift_veto_value: td3VetoValue(evaluation.vetoFired, underlying.result),
+    });
+  }
+
+  for (let i = 0; i < inserts.length; i += 500) {
+    await sb.from("model7_td1_rc_shadow").insert(inserts.slice(i, i + 500) as never);
+  }
+
+  return {
+    td1_rows: td1Rows.length,
+    inserted: inserts.length,
+    already_present: existing.length,
+    replay: {
+      td1: { wins: td1Wins, losses: td1Losses, net: td1Wins - td1Losses, directional: td1Wins + td1Losses },
+      td3: { wins: td3Wins, losses: td3Losses, net: td3Wins - td3Losses, directional: td3Wins + td3Losses },
+      veto: { fired: vetoed, avoided_losses: avoidedLosses, sacrificed_wins: sacrificedWins, net_value: avoidedLosses - sacrificedWins },
+    },
+  };
+});
+
+
+
 
 
 const overrideSchema = z.object({
