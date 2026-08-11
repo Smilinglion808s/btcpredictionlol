@@ -938,6 +938,49 @@ export const getTd2RcShadowStats = createServerFn({ method: "GET" }).handler(asy
   td1RcStatsFor(TD2_VARIANT, 2),
 );
 
+/** Basic live-forward stats for TD3 (TD1 clone + Toxic Opposing Drift Veto). */
+export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = await admin();
+  const rows: any[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("model7_td1_rc_shadow")
+      .select("external_final_decision, would_trade, result, candle_ts, td3_run_mode, td3_toxic_drift_veto_fired, td3_toxic_drift_veto_value")
+      .eq("variant", TD3_VARIANT)
+      .neq("td3_run_mode", "BACKFILL")
+      .order("candle_ts", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (from > 100000) break;
+  }
+  const traded = rows.filter((r) => r.would_trade === true);
+  const wins = traded.filter((r) => r.result === "WIN").length;
+  const losses = traded.filter((r) => r.result === "LOSS").length;
+  const pushes = traded.filter((r) => r.result === "PUSH").length;
+  const pending = traded.filter((r) => !r.result).length;
+  const vetoes = rows.filter((r) => r.td3_toxic_drift_veto_fired === true).length;
+  const avoided_losses = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) > 0).length;
+  const sacrificed_wins = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) < 0).length;
+  return {
+    total: traded.length,
+    wins,
+    losses,
+    pushes,
+    pending,
+    net: wins - losses,
+    win_rate: wins + losses === 0 ? 0 : Math.round((wins / (wins + losses)) * 10000) / 100,
+    vetoes,
+    avoided_losses,
+    sacrificed_wins,
+  };
+});
+
+
+
 /** Visual-only reset for TD1-RC Stats page counters. CSV export remains unchanged. */
 async function resetTd1RcVisual(resetId: number) {
   const sb = await admin();
