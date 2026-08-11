@@ -542,6 +542,7 @@ export async function resolveTd1RcRow(
         td1_no_global_veto_result: noGlobal.result,
         td1_no_global_veto_score: noGlobal.score,
         ...td2Patch,
+        ...td3Patch,
       } as never).eq("id", row.id as string).is("resolved_at", null);
 
 
