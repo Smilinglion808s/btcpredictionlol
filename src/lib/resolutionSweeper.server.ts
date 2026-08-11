@@ -133,7 +133,10 @@ export async function sweepUnresolvedRows(
     for (const r of (data ?? []) as unknown as TdRow[]) {
       const c = candles.get(new Date(r.candle_ts).toISOString());
       if (!c) continue;
-      const gradeable = r.a2_original_decision === "YES" || r.a2_original_decision === "NO";
+      // Ungradeable: A2 never produced a direction, or the candle was a doji
+      // (open == close), which no directional policy can win or lose.
+      const gradeable =
+        (r.a2_original_decision === "YES" || r.a2_original_decision === "NO") && c.dir !== "PUSH";
       if (!gradeable) {
         await supabase
           .from("model7_td1_rc_shadow")
@@ -146,7 +149,8 @@ export async function sweepUnresolvedRows(
         tdClosedIneligible += 1;
         continue;
       }
-      if (!r.prediction_id || seen.has(r.prediction_id) || c.dir === "PUSH") continue;
+      if (!r.prediction_id || seen.has(r.prediction_id)) continue;
+
       seen.add(r.prediction_id);
       await resolveTd1RcRow(supabase, r.prediction_id, c.dir);
       tdTargets.push(new Date(r.candle_ts).toISOString());
