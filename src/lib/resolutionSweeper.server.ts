@@ -27,26 +27,32 @@ async function loadConfirmedCandles(
   supabase: SupabaseClient,
   sinceIso: string,
 ): Promise<Map<string, { dir: Dir; ohlc: CandleRow }>> {
-  const { data } = await supabase
-    .from("candles")
-    .select("candle_ts, open, high, low, close, confirm")
-    .eq("symbol", "BTC-USDT")
-    .eq("timeframe", "15m")
-    .eq("fetch_source", "okx")
-    .gte("candle_ts", sinceIso)
-    .order("candle_ts", { ascending: true })
-    .limit(2000);
   const out = new Map<string, { dir: Dir; ohlc: CandleRow }>();
-  for (const raw of (data ?? []) as unknown as CandleRow[]) {
-    if (raw.confirm === false) continue;
-    const open = Number(raw.open);
-    const close = Number(raw.close);
-    if (!Number.isFinite(open) || !Number.isFinite(close) || open <= 0) continue;
-    const dir: Dir = close > open ? "GREEN" : close < open ? "RED" : "PUSH";
-    out.set(new Date(raw.candle_ts).toISOString(), { dir, ohlc: raw });
+  const page = 1000;
+  for (let from = 0; ; from += page) {
+    const { data } = await supabase
+      .from("candles")
+      .select("candle_ts, open, high, low, close, confirm")
+      .eq("symbol", "BTC-USDT")
+      .eq("timeframe", "15m")
+      .eq("fetch_source", "okx")
+      .gte("candle_ts", sinceIso)
+      .order("candle_ts", { ascending: true })
+      .range(from, from + page - 1);
+    const rows = (data ?? []) as unknown as CandleRow[];
+    for (const raw of rows) {
+      if (raw.confirm === false) continue;
+      const open = Number(raw.open);
+      const close = Number(raw.close);
+      if (!Number.isFinite(open) || !Number.isFinite(close) || open <= 0) continue;
+      const dir: Dir = close > open ? "GREEN" : close < open ? "RED" : "PUSH";
+      out.set(new Date(raw.candle_ts).toISOString(), { dir, ohlc: raw });
+    }
+    if (rows.length < page) break;
   }
   return out;
 }
+
 
 export interface SweepResult {
   v6_swept: boolean;
