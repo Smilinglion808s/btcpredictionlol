@@ -77,7 +77,7 @@ function hist(n: number, cell: [number, number], correct: boolean[]): HistoryEnt
 describe("B4x4 policy shadows (reporting only)", () => {
   it("shadow A gates expansion-only rows on short-cell reliability", () => {
     const history = hist(900, [3, 3], [false, false, false, true]);
-    const d = decision({ coreEligible: false, expansionEligible: true, selectedRoute: "EXPANSION", baseCandidate: true } as Partial<B4x4Decision>);
+    const d = decision({ gridCell: "G4-S4", coreEligible: false, expansionEligible: true, selectedRoute: "EXPANSION", baseCandidate: true } as Partial<B4x4Decision>);
     const s = evaluateShadowA(d, history, 0);
     expect(s.shadowVariant).toBe(SHADOW_A_VARIANT);
     expect(s.gateFired).toBe(true);
@@ -118,7 +118,7 @@ describe("B4x4 policy shadows (reporting only)", () => {
 
   it("short-cell stats only look back 96 source positions", () => {
     const history = hist(300, [3, 3], [true]);
-    const stats = shortCellStats(history, 300, "3-3");
+    const stats = shortCellStats(history, 300, "G4-S4");
     expect(stats.sourceWindowCount).toBe(96);
     expect(stats.wins).toBe(96);
   });
