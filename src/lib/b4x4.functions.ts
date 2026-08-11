@@ -2,6 +2,8 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
+
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
