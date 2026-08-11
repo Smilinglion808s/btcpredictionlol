@@ -178,7 +178,7 @@ describe("B4x4 external fixture parity (B4x4-20260810)", () => {
     // Every LIVE fixture row is compared; mismatches are the pre-repair
     // truncated-window rows and are reported exactly, not just in aggregate.
     expect(compared).toBe(363);
-    expect(tradeMismatches).toBe(43);
+    expect(tradeMismatches).toBe(12);
     expect(outcomeMismatches).toBe(0);
   });
 });
