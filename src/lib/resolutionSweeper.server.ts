@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TF_MS = 15 * 60 * 1000;
-const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+const LOOKBACK_MS = 60 * 24 * 60 * 60 * 1000;
 
 type Dir = "GREEN" | "RED" | "PUSH";
 
