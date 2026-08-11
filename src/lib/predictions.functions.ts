@@ -2,6 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
+import {
+  TD3_POLICY_VERSION,
+  TD3_VARIANT,
+  evaluateTd3,
+  scoreTd3Decision,
+  td3PredictionColumns,
+  td3VetoValue,
+} from "./model7/td1/td3";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
