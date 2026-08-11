@@ -8,6 +8,7 @@ import {
   listPredictions,
   listModelVersions,
   getTd1RcShadowStats,
+  getTd3ShadowStats,
   getTd1RcShadowPending,
   exportTd1RcShadow,
   getTd1RcTrainingProgress,
@@ -52,6 +53,8 @@ function StatsPage() {
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td3Fn = useServerFn(getTd3ShadowStats);
+  const td3Q = useQuery({ queryKey: ["td3-shadow-stats"], queryFn: () => td3Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
   const td1PendingFn = useServerFn(getTd1RcShadowPending);
   const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
@@ -328,6 +331,10 @@ function StatsPage() {
           dailyCount={7}
         />
 
+        <TD3Card stats={(td3Q.data as any) ?? {}} />
+
+
+
 
 
         <V6Card
@@ -577,6 +584,50 @@ function TD1Section({ title, children }: { title: string; children: React.ReactN
       </div>
       <div className="grid grid-cols-2 gap-2">{children}</div>
     </div>
+  );
+}
+
+/** Basic TD3 tile (TD1 clone + Toxic Opposing Drift Veto) — green theme. */
+function TD3Card({ stats }: { stats: Record<string, any> }) {
+  const n = (k: string) => Number(stats?.[k] ?? 0);
+  const winRate = n("win_rate");
+  const cells: Array<[string, string]> = [
+    ["Trades", String(n("total"))],
+    ["Wins", String(n("wins"))],
+    ["Losses", String(n("losses"))],
+    ["Pushes", String(n("pushes"))],
+    ["Pending", String(n("pending"))],
+    ["Net", (n("net") > 0 ? "+" : "") + n("net")],
+    ["Vetoes", String(n("vetoes"))],
+    ["Avoided losses", String(n("avoided_losses"))],
+    ["Sacrificed wins", String(n("sacrificed_wins"))],
+  ];
+  return (
+    <Card className="relative overflow-hidden border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-background to-background">
+      <div className="pointer-events-none absolute -top-20 -right-16 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl" />
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.25em] text-emerald-500/80">Shadow layer</p>
+            <CardTitle className="text-base text-emerald-400">TD3 · Toxic Drift Veto</CardTitle>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-semibold tabular-nums text-emerald-400">{winRate.toFixed(1)}%</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Win rate</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-2">
+          {cells.map(([label, value]) => (
+            <div key={label} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2">
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p>
+              <p className="text-sm font-semibold tabular-nums text-emerald-300">{value}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
