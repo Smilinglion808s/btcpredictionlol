@@ -357,20 +357,24 @@ export async function resolveB4x4Row(
   actualDirection: ActualDirection,
   ohlc?: { open?: number | null; high?: number | null; low?: number | null; close?: number | null },
 ): Promise<void> {
+  let rowId: string | null = null;
   try {
     const { data } = await supabase
       .from("b4x4_predictions")
       .select(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
-        "expansion_eligible, intraday_brake_veto_fired, resolved_at",
+        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
       )
       .eq("model_version", B4X4_MODEL_VERSION)
       .eq("target_candle_ts", targetCandleTs)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
+    rowId = String(row.id);
     if (row.resolved_at) return; // idempotent
 
+    // Every genuine resolution attempt is counted, successful or not.
+    const attempts = Number(row.resolution_attempt_count ?? 0) + 1;
     const rawDir = (row.raw_direction as Direction | null) ?? null;
     const final = scoreAgainst((row.final_prediction as Direction | null) ?? null, actualDirection);
     const baseNoBrake = scoreAgainst(row.base_candidate === true ? rawDir : null, actualDirection);
@@ -395,8 +399,11 @@ export async function resolveB4x4Row(
         result: row.would_trade === true ? (final.result ?? "PUSH") : "PUSH",
         result_score: row.would_trade === true ? final.score : 0,
         resolved_at: new Date().toISOString(),
+        resolution_attempt_count: attempts,
         last_resolution_attempt_at: new Date().toISOString(),
         last_resolution_error: null,
+        resolver_version: B4X4_RESOLVER_VERSION,
+        legacy_resolution_counter_unreliable: false,
         raw_a2_counterfactual_result: rawCf.result,
         core_only_counterfactual_trade: row.core_eligible === true,
         core_only_counterfactual_score: coreOnly.score,
@@ -410,7 +417,7 @@ export async function resolveB4x4Row(
       .eq("id", row.id as string)
       .is("resolved_at", null);
 
-    // ---- Shadow attribution (never blocks resolution). ----
+    // ---- Order-book shadow attribution (never blocks resolution). ----
     try {
       const { resolveB4x4ShadowRow } = await import("./shadow/persist.server");
       await resolveB4x4ShadowRow(supabase, targetCandleTs, actualDirection, {
@@ -420,5 +427,27 @@ export async function resolveB4x4Row(
         would_trade: row.would_trade === true,
       });
     } catch { /* shadow only */ }
-  } catch { /* never block the resolver */ }
+
+    // ---- Reporting-only policy shadows (independent scoring). ----
+    try {
+      const { resolveB4x4PolicyShadows } = await import("./shadow/policy-shadows.server");
+      await resolveB4x4PolicyShadows(supabase, targetCandleTs, actualDirection);
+    } catch { /* reporting only */ }
+  } catch (e) {
+    // Record the failed attempt so resolution health is auditable.
+    try {
+      if (rowId) {
+        await supabase
+          .from("b4x4_predictions")
+          .update({
+            last_resolution_attempt_at: new Date().toISOString(),
+            last_resolution_error: e instanceof Error ? e.message : String(e),
+            resolver_version: B4X4_RESOLVER_VERSION,
+          } as never)
+          .eq("id", rowId)
+          .is("resolved_at", null);
+      }
+    } catch { /* never block the resolver */ }
+  }
 }
+
