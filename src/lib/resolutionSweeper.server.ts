@@ -60,6 +60,8 @@ export interface SweepResult {
   b4x4_targets: string[];
   td1_resolved: number;
   td1_targets: string[];
+  td1_closed_ineligible: number;
+
   errors: string[];
 }
 
