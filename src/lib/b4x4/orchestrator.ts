@@ -12,6 +12,8 @@ import {
   B4X4_MODEL_VERSION,
   B4X4_PROSPECTIVE_TEST_ID,
   B4X4_RESOLVER_VERSION,
+  B4X4_REVISION_ACTIVATED_AT,
+  B4X4_REVISION_PROSPECTIVE_TEST_ID,
   B4X4_SOURCE_EPOCH_TS,
   B4X4_SOURCE_INDEX_VERSION,
   B4X4_SOURCE_VARIANT,
@@ -212,6 +214,8 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
 
     // ---- runtime-integrity audit identity ----
     implementation_revision: B4X4_IMPLEMENTATION_REVISION,
+    revision_prospective_test_id: B4X4_REVISION_PROSPECTIVE_TEST_ID,
+    revision_activated_at: B4X4_REVISION_ACTIVATED_AT,
     source_index_absolute: d.sourceIndexAbsolute,
     source_index_version: B4X4_SOURCE_INDEX_VERSION,
     source_epoch_ts: B4X4_SOURCE_EPOCH_TS,
