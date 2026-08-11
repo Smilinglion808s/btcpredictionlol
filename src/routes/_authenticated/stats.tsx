@@ -1130,7 +1130,7 @@ function V6Card({
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.28em] text-violet/80 mb-1">Frozen forward test</div>
           <h3 className="v6-title text-4xl font-bold font-heading tracking-tight leading-none">V6</h3>
-          <div className="text-[10px] text-muted-foreground mt-1">V6-r4 Structure Confirmation</div>
+          <div className="text-[10px] text-muted-foreground mt-1">V6-r5 Selective Core Router</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
@@ -1210,7 +1210,28 @@ function V6Card({
           <V6Stat label="Rolling 96 raw net" value={fmt(stats.rolling96_raw_net)} />
         </V6Section>
 
-        <V6Section title="Selectivity · V6-r4">
+        <V6Section title="Router · V6-r5 (live authority)">
+          <V6Stat
+            label="GREEN route"
+            value={pending?.r5_green_candidate ? "PASS" : pending?.r5_green_evaluable ? "FAIL" : "n/a"}
+            tone={pending?.r5_green_candidate ? "bull" : undefined}
+          />
+          <V6Stat
+            label="RED anchor route"
+            value={pending?.r5_red_anchor_candidate ? "PASS" : pending?.r5_red_anchor_evaluable ? "FAIL" : "n/a"}
+            tone={pending?.r5_red_anchor_candidate ? "bear" : undefined}
+          />
+          <V6Stat
+            label="RED broad route"
+            value={pending?.r5_red_broad_candidate ? "PASS" : pending?.r5_red_broad_evaluable ? "FAIL" : "n/a"}
+            tone={pending?.r5_red_broad_candidate ? "bear" : undefined}
+          />
+          <V6Stat label="Router decision" value={String(pending?.r5_router_decision ?? "—")} />
+          <V6Stat label="Route conflict" value={pending?.r5_conflict ? "YES" : "no"} tone={pending?.r5_conflict ? "bear" : undefined} />
+          <V6Stat label="Legacy layers" value="shadow only" tone="violet" />
+        </V6Section>
+
+        <V6Section title="Selectivity · legacy shadows">
           <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
           <V6Stat label="Structure vetoes" value={Number(stats.structure_vetoes ?? 0)} />
           <V6Stat label="Avoided losses" value={Number(stats.structure_avoided_losses ?? 0)} tone="bull" />
