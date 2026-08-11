@@ -442,11 +442,12 @@ export async function resolveTd1RcRow(
         "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
         "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_prev_policy_would_trade, " +
         "td1_prev_policy_skip_reason, td1_no_global_veto_decision, " +
-        "td2_policy_version, td2_recovery_fired, td2_r1_counterfactual_decision",
+        "td2_policy_version, td2_recovery_fired, td2_r1_counterfactual_decision, " +
+        "td3_policy_version, td3_pre_veto_decision, td3_toxic_drift_veto_fired, td3_final_decision",
       )
 
       .eq("prediction_id", predictionId)
-      .in("variant", [VARIANT, TD2_VARIANT]);
+      .in("variant", [VARIANT, TD2_VARIANT, TD3_VARIANT]);
     const rows = ((rowData ?? []) as unknown) as Record<string, unknown>[];
     if (rows.length === 0) return;
 
