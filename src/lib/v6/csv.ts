@@ -95,7 +95,38 @@ export const V6_CSV_COLUMNS = [
   "structure_underlying_prediction","structure_underlying_actual_direction",
   "structure_underlying_raw_score","structure_underlying_adjusted_score",
   "structure_confirmation_raw_contribution","structure_confirmation_adjusted_contribution",
+
+  // --- V6-r5 Selective Core Router ---
+  "r5_router_version","r5_router_decision","r5_router_source","r5_router_reason","final_reason",
+  "r5_green_evaluable","r5_green_candidate",
+  "r5_green_stoch_spread","r5_green_stoch_spread_threshold","r5_green_stoch_condition",
+  "r5_green_d1_mean_body_to_range_2","r5_green_d1_mean_body_to_range_2_threshold","r5_green_body_condition",
+  "r5_red_feeder_evaluable","r5_red_feeder_pass","r5_red_feeder_prediction","r5_red_feeder_source",
+  "r5_red_anchor_evaluable","r5_red_anchor_candidate",
+  "r5_red_anchor_d1_close_position","r5_red_anchor_d1_close_position_threshold","r5_red_anchor_condition",
+  "r5_red_broad_evaluable","r5_red_broad_candidate",
+  "r5_red_broad_close_slope_8","r5_red_broad_close_slope_threshold","r5_red_broad_slope_condition",
+  "r5_red_broad_bb_width_pct","r5_red_broad_bb_width_threshold","r5_red_broad_bb_condition",
+  "r5_red_candidate","r5_conflict","r5_conflict_green_result","r5_conflict_red_result",
+  "r5_final_result","r5_final_raw_score","r5_final_adjusted_score",
+  "r5_green_shadow_prediction","r5_green_shadow_result","r5_green_shadow_raw_score","r5_green_shadow_adjusted_score",
+  "r5_red_anchor_shadow_prediction","r5_red_anchor_shadow_result","r5_red_anchor_shadow_raw_score","r5_red_anchor_shadow_adjusted_score",
+  "r5_red_broad_shadow_prediction","r5_red_broad_shadow_result","r5_red_broad_shadow_raw_score","r5_red_broad_shadow_adjusted_score",
+  "r5_aligned_wick_red_shadow_evaluable","r5_aligned_wick_red_shadow_candidate",
+  "r5_aligned_wick_red_shadow_value","r5_aligned_wick_red_shadow_threshold",
+  "r5_aligned_wick_red_shadow_result","r5_aligned_wick_red_shadow_raw_score","r5_aligned_wick_red_shadow_adjusted_score",
+  "legacy_pickup_publication_enabled","broad_conflict_publication_enabled",
+  "broad_red_reliability_publication_enabled","structure_confirmation_publication_enabled",
+  "structure_confirmation_shadow_only",
+  "legacy_r4_shadow_prediction","legacy_r4_shadow_source","legacy_r4_shadow_reason",
+  "legacy_r4_shadow_result","legacy_r4_shadow_raw_score","legacy_r4_shadow_adjusted_score",
+  "consensus_red_shadow_prediction","consensus_red_shadow_result",
+  "consensus_red_shadow_raw_score","consensus_red_shadow_adjusted_score",
+  "momentum_green_shadow_prediction","momentum_green_shadow_result",
+  "momentum_green_shadow_raw_score","momentum_green_shadow_adjusted_score",
+  "r5_cumulative_raw_net","r5_cumulative_adjusted_net","r5_trade_index",
 ] as const;
+
 
 type Row = Record<string, unknown>;
 
