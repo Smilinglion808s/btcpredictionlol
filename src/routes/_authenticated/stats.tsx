@@ -539,11 +539,22 @@ function TD1Stat({ label, value, tone }: { label: string; value: string | number
 }
 
 /** Last N calendar days (Mountain Time): win rate + net wins per day. */
-function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<string, any>>; accent?: "bear" | "cyan"; count?: number }) {
+function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<string, any>>; accent?: "bear" | "cyan" | "emerald"; count?: number }) {
   const rows = (days ?? []).slice(0, count);
   if (rows.length === 0) return null;
   const compact = count > 3;
-  const line = accent === "cyan" ? "from-cyan-400/40" : "from-bear/40";
+  const lineMap = {
+    cyan: "from-cyan-400/40",
+    bear: "from-bear/40",
+    emerald: "from-emerald/40",
+  };
+  const chipMap = {
+    cyan: "td1-chip",
+    bear: "td1-chip",
+    emerald: "td3-chip",
+  };
+  const line = lineMap[accent];
+  const chip = chipMap[accent];
   const label = (dateKey: string, i: number) => {
     if (i === 0) return "Today";
     if (i === 1) return "Yest";
@@ -564,7 +575,7 @@ function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<stri
           const trades = Number(d.trades ?? 0);
           const netCls = net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-muted-foreground";
           return (
-            <div key={String(d.date ?? i)} className={`td1-chip ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
+            <div key={String(d.date ?? i)} className={`${chip} ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
               <div className={`uppercase tracking-[0.12em] text-muted-foreground truncate ${compact ? "text-[8px]" : "text-[9px]"}`}>
                 {label(String(d.date ?? ""), i)}
               </div>
@@ -581,6 +592,7 @@ function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<stri
     </div>
   );
 }
+
 
 
 
