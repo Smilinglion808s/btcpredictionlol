@@ -174,6 +174,14 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     if (key) td1By.set(key, r);
   }
 
+  const td3By = new Map<string, Row>();
+  for (const r of td3Rows) {
+    const key = toIsoBucket(r.candle_ts ?? r.target_candle_ts);
+    if (key) td3By.set(key, r);
+  }
+
+
+
   const aasBy = new Map<string, Row>();
   for (const r of aas96Rows) {
     const key = toIsoBucket(r.target_candle_ts ?? r.candle_ts);
