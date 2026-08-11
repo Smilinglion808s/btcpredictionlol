@@ -15,10 +15,10 @@ export const V6_WEBHOOK_ACTIVATION_TS = "2026-08-11T02:00:00.000Z";
 
 type Row = Record<string, unknown> | null;
 
-async function b4x4DirectionFor(
+async function readB4x4(
   supabase: SupabaseClient,
   targetCandleTs: string,
-): Promise<"GREEN" | "RED" | null> {
+): Promise<{ found: boolean; direction: "GREEN" | "RED" | null }> {
   try {
     const { data } = await supabase
       .from("b4x4_predictions")
@@ -28,17 +28,34 @@ async function b4x4DirectionFor(
     const row = data as
       | { final_prediction?: string | null; would_trade?: boolean | null; run_mode?: string | null; operational_gap_status?: string | null }
       | null;
-    if (!row) return null;
-    if (row.run_mode !== "LIVE") return null;
-    if (row.operational_gap_status === "CATCHUP") return null;
-    if (row.would_trade !== true) return null;
+    if (!row) return { found: false, direction: null };
+    if (row.run_mode !== "LIVE") return { found: true, direction: null };
+    if (row.operational_gap_status === "CATCHUP") return { found: true, direction: null };
+    if (row.would_trade !== true) return { found: true, direction: null };
     if (row.final_prediction === "GREEN" || row.final_prediction === "RED") {
-      return row.final_prediction;
+      return { found: true, direction: row.final_prediction };
     }
-    return null;
+    return { found: true, direction: null };
   } catch {
-    return null;
+    return { found: false, direction: null };
   }
+}
+
+/**
+ * B4x4 runs first on the critical path, but V6 can occasionally reach this
+ * point before the B4x4 row lands. Poll briefly so a conflicting B4x4 trade is
+ * never missed; give up quickly so V6 is not delayed materially.
+ */
+async function b4x4DirectionFor(
+  supabase: SupabaseClient,
+  targetCandleTs: string,
+): Promise<"GREEN" | "RED" | null> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const res = await readB4x4(supabase, targetCandleTs);
+    if (res.found) return res.direction;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return null;
 }
 
 /**
