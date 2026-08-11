@@ -66,6 +66,12 @@ export interface B4x4Context {
   catchupTargetTs?: string | null;
   operationalGapStatus?: string | null;
   operationalGapReason?: string | null;
+  /**
+   * When true the order-book shadow capture is NOT awaited inside the run, so
+   * order-book polling can never delay the prediction row or its webhook. The
+   * caller must invoke captureB4x4ShadowForRow() afterwards.
+   */
+  deferShadowCapture?: boolean;
 }
 
 type DbRow = Record<string, unknown>;
@@ -284,19 +290,7 @@ export async function runB4x4ForA2Combined(
     }
 
     // ---- Order-book shadow capture (shadow only, never blocks B4x4). ----
-    if (saved && saved.run_mode === "LIVE") {
-      try {
-        const { persistB4x4Shadow } = await import("./shadow/persist.server");
-        await persistB4x4Shadow(supabase, {
-          id: String(saved.id),
-          target_candle_ts: String(saved.target_candle_ts),
-          run_mode: "LIVE",
-          raw_direction: (saved.raw_direction as string | null) ?? null,
-          final_prediction: (saved.final_prediction as string | null) ?? null,
-          would_trade: saved.would_trade === true,
-        });
-      } catch { /* shadow only */ }
-    }
+    if (!ctx.deferShadowCapture) await captureB4x4ShadowForRow(supabase, saved);
     return saved;
 
   } catch (e) {
@@ -359,6 +353,29 @@ export async function maybeSendB4x4Webhook(
   } catch {
     return false;
   }
+}
+
+/**
+ * Order-book shadow capture for a persisted row. Shadow only: it runs strictly
+ * after the prediction row (and its webhook) so its polling can never make a
+ * prediction late, and every failure is swallowed.
+ */
+export async function captureB4x4ShadowForRow(
+  supabase: SupabaseClient,
+  saved: DbRow | null,
+): Promise<void> {
+  if (!saved || saved.run_mode !== "LIVE") return;
+  try {
+    const { persistB4x4Shadow } = await import("./shadow/persist.server");
+    await persistB4x4Shadow(supabase, {
+      id: String(saved.id),
+      target_candle_ts: String(saved.target_candle_ts),
+      run_mode: "LIVE",
+      raw_direction: (saved.raw_direction as string | null) ?? null,
+      final_prediction: (saved.final_prediction as string | null) ?? null,
+      would_trade: saved.would_trade === true,
+    });
+  } catch { /* shadow only */ }
 }
 
 /** Idempotent resolution of the B4x4 row for a target candle. */
