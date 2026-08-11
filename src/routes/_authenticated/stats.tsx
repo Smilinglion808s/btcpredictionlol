@@ -10,10 +10,6 @@ import {
   getTd1RcShadowStats,
   getTd1RcShadowPending,
   exportTd1RcShadow,
-  getTd2RcShadowStats,
-  getTd2RcShadowPending,
-  exportTd2RcShadow,
-  resetTd2RcVisualStats,
   getTd1RcTrainingProgress,
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
@@ -62,12 +58,6 @@ function StatsPage() {
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
 
-  const td2Fn = useServerFn(getTd2RcShadowStats);
-  const td2Q = useQuery({ queryKey: ["td2-rc-shadow-stats"], queryFn: () => td2Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const td2PendingFn = useServerFn(getTd2RcShadowPending);
-  const td2PendingQ = useQuery({ queryKey: ["td2-rc-shadow-pending"], queryFn: () => td2PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
-  const exportTd2Fn = useServerFn(exportTd2RcShadow);
-  const resetTd2Fn = useServerFn(resetTd2RcVisualStats);
 
   const v6Fn = useServerFn(getV6Stats);
   const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
@@ -119,8 +109,6 @@ function StatsPage() {
 
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
-  const [resettingTd2, setResettingTd2] = useState(false);
-  const [exportingTd2, setExportingTd2] = useState(false);
 
 
   async function downloadV6Csv() {
@@ -157,27 +145,6 @@ function StatsPage() {
     }
   }
 
-  async function doResetTd2Stats() {
-    if (!confirm("Reset TD2-RC visual stats to zero? The CSV export will keep all historical rows.")) return;
-    try {
-      setResettingTd2(true);
-      await resetTd2Fn();
-      qc.invalidateQueries({ queryKey: ["td2-rc-shadow-stats"] });
-    } finally {
-      setResettingTd2(false);
-    }
-  }
-
-  async function downloadTd2Csv() {
-    try {
-      setExportingTd2(true);
-      const rows = await exportTd2Fn();
-      if (rows.length === 0) { alert("No TD2-RC shadow rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `td2-rc-shadow-${stamp()}.csv`);
-    } finally {
-      setExportingTd2(false);
-    }
-  }
 
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
@@ -247,8 +214,6 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
-        qc.invalidateQueries({ queryKey: ["td2-rc-shadow-stats"] });
-        qc.invalidateQueries({ queryKey: ["td2-rc-shadow-pending"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["v6-stats"] });
@@ -289,23 +254,6 @@ function StatsPage() {
     daily_3d: (td1Stats.daily_3d ?? []) as Array<Record<string, any>>,
 
   };
-  const td2Stats = (td2Q.data ?? {}) as Record<string, any>;
-  const td2Hero = {
-    total: Number(td2Stats.total ?? 0),
-    wins: Number(td2Stats.wins ?? 0),
-    losses: Number(td2Stats.losses ?? 0),
-    pushes: Number(td2Stats.pushes ?? 0),
-    pending: Number(td2Stats.pending ?? 0),
-    win_rate: Number(td2Stats.win_rate ?? 0),
-    td1_vetoes: Number(td2Stats.td1_vetoes ?? 0),
-    containment_vetoes: Number(td2Stats.containment_vetoes ?? 0),
-    compressed_risk: (td2Stats.compressed_risk ?? null) as Record<string, any> | null,
-    recovery: (td2Stats.recovery ?? null) as Record<string, any> | null,
-    daily_3d: (td2Stats.daily_3d ?? []) as Array<Record<string, any>>,
-
-
-  };
-  const td2Resolved = td2Hero.wins + td2Hero.losses + td2Hero.pushes;
 
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
   const isLive = Boolean(settingsQ.data?.auto_run_enabled);
@@ -397,21 +345,7 @@ function StatsPage() {
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <TD1Card
-          title="TD2-RC"
-          eyebrow="Shadow layer · compressed-risk gate"
-          showCompressedRisk
-          hero={td2Hero}
-          resolved={td2Resolved}
-          pending={td2PendingQ.data as any}
-          progress={td1ProgressQ.data as any}
-          onExport={downloadTd2Csv}
-          exporting={exportingTd2}
-          onReset={doResetTd2Stats}
-          resetting={resettingTd2}
-        />
-
+      <div className="grid grid-cols-1 gap-5">
         <B4x4Card
           stats={(b4x4Q.data as any) ?? {}}
           pending={(b4x4PendingQ.data as any) ?? null}
