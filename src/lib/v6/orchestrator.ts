@@ -563,13 +563,68 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
       structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      final_prediction: accepted ? r4Prediction : "OP_FAIL",
+      // --- V6-r5 publication (the router is the only live authority) -------
+      final_prediction: accepted ? r5.decision : "OP_FAIL",
+      final_prediction_source: accepted ? r5.source : "OP_FAIL",
+      final_reason: accepted ? r5.reason : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && r4Prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted ? r4AbstainReason : null,
+      abstain_status: accepted && r5.decision === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted && r5.decision === "ABSTAIN" ? r5.reason : null,
 
-      // --- Regime Inverter — SHADOW ONLY (V6-r3 / r4) ---
-      model_revision: V6_R4_MODEL_REVISION,
+      model_revision: V6_R5_MODEL_REVISION,
+      r5_router_version: r5.routerVersion,
+      r5_green_evaluable: r5.greenEvaluable,
+      r5_green_candidate: accepted && r5.greenCandidate,
+      r5_green_stoch_spread: r5.greenStochSpread,
+      r5_green_stoch_spread_threshold: R5_GREEN_STOCH_SPREAD_MAX,
+      r5_green_stoch_condition: r5.greenStochCondition,
+      r5_green_d1_mean_body_to_range_2: r5.greenD1MeanBodyToRange2,
+      r5_green_d1_mean_body_to_range_2_threshold: R5_GREEN_D1_MEAN_BODY_RANGE_MAX,
+      r5_green_body_condition: r5.greenBodyCondition,
+      r5_red_feeder_evaluable: r5.redFeederEvaluable,
+      r5_red_feeder_pass: r5.redFeederPass,
+      r5_red_feeder_prediction: r5.redFeederPrediction,
+      r5_red_feeder_source: r5.redFeederSource,
+      r5_red_anchor_evaluable: r5.redAnchorEvaluable,
+      r5_red_anchor_candidate: accepted && r5.redAnchorCandidate,
+      r5_red_anchor_d1_close_position: r5.redAnchorD1ClosePosition,
+      r5_red_anchor_d1_close_position_threshold: R5_RED_ANCHOR_D1_CLOSE_POSITION_MAX,
+      r5_red_anchor_condition: r5.redAnchorCondition,
+      r5_red_broad_evaluable: r5.redBroadEvaluable,
+      r5_red_broad_candidate: accepted && r5.redBroadCandidate,
+      r5_red_broad_close_slope_8: r5.redBroadCloseSlope8,
+      r5_red_broad_close_slope_threshold: R5_RED_BROAD_CLOSE_SLOPE_MIN,
+      r5_red_broad_slope_condition: r5.redBroadSlopeCondition,
+      r5_red_broad_bb_width_pct: r5.redBroadBbWidthPct,
+      r5_red_broad_bb_width_threshold: R5_RED_BROAD_BB_WIDTH_MAX,
+      r5_red_broad_bb_condition: r5.redBroadBbCondition,
+      r5_red_candidate: accepted && r5.redCandidate,
+      r5_conflict: accepted && r5.conflict,
+      r5_router_decision: accepted ? r5.decision : "OP_FAIL",
+      r5_router_source: accepted ? r5.source : "OP_FAIL",
+      r5_router_reason: accepted ? r5.reason : "OP_FAIL",
+
+      // Experimental aligned-wick RED branch — SHADOW ONLY, never publishes.
+      r5_aligned_wick_red_shadow_evaluable: r5.wickShadowEvaluable,
+      r5_aligned_wick_red_shadow_candidate: accepted && r5.wickShadowCandidate,
+      r5_aligned_wick_red_shadow_value: r5.wickShadowValue,
+      r5_aligned_wick_red_shadow_threshold: R5_ALIGNED_WICK_RED_SHADOW_MIN,
+
+      // Publication authority of every legacy layer under r5.
+      legacy_pickup_publication_enabled: LEGACY_PICKUP_PUBLICATION_ENABLED,
+      broad_conflict_publication_enabled: BROAD_CONFLICT_PUBLICATION_ENABLED,
+      broad_red_reliability_publication_enabled: BROAD_RED_RELIABILITY_PUBLICATION_ENABLED,
+      structure_confirmation_publication_enabled: STRUCTURE_CONFIRMATION_PUBLICATION_ENABLED,
+      structure_confirmation_shadow_only: STRUCTURE_CONFIRMATION_SHADOW_ONLY,
+
+      // Complete legacy r4 stack, retained as a counterfactual shadow only.
+      legacy_r4_shadow_prediction: accepted ? r4Prediction : "OP_FAIL",
+      legacy_r4_shadow_source: accepted ? r4Source : "OP_FAIL",
+      legacy_r4_shadow_reason: accepted ? r4AbstainReason : "OP_FAIL",
+      consensus_red_shadow_prediction: accepted && inf.redPickupTriggered ? "RED" : null,
+      momentum_green_shadow_prediction: accepted && inf.greenPickupTriggered ? "GREEN" : null,
+
+      // --- Regime Inverter — SHADOW ONLY (V6-r3 / r4 / r5) ---
       original_v6_base_prediction: inf.basePrediction,
       original_v6_base_source: inf.predictionSource,
       pre_inverter_prediction: r3Prediction,
@@ -592,9 +647,8 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
       regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
-      final_prediction_source: accepted ? r4Source : "OP_FAIL",
-
     };
+
 
     const { error } = await sb.from("v6_predictions").insert(row as never);
     if (error && !String(error.message).includes("duplicate key")) throw error;
