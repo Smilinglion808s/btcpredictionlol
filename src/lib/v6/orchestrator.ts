@@ -893,6 +893,55 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           regime_inverter_shadow_adjusted_score: inverterShadowAdj,
           regime_inverter_counterfactual_raw_contribution: inverterCounterfactual.raw,
           regime_inverter_counterfactual_adjusted_contribution: inverterCounterfactual.adjusted,
+
+          // --- V6-r5 published outcome and per-branch shadow outcomes ---
+          r5_final_result: finalDirectional
+            ? (final === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS")
+            : opFail ? null : "ABSTAIN",
+          r5_final_raw_score: opFail ? null : rawScore(final, actual),
+          r5_final_adjusted_score: opFail ? null : adjustedScore(final, actual),
+
+          r5_green_shadow_prediction: r5Green.prediction,
+          r5_green_shadow_result: r5Green.result,
+          r5_green_shadow_raw_score: r5Green.raw,
+          r5_green_shadow_adjusted_score: r5Green.adjusted,
+
+          r5_red_anchor_shadow_prediction: r5Anchor.prediction,
+          r5_red_anchor_shadow_result: r5Anchor.result,
+          r5_red_anchor_shadow_raw_score: r5Anchor.raw,
+          r5_red_anchor_shadow_adjusted_score: r5Anchor.adjusted,
+
+          r5_red_broad_shadow_prediction: r5Broad.prediction,
+          r5_red_broad_shadow_result: r5Broad.result,
+          r5_red_broad_shadow_raw_score: r5Broad.raw,
+          r5_red_broad_shadow_adjusted_score: r5Broad.adjusted,
+
+          // Conflict attribution: what each blocked side would have produced.
+          r5_conflict_green_result: r5Conflicted ? r5Green.result : null,
+          r5_conflict_red_result: r5Conflicted
+            ? (r5Anchor.result ?? r5Broad.result)
+            : null,
+
+          r5_aligned_wick_red_shadow_result: r5Wick.result,
+          r5_aligned_wick_red_shadow_raw_score: r5Wick.raw,
+          r5_aligned_wick_red_shadow_adjusted_score: r5Wick.adjusted,
+
+          // Legacy stack, graded as pure counterfactual shadows.
+          legacy_r4_shadow_result: opFail || !legacyR4 || legacyR4 === "ABSTAIN"
+            ? null
+            : legacyR4 === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          legacy_r4_shadow_raw_score: opFail ? null : rawScore(legacyR4, actual),
+          legacy_r4_shadow_adjusted_score: opFail ? null : adjustedScore(legacyR4, actual),
+          consensus_red_shadow_result: opFail || !consensusRed
+            ? null
+            : consensusRed === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          consensus_red_shadow_raw_score: consensusRed ? rawScore(consensusRed, actual) : null,
+          consensus_red_shadow_adjusted_score: consensusRed ? adjustedScore(consensusRed, actual) : null,
+          momentum_green_shadow_result: opFail || !momentumGreen
+            ? null
+            : momentumGreen === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
+          momentum_green_shadow_raw_score: momentumGreen ? rawScore(momentumGreen, actual) : null,
+          momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(momentumGreen, actual) : null,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
