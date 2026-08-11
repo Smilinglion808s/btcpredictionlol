@@ -196,6 +196,14 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     if (key) b4x4By.set(key, r);
   }
 
+  // Reporting-only B4x4 policy shadows, keyed by boundary + shadow variant.
+  const b4x4ShadowBy = new Map<string, Row>();
+  for (const r of input.b4x4PolicyShadowRows ?? []) {
+    const key = toIsoBucket(r.target_candle_ts);
+    if (key) b4x4ShadowBy.set(`${key}|${String(r.shadow_variant)}`, r);
+  }
+
+
   const a96By = new Map<string, Row>();
   for (const r of a96Rows) {
     const key = toIsoBucket(r.target_candle_ts);
