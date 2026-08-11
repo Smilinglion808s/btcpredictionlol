@@ -35,6 +35,8 @@ export interface UniversalInput {
   aas96Rows: readonly Row[]; // model7_aas96_shadow
   a96Rows: readonly Row[]; // a96_predictions
   b4x4Rows?: readonly Row[]; // b4x4_predictions
+  b4x4PolicyShadowRows?: readonly Row[]; // b4x4_policy_shadows (reporting only)
+
 }
 
 export interface UniversalStats {
