@@ -56,6 +56,12 @@ export interface B4x4Context {
   featureCutoffTs?: string | null;
   latestSourceCandleTs?: string | null;
   runMode?: "LIVE" | "BACKFILL";
+  /** Scheduler run identity, for gap/watchdog auditing. */
+  schedulerInvocationId?: string | null;
+  /** Set when this row is produced by a catch-up pass for a missed boundary. */
+  catchupTargetTs?: string | null;
+  operationalGapStatus?: string | null;
+  operationalGapReason?: string | null;
 }
 
 type DbRow = Record<string, unknown>;
