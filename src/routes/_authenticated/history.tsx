@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   listAllPredictionsForHistory,
   exportTd1RcShadow,
+  exportTd3Shadow,
   exportAas96Shadow,
   exportA96Csv,
   exportUniversalV2,
