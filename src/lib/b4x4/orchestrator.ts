@@ -20,6 +20,8 @@ import {
   b4x4ConfigHash,
   b4x4LocalDate,
 } from "./config";
+import { b4x4BuildIdentity } from "./build-identity";
+
 import {
   brakeAttribution,
   evaluateB4x4,
