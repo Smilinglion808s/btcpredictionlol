@@ -4756,6 +4756,7 @@ export type Database = {
           broad_conflict_min_distance: number | null
           broad_conflict_original_prediction: string | null
           broad_conflict_original_source: string | null
+          broad_conflict_publication_enabled: boolean | null
           broad_conflict_underlying_adjusted_score: number | null
           broad_conflict_underlying_prediction: string | null
           broad_conflict_underlying_raw_score: number | null
@@ -4773,6 +4774,7 @@ export type Database = {
           broad_red_last12_wins: number | null
           broad_red_reliability_adjusted_contribution: number | null
           broad_red_reliability_evaluable: boolean | null
+          broad_red_reliability_publication_enabled: boolean | null
           broad_red_reliability_raw_contribution: number | null
           broad_red_reliability_ready: boolean | null
           broad_red_reliability_reason: string | null
@@ -4793,6 +4795,10 @@ export type Database = {
           canonical_low: number | null
           canonical_open: number | null
           canonical_volume: number | null
+          consensus_red_shadow_adjusted_score: number | null
+          consensus_red_shadow_prediction: string | null
+          consensus_red_shadow_raw_score: number | null
+          consensus_red_shadow_result: string | null
           continuity_valid: boolean
           created_at: string
           cum_vol_delta_to_avg: number | null
@@ -4804,6 +4810,7 @@ export type Database = {
           final_prediction: string
           final_prediction_source: string | null
           final_raw_score: number | null
+          final_reason: string | null
           final_score: number | null
           fit_id: string | null
           gb_features_json: Json | null
@@ -4823,11 +4830,22 @@ export type Database = {
           input_low: number | null
           input_open: number | null
           input_volume: number | null
+          legacy_pickup_publication_enabled: boolean | null
+          legacy_r4_shadow_adjusted_score: number | null
+          legacy_r4_shadow_prediction: string | null
+          legacy_r4_shadow_raw_score: number | null
+          legacy_r4_shadow_reason: string | null
+          legacy_r4_shadow_result: string | null
+          legacy_r4_shadow_source: string | null
           lower_wick_pct: number | null
           model_artifact_sha256: string | null
           model_revision: string | null
           model_revision_activated_at: string | null
           model_version: string
+          momentum_green_shadow_adjusted_score: number | null
+          momentum_green_shadow_prediction: string | null
+          momentum_green_shadow_raw_score: number | null
+          momentum_green_shadow_result: string | null
           operational_error: string | null
           operational_status: string
           original_v6_base_prediction: string | null
@@ -4859,6 +4877,61 @@ export type Database = {
           prediction_source_after_weak_red_recovery: string | null
           prior_candle_ids_json: Json | null
           provider: string
+          r5_aligned_wick_red_shadow_adjusted_score: number | null
+          r5_aligned_wick_red_shadow_candidate: boolean | null
+          r5_aligned_wick_red_shadow_evaluable: boolean | null
+          r5_aligned_wick_red_shadow_raw_score: number | null
+          r5_aligned_wick_red_shadow_result: string | null
+          r5_aligned_wick_red_shadow_threshold: number | null
+          r5_aligned_wick_red_shadow_value: number | null
+          r5_conflict: boolean | null
+          r5_conflict_green_result: string | null
+          r5_conflict_red_result: string | null
+          r5_final_adjusted_score: number | null
+          r5_final_raw_score: number | null
+          r5_final_result: string | null
+          r5_green_body_condition: boolean | null
+          r5_green_candidate: boolean | null
+          r5_green_d1_mean_body_to_range_2: number | null
+          r5_green_d1_mean_body_to_range_2_threshold: number | null
+          r5_green_evaluable: boolean | null
+          r5_green_shadow_adjusted_score: number | null
+          r5_green_shadow_prediction: string | null
+          r5_green_shadow_raw_score: number | null
+          r5_green_shadow_result: string | null
+          r5_green_stoch_condition: boolean | null
+          r5_green_stoch_spread: number | null
+          r5_green_stoch_spread_threshold: number | null
+          r5_red_anchor_candidate: boolean | null
+          r5_red_anchor_condition: boolean | null
+          r5_red_anchor_d1_close_position: number | null
+          r5_red_anchor_d1_close_position_threshold: number | null
+          r5_red_anchor_evaluable: boolean | null
+          r5_red_anchor_shadow_adjusted_score: number | null
+          r5_red_anchor_shadow_prediction: string | null
+          r5_red_anchor_shadow_raw_score: number | null
+          r5_red_anchor_shadow_result: string | null
+          r5_red_broad_bb_condition: boolean | null
+          r5_red_broad_bb_width_pct: number | null
+          r5_red_broad_bb_width_threshold: number | null
+          r5_red_broad_candidate: boolean | null
+          r5_red_broad_close_slope_8: number | null
+          r5_red_broad_close_slope_threshold: number | null
+          r5_red_broad_evaluable: boolean | null
+          r5_red_broad_shadow_adjusted_score: number | null
+          r5_red_broad_shadow_prediction: string | null
+          r5_red_broad_shadow_raw_score: number | null
+          r5_red_broad_shadow_result: string | null
+          r5_red_broad_slope_condition: boolean | null
+          r5_red_candidate: boolean | null
+          r5_red_feeder_evaluable: boolean | null
+          r5_red_feeder_pass: boolean | null
+          r5_red_feeder_prediction: string | null
+          r5_red_feeder_source: string | null
+          r5_router_decision: string | null
+          r5_router_reason: string | null
+          r5_router_source: string | null
+          r5_router_version: string | null
           range_expansion_vs_avg20: number | null
           red_pickup_adjusted_contribution: number | null
           red_pickup_evaluable: boolean
@@ -4904,8 +4977,10 @@ export type Database = {
           structure_confirmation_adjusted_contribution: number | null
           structure_confirmation_evaluable: boolean | null
           structure_confirmation_pass: boolean | null
+          structure_confirmation_publication_enabled: boolean | null
           structure_confirmation_raw_contribution: number | null
           structure_confirmation_reason: string | null
+          structure_confirmation_shadow_only: boolean | null
           structure_confirmation_triggered: boolean | null
           structure_expansion_efficiency_threshold: number | null
           structure_expansion_efficiency_value: number | null
@@ -4977,6 +5052,7 @@ export type Database = {
           broad_conflict_min_distance?: number | null
           broad_conflict_original_prediction?: string | null
           broad_conflict_original_source?: string | null
+          broad_conflict_publication_enabled?: boolean | null
           broad_conflict_underlying_adjusted_score?: number | null
           broad_conflict_underlying_prediction?: string | null
           broad_conflict_underlying_raw_score?: number | null
@@ -4994,6 +5070,7 @@ export type Database = {
           broad_red_last12_wins?: number | null
           broad_red_reliability_adjusted_contribution?: number | null
           broad_red_reliability_evaluable?: boolean | null
+          broad_red_reliability_publication_enabled?: boolean | null
           broad_red_reliability_raw_contribution?: number | null
           broad_red_reliability_ready?: boolean | null
           broad_red_reliability_reason?: string | null
@@ -5014,6 +5091,10 @@ export type Database = {
           canonical_low?: number | null
           canonical_open?: number | null
           canonical_volume?: number | null
+          consensus_red_shadow_adjusted_score?: number | null
+          consensus_red_shadow_prediction?: string | null
+          consensus_red_shadow_raw_score?: number | null
+          consensus_red_shadow_result?: string | null
           continuity_valid?: boolean
           created_at?: string
           cum_vol_delta_to_avg?: number | null
@@ -5025,6 +5106,7 @@ export type Database = {
           final_prediction: string
           final_prediction_source?: string | null
           final_raw_score?: number | null
+          final_reason?: string | null
           final_score?: number | null
           fit_id?: string | null
           gb_features_json?: Json | null
@@ -5044,11 +5126,22 @@ export type Database = {
           input_low?: number | null
           input_open?: number | null
           input_volume?: number | null
+          legacy_pickup_publication_enabled?: boolean | null
+          legacy_r4_shadow_adjusted_score?: number | null
+          legacy_r4_shadow_prediction?: string | null
+          legacy_r4_shadow_raw_score?: number | null
+          legacy_r4_shadow_reason?: string | null
+          legacy_r4_shadow_result?: string | null
+          legacy_r4_shadow_source?: string | null
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
           model_revision?: string | null
           model_revision_activated_at?: string | null
           model_version?: string
+          momentum_green_shadow_adjusted_score?: number | null
+          momentum_green_shadow_prediction?: string | null
+          momentum_green_shadow_raw_score?: number | null
+          momentum_green_shadow_result?: string | null
           operational_error?: string | null
           operational_status?: string
           original_v6_base_prediction?: string | null
@@ -5080,6 +5173,61 @@ export type Database = {
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
+          r5_aligned_wick_red_shadow_adjusted_score?: number | null
+          r5_aligned_wick_red_shadow_candidate?: boolean | null
+          r5_aligned_wick_red_shadow_evaluable?: boolean | null
+          r5_aligned_wick_red_shadow_raw_score?: number | null
+          r5_aligned_wick_red_shadow_result?: string | null
+          r5_aligned_wick_red_shadow_threshold?: number | null
+          r5_aligned_wick_red_shadow_value?: number | null
+          r5_conflict?: boolean | null
+          r5_conflict_green_result?: string | null
+          r5_conflict_red_result?: string | null
+          r5_final_adjusted_score?: number | null
+          r5_final_raw_score?: number | null
+          r5_final_result?: string | null
+          r5_green_body_condition?: boolean | null
+          r5_green_candidate?: boolean | null
+          r5_green_d1_mean_body_to_range_2?: number | null
+          r5_green_d1_mean_body_to_range_2_threshold?: number | null
+          r5_green_evaluable?: boolean | null
+          r5_green_shadow_adjusted_score?: number | null
+          r5_green_shadow_prediction?: string | null
+          r5_green_shadow_raw_score?: number | null
+          r5_green_shadow_result?: string | null
+          r5_green_stoch_condition?: boolean | null
+          r5_green_stoch_spread?: number | null
+          r5_green_stoch_spread_threshold?: number | null
+          r5_red_anchor_candidate?: boolean | null
+          r5_red_anchor_condition?: boolean | null
+          r5_red_anchor_d1_close_position?: number | null
+          r5_red_anchor_d1_close_position_threshold?: number | null
+          r5_red_anchor_evaluable?: boolean | null
+          r5_red_anchor_shadow_adjusted_score?: number | null
+          r5_red_anchor_shadow_prediction?: string | null
+          r5_red_anchor_shadow_raw_score?: number | null
+          r5_red_anchor_shadow_result?: string | null
+          r5_red_broad_bb_condition?: boolean | null
+          r5_red_broad_bb_width_pct?: number | null
+          r5_red_broad_bb_width_threshold?: number | null
+          r5_red_broad_candidate?: boolean | null
+          r5_red_broad_close_slope_8?: number | null
+          r5_red_broad_close_slope_threshold?: number | null
+          r5_red_broad_evaluable?: boolean | null
+          r5_red_broad_shadow_adjusted_score?: number | null
+          r5_red_broad_shadow_prediction?: string | null
+          r5_red_broad_shadow_raw_score?: number | null
+          r5_red_broad_shadow_result?: string | null
+          r5_red_broad_slope_condition?: boolean | null
+          r5_red_candidate?: boolean | null
+          r5_red_feeder_evaluable?: boolean | null
+          r5_red_feeder_pass?: boolean | null
+          r5_red_feeder_prediction?: string | null
+          r5_red_feeder_source?: string | null
+          r5_router_decision?: string | null
+          r5_router_reason?: string | null
+          r5_router_source?: string | null
+          r5_router_version?: string | null
           range_expansion_vs_avg20?: number | null
           red_pickup_adjusted_contribution?: number | null
           red_pickup_evaluable?: boolean
@@ -5125,8 +5273,10 @@ export type Database = {
           structure_confirmation_adjusted_contribution?: number | null
           structure_confirmation_evaluable?: boolean | null
           structure_confirmation_pass?: boolean | null
+          structure_confirmation_publication_enabled?: boolean | null
           structure_confirmation_raw_contribution?: number | null
           structure_confirmation_reason?: string | null
+          structure_confirmation_shadow_only?: boolean | null
           structure_confirmation_triggered?: boolean | null
           structure_expansion_efficiency_threshold?: number | null
           structure_expansion_efficiency_value?: number | null
@@ -5198,6 +5348,7 @@ export type Database = {
           broad_conflict_min_distance?: number | null
           broad_conflict_original_prediction?: string | null
           broad_conflict_original_source?: string | null
+          broad_conflict_publication_enabled?: boolean | null
           broad_conflict_underlying_adjusted_score?: number | null
           broad_conflict_underlying_prediction?: string | null
           broad_conflict_underlying_raw_score?: number | null
@@ -5215,6 +5366,7 @@ export type Database = {
           broad_red_last12_wins?: number | null
           broad_red_reliability_adjusted_contribution?: number | null
           broad_red_reliability_evaluable?: boolean | null
+          broad_red_reliability_publication_enabled?: boolean | null
           broad_red_reliability_raw_contribution?: number | null
           broad_red_reliability_ready?: boolean | null
           broad_red_reliability_reason?: string | null
@@ -5235,6 +5387,10 @@ export type Database = {
           canonical_low?: number | null
           canonical_open?: number | null
           canonical_volume?: number | null
+          consensus_red_shadow_adjusted_score?: number | null
+          consensus_red_shadow_prediction?: string | null
+          consensus_red_shadow_raw_score?: number | null
+          consensus_red_shadow_result?: string | null
           continuity_valid?: boolean
           created_at?: string
           cum_vol_delta_to_avg?: number | null
@@ -5246,6 +5402,7 @@ export type Database = {
           final_prediction?: string
           final_prediction_source?: string | null
           final_raw_score?: number | null
+          final_reason?: string | null
           final_score?: number | null
           fit_id?: string | null
           gb_features_json?: Json | null
@@ -5265,11 +5422,22 @@ export type Database = {
           input_low?: number | null
           input_open?: number | null
           input_volume?: number | null
+          legacy_pickup_publication_enabled?: boolean | null
+          legacy_r4_shadow_adjusted_score?: number | null
+          legacy_r4_shadow_prediction?: string | null
+          legacy_r4_shadow_raw_score?: number | null
+          legacy_r4_shadow_reason?: string | null
+          legacy_r4_shadow_result?: string | null
+          legacy_r4_shadow_source?: string | null
           lower_wick_pct?: number | null
           model_artifact_sha256?: string | null
           model_revision?: string | null
           model_revision_activated_at?: string | null
           model_version?: string
+          momentum_green_shadow_adjusted_score?: number | null
+          momentum_green_shadow_prediction?: string | null
+          momentum_green_shadow_raw_score?: number | null
+          momentum_green_shadow_result?: string | null
           operational_error?: string | null
           operational_status?: string
           original_v6_base_prediction?: string | null
@@ -5301,6 +5469,61 @@ export type Database = {
           prediction_source_after_weak_red_recovery?: string | null
           prior_candle_ids_json?: Json | null
           provider?: string
+          r5_aligned_wick_red_shadow_adjusted_score?: number | null
+          r5_aligned_wick_red_shadow_candidate?: boolean | null
+          r5_aligned_wick_red_shadow_evaluable?: boolean | null
+          r5_aligned_wick_red_shadow_raw_score?: number | null
+          r5_aligned_wick_red_shadow_result?: string | null
+          r5_aligned_wick_red_shadow_threshold?: number | null
+          r5_aligned_wick_red_shadow_value?: number | null
+          r5_conflict?: boolean | null
+          r5_conflict_green_result?: string | null
+          r5_conflict_red_result?: string | null
+          r5_final_adjusted_score?: number | null
+          r5_final_raw_score?: number | null
+          r5_final_result?: string | null
+          r5_green_body_condition?: boolean | null
+          r5_green_candidate?: boolean | null
+          r5_green_d1_mean_body_to_range_2?: number | null
+          r5_green_d1_mean_body_to_range_2_threshold?: number | null
+          r5_green_evaluable?: boolean | null
+          r5_green_shadow_adjusted_score?: number | null
+          r5_green_shadow_prediction?: string | null
+          r5_green_shadow_raw_score?: number | null
+          r5_green_shadow_result?: string | null
+          r5_green_stoch_condition?: boolean | null
+          r5_green_stoch_spread?: number | null
+          r5_green_stoch_spread_threshold?: number | null
+          r5_red_anchor_candidate?: boolean | null
+          r5_red_anchor_condition?: boolean | null
+          r5_red_anchor_d1_close_position?: number | null
+          r5_red_anchor_d1_close_position_threshold?: number | null
+          r5_red_anchor_evaluable?: boolean | null
+          r5_red_anchor_shadow_adjusted_score?: number | null
+          r5_red_anchor_shadow_prediction?: string | null
+          r5_red_anchor_shadow_raw_score?: number | null
+          r5_red_anchor_shadow_result?: string | null
+          r5_red_broad_bb_condition?: boolean | null
+          r5_red_broad_bb_width_pct?: number | null
+          r5_red_broad_bb_width_threshold?: number | null
+          r5_red_broad_candidate?: boolean | null
+          r5_red_broad_close_slope_8?: number | null
+          r5_red_broad_close_slope_threshold?: number | null
+          r5_red_broad_evaluable?: boolean | null
+          r5_red_broad_shadow_adjusted_score?: number | null
+          r5_red_broad_shadow_prediction?: string | null
+          r5_red_broad_shadow_raw_score?: number | null
+          r5_red_broad_shadow_result?: string | null
+          r5_red_broad_slope_condition?: boolean | null
+          r5_red_candidate?: boolean | null
+          r5_red_feeder_evaluable?: boolean | null
+          r5_red_feeder_pass?: boolean | null
+          r5_red_feeder_prediction?: string | null
+          r5_red_feeder_source?: string | null
+          r5_router_decision?: string | null
+          r5_router_reason?: string | null
+          r5_router_source?: string | null
+          r5_router_version?: string | null
           range_expansion_vs_avg20?: number | null
           red_pickup_adjusted_contribution?: number | null
           red_pickup_evaluable?: boolean
@@ -5346,8 +5569,10 @@ export type Database = {
           structure_confirmation_adjusted_contribution?: number | null
           structure_confirmation_evaluable?: boolean | null
           structure_confirmation_pass?: boolean | null
+          structure_confirmation_publication_enabled?: boolean | null
           structure_confirmation_raw_contribution?: number | null
           structure_confirmation_reason?: string | null
+          structure_confirmation_shadow_only?: boolean | null
           structure_confirmation_triggered?: boolean | null
           structure_expansion_efficiency_threshold?: number | null
           structure_expansion_efficiency_value?: number | null
