@@ -70,6 +70,11 @@ export function B4x4Card({
           <div className="text-[10px] text-muted-foreground mt-1 font-mono">
             A2_Combined ranks · 4×4 correctness grid · loss brake
           </div>
+          <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
+            {String(stats.implementation_revision ?? "—")}
+            {stats.deploy_environment ? ` · ${String(stats.deploy_environment)}` : ""}
+          </div>
+
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Button
