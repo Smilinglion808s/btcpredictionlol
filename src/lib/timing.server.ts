@@ -76,15 +76,23 @@ export async function getBtc15mExchangeTiming(): Promise<Btc15mTiming> {
   }
 
   const utcNextCloseMs = Math.floor(serverNowMs / BTC_15M_TF_MS) * BTC_15M_TF_MS + BTC_15M_TF_MS;
-  let nextCloseMs = utcNextCloseMs;
+  // The canonical prediction target is always the next UTC 15-minute candle
+  // boundary. Kalshi metadata is audit-only: its market close timestamp has
+  // occasionally described the following settlement boundary, which shifted
+  // the target one full candle ahead and left downstream models waiting until
+  // the server request timed out.
+  const nextCloseMs = utcNextCloseMs;
   let kalshiTicker: string | null = null;
   let closeSource: Btc15mTiming["closeSource"] = "coinbase_boundary";
 
   try {
     const kalshi = await fetchKalshiCloseTime(utcNextCloseMs);
-    nextCloseMs = kalshi.closeMs;
     kalshiTicker = kalshi.ticker;
-    closeSource = "kalshi";
+    // Only label Kalshi as the corroborating source when it agrees with the
+    // canonical boundary. It must never move the target timestamp.
+    if (Math.abs(kalshi.closeMs - utcNextCloseMs) < 1_000) {
+      closeSource = "kalshi";
+    }
   } catch {
     // Exchange time still anchors the 15m UTC candle boundary.
   }
