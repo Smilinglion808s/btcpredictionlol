@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   listAllPredictionsForHistory,
   exportTd1RcShadow,
+  exportTd3Shadow,
   exportAas96Shadow,
   exportA96Csv,
   exportUniversalV2,
@@ -454,6 +455,7 @@ function CsvDataPage() {
   const listFn = useServerFn(listAllPredictionsForHistory);
   const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
   const exportTd1 = useServerFn(exportTd1RcShadow);
+  const exportTd3 = useServerFn(exportTd3Shadow);
   const exportAas96 = useServerFn(exportAas96Shadow);
   const exportA96 = useServerFn(exportA96Csv);
   const exportV6 = useServerFn(exportV6Csv);
@@ -566,6 +568,17 @@ function CsvDataPage() {
             }}
           >
             <Download className="size-4" /> TD1-RC CSV
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="gap-2"
+            onClick={async () => {
+              const rows = (await exportTd3().catch(() => [])) as any[];
+              downloadJsonRowsAsCsv(rows, "btc15m_td3_toxic_drift");
+            }}
+          >
+            <Download className="size-4" /> TD3 CSV
           </Button>
           <Button
             size="lg"

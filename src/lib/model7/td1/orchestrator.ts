@@ -28,6 +28,15 @@ import {
   attributeTd2R2,
   evaluateTd2R2,
 } from "./td2r2";
+import {
+  TD3_POLICY_VERSION,
+  TD3_VARIANT,
+  TD3_VETO_REASON,
+  evaluateTd3,
+  scoreTd3Decision,
+  td3PredictionColumns,
+  td3VetoValue,
+} from "./td3";
 import type { Candle } from "../featurize";
 
 
@@ -82,8 +91,59 @@ async function writeSkipRow(
     td2_r1_counterfactual_skip_reason: reason,
     td2_recovery_value_class: "NO_CHANGE",
   };
-  await supabase.from("model7_td1_rc_shadow").insert([row, td2Row] as never);
+  const { data: inserted } = await supabase
+    .from("model7_td1_rc_shadow")
+    .insert([row, td2Row] as never)
+    .select("id, variant");
+  const td1RowId = ((inserted ?? []) as { id: string; variant: string }[])
+    .find((r) => r.variant === VARIANT)?.id ?? null;
+  await writeTd3Row(supabase, row, td1RowId);
   return { td1Row: row, td2Row };
+}
+
+/** TD3 = exact TD1 row + one final Toxic Opposing Drift Veto. Never mutates TD1. */
+async function writeTd3Row(
+  supabase: SupabaseClient,
+  td1Row: Record<string, unknown>,
+  td1RowId: string | null,
+): Promise<void> {
+  const features = (td1Row.feature_values_json as Record<string, unknown> | null) ?? null;
+  const preVetoDecision = (td1Row.external_final_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+  const evaluation = evaluateTd3({
+    preVetoDecision,
+    preVetoWouldTrade: td1Row.would_trade === true,
+    preVetoSkipReason: (td1Row.skip_reason as string | null) ?? null,
+    currentDirectionalConfidence: features?.current_directional_confidence as number | undefined,
+    opposingDrift4: features?.opposing_drift_4 as number | undefined,
+    sameDirectionRunLength: features?.same_direction_run_length as number | undefined,
+  });
+  const td3Row = {
+    ...td1Row,
+    variant: TD3_VARIANT,
+    prospective_test_id: TD3_POLICY_VERSION,
+    external_final_decision: evaluation.finalDecision,
+    would_trade: evaluation.wouldTrade,
+    skip_reason: evaluation.skipReason,
+    all_veto_reasons_json: evaluation.vetoFired
+      ? [...((td1Row.all_veto_reasons_json as string[] | null) ?? []), TD3_VETO_REASON]
+      : ((td1Row.all_veto_reasons_json as string[] | null) ?? []),
+    ...td3PredictionColumns({
+      evaluation,
+      runMode: "LIVE",
+      preVetoDecision,
+      preVetoWouldTrade: td1Row.would_trade === true,
+      preVetoSkipReason: (td1Row.skip_reason as string | null) ?? null,
+      sourceTd1RowId: td1RowId,
+      sourceTd1PolicyVersion: (td1Row.td1_policy_version as string | null) ?? null,
+      sourceTd1FitId: (td1Row.td1_fit_id as string | null) ?? null,
+      sourceTd1ArtifactSha256: (td1Row.td1_artifact_sha256 as string | null) ?? null,
+      featureCutoffTs: (td1Row.td1_feature_cutoff_ts as string | null) ?? null,
+      latestSourceCandleTs: (td1Row.td1_latest_source_candle_ts as string | null) ?? null,
+      timingStatus: (td1Row.timing_status as string | null) ?? null,
+      leakageCheckPassed: (td1Row.leakage_check_passed as boolean | null) ?? null,
+    }),
+  };
+  await supabase.from("model7_td1_rc_shadow").insert(td3Row as never);
 }
 
 
@@ -342,7 +402,13 @@ export async function runTd1RcForA2Combined(
       td2_recovery_value_class: r2.fired ? "UNRESOLVED" : "NO_CHANGE",
     };
 
-    await supabase.from("model7_td1_rc_shadow").insert([finalRow, td2Row] as never);
+    const { data: inserted } = await supabase
+      .from("model7_td1_rc_shadow")
+      .insert([finalRow, td2Row] as never)
+      .select("id, variant");
+    const td1RowId = ((inserted ?? []) as { id: string; variant: string }[])
+      .find((r) => r.variant === VARIANT)?.id ?? null;
+    await writeTd3Row(supabase, finalRow, td1RowId);
     return { td1Row: finalRow, td2Row };
   } catch (e) {
     try {
@@ -376,11 +442,12 @@ export async function resolveTd1RcRow(
         "id, variant, a2_original_decision, external_final_decision, candle_ts, resolved_at, " +
         "td1_compressed_risk_veto_fired, td1_prev_policy_decision, td1_prev_policy_would_trade, " +
         "td1_prev_policy_skip_reason, td1_no_global_veto_decision, " +
-        "td2_policy_version, td2_recovery_fired, td2_r1_counterfactual_decision",
+        "td2_policy_version, td2_recovery_fired, td2_r1_counterfactual_decision, " +
+        "td3_policy_version, td3_pre_veto_decision, td3_toxic_drift_veto_fired, td3_final_decision",
       )
 
       .eq("prediction_id", predictionId)
-      .in("variant", [VARIANT, TD2_VARIANT]);
+      .in("variant", [VARIANT, TD2_VARIANT, TD3_VARIANT]);
     const rows = ((rowData ?? []) as unknown) as Record<string, unknown>[];
     if (rows.length === 0) return;
 
@@ -439,6 +506,26 @@ export async function resolveTd1RcRow(
         };
       }
 
+      // --- TD3 toxic-drift attribution (TD3 rows only) ---
+      let td3Patch: Record<string, unknown> = {};
+      if (row.variant === TD3_VARIANT && row.td3_policy_version) {
+        const td3Final = scoreTd3Decision(
+          (row.td3_final_decision as "YES" | "NO" | "SKIP" | null) ?? null,
+          actualDirection,
+        );
+        const underlyingDecision = (row.td3_pre_veto_decision as "YES" | "NO" | "SKIP" | null) ?? null;
+        const underlying = scoreTd3Decision(underlyingDecision, actualDirection);
+        const vetoFired = row.td3_toxic_drift_veto_fired === true;
+        td3Patch = {
+          td3_result: td3Final.result,
+          td3_raw_score: td3Final.score,
+          td3_underlying_td1_decision: underlyingDecision,
+          td3_underlying_td1_result: underlying.result,
+          td3_underlying_td1_score: underlying.score,
+          td3_toxic_drift_veto_value: td3VetoValue(vetoFired, underlying.result),
+        };
+      }
+
       await supabase.from("model7_td1_rc_shadow").update({
         a2_counterfactual_result: cfResult,
         actual_direction: actualDirection,
@@ -455,6 +542,7 @@ export async function resolveTd1RcRow(
         td1_no_global_veto_result: noGlobal.result,
         td1_no_global_veto_score: noGlobal.score,
         ...td2Patch,
+        ...td3Patch,
       } as never).eq("id", row.id as string).is("resolved_at", null);
 
 

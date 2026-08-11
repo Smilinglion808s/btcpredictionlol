@@ -31,6 +31,7 @@ export interface UniversalInput {
   predictions: readonly Row[]; // union of predictions + predictions_archive
   candles: readonly CanonicalCandle[]; // OKX-confirmed candles for the range
   td1Rows: readonly Row[]; // model7_td1_rc_shadow
+  td3Rows?: readonly Row[]; // model7_td1_rc_shadow (A2_Combined_TD3_ToxicDrift)
   aas96Rows: readonly Row[]; // model7_aas96_shadow
   a96Rows: readonly Row[]; // a96_predictions
   b4x4Rows?: readonly Row[]; // b4x4_predictions
@@ -114,6 +115,7 @@ const LEGACY_RESOLUTION_META_NAMES = new Set<string>([
 export function buildUniversalExport(input: UniversalInput): UniversalOutput {
   const { predictions, candles, td1Rows, aas96Rows, a96Rows } = input;
   const b4x4Rows: readonly Row[] = input.b4x4Rows ?? [];
+  const td3Rows: readonly Row[] = input.td3Rows ?? [];
 
   // 1. Determine spine range.
   const allTsSources: Array<number> = [];
@@ -171,6 +173,14 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
     const key = toIsoBucket(r.candle_ts ?? r.target_candle_ts);
     if (key) td1By.set(key, r);
   }
+
+  const td3By = new Map<string, Row>();
+  for (const r of td3Rows) {
+    const key = toIsoBucket(r.candle_ts ?? r.target_candle_ts);
+    if (key) td3By.set(key, r);
+  }
+
+
 
   const aasBy = new Map<string, Row>();
   for (const r of aas96Rows) {
@@ -487,6 +497,18 @@ export function buildUniversalExport(input: UniversalInput): UniversalOutput {
 
     // Attach per-model raw rows under prefixed keys (backward-compat with
     // the old exporter).  Values are stably serialized.
+    // TD3 (TD1 clone + toxic opposing drift veto) — appended, never replacing TD1.
+    const td3Row = td3By.get(boundary) ?? null;
+    const td3Pred = td3Row ? normalizePrediction((td3Row as Row).td3_final_decision ?? (td3Row as Row).external_final_decision) : null;
+    row.td3_canonical_prediction = td3Pred;
+    row.td3_canonical_result_score = canonicalScore(td3Pred, canonicalDirNorm, canonical.canonical_ground_truth_valid);
+    row.td3_tracking_available = td3Row !== null;
+    if (td3Row) {
+      for (const [k, v] of Object.entries(td3Row)) {
+        row[`td3_raw_${k}`] = v && typeof v === "object" ? stableJson(v) : v;
+      }
+    }
+
     if (td1Row) {
       for (const [k, v] of Object.entries(td1Row)) {
         const key = `td1_raw_${k}`;
