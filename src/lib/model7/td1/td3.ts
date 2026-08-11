@@ -47,6 +47,7 @@ export interface Td3Evaluation {
 }
 
 const num = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 };
