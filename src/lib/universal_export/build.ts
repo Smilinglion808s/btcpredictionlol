@@ -31,6 +31,7 @@ export interface UniversalInput {
   predictions: readonly Row[]; // union of predictions + predictions_archive
   candles: readonly CanonicalCandle[]; // OKX-confirmed candles for the range
   td1Rows: readonly Row[]; // model7_td1_rc_shadow
+  td3Rows?: readonly Row[]; // model7_td1_rc_shadow (A2_Combined_TD3_ToxicDrift)
   aas96Rows: readonly Row[]; // model7_aas96_shadow
   a96Rows: readonly Row[]; // a96_predictions
   b4x4Rows?: readonly Row[]; // b4x4_predictions
