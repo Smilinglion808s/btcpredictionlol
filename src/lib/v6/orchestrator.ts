@@ -806,6 +806,8 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         "RED",
         gradeable,
       );
+      type ScoreArg = Parameters<typeof rawScore>[0];
+      const asDir = (v: unknown): ScoreArg => (v == null ? "ABSTAIN" : String(v)) as ScoreArg;
       const legacyR4 = r.legacy_r4_shadow_prediction as string | null;
       const consensusRed = r.consensus_red_shadow_prediction as string | null;
       const momentumGreen = r.momentum_green_shadow_prediction as string | null;
@@ -930,18 +932,18 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           legacy_r4_shadow_result: opFail || !legacyR4 || legacyR4 === "ABSTAIN"
             ? null
             : legacyR4 === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
-          legacy_r4_shadow_raw_score: opFail ? null : rawScore(legacyR4, actual),
-          legacy_r4_shadow_adjusted_score: opFail ? null : adjustedScore(legacyR4, actual),
+          legacy_r4_shadow_raw_score: opFail ? null : rawScore(asDir(legacyR4), actual),
+          legacy_r4_shadow_adjusted_score: opFail ? null : adjustedScore(asDir(legacyR4), actual),
           consensus_red_shadow_result: opFail || !consensusRed
             ? null
             : consensusRed === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
-          consensus_red_shadow_raw_score: consensusRed ? rawScore(consensusRed, actual) : null,
-          consensus_red_shadow_adjusted_score: consensusRed ? adjustedScore(consensusRed, actual) : null,
+          consensus_red_shadow_raw_score: consensusRed ? rawScore(asDir(consensusRed), actual) : null,
+          consensus_red_shadow_adjusted_score: consensusRed ? adjustedScore(asDir(consensusRed), actual) : null,
           momentum_green_shadow_result: opFail || !momentumGreen
             ? null
             : momentumGreen === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
-          momentum_green_shadow_raw_score: momentumGreen ? rawScore(momentumGreen, actual) : null,
-          momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(momentumGreen, actual) : null,
+          momentum_green_shadow_raw_score: momentumGreen ? rawScore(asDir(momentumGreen), actual) : null,
+          momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(asDir(momentumGreen), actual) : null,
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
