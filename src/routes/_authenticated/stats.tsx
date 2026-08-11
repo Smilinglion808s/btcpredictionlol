@@ -214,8 +214,6 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
-        qc.invalidateQueries({ queryKey: ["td2-rc-shadow-stats"] });
-        qc.invalidateQueries({ queryKey: ["td2-rc-shadow-pending"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["v6-stats"] });
