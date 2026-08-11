@@ -770,6 +770,7 @@ export type Database = {
           result: string | null
           result_score: number | null
           revision_activated_at: string | null
+          revision_prospective_test_id: string | null
           run_finished_at: string | null
           run_mode: string
           run_started_at: string | null
@@ -894,6 +895,7 @@ export type Database = {
           result?: string | null
           result_score?: number | null
           revision_activated_at?: string | null
+          revision_prospective_test_id?: string | null
           run_finished_at?: string | null
           run_mode?: string
           run_started_at?: string | null
@@ -1018,6 +1020,7 @@ export type Database = {
           result?: string | null
           result_score?: number | null
           revision_activated_at?: string | null
+          revision_prospective_test_id?: string | null
           run_finished_at?: string | null
           run_mode?: string
           run_started_at?: string | null

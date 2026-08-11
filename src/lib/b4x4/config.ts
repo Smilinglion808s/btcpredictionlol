@@ -15,6 +15,12 @@ export const B4X4_TIMEZONE = "America/Boise";
  */
 export const B4X4_IMPLEMENTATION_REVISION = "b4x4-v1-runtime-integrity-r1";
 export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_V1_RUNTIME_INTEGRITY_R1";
+/**
+ * Immutable activation instant of the runtime-integrity revision. Every row
+ * produced by this build carries it so the prospective test window is
+ * reconstructable from the data alone. Never change this value.
+ */
+export const B4X4_REVISION_ACTIVATED_AT = "2026-08-11T00:00:00.000Z";
 /** Reporting label for rows produced before the repair. */
 export const B4X4_PRE_REPAIR_SEGMENT = "B4X4_V1_PRE_RUNTIME_REPAIR";
 /** Absolute source index scheme version. */

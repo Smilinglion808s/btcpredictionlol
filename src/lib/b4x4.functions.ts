@@ -180,11 +180,20 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
     "base_no_brake_counterfactual_score, core_only_counterfactual_score, " +
     "expansion_only_counterfactual_score, brake_attribution_class, brake_incremental_value, " +
     "grid_snapshot_json, grid_cell, p_correct, grid_quality_percentile, global_rank, same_side_rank, " +
-    "implementation_revision, build_identifier, deploy_environment",
+    "implementation_revision, build_identifier, deploy_environment, " +
+    "operational_gap_status, operational_gap_reason, revision_prospective_test_id, " +
+    "revision_activated_at, webhook_eligible",
   );
 
-  const repaired = rows.filter((r) => r.implementation_revision === B4X4_IMPLEMENTATION_REVISION);
-  const legacy = rows.filter((r) => r.implementation_revision !== B4X4_IMPLEMENTATION_REVISION);
+  const isRepaired = (r: Row) => r.implementation_revision === B4X4_IMPLEMENTATION_REVISION;
+  // Operational catch-up rows are audit artifacts: they are webhook-ineligible
+  // and are excluded from LIVE performance AND coverage. BACKFILL rows are
+  // likewise never part of the live forward test.
+  const isLive = (r: Row) =>
+    r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP";
+  const repaired = rows.filter((r) => isRepaired(r) && isLive(r));
+  const legacy = rows.filter((r) => !isRepaired(r) && isLive(r));
+  const catchup = rows.filter((r) => String(r.operational_gap_status ?? "NONE") === "CATCHUP");
 
   const c = aggregate(repaired);
   c.segment = "ACTIVE_REVISION";
@@ -198,6 +207,16 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
     ...c,
     build_identifier: (lastBuild?.build_identifier as string | null) ?? null,
     deploy_environment: (lastBuild?.deploy_environment as string | null) ?? null,
+    revision_prospective_test_id:
+      (repaired[repaired.length - 1]?.revision_prospective_test_id as string | null) ?? null,
+    revision_activated_at:
+      (repaired[repaired.length - 1]?.revision_activated_at as string | null) ?? null,
+    // Operational catch-up audit rows: reported, never scored, never webhooked.
+    catchup: {
+      rows: catchup.length,
+      webhook_eligible: catchup.filter((r) => r.webhook_eligible === true).length,
+      targets: catchup.map((r) => String(r.target_candle_ts)),
+    },
     // Pre-repair rows are preserved and reported, but kept out of the headline.
     historical: {
       segment: historical.segment,

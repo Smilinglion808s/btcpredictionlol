@@ -155,4 +155,30 @@ describe("B4x4 external fixture parity (B4x4-20260810)", () => {
     expect(maxDrawdown).toBe(9);
     expect([...daily.keys()].sort().map((k) => daily.get(k))).toEqual([1, 6, -1, 13, -3]);
   });
+
+  it("reports an explicit row-level mismatch count vs the stored pre-repair rows", () => {
+    const replay = replayB4x4(fixture.map((r) => r.source));
+    const byTs = new Map(replay.map((r) => [r.row.candleTs, r]));
+    const live = fixture.filter(inLiveSlice);
+
+    let compared = 0;
+    let tradeMismatches = 0;
+    let outcomeMismatches = 0;
+    for (const f of live) {
+      const d = byTs.get(f.ts)?.decision;
+      if (!d) continue;
+      compared++;
+      if (d.wouldTrade !== f.storedWouldTrade) tradeMismatches++;
+      if (d.wouldTrade && f.storedWouldTrade && f.source.actualDirection != null) {
+        const score = d.finalPrediction === f.source.actualDirection ? 1 : -1;
+        if (score !== f.storedScore) outcomeMismatches++;
+      }
+    }
+
+    // Every LIVE fixture row is compared; mismatches are the pre-repair
+    // truncated-window rows and are reported exactly, not just in aggregate.
+    expect(compared).toBe(363);
+    expect(tradeMismatches).toBe(12);
+    expect(outcomeMismatches).toBe(0);
+  });
 });

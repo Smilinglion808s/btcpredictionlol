@@ -664,7 +664,8 @@ async function runA2Policies(
     // so its directional webhook ships with the least possible latency.
     const b4x4Promise = (async () => {
       try {
-        const { runB4x4ForA2Combined, maybeSendB4x4Webhook } = await import("@/lib/b4x4/orchestrator");
+        const { runB4x4ForA2Combined, maybeSendB4x4Webhook, captureB4x4ShadowForRow } =
+          await import("@/lib/b4x4/orchestrator");
         const row = await runB4x4ForA2Combined(supabase, {
           predictionId: predictionRow.id,
           candleTs: predictionRow.candle_ts,
@@ -678,8 +679,11 @@ async function runA2Policies(
           featureCutoffTs: (inherited.feature_cutoff_ts as string | null) ?? null,
           latestSourceCandleTs: (inherited.latest_source_candle_ts as string | null) ?? null,
           runMode: "LIVE",
+          // Order-book polling runs after the webhook so it can never delay it.
+          deferShadowCapture: true,
         });
         await maybeSendB4x4Webhook(supabase, row);
+        await captureB4x4ShadowForRow(supabase, row);
       } catch { /* never block */ }
     })();
 
