@@ -150,6 +150,10 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
   let streak = 0;
   let maxStreak = 0;
   const window: Array<{ raw: number; adj: number; directional: boolean }> = [];
+  // r5-only running totals: they advance only on rows published by the r5 router.
+  let r5Raw = 0;
+  let r5Adj = 0;
+  let r5Trades = 0;
 
   return rowsOldestFirst.map((r) => {
     const raw = num(r.final_raw_score);
@@ -177,6 +181,15 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       if (window.length > 96) window.shift();
     }
 
+    const r5Raw1 = num(r.r5_final_raw_score);
+    const r5Adj1 = num(r.r5_final_adjusted_score);
+    const r5Published = r.r5_router_decision === "GREEN" || r.r5_router_decision === "RED";
+    if (r5Published && r5Raw1 !== null && r5Adj1 !== null) {
+      r5Raw += r5Raw1;
+      r5Adj += r5Adj1;
+      r5Trades += 1;
+    }
+
     const rollingDirectional = window.filter((w) => w.directional).length;
     return {
       ...r,
@@ -196,6 +209,9 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       actual_direction: r.canonical_actual_direction ?? null,
       rolling96_raw_net: window.reduce((s, w) => s + w.raw, 0),
       rolling96_adjusted_net: window.reduce((s, w) => s + w.adj, 0),
+      r5_cumulative_raw_net: r5Trades ? r5Raw : null,
+      r5_cumulative_adjusted_net: r5Trades ? r5Adj : null,
+      r5_trade_index: r5Published ? r5Trades : null,
     };
   });
 }
