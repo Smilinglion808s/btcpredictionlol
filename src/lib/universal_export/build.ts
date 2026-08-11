@@ -115,6 +115,7 @@ const LEGACY_RESOLUTION_META_NAMES = new Set<string>([
 export function buildUniversalExport(input: UniversalInput): UniversalOutput {
   const { predictions, candles, td1Rows, aas96Rows, a96Rows } = input;
   const b4x4Rows: readonly Row[] = input.b4x4Rows ?? [];
+  const td3Rows: readonly Row[] = input.td3Rows ?? [];
 
   // 1. Determine spine range.
   const allTsSources: Array<number> = [];
