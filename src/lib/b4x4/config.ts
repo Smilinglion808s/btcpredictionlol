@@ -9,6 +9,21 @@ export const B4X4_SOURCE_VARIANT = "A2_Combined";
 export const B4X4_TIMEFRAME = "15m";
 export const B4X4_TIMEZONE = "America/Boise";
 
+/**
+ * Runtime-integrity repair identity. The predictive policy is unchanged
+ * (still B4x4-v1); only the implementation was corrected.
+ */
+export const B4X4_IMPLEMENTATION_REVISION = "b4x4-v1-runtime-integrity-r1";
+export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_V1_RUNTIME_INTEGRITY_R1";
+/** Reporting label for rows produced before the repair. */
+export const B4X4_PRE_REPAIR_SEGMENT = "B4X4_V1_PRE_RUNTIME_REPAIR";
+/** Absolute source index scheme version. */
+export const B4X4_SOURCE_INDEX_VERSION = "abs-epoch-v1";
+/** Resolver accounting version. */
+export const B4X4_RESOLVER_VERSION = "b4x4-resolver-r1";
+export const B4X4_CANONICAL_CANDLE_SOURCE = "OKX:BTC-USDT:15m:confirmed";
+
+
 export const GLOBAL_CONFIDENCE_LOOKBACK = 384;
 export const SAME_SIDE_CONFIDENCE_LOOKBACK = 768;
 
