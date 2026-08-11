@@ -177,6 +177,7 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     predictions,
     candles: candles as never,
     td1Rows,
+    td3Rows,
     aas96Rows,
     a96Rows,
     b4x4Rows,
