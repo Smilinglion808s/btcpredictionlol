@@ -451,3 +451,86 @@ export async function resolveB4x4Row(
   }
 }
 
+
+/**
+ * Catch-up pass: create the missing B4x4 row for any canonical source target
+ * that was never evaluated (missed scheduler run, deploy, outage).
+ *
+ * Catch-up rows are audit rows: they are marked with the gap status, are never
+ * webhook-eligible, and are written with `ignoreDuplicates` so no existing
+ * historical row is ever mutated.
+ */
+export async function catchUpMissingB4x4Rows(
+  supabase: SupabaseClient,
+  opts: { lookbackTargets?: number; schedulerInvocationId?: string | null } = {},
+): Promise<{ checked: number; created: number; targets: string[] }> {
+  const lookback = opts.lookbackTargets ?? 96;
+  try {
+    const { loadCanonicalSourceRows } = await import("./backfill");
+    const { replayB4x4 } = await import("./engine");
+    const all = await loadCanonicalSourceRows(supabase);
+    if (!all.length) return { checked: 0, created: 0, targets: [] };
+
+    const recent = all.slice(-lookback);
+    const { data: existingRows } = await supabase
+      .from("b4x4_predictions")
+      .select("target_candle_ts")
+      .eq("model_version", B4X4_MODEL_VERSION)
+      .gte("target_candle_ts", recent[0]!.candleTs);
+    const have = new Set(
+      ((existingRows ?? []) as unknown as DbRow[]).map((r) =>
+        new Date(String(r.target_candle_ts)).toISOString(),
+      ),
+    );
+    const missing = recent.filter((r) => !have.has(r.candleTs));
+    if (!missing.length) return { checked: recent.length, created: 0, targets: [] };
+
+    // Replay the full stream so every catch-up row keeps the absolute window.
+    const results = replayB4x4(all);
+    const byTs = new Map(results.map((r) => [r.row.candleTs, r]));
+    const rows: DbRow[] = [];
+    for (const src of missing) {
+      const r = byTs.get(src.candleTs);
+      if (!r) continue;
+      const row = decisionToRow(
+        {
+          predictionId: src.predictionId ?? "",
+          candleTs: src.candleTs,
+          a2RowId: src.sourceRowId,
+          probabilityGreen: src.probabilityGreen,
+          timingStatus: src.timingStatus,
+          leakageCheckPassed: src.leakageCheckPassed,
+          a2ModelFitId: src.a2ModelFitId,
+          a2ProductionModelVersion: src.a2ProductionModelVersion,
+          runMode: "LIVE",
+          schedulerInvocationId: opts.schedulerInvocationId ?? null,
+          catchupTargetTs: src.candleTs,
+          operationalGapStatus: "CATCHUP",
+          operationalGapReason: "MISSING_SCHEDULED_RUN",
+        },
+        r.decision,
+      );
+      row.webhook_eligible = false;
+      row.catchup_resolution_status = "CATCHUP_CREATED";
+      row.catchup_completed_at = new Date().toISOString();
+      row.watchdog_detected_at = new Date().toISOString();
+      rows.push(row);
+    }
+    if (!rows.length) return { checked: recent.length, created: 0, targets: [] };
+
+    const { error } = await supabase
+      .from("b4x4_predictions")
+      .upsert(rows as never, {
+        onConflict: "target_candle_ts,model_version",
+        ignoreDuplicates: true,
+      });
+    if (error) return { checked: recent.length, created: 0, targets: [] };
+    return {
+      checked: recent.length,
+      created: rows.length,
+      targets: rows.map((r) => String(r.target_candle_ts)),
+    };
+  } catch {
+    return { checked: 0, created: 0, targets: [] };
+  }
+}
