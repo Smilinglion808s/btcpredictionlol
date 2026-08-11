@@ -35,6 +35,8 @@ export function B4x4Card({
   const grid: Array<{ cell: string; resolvedCount: number; wins: number; losses: number; pCorrect: number }> =
     stats.grid ?? [];
   const last7: Array<{ date: string; net: number; wins: number; losses: number }> = stats.last7 ?? [];
+  const hist: Any | null = (stats.historical as Any | undefined) ?? null;
+
 
   const upper = String(pending?.final_prediction ?? pending?.raw_direction ?? "—").toUpperCase();
   const traded = pending?.would_trade === true;
