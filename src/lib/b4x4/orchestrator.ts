@@ -248,6 +248,23 @@ export async function runB4x4ForA2Combined(
 ): Promise<DbRow | null> {
   const runStartedAt = new Date().toISOString();
   try {
+    // Target-row protection across the whole version lineage: a target that
+    // already has a B4x4 row (under any historical model_version) is never
+    // re-predicted, so the version bump cannot duplicate a target.
+    const { data: priorRow } = await supabase
+      .from("b4x4_predictions")
+      .select("*")
+      .in("model_version", B4X4_MODEL_VERSIONS)
+      .eq("target_candle_ts", ctx.candleTs)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (priorRow) {
+      const existing = priorRow as unknown as DbRow;
+      if (!ctx.deferShadowCapture) await captureB4x4ShadowForRow(supabase, existing);
+      return existing;
+    }
+
     const history = await loadHistory(supabase, ctx.candleTs);
     const daily = await loadDailyState(supabase, ctx.candleTs);
     const source: SourceRow = {
@@ -256,8 +273,15 @@ export async function runB4x4ForA2Combined(
       timingStatus: ctx.timingStatus,
       leakageCheckPassed: ctx.leakageCheckPassed,
       actualDirection: null,
+      runMode: ctx.runMode ?? "LIVE",
+      operationalGapStatus: ctx.operationalGapStatus ?? "NONE",
     };
-    const decision = evaluateB4x4(source, history, daily);
+    const decision = evaluateB4x4(source, history, daily, {
+      promotionEnabled:
+        (ctx.runMode ?? "LIVE") === "LIVE" &&
+        new Date(ctx.candleTs).getTime() >=
+          new Date(CALIBRATION_PROMOTION_ACTIVATED_AT).getTime(),
+    });
     const row = {
       ...decisionToRow(ctx, decision),
       run_started_at: runStartedAt,
