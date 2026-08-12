@@ -1036,6 +1036,39 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             : momentumGreen === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
           momentum_green_shadow_raw_score: momentumGreen ? rawScore(asDir(momentumGreen), actual) : null,
           momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(asDir(momentumGreen), actual) : null,
+
+          // --- V6-r5.1 route drawdown brake accounting ---
+          r5_route_brake_underlying_actual: brakeTriggered ? actual : null,
+          r5_route_brake_underlying_result: brakeContrib.result,
+          r5_route_brake_underlying_raw_score:
+            brakeTriggered && brakeUnderlying ? rawScore(asDir(brakeUnderlying), actual) : null,
+          r5_route_brake_underlying_adjusted_score:
+            brakeTriggered && brakeUnderlying ? adjustedScore(asDir(brakeUnderlying), actual) : null,
+          r5_route_brake_raw_contribution: brakeContrib.raw,
+          r5_route_brake_adjusted_contribution: brakeContrib.adjusted,
+
+          r5_green_route_shadow_eligible: greenEligible,
+          r5_green_route_shadow_result: greenEligible ? r5Green.result : null,
+          r5_green_route_shadow_streak_before:
+            greenTransition ? greenTransition.before.consecutiveShadowLosses : null,
+          r5_green_route_shadow_streak_after:
+            greenTransition ? greenTransition.after.consecutiveShadowLosses : null,
+          r5_green_route_pause_before_resolution:
+            greenTransition ? greenTransition.before.pauseActive : null,
+          r5_green_route_pause_after_resolution:
+            greenTransition ? greenTransition.after.pauseActive : null,
+
+          r5_anchor_red_route_shadow_eligible: anchorEligible,
+          r5_anchor_red_route_shadow_result: anchorEligible ? r5Anchor.result : null,
+          r5_anchor_red_route_shadow_streak_before:
+            anchorTransition ? anchorTransition.before.consecutiveShadowLosses : null,
+          r5_anchor_red_route_shadow_streak_after:
+            anchorTransition ? anchorTransition.after.consecutiveShadowLosses : null,
+          r5_anchor_red_route_pause_before_resolution:
+            anchorTransition ? anchorTransition.before.pauseActive : null,
+          r5_anchor_red_route_pause_after_resolution:
+            anchorTransition ? anchorTransition.after.pauseActive : null,
+
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row
