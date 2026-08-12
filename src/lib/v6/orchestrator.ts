@@ -878,6 +878,33 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
       const momentumGreen = r.momentum_green_shadow_prediction as string | null;
       const finalDirectional = !opFail && (final === "GREEN" || final === "RED");
 
+      // --- V6-r5.1 route drawdown brake: state transitions + attribution ----
+      // Route shadow history keeps advancing while a route is paused, so a
+      // paused route can always earn its way back with one eligible win.
+      const greenEligible = Boolean(r.r5_green_candidate) && !opFail && r5Green.result != null;
+      const anchorEligible = Boolean(r.r5_red_anchor_candidate) && !opFail && r5Anchor.result != null;
+      const tsIso = targetTs.toISOString();
+      const greenTransition = greenEligible
+        ? await recordResolvedRouteOutcome(
+            sb, R5_ROUTE_GREEN, r5Green.result as "WIN" | "LOSS" | "PUSH", tsIso, "GREEN",
+          )
+        : null;
+      const anchorTransition = anchorEligible
+        ? await recordResolvedRouteOutcome(
+            sb, R5_ROUTE_ANCHOR_RED, r5Anchor.result as "WIN" | "LOSS" | "PUSH", tsIso, "RED",
+          )
+        : null;
+
+      const brakeTriggered = Boolean(r.r5_route_brake_triggered) && !opFail;
+      const brakeUnderlying = (r.r5_route_brake_underlying_prediction as string | null) ?? null;
+      const brakeContrib = routeBrakeContribution(
+        brakeTriggered,
+        brakeUnderlying as "GREEN" | "RED" | null,
+        opFail ? null : actual,
+      );
+
+
+
       await sb
         .from("v6_predictions")
         .update({
