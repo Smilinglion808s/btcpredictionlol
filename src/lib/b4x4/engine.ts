@@ -325,7 +325,39 @@ export function calibrationHistoryPool(
       const availableAt =
         new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
       if (!(availableAt <= decisionAsOfMs)) continue;
-    }
+}
+
+/** Frozen z-score math over an eligible promotion pool. No intermediate rounding. */
+export function calibrationPoolMetrics(pool: HistoryEntry[]): {
+  historyWins: number;
+  historyLosses: number;
+  expectedWins: number;
+  variance: number;
+  standardDeviation: number;
+  residualWins: number;
+  zScore: number;
+} {
+  let historyWins = 0;
+  let expectedWins = 0;
+  let variance = 0;
+  for (const e of pool) {
+    const p = e.pCorrect!;
+    if (e.direction === e.actualDirection) historyWins++;
+    expectedWins += p;
+    variance += p * (1 - p);
+  }
+  const standardDeviation = Math.sqrt(variance);
+  const residualWins = historyWins - expectedWins;
+  return {
+    historyWins,
+    historyLosses: pool.length - historyWins,
+    expectedWins,
+    variance,
+    standardDeviation,
+    residualWins,
+    zScore: residualWins / standardDeviation,
+  };
+}
     out.push(e);
     if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
   }
