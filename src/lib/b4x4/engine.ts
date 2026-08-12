@@ -94,6 +94,9 @@ export interface SourceRow {
   a2ModelFitId?: string | null;
   a2ProductionModelVersion?: string | null;
   createdAt?: string | null;
+  /** Run mode of the B4x4 row this source produced (calibration availability). */
+  runMode?: "LIVE" | "BACKFILL" | null;
+  operationalGapStatus?: string | null;
 }
 
 /** Prediction-time state carried forward for every valid prior source row. */
