@@ -82,6 +82,18 @@ import {
   V6_R5_MODEL_REVISION,
   V6_R5_ROUTER_VERSION,
 } from "./r5";
+import {
+  applyRouteBrake,
+  R5_ROUTE_ANCHOR_RED,
+  R5_ROUTE_BRAKE_PAUSE_LOSSES,
+  R5_ROUTE_BRAKE_RESUME_WINS,
+  R5_ROUTE_GREEN,
+  routeBrakeContribution,
+  V6_R5_1_ACTIVATED_AT,
+  V6_R5_1_MODEL_REVISION,
+} from "./routeBrake";
+import { ensureRouteBrakeStates, recordResolvedRouteOutcome } from "./routeBrakeStore";
+
 
 
 
