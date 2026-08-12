@@ -4957,10 +4957,15 @@ export type Database = {
           r5_red_feeder_pass: boolean | null
           r5_red_feeder_prediction: string | null
           r5_red_feeder_source: string | null
+          r5_route_brake_activated_at: string | null
           r5_route_brake_adjusted_contribution: number | null
+          r5_route_brake_pause_loss_threshold: number | null
           r5_route_brake_raw_contribution: number | null
           r5_route_brake_reason: string | null
+          r5_route_brake_resume_win_threshold: number | null
+          r5_route_brake_revision: string | null
           r5_route_brake_route_key: string | null
+          r5_route_brake_state_rebuilt: boolean | null
           r5_route_brake_triggered: boolean | null
           r5_route_brake_underlying_actual: string | null
           r5_route_brake_underlying_adjusted_score: number | null
@@ -5293,10 +5298,15 @@ export type Database = {
           r5_red_feeder_pass?: boolean | null
           r5_red_feeder_prediction?: string | null
           r5_red_feeder_source?: string | null
+          r5_route_brake_activated_at?: string | null
           r5_route_brake_adjusted_contribution?: number | null
+          r5_route_brake_pause_loss_threshold?: number | null
           r5_route_brake_raw_contribution?: number | null
           r5_route_brake_reason?: string | null
+          r5_route_brake_resume_win_threshold?: number | null
+          r5_route_brake_revision?: string | null
           r5_route_brake_route_key?: string | null
+          r5_route_brake_state_rebuilt?: boolean | null
           r5_route_brake_triggered?: boolean | null
           r5_route_brake_underlying_actual?: string | null
           r5_route_brake_underlying_adjusted_score?: number | null
@@ -5629,10 +5639,15 @@ export type Database = {
           r5_red_feeder_pass?: boolean | null
           r5_red_feeder_prediction?: string | null
           r5_red_feeder_source?: string | null
+          r5_route_brake_activated_at?: string | null
           r5_route_brake_adjusted_contribution?: number | null
+          r5_route_brake_pause_loss_threshold?: number | null
           r5_route_brake_raw_contribution?: number | null
           r5_route_brake_reason?: string | null
+          r5_route_brake_resume_win_threshold?: number | null
+          r5_route_brake_revision?: string | null
           r5_route_brake_route_key?: string | null
+          r5_route_brake_state_rebuilt?: boolean | null
           r5_route_brake_triggered?: boolean | null
           r5_route_brake_underlying_actual?: string | null
           r5_route_brake_underlying_adjusted_score?: number | null
