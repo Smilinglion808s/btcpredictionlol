@@ -2,8 +2,14 @@
 import { createHash } from "crypto";
 
 export const B4X4_MODEL_NAME = "B4x4";
-export const B4X4_MODEL_VERSION = "b4x4-v1";
-export const B4X4_VARIANT = "a2-core-grid40-brake80";
+export const B4X4_MODEL_VERSION = "b4x4-calibration-promotion-r1";
+/**
+ * Every model_version this model has ever written rows under, newest last.
+ * History, daily-ledger and resolver lookups span all of them so the
+ * calibration-promotion patch does not orphan earlier rows.
+ */
+export const B4X4_MODEL_VERSION_LINEAGE = ["b4x4-v1", "b4x4-calibration-promotion-r1"] as const;
+export const B4X4_VARIANT = "balanced-4x4-calibration-promotion";
 export const B4X4_PROSPECTIVE_TEST_ID = "B4X4_CORE_GRID40_BRAKE80_V1";
 export const B4X4_SOURCE_VARIANT = "A2_Combined";
 export const B4X4_TIMEFRAME = "15m";
@@ -13,8 +19,8 @@ export const B4X4_TIMEZONE = "America/Boise";
  * Runtime-integrity repair identity. The predictive policy is unchanged
  * (still B4x4-v1); only the implementation was corrected.
  */
-export const B4X4_IMPLEMENTATION_REVISION = "b4x4-v1-runtime-integrity-r1";
-export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_V1_RUNTIME_INTEGRITY_R1";
+export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_CALIBRATION_PROMOTION_R1_ACTIVE";
 /**
  * Immutable activation instant of the runtime-integrity revision. Every row
  * produced by this build carries it so the prospective test window is
@@ -28,6 +34,26 @@ export const B4X4_SOURCE_INDEX_VERSION = "abs-epoch-v1";
 /** Resolver accounting version. */
 export const B4X4_RESOLVER_VERSION = "b4x4-resolver-r1";
 export const B4X4_CANONICAL_CANDLE_SOURCE = "OKX:BTC-USDT:15m:confirmed";
+
+// ---- calibration promotion (active route, frozen) ----
+export const CALIBRATION_PROMOTION_VERSION = "calibration-promotion-r1";
+export const CALIBRATION_PROMOTION_HISTORY_WINDOW = 96;
+export const CALIBRATION_PROMOTION_MIN_P_CORRECT = 0.50;
+export const CALIBRATION_PROMOTION_MIN_Z_SCORE = 1.00;
+export const CALIBRATION_PROMOTION_HISTORY_POOL =
+  "same-direction-resolved-no-active-route-v1";
+/**
+ * Production resolver delay simulated at prediction time: an outcome for a
+ * target candle is only knowable this long after that candle opens. Keeps the
+ * live decision and the frozen replay bit-identical.
+ */
+export const CALIBRATION_PROMOTION_OUTCOME_DELAY_MS = 16 * 60_000 + 15_000;
+/**
+ * Immutable activation boundary for the promotion route. Only LIVE targets at
+ * or after this exact 15-minute UTC boundary may be promoted.
+ */
+export const CALIBRATION_PROMOTION_ACTIVATED_AT = "2026-08-13T00:00:00.000Z";
+
 
 
 export const GLOBAL_CONFIDENCE_LOOKBACK = 384;
