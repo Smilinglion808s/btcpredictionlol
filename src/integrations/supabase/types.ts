@@ -4888,6 +4888,17 @@ export type Database = {
           r5_aligned_wick_red_shadow_result: string | null
           r5_aligned_wick_red_shadow_threshold: number | null
           r5_aligned_wick_red_shadow_value: number | null
+          r5_anchor_red_route_brake_evaluable: boolean | null
+          r5_anchor_red_route_brake_reason: string | null
+          r5_anchor_red_route_brake_triggered: boolean | null
+          r5_anchor_red_route_consecutive_shadow_losses: number | null
+          r5_anchor_red_route_pause_active: boolean | null
+          r5_anchor_red_route_pause_after_resolution: boolean | null
+          r5_anchor_red_route_pause_before_resolution: boolean | null
+          r5_anchor_red_route_shadow_eligible: boolean | null
+          r5_anchor_red_route_shadow_result: string | null
+          r5_anchor_red_route_shadow_streak_after: number | null
+          r5_anchor_red_route_shadow_streak_before: number | null
           r5_conflict: boolean | null
           r5_conflict_green_result: string | null
           r5_conflict_red_result: string | null
@@ -4899,6 +4910,17 @@ export type Database = {
           r5_green_d1_mean_body_to_range_2: number | null
           r5_green_d1_mean_body_to_range_2_threshold: number | null
           r5_green_evaluable: boolean | null
+          r5_green_route_brake_evaluable: boolean | null
+          r5_green_route_brake_reason: string | null
+          r5_green_route_brake_triggered: boolean | null
+          r5_green_route_consecutive_shadow_losses: number | null
+          r5_green_route_pause_active: boolean | null
+          r5_green_route_pause_after_resolution: boolean | null
+          r5_green_route_pause_before_resolution: boolean | null
+          r5_green_route_shadow_eligible: boolean | null
+          r5_green_route_shadow_result: string | null
+          r5_green_route_shadow_streak_after: number | null
+          r5_green_route_shadow_streak_before: number | null
           r5_green_shadow_adjusted_score: number | null
           r5_green_shadow_prediction: string | null
           r5_green_shadow_raw_score: number | null
@@ -4906,6 +4928,9 @@ export type Database = {
           r5_green_stoch_condition: boolean | null
           r5_green_stoch_spread: number | null
           r5_green_stoch_spread_threshold: number | null
+          r5_pre_brake_prediction: string | null
+          r5_pre_brake_reason: string | null
+          r5_pre_brake_source: string | null
           r5_red_anchor_candidate: boolean | null
           r5_red_anchor_condition: boolean | null
           r5_red_anchor_d1_close_position: number | null
@@ -4932,6 +4957,16 @@ export type Database = {
           r5_red_feeder_pass: boolean | null
           r5_red_feeder_prediction: string | null
           r5_red_feeder_source: string | null
+          r5_route_brake_adjusted_contribution: number | null
+          r5_route_brake_raw_contribution: number | null
+          r5_route_brake_reason: string | null
+          r5_route_brake_route_key: string | null
+          r5_route_brake_triggered: boolean | null
+          r5_route_brake_underlying_actual: string | null
+          r5_route_brake_underlying_adjusted_score: number | null
+          r5_route_brake_underlying_prediction: string | null
+          r5_route_brake_underlying_raw_score: number | null
+          r5_route_brake_underlying_result: string | null
           r5_router_decision: string | null
           r5_router_reason: string | null
           r5_router_source: string | null
@@ -5189,6 +5224,17 @@ export type Database = {
           r5_aligned_wick_red_shadow_result?: string | null
           r5_aligned_wick_red_shadow_threshold?: number | null
           r5_aligned_wick_red_shadow_value?: number | null
+          r5_anchor_red_route_brake_evaluable?: boolean | null
+          r5_anchor_red_route_brake_reason?: string | null
+          r5_anchor_red_route_brake_triggered?: boolean | null
+          r5_anchor_red_route_consecutive_shadow_losses?: number | null
+          r5_anchor_red_route_pause_active?: boolean | null
+          r5_anchor_red_route_pause_after_resolution?: boolean | null
+          r5_anchor_red_route_pause_before_resolution?: boolean | null
+          r5_anchor_red_route_shadow_eligible?: boolean | null
+          r5_anchor_red_route_shadow_result?: string | null
+          r5_anchor_red_route_shadow_streak_after?: number | null
+          r5_anchor_red_route_shadow_streak_before?: number | null
           r5_conflict?: boolean | null
           r5_conflict_green_result?: string | null
           r5_conflict_red_result?: string | null
@@ -5200,6 +5246,17 @@ export type Database = {
           r5_green_d1_mean_body_to_range_2?: number | null
           r5_green_d1_mean_body_to_range_2_threshold?: number | null
           r5_green_evaluable?: boolean | null
+          r5_green_route_brake_evaluable?: boolean | null
+          r5_green_route_brake_reason?: string | null
+          r5_green_route_brake_triggered?: boolean | null
+          r5_green_route_consecutive_shadow_losses?: number | null
+          r5_green_route_pause_active?: boolean | null
+          r5_green_route_pause_after_resolution?: boolean | null
+          r5_green_route_pause_before_resolution?: boolean | null
+          r5_green_route_shadow_eligible?: boolean | null
+          r5_green_route_shadow_result?: string | null
+          r5_green_route_shadow_streak_after?: number | null
+          r5_green_route_shadow_streak_before?: number | null
           r5_green_shadow_adjusted_score?: number | null
           r5_green_shadow_prediction?: string | null
           r5_green_shadow_raw_score?: number | null
@@ -5207,6 +5264,9 @@ export type Database = {
           r5_green_stoch_condition?: boolean | null
           r5_green_stoch_spread?: number | null
           r5_green_stoch_spread_threshold?: number | null
+          r5_pre_brake_prediction?: string | null
+          r5_pre_brake_reason?: string | null
+          r5_pre_brake_source?: string | null
           r5_red_anchor_candidate?: boolean | null
           r5_red_anchor_condition?: boolean | null
           r5_red_anchor_d1_close_position?: number | null
@@ -5233,6 +5293,16 @@ export type Database = {
           r5_red_feeder_pass?: boolean | null
           r5_red_feeder_prediction?: string | null
           r5_red_feeder_source?: string | null
+          r5_route_brake_adjusted_contribution?: number | null
+          r5_route_brake_raw_contribution?: number | null
+          r5_route_brake_reason?: string | null
+          r5_route_brake_route_key?: string | null
+          r5_route_brake_triggered?: boolean | null
+          r5_route_brake_underlying_actual?: string | null
+          r5_route_brake_underlying_adjusted_score?: number | null
+          r5_route_brake_underlying_prediction?: string | null
+          r5_route_brake_underlying_raw_score?: number | null
+          r5_route_brake_underlying_result?: string | null
           r5_router_decision?: string | null
           r5_router_reason?: string | null
           r5_router_source?: string | null
@@ -5490,6 +5560,17 @@ export type Database = {
           r5_aligned_wick_red_shadow_result?: string | null
           r5_aligned_wick_red_shadow_threshold?: number | null
           r5_aligned_wick_red_shadow_value?: number | null
+          r5_anchor_red_route_brake_evaluable?: boolean | null
+          r5_anchor_red_route_brake_reason?: string | null
+          r5_anchor_red_route_brake_triggered?: boolean | null
+          r5_anchor_red_route_consecutive_shadow_losses?: number | null
+          r5_anchor_red_route_pause_active?: boolean | null
+          r5_anchor_red_route_pause_after_resolution?: boolean | null
+          r5_anchor_red_route_pause_before_resolution?: boolean | null
+          r5_anchor_red_route_shadow_eligible?: boolean | null
+          r5_anchor_red_route_shadow_result?: string | null
+          r5_anchor_red_route_shadow_streak_after?: number | null
+          r5_anchor_red_route_shadow_streak_before?: number | null
           r5_conflict?: boolean | null
           r5_conflict_green_result?: string | null
           r5_conflict_red_result?: string | null
@@ -5501,6 +5582,17 @@ export type Database = {
           r5_green_d1_mean_body_to_range_2?: number | null
           r5_green_d1_mean_body_to_range_2_threshold?: number | null
           r5_green_evaluable?: boolean | null
+          r5_green_route_brake_evaluable?: boolean | null
+          r5_green_route_brake_reason?: string | null
+          r5_green_route_brake_triggered?: boolean | null
+          r5_green_route_consecutive_shadow_losses?: number | null
+          r5_green_route_pause_active?: boolean | null
+          r5_green_route_pause_after_resolution?: boolean | null
+          r5_green_route_pause_before_resolution?: boolean | null
+          r5_green_route_shadow_eligible?: boolean | null
+          r5_green_route_shadow_result?: string | null
+          r5_green_route_shadow_streak_after?: number | null
+          r5_green_route_shadow_streak_before?: number | null
           r5_green_shadow_adjusted_score?: number | null
           r5_green_shadow_prediction?: string | null
           r5_green_shadow_raw_score?: number | null
@@ -5508,6 +5600,9 @@ export type Database = {
           r5_green_stoch_condition?: boolean | null
           r5_green_stoch_spread?: number | null
           r5_green_stoch_spread_threshold?: number | null
+          r5_pre_brake_prediction?: string | null
+          r5_pre_brake_reason?: string | null
+          r5_pre_brake_source?: string | null
           r5_red_anchor_candidate?: boolean | null
           r5_red_anchor_condition?: boolean | null
           r5_red_anchor_d1_close_position?: number | null
@@ -5534,6 +5629,16 @@ export type Database = {
           r5_red_feeder_pass?: boolean | null
           r5_red_feeder_prediction?: string | null
           r5_red_feeder_source?: string | null
+          r5_route_brake_adjusted_contribution?: number | null
+          r5_route_brake_raw_contribution?: number | null
+          r5_route_brake_reason?: string | null
+          r5_route_brake_route_key?: string | null
+          r5_route_brake_triggered?: boolean | null
+          r5_route_brake_underlying_actual?: string | null
+          r5_route_brake_underlying_adjusted_score?: number | null
+          r5_route_brake_underlying_prediction?: string | null
+          r5_route_brake_underlying_raw_score?: number | null
+          r5_route_brake_underlying_result?: string | null
           r5_router_decision?: string | null
           r5_router_reason?: string | null
           r5_router_source?: string | null
@@ -5642,6 +5747,51 @@ export type Database = {
           webhook_eligible?: boolean | null
           webhook_sent_at?: string | null
           webhook_suppressed_reason?: string | null
+        }
+        Relationships: []
+      }
+      v6_r5_route_brake_state: {
+        Row: {
+          consecutive_shadow_losses: number
+          created_at: string
+          id: string
+          last_shadow_prediction: string | null
+          last_shadow_result: string | null
+          last_shadow_target_ts: string | null
+          model_revision: string
+          model_version: string
+          pause_active: boolean
+          route_key: string
+          state_updated_at: string
+          updated_at: string
+        }
+        Insert: {
+          consecutive_shadow_losses?: number
+          created_at?: string
+          id?: string
+          last_shadow_prediction?: string | null
+          last_shadow_result?: string | null
+          last_shadow_target_ts?: string | null
+          model_revision: string
+          model_version?: string
+          pause_active?: boolean
+          route_key: string
+          state_updated_at?: string
+          updated_at?: string
+        }
+        Update: {
+          consecutive_shadow_losses?: number
+          created_at?: string
+          id?: string
+          last_shadow_prediction?: string | null
+          last_shadow_result?: string | null
+          last_shadow_target_ts?: string | null
+          model_revision?: string
+          model_version?: string
+          pause_active?: boolean
+          route_key?: string
+          state_updated_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
