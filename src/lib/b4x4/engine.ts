@@ -310,13 +310,19 @@ export function calibrationHistoryPool(
     const e = history[i]!;
     if (e.direction !== rawDirection) continue;
     if (e.baseCandidate !== false) continue;
-    if (e.gridWindowIntegrityPassed !== true) continue;
+    // legacy rows predate the integrity column; only an explicit false disqualifies
+    if (e.gridWindowIntegrityPassed === false) continue;
     if (e.gridCell == null) continue;
     if (e.pCorrect == null || !Number.isFinite(e.pCorrect)) continue;
     if (e.actualDirection !== "GREEN" && e.actualDirection !== "RED") continue;
-    const availableAt =
-      new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
-    if (!(availableAt <= decisionAsOfMs)) continue;
+    if (e.operationalGapStatus === "CATCHUP") continue;
+    // LIVE outcomes only become knowable after the production resolver delay;
+    // BACKFILL rows are historical and already resolved when replayed.
+    if (e.runMode !== "BACKFILL") {
+      const availableAt =
+        new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
+      if (!(availableAt <= decisionAsOfMs)) continue;
+    }
     out.push(e);
     if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
   }
