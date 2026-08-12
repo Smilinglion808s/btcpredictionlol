@@ -547,6 +547,11 @@ export function evaluateB4x4(
       row.actualDirection === "GREEN" || row.actualDirection === "RED"
         ? rawDirection === row.actualDirection
         : null,
+    predictionId: row.predictionId ?? null,
+    pCorrect: null,
+    gridCell: null,
+    gridWindowIntegrityPassed: null,
+    baseCandidate: false,
   };
 
   const withRanks: Partial<B4x4Decision> = {
