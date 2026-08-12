@@ -178,6 +178,10 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
   let r5Raw = 0;
   let r5Adj = 0;
   let r5Trades = 0;
+  let brakeTriggers = 0;
+  let brakeRaw = 0;
+  let brakeAdj = 0;
+
 
   return rowsOldestFirst.map((r) => {
     const raw = num(r.final_raw_score);
