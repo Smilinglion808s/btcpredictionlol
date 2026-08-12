@@ -412,6 +412,17 @@ function abstain(
   return { ...base, ...partial, finalPrediction: null, wouldTrade: false, decisionReason: reason };
 }
 
+/** Optional evaluation context (defaults reproduce the frozen replay exactly). */
+export interface B4x4EvalOptions {
+  /**
+   * Instant the decision is taken. Defaults to the target candle timestamp,
+   * which is when the live prediction is produced.
+   */
+  decisionAsOfMs?: number;
+  /** Calibration promotion route master switch (activation boundary gate). */
+  promotionEnabled?: boolean;
+}
+
 /**
  * Evaluate one source row against its strictly-earlier history.
  * `history` must be ordered oldest → newest and contain only valid prior rows.
@@ -420,7 +431,10 @@ export function evaluateB4x4(
   row: SourceRow,
   history: HistoryEntry[],
   daily: DailyState,
+  opts: B4x4EvalOptions = {},
 ): B4x4Decision {
+  const decisionAsOfMs = opts.decisionAsOfMs ?? new Date(row.candleTs).getTime();
+  const promotionEnabled = opts.promotionEnabled !== false;
   const localDate = daily.localDate || b4x4LocalDate(row.candleTs);
   const base: B4x4Decision = {
     probabilityGreen: row.probabilityGreen,
