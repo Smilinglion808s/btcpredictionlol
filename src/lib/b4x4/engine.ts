@@ -711,19 +711,8 @@ export function evaluateB4x4(
     if (!calibration.historyReady) {
       calibration.eligibilityReason = "HISTORY_NOT_READY";
     } else {
-      let historyWins = 0;
-      let expectedWins = 0;
-      let variance = 0;
-      for (const e of pool) {
-        const p = e.pCorrect!;
-        if (e.direction === e.actualDirection) historyWins++;
-        expectedWins += p;
-        variance += p * (1 - p);
-      }
-      const historyLosses = CALIBRATION_PROMOTION_HISTORY_WINDOW - historyWins;
-      const standardDeviation = Math.sqrt(variance);
-      const residualWins = historyWins - expectedWins;
-      const zScore = residualWins / standardDeviation;
+      const m = calibrationPoolMetrics(pool);
+      const { historyWins, historyLosses, expectedWins, variance, standardDeviation, residualWins, zScore } = m;
       calibration.historyWins = historyWins;
       calibration.historyLosses = historyLosses;
       calibration.expectedWins = expectedWins;
