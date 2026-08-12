@@ -73,7 +73,8 @@ describe("B4x4 orchestrator integration", () => {
       leakageCheckPassed: null,
       runMode: "BACKFILL",
     });
-    expect(upserted).toBe(true);
+    // Protection now short-circuits before any write.
+    expect(upserted).toBe(false);
     expect(saved).toEqual(existing);
   });
 
