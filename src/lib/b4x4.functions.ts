@@ -1,7 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, B4X4_VARIANTS, b4x4LocalDate } from "./b4x4/config";
 import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
 
 
@@ -22,7 +22,7 @@ async function pageAll(select: string): Promise<Row[]> {
       .from("b4x4_predictions")
       .select(select)
       .in("model_version", B4X4_MODEL_VERSIONS)
-      .eq("variant", B4X4_VARIANT)
+      .in("variant", B4X4_VARIANTS)
       .order("target_candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
     if (!data || data.length === 0) break;
@@ -463,7 +463,7 @@ export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async ()
       "selected_route, grid_cell, p_correct, a2_probability_green, confidence, result, resolved_at, actual_close",
     )
     .in("model_version", B4X4_MODEL_VERSIONS)
-    .eq("variant", B4X4_VARIANT)
+    .in("variant", B4X4_VARIANTS)
     .order("target_candle_ts", { ascending: false })
     .limit(50);
   return ((data ?? []) as unknown as Row[]).map((r) => ({
