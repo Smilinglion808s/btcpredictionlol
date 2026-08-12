@@ -571,6 +571,8 @@ export function evaluateB4x4(
         ? rawDirection === row.actualDirection
         : null,
     predictionId: row.predictionId ?? null,
+    runMode: row.runMode ?? null,
+    operationalGapStatus: row.operationalGapStatus ?? null,
     pCorrect: null,
     gridCell: null,
     gridWindowIntegrityPassed: null,
