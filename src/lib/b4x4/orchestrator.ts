@@ -11,6 +11,7 @@ import {
   B4X4_MODEL_NAME,
   B4X4_MODEL_VERSION,
   B4X4_MODEL_VERSIONS,
+  CALIBRATION_PROMOTION_ACTIVATED_AT,
   B4X4_PROSPECTIVE_TEST_ID,
   B4X4_RESOLVER_VERSION,
   B4X4_REVISION_ACTIVATED_AT,
@@ -420,7 +421,19 @@ export async function resolveB4x4Row(
       { p_target_candle_ts: targetCandleTs, p_model_version: B4X4_MODEL_VERSION } as never,
     );
     if (beginError) throw beginError;
-    const claim = (begin ?? {}) as { found?: boolean; already_resolved?: boolean; id?: string; attempt_count?: number };
+    let claim = (begin ?? {}) as { found?: boolean; already_resolved?: boolean; id?: string; attempt_count?: number };
+    if (!claim.found) {
+      // legacy rows still carry an earlier model_version
+      for (const mv of B4X4_MODEL_VERSIONS) {
+        if (mv === B4X4_MODEL_VERSION) continue;
+        const { data: legacy } = await supabase.rpc(
+          "b4x4_begin_resolution_attempt" as never,
+          { p_target_candle_ts: targetCandleTs, p_model_version: mv } as never,
+        );
+        const legacyClaim = (legacy ?? {}) as typeof claim;
+        if (legacyClaim.found) { claim = legacyClaim; break; }
+      }
+    }
     if (!claim.found) return;
     if (claim.already_resolved) return; // idempotent
     rowId = claim.id ? String(claim.id) : null;
@@ -434,6 +447,8 @@ export async function resolveB4x4Row(
       )
       .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("target_candle_ts", targetCandleTs)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
