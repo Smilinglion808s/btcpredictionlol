@@ -1130,7 +1130,7 @@ function V6Card({
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.28em] text-violet/80 mb-1">Frozen forward test</div>
           <h3 className="v6-title text-4xl font-bold font-heading tracking-tight leading-none">V6</h3>
-          <div className="text-[10px] text-muted-foreground mt-1">V6-r5 Selective Core Router</div>
+          <div className="text-[10px] text-muted-foreground mt-1">V6-r5.1 Router + Route Brake</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
@@ -1230,6 +1230,34 @@ function V6Card({
           <V6Stat label="Route conflict" value={pending?.r5_conflict ? "YES" : "no"} tone={pending?.r5_conflict ? "bear" : undefined} />
           <V6Stat label="Legacy layers" value="shadow only" tone="violet" />
         </V6Section>
+
+        <V6Section title="Route brake · V6-r5.1 (veto only)">
+          <V6Stat
+            label="GREEN route"
+            value={pending?.r5_green_route_pause_active ? "PAUSED" : "armed"}
+            tone={pending?.r5_green_route_pause_active ? "bear" : "bull"}
+          />
+          <V6Stat
+            label="GREEN loss streak"
+            value={`${Number(pending?.r5_green_route_consecutive_shadow_losses ?? 0)}/2`}
+          />
+          <V6Stat
+            label="Anchor RED route"
+            value={pending?.r5_anchor_red_route_pause_active ? "PAUSED" : "armed"}
+            tone={pending?.r5_anchor_red_route_pause_active ? "bear" : "bull"}
+          />
+          <V6Stat
+            label="Anchor RED loss streak"
+            value={`${Number(pending?.r5_anchor_red_route_consecutive_shadow_losses ?? 0)}/2`}
+          />
+          <V6Stat label="Broad RED route" value="unrestricted" tone="violet" />
+          <V6Stat
+            label="Brake this candle"
+            value={pending?.r5_route_brake_triggered ? String(pending?.r5_route_brake_route_key ?? "YES") : "no"}
+            tone={pending?.r5_route_brake_triggered ? "bear" : undefined}
+          />
+        </V6Section>
+
 
         <V6Section title="Selectivity · legacy shadows">
           <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />

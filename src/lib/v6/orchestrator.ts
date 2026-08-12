@@ -82,6 +82,18 @@ import {
   V6_R5_MODEL_REVISION,
   V6_R5_ROUTER_VERSION,
 } from "./r5";
+import {
+  applyRouteBrake,
+  R5_ROUTE_ANCHOR_RED,
+  R5_ROUTE_BRAKE_PAUSE_LOSSES,
+  R5_ROUTE_BRAKE_RESUME_WINS,
+  R5_ROUTE_GREEN,
+  routeBrakeContribution,
+  V6_R5_1_ACTIVATED_AT,
+  V6_R5_1_MODEL_REVISION,
+} from "./routeBrake";
+import { ensureRouteBrakeStates, recordResolvedRouteOutcome } from "./routeBrakeStore";
+
 
 
 
@@ -417,6 +429,20 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       },
     );
 
+    // --- V6-r5.1 Route Drawdown Brake — veto-only, route-specific ------------
+    // Applied strictly AFTER the r5 router. It can only downgrade a GREEN or
+    // Anchor RED publication to ABSTAIN. Broad RED is never restricted and no
+    // daily/global cap exists.
+    const brakeStates = await ensureRouteBrakeStates(sb, targetTs);
+    const brake = applyRouteBrake(
+      r5.decision,
+      r5.source,
+      r5.reason,
+      brakeStates.green,
+      brakeStates.anchorRed,
+    );
+
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
@@ -563,15 +589,43 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
       structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      // --- V6-r5 publication (the router is the only live authority) -------
-      final_prediction: accepted ? r5.decision : "OP_FAIL",
-      final_prediction_source: accepted ? r5.source : "OP_FAIL",
-      final_reason: accepted ? r5.reason : "OP_FAIL",
+      // --- V6-r5.1 publication (router + route drawdown brake) -------------
+      final_prediction: accepted ? brake.prediction : "OP_FAIL",
+      final_prediction_source: accepted ? brake.source : "OP_FAIL",
+      final_reason: accepted ? brake.reason : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && r5.decision === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted && r5.decision === "ABSTAIN" ? r5.reason : null,
+      abstain_status: accepted && brake.prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted && brake.prediction === "ABSTAIN" ? brake.reason : null,
 
-      model_revision: V6_R5_MODEL_REVISION,
+      // Pre-brake router decision, retained verbatim for attribution.
+      r5_pre_brake_prediction: accepted ? r5.decision : "OP_FAIL",
+      r5_pre_brake_source: accepted ? r5.source : "OP_FAIL",
+      r5_pre_brake_reason: accepted ? r5.reason : "OP_FAIL",
+
+      // Route brake state as read at prediction time (independent per route).
+      r5_route_brake_revision: V6_R5_1_MODEL_REVISION,
+      r5_route_brake_activated_at: V6_R5_1_ACTIVATED_AT,
+      r5_route_brake_pause_loss_threshold: R5_ROUTE_BRAKE_PAUSE_LOSSES,
+      r5_route_brake_resume_win_threshold: R5_ROUTE_BRAKE_RESUME_WINS,
+      r5_route_brake_state_rebuilt: brakeStates.rebuilt,
+      r5_green_route_brake_evaluable: accepted,
+      r5_green_route_pause_active: brakeStates.green.pauseActive,
+      r5_green_route_consecutive_shadow_losses: brakeStates.green.consecutiveShadowLosses,
+      r5_green_route_brake_triggered: accepted && brake.greenBrakeTriggered,
+      r5_green_route_brake_reason: accepted && brake.greenBrakeTriggered ? brake.brakeReason : null,
+      r5_anchor_red_route_brake_evaluable: accepted,
+      r5_anchor_red_route_pause_active: brakeStates.anchorRed.pauseActive,
+      r5_anchor_red_route_consecutive_shadow_losses: brakeStates.anchorRed.consecutiveShadowLosses,
+      r5_anchor_red_route_brake_triggered: accepted && brake.anchorRedBrakeTriggered,
+      r5_anchor_red_route_brake_reason:
+        accepted && brake.anchorRedBrakeTriggered ? brake.brakeReason : null,
+      r5_route_brake_triggered: accepted && brake.triggered,
+      r5_route_brake_route_key: accepted ? brake.routeKey : null,
+      r5_route_brake_reason: accepted ? brake.brakeReason : null,
+      r5_route_brake_underlying_prediction: accepted ? brake.underlyingPrediction : null,
+
+      model_revision: V6_R5_1_MODEL_REVISION,
+
       r5_router_version: r5.routerVersion,
       r5_green_evaluable: r5.greenEvaluable,
       r5_green_candidate: accepted && r5.greenCandidate,
@@ -675,7 +729,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -824,6 +878,33 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
       const momentumGreen = r.momentum_green_shadow_prediction as string | null;
       const finalDirectional = !opFail && (final === "GREEN" || final === "RED");
 
+      // --- V6-r5.1 route drawdown brake: state transitions + attribution ----
+      // Route shadow history keeps advancing while a route is paused, so a
+      // paused route can always earn its way back with one eligible win.
+      const greenEligible = Boolean(r.r5_green_candidate) && !opFail && r5Green.result != null;
+      const anchorEligible = Boolean(r.r5_red_anchor_candidate) && !opFail && r5Anchor.result != null;
+      const tsIso = targetTs.toISOString();
+      const greenTransition = greenEligible
+        ? await recordResolvedRouteOutcome(
+            sb, R5_ROUTE_GREEN, r5Green.result as "WIN" | "LOSS" | "PUSH", tsIso, "GREEN",
+          )
+        : null;
+      const anchorTransition = anchorEligible
+        ? await recordResolvedRouteOutcome(
+            sb, R5_ROUTE_ANCHOR_RED, r5Anchor.result as "WIN" | "LOSS" | "PUSH", tsIso, "RED",
+          )
+        : null;
+
+      const brakeTriggered = Boolean(r.r5_route_brake_triggered) && !opFail;
+      const brakeUnderlying = (r.r5_route_brake_underlying_prediction as string | null) ?? null;
+      const brakeContrib = routeBrakeContribution(
+        brakeTriggered,
+        brakeUnderlying as "GREEN" | "RED" | null,
+        opFail ? null : actual,
+      );
+
+
+
       await sb
         .from("v6_predictions")
         .update({
@@ -955,6 +1036,39 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             : momentumGreen === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS",
           momentum_green_shadow_raw_score: momentumGreen ? rawScore(asDir(momentumGreen), actual) : null,
           momentum_green_shadow_adjusted_score: momentumGreen ? adjustedScore(asDir(momentumGreen), actual) : null,
+
+          // --- V6-r5.1 route drawdown brake accounting ---
+          r5_route_brake_underlying_actual: brakeTriggered ? actual : null,
+          r5_route_brake_underlying_result: brakeContrib.result,
+          r5_route_brake_underlying_raw_score:
+            brakeTriggered && brakeUnderlying ? rawScore(asDir(brakeUnderlying), actual) : null,
+          r5_route_brake_underlying_adjusted_score:
+            brakeTriggered && brakeUnderlying ? adjustedScore(asDir(brakeUnderlying), actual) : null,
+          r5_route_brake_raw_contribution: brakeContrib.raw,
+          r5_route_brake_adjusted_contribution: brakeContrib.adjusted,
+
+          r5_green_route_shadow_eligible: greenEligible,
+          r5_green_route_shadow_result: greenEligible ? r5Green.result : null,
+          r5_green_route_shadow_streak_before:
+            greenTransition ? greenTransition.before.consecutiveShadowLosses : null,
+          r5_green_route_shadow_streak_after:
+            greenTransition ? greenTransition.after.consecutiveShadowLosses : null,
+          r5_green_route_pause_before_resolution:
+            greenTransition ? greenTransition.before.pauseActive : null,
+          r5_green_route_pause_after_resolution:
+            greenTransition ? greenTransition.after.pauseActive : null,
+
+          r5_anchor_red_route_shadow_eligible: anchorEligible,
+          r5_anchor_red_route_shadow_result: anchorEligible ? r5Anchor.result : null,
+          r5_anchor_red_route_shadow_streak_before:
+            anchorTransition ? anchorTransition.before.consecutiveShadowLosses : null,
+          r5_anchor_red_route_shadow_streak_after:
+            anchorTransition ? anchorTransition.after.consecutiveShadowLosses : null,
+          r5_anchor_red_route_pause_before_resolution:
+            anchorTransition ? anchorTransition.before.pauseActive : null,
+          r5_anchor_red_route_pause_after_resolution:
+            anchorTransition ? anchorTransition.after.pauseActive : null,
+
         } as never)
         .eq("prediction_id", String(r.prediction_id))
         .is("resolution_timestamp", null); // idempotent: never rewrite a resolved row

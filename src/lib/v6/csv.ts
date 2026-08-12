@@ -125,7 +125,31 @@ export const V6_CSV_COLUMNS = [
   "momentum_green_shadow_prediction","momentum_green_shadow_result",
   "momentum_green_shadow_raw_score","momentum_green_shadow_adjusted_score",
   "r5_cumulative_raw_net","r5_cumulative_adjusted_net","r5_trade_index",
+
+  // --- V6-r5.1 Route Drawdown Brake ---
+  "r5_route_brake_revision","r5_route_brake_activated_at","r5_route_brake_state_rebuilt",
+  "r5_route_brake_pause_loss_threshold","r5_route_brake_resume_win_threshold",
+  "r5_pre_brake_prediction","r5_pre_brake_source","r5_pre_brake_reason",
+  "r5_green_route_brake_evaluable","r5_green_route_pause_active",
+  "r5_green_route_consecutive_shadow_losses","r5_green_route_brake_triggered","r5_green_route_brake_reason",
+  "r5_anchor_red_route_brake_evaluable","r5_anchor_red_route_pause_active",
+  "r5_anchor_red_route_consecutive_shadow_losses","r5_anchor_red_route_brake_triggered",
+  "r5_anchor_red_route_brake_reason",
+  "r5_route_brake_triggered","r5_route_brake_route_key","r5_route_brake_reason",
+  "r5_route_brake_underlying_prediction","r5_route_brake_underlying_actual",
+  "r5_route_brake_underlying_result","r5_route_brake_underlying_raw_score",
+  "r5_route_brake_underlying_adjusted_score",
+  "r5_route_brake_raw_contribution","r5_route_brake_adjusted_contribution",
+  "r5_green_route_shadow_eligible","r5_green_route_shadow_result",
+  "r5_green_route_shadow_streak_before","r5_green_route_shadow_streak_after",
+  "r5_green_route_pause_before_resolution","r5_green_route_pause_after_resolution",
+  "r5_anchor_red_route_shadow_eligible","r5_anchor_red_route_shadow_result",
+  "r5_anchor_red_route_shadow_streak_before","r5_anchor_red_route_shadow_streak_after",
+  "r5_anchor_red_route_pause_before_resolution","r5_anchor_red_route_pause_after_resolution",
+  "r5_route_brake_cumulative_raw_contribution","r5_route_brake_cumulative_adjusted_contribution",
+  "r5_route_brake_trigger_index",
 ] as const;
+
 
 
 type Row = Record<string, unknown>;
@@ -154,6 +178,10 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
   let r5Raw = 0;
   let r5Adj = 0;
   let r5Trades = 0;
+  let brakeTriggers = 0;
+  let brakeRaw = 0;
+  let brakeAdj = 0;
+
 
   return rowsOldestFirst.map((r) => {
     const raw = num(r.final_raw_score);
@@ -190,6 +218,16 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       r5Trades += 1;
     }
 
+    // r5.1 brake attribution totals: only rows the brake actually vetoed move them.
+    const brakeTriggered = r.r5_route_brake_triggered === true;
+    const brakeRaw1 = num(r.r5_route_brake_raw_contribution);
+    const brakeAdj1 = num(r.r5_route_brake_adjusted_contribution);
+    if (brakeTriggered) {
+      brakeTriggers += 1;
+      brakeRaw += brakeRaw1 ?? 0;
+      brakeAdj += brakeAdj1 ?? 0;
+    }
+
     const rollingDirectional = window.filter((w) => w.directional).length;
     return {
       ...r,
@@ -212,7 +250,11 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       r5_cumulative_raw_net: r5Trades ? r5Raw : null,
       r5_cumulative_adjusted_net: r5Trades ? r5Adj : null,
       r5_trade_index: r5Published ? r5Trades : null,
+      r5_route_brake_cumulative_raw_contribution: brakeTriggers ? brakeRaw : null,
+      r5_route_brake_cumulative_adjusted_contribution: brakeTriggers ? brakeAdj : null,
+      r5_route_brake_trigger_index: brakeTriggered ? brakeTriggers : null,
     };
+
   });
 }
 
