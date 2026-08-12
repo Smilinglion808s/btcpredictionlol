@@ -222,6 +222,7 @@ export interface B4x4Decision {
   expansionEligible: boolean;
   baseCandidate: boolean;
   selectedRoute: SelectedRoute;
+  calibration: CalibrationPromotion;
   localDate: string;
   dailyNetBefore: number;
   dailyResolvedTradeCountBefore: number;
@@ -233,6 +234,92 @@ export interface B4x4Decision {
   /** history entry to append after this row is processed */
   historyEntry: HistoryEntry | null;
 }
+
+/** Empty (not-evaluated) calibration audit block. */
+export function emptyCalibration(
+  reason: CalibrationEligibilityReason = "NOT_APPLICABLE_NOT_EVALUATED",
+): CalibrationPromotion {
+  return {
+    version: CALIBRATION_PROMOTION_VERSION,
+    historyWindow: CALIBRATION_PROMOTION_HISTORY_WINDOW,
+    historyPool: CALIBRATION_PROMOTION_HISTORY_POOL,
+    historyCount: 0,
+    historyReady: false,
+    rawDirection: null,
+    historyStartTs: null,
+    historyEndTs: null,
+    historyAsOfTs: null,
+    historyWins: null,
+    historyLosses: null,
+    expectedWins: null,
+    observedWinRate: null,
+    expectedWinRate: null,
+    variance: null,
+    standardDeviation: null,
+    residualWins: null,
+    zScore: null,
+    minPCorrect: CALIBRATION_PROMOTION_MIN_P_CORRECT,
+    minZScore: CALIBRATION_PROMOTION_MIN_Z_SCORE,
+    historyIdsHash: null,
+    eligibilityReason: reason,
+    conditionMet: false,
+    candidateBeforeBrake: false,
+    brakeVetoed: false,
+    published: false,
+    postCalibrationCandidate: false,
+  };
+}
+
+/** Deterministic FNV-1a hash over the ordered promotion history identity. */
+export function calibrationHistoryHash(entries: HistoryEntry[]): string {
+  let h = 0x811c9dc5;
+  const push = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+  };
+  for (const e of entries) {
+    push(
+      [
+        e.predictionId ?? "",
+        e.candleTs,
+        e.direction,
+        e.actualDirection ?? "",
+        String(e.pCorrect ?? ""),
+      ].join("|") + ";",
+    );
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * Eligible same-direction no-active-route history for the promotion pool.
+ * Only outcomes that were genuinely knowable at `decisionAsOfMs` are used.
+ */
+export function calibrationHistoryPool(
+  history: HistoryEntry[],
+  rawDirection: Direction,
+  decisionAsOfMs: number,
+): HistoryEntry[] {
+  const out: HistoryEntry[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const e = history[i]!;
+    if (e.direction !== rawDirection) continue;
+    if (e.baseCandidate !== false) continue;
+    if (e.gridWindowIntegrityPassed !== true) continue;
+    if (e.gridCell == null) continue;
+    if (e.pCorrect == null || !Number.isFinite(e.pCorrect)) continue;
+    if (e.actualDirection !== "GREEN" && e.actualDirection !== "RED") continue;
+    const availableAt =
+      new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
+    if (!(availableAt <= decisionAsOfMs)) continue;
+    out.push(e);
+    if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
+  }
+  return out.reverse();
+}
+
 
 // ---------------------------------------------------------------- primitives
 
