@@ -1231,6 +1231,34 @@ function V6Card({
           <V6Stat label="Legacy layers" value="shadow only" tone="violet" />
         </V6Section>
 
+        <V6Section title="Route brake · V6-r5.1 (veto only)">
+          <V6Stat
+            label="GREEN route"
+            value={pending?.r5_green_route_pause_active ? "PAUSED" : "armed"}
+            tone={pending?.r5_green_route_pause_active ? "bear" : "bull"}
+          />
+          <V6Stat
+            label="GREEN loss streak"
+            value={`${Number(pending?.r5_green_route_consecutive_shadow_losses ?? 0)}/2`}
+          />
+          <V6Stat
+            label="Anchor RED route"
+            value={pending?.r5_anchor_red_route_pause_active ? "PAUSED" : "armed"}
+            tone={pending?.r5_anchor_red_route_pause_active ? "bear" : "bull"}
+          />
+          <V6Stat
+            label="Anchor RED loss streak"
+            value={`${Number(pending?.r5_anchor_red_route_consecutive_shadow_losses ?? 0)}/2`}
+          />
+          <V6Stat label="Broad RED route" value="unrestricted" tone="violet" />
+          <V6Stat
+            label="Brake this candle"
+            value={pending?.r5_route_brake_triggered ? String(pending?.r5_route_brake_route_key ?? "YES") : "no"}
+            tone={pending?.r5_route_brake_triggered ? "bear" : undefined}
+          />
+        </V6Section>
+
+
         <V6Section title="Selectivity · legacy shadows">
           <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
           <V6Stat label="Structure vetoes" value={Number(stats.structure_vetoes ?? 0)} />
