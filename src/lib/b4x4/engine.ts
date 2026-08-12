@@ -116,6 +116,9 @@ export interface HistoryEntry {
   gridWindowIntegrityPassed?: boolean | null;
   /** Frozen original B4x4 base decision (Core / Expansion eligibility). */
   baseCandidate?: boolean;
+  /** 'LIVE' rows respect the resolver delay; 'BACKFILL' rows are already resolved. */
+  runMode?: "LIVE" | "BACKFILL" | null;
+  operationalGapStatus?: string | null;
   predictionId?: string | null;
 }
 
