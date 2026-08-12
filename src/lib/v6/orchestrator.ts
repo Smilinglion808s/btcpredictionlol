@@ -589,15 +589,43 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
       structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      // --- V6-r5 publication (the router is the only live authority) -------
-      final_prediction: accepted ? r5.decision : "OP_FAIL",
-      final_prediction_source: accepted ? r5.source : "OP_FAIL",
-      final_reason: accepted ? r5.reason : "OP_FAIL",
+      // --- V6-r5.1 publication (router + route drawdown brake) -------------
+      final_prediction: accepted ? brake.prediction : "OP_FAIL",
+      final_prediction_source: accepted ? brake.source : "OP_FAIL",
+      final_reason: accepted ? brake.reason : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && r5.decision === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted && r5.decision === "ABSTAIN" ? r5.reason : null,
+      abstain_status: accepted && brake.prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted && brake.prediction === "ABSTAIN" ? brake.reason : null,
 
-      model_revision: V6_R5_MODEL_REVISION,
+      // Pre-brake router decision, retained verbatim for attribution.
+      r5_pre_brake_prediction: accepted ? r5.decision : "OP_FAIL",
+      r5_pre_brake_source: accepted ? r5.source : "OP_FAIL",
+      r5_pre_brake_reason: accepted ? r5.reason : "OP_FAIL",
+
+      // Route brake state as read at prediction time (independent per route).
+      r5_route_brake_revision: V6_R5_1_MODEL_REVISION,
+      r5_route_brake_activated_at: V6_R5_1_ACTIVATED_AT,
+      r5_route_brake_pause_loss_threshold: R5_ROUTE_BRAKE_PAUSE_LOSSES,
+      r5_route_brake_resume_win_threshold: R5_ROUTE_BRAKE_RESUME_WINS,
+      r5_route_brake_state_rebuilt: brakeStates.rebuilt,
+      r5_green_route_brake_evaluable: accepted,
+      r5_green_route_pause_active: brakeStates.green.pauseActive,
+      r5_green_route_consecutive_shadow_losses: brakeStates.green.consecutiveShadowLosses,
+      r5_green_route_brake_triggered: accepted && brake.greenBrakeTriggered,
+      r5_green_route_brake_reason: accepted && brake.greenBrakeTriggered ? brake.brakeReason : null,
+      r5_anchor_red_route_brake_evaluable: accepted,
+      r5_anchor_red_route_pause_active: brakeStates.anchorRed.pauseActive,
+      r5_anchor_red_route_consecutive_shadow_losses: brakeStates.anchorRed.consecutiveShadowLosses,
+      r5_anchor_red_route_brake_triggered: accepted && brake.anchorRedBrakeTriggered,
+      r5_anchor_red_route_brake_reason:
+        accepted && brake.anchorRedBrakeTriggered ? brake.brakeReason : null,
+      r5_route_brake_triggered: accepted && brake.triggered,
+      r5_route_brake_route_key: accepted ? brake.routeKey : null,
+      r5_route_brake_reason: accepted ? brake.brakeReason : null,
+      r5_route_brake_underlying_prediction: accepted ? brake.underlyingPrediction : null,
+
+      model_revision: V6_R5_1_MODEL_REVISION,
+
       r5_router_version: r5.routerVersion,
       r5_green_evaluable: r5.greenEvaluable,
       r5_green_candidate: accepted && r5.greenCandidate,
