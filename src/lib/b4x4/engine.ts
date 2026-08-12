@@ -822,7 +822,10 @@ export function scoreAgainst(
  * Replay B4x4 chronologically over ordered source rows. Used by the historical
  * backfill and by tests; identical decision path to the live orchestrator.
  */
-export function replayB4x4(rows: SourceRow[]): ReplayResult[] {
+export function replayB4x4(
+  rows: SourceRow[],
+  opts: B4x4EvalOptions = {},
+): ReplayResult[] {
   const history: HistoryEntry[] = [];
   const results: ReplayResult[] = [];
   // Published + resolved outcomes per local date, used for the intraday brake.
@@ -836,7 +839,7 @@ export function replayB4x4(rows: SourceRow[]): ReplayResult[] {
       dailyNetBefore: dailyNet.get(localDate) ?? 0,
       dailyResolvedTradeCountBefore: dailyTrades.get(localDate) ?? 0,
     };
-    const decision = evaluateB4x4(row, history, daily);
+    const decision = evaluateB4x4(row, history, daily, opts);
     if (decision.historyEntry) history.push(decision.historyEntry);
 
     const actual = row.actualDirection;
