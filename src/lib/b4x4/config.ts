@@ -9,6 +9,8 @@ export const B4X4_MODEL_VERSION = "b4x4-calibration-promotion-r1";
  * calibration-promotion patch does not orphan earlier rows.
  */
 export const B4X4_MODEL_VERSION_LINEAGE = ["b4x4-v1", "b4x4-calibration-promotion-r1"] as const;
+/** Mutable copy for Supabase `.in("model_version", ...)` filters. */
+export const B4X4_MODEL_VERSIONS: string[] = [...B4X4_MODEL_VERSION_LINEAGE];
 export const B4X4_VARIANT = "balanced-4x4-calibration-promotion";
 export const B4X4_PROSPECTIVE_TEST_ID = "B4X4_CORE_GRID40_BRAKE80_V1";
 export const B4X4_SOURCE_VARIANT = "A2_Combined";
