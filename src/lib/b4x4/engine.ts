@@ -325,6 +325,11 @@ export function calibrationHistoryPool(
       const availableAt =
         new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
       if (!(availableAt <= decisionAsOfMs)) continue;
+    }
+    out.push(e);
+    if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
+  }
+  return out.reverse();
 }
 
 /** Frozen z-score math over an eligible promotion pool. No intermediate rounding. */
@@ -357,11 +362,6 @@ export function calibrationPoolMetrics(pool: HistoryEntry[]): {
     residualWins,
     zScore: residualWins / standardDeviation,
   };
-}
-    out.push(e);
-    if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
-  }
-  return out.reverse();
 }
 
 
