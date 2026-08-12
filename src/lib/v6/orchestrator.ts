@@ -417,6 +417,20 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       },
     );
 
+    // --- V6-r5.1 Route Drawdown Brake — veto-only, route-specific ------------
+    // Applied strictly AFTER the r5 router. It can only downgrade a GREEN or
+    // Anchor RED publication to ABSTAIN. Broad RED is never restricted and no
+    // daily/global cap exists.
+    const brakeStates = await ensureRouteBrakeStates(sb, targetTs);
+    const brake = applyRouteBrake(
+      r5.decision,
+      r5.source,
+      r5.reason,
+      brakeStates.green,
+      brakeStates.anchorRed,
+    );
+
+
 
     const timing = timingPosture(targetTs);
     const createdBefore = timing.createdBefore;
