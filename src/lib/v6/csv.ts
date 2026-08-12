@@ -214,6 +214,16 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       r5Trades += 1;
     }
 
+    // r5.1 brake attribution totals: only rows the brake actually vetoed move them.
+    const brakeTriggered = r.r5_route_brake_triggered === true;
+    const brakeRaw1 = num(r.r5_route_brake_raw_contribution);
+    const brakeAdj1 = num(r.r5_route_brake_adjusted_contribution);
+    if (brakeTriggered) {
+      brakeTriggers += 1;
+      brakeRaw += brakeRaw1 ?? 0;
+      brakeAdj += brakeAdj1 ?? 0;
+    }
+
     const rollingDirectional = window.filter((w) => w.directional).length;
     return {
       ...r,
@@ -236,7 +246,11 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       r5_cumulative_raw_net: r5Trades ? r5Raw : null,
       r5_cumulative_adjusted_net: r5Trades ? r5Adj : null,
       r5_trade_index: r5Published ? r5Trades : null,
+      r5_route_brake_cumulative_raw_contribution: brakeTriggers ? brakeRaw : null,
+      r5_route_brake_cumulative_adjusted_contribution: brakeTriggers ? brakeAdj : null,
+      r5_route_brake_trigger_index: brakeTriggered ? brakeTriggers : null,
     };
+
   });
 }
 
