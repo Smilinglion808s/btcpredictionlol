@@ -10,6 +10,7 @@ import {
   B4X4_IMPLEMENTATION_REVISION,
   B4X4_MODEL_NAME,
   B4X4_MODEL_VERSION,
+  B4X4_MODEL_VERSIONS,
   B4X4_PROSPECTIVE_TEST_ID,
   B4X4_RESOLVER_VERSION,
   B4X4_REVISION_ACTIVATED_AT,
@@ -113,7 +114,7 @@ export async function loadDailyState(
   const { data } = await supabase
     .from("b4x4_predictions")
     .select("result_score, result")
-    .eq("model_version", B4X4_MODEL_VERSION)
+    .in("model_version", B4X4_MODEL_VERSIONS)
     .eq("local_date", localDate)
     .eq("would_trade", true)
     .not("resolved_at", "is", null)
@@ -276,7 +277,7 @@ export async function runB4x4ForA2Combined(
       const { data: existing } = await supabase
         .from("b4x4_predictions")
         .select("*")
-        .eq("model_version", B4X4_MODEL_VERSION)
+        .in("model_version", B4X4_MODEL_VERSIONS)
         .eq("target_candle_ts", ctx.candleTs)
         .maybeSingle();
       saved = (existing as unknown as DbRow | null) ?? null;
@@ -407,7 +408,7 @@ export async function resolveB4x4Row(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
         "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
       )
-      .eq("model_version", B4X4_MODEL_VERSION)
+      .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("target_candle_ts", targetCandleTs)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
@@ -516,7 +517,7 @@ export async function catchUpMissingB4x4Rows(
     const { data: existingRows } = await supabase
       .from("b4x4_predictions")
       .select("target_candle_ts")
-      .eq("model_version", B4X4_MODEL_VERSION)
+      .in("model_version", B4X4_MODEL_VERSIONS)
       .gte("target_candle_ts", recent[0]!.candleTs);
     const have = new Set(
       ((existingRows ?? []) as unknown as DbRow[]).map((r) =>

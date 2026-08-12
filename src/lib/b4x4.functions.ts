@@ -1,7 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
+import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, b4x4LocalDate } from "./b4x4/config";
 import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
 
 
@@ -21,7 +21,7 @@ async function pageAll(select: string): Promise<Row[]> {
     const { data } = await sb
       .from("b4x4_predictions")
       .select(select)
-      .eq("model_version", B4X4_MODEL_VERSION)
+      .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("variant", B4X4_VARIANT)
       .order("target_candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
@@ -243,7 +243,7 @@ export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async ()
       "selected_route, global_rank, same_side_rank, grid_cell, p_correct, grid_quality_percentile, " +
       "a2_probability_green, confidence, daily_net_before, intraday_brake_active, resolved_at, result",
     )
-    .eq("model_version", B4X4_MODEL_VERSION)
+    .in("model_version", B4X4_MODEL_VERSIONS)
     .order("target_candle_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -279,7 +279,7 @@ export const getB4x4ObShadowAudit = createServerFn({ method: "GET" }).handler(as
   const { data: preds } = await sb
     .from("b4x4_predictions")
     .select("id")
-    .eq("model_version", B4X4_MODEL_VERSION)
+    .in("model_version", B4X4_MODEL_VERSIONS)
     .eq("run_mode", "LIVE")
     .limit(10000);
   const expected = (preds ?? []).length;
@@ -462,7 +462,7 @@ export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async ()
       "id, target_candle_ts, final_prediction, raw_direction, would_trade, decision_reason, " +
       "selected_route, grid_cell, p_correct, a2_probability_green, confidence, result, resolved_at, actual_close",
     )
-    .eq("model_version", B4X4_MODEL_VERSION)
+    .in("model_version", B4X4_MODEL_VERSIONS)
     .eq("variant", B4X4_VARIANT)
     .order("target_candle_ts", { ascending: false })
     .limit(50);
