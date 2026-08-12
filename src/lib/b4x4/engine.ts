@@ -109,6 +109,45 @@ export interface HistoryEntry {
   actualDirection: ActualDirection | null;
   /** raw_direction === actual_direction (null when unresolved / PUSH). */
   correct: boolean | null;
+  // ---- prediction-time fields used by the calibration promotion pool ----
+  /** Stored prediction-time grid probability of correctness. Never recomputed. */
+  pCorrect?: number | null;
+  gridCell?: string | null;
+  gridWindowIntegrityPassed?: boolean | null;
+  /** Frozen original B4x4 base decision (Core / Expansion eligibility). */
+  baseCandidate?: boolean;
+  predictionId?: string | null;
+}
+
+/** Prediction-time calibration-promotion audit block. */
+export interface CalibrationPromotion {
+  version: string;
+  historyWindow: number;
+  historyPool: string;
+  historyCount: number;
+  historyReady: boolean;
+  rawDirection: Direction | null;
+  historyStartTs: string | null;
+  historyEndTs: string | null;
+  historyAsOfTs: string | null;
+  historyWins: number | null;
+  historyLosses: number | null;
+  expectedWins: number | null;
+  observedWinRate: number | null;
+  expectedWinRate: number | null;
+  variance: number | null;
+  standardDeviation: number | null;
+  residualWins: number | null;
+  zScore: number | null;
+  minPCorrect: number;
+  minZScore: number;
+  historyIdsHash: string | null;
+  eligibilityReason: CalibrationEligibilityReason;
+  conditionMet: boolean;
+  candidateBeforeBrake: boolean;
+  brakeVetoed: boolean;
+  published: boolean;
+  postCalibrationCandidate: boolean;
 }
 
 export interface GridCell {
