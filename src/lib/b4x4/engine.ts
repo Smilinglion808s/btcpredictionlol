@@ -473,6 +473,7 @@ export function evaluateB4x4(
     expansionEligible: false,
     baseCandidate: false,
     selectedRoute: "NONE",
+    calibration: emptyCalibration(),
     localDate,
     dailyNetBefore: daily.dailyNetBefore,
     dailyResolvedTradeCountBefore: daily.dailyResolvedTradeCountBefore,
