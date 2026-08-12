@@ -693,6 +693,32 @@ export type Database = {
           brake_incremental_value: number | null
           build_commit_sha: string | null
           build_identifier: string | null
+          calibration_promotion_brake_vetoed: boolean | null
+          calibration_promotion_candidate_before_brake: boolean | null
+          calibration_promotion_condition_met: boolean | null
+          calibration_promotion_eligibility_reason: string | null
+          calibration_promotion_expected_win_rate: number | null
+          calibration_promotion_expected_wins: number | null
+          calibration_promotion_history_as_of_ts: string | null
+          calibration_promotion_history_count: number | null
+          calibration_promotion_history_end_ts: string | null
+          calibration_promotion_history_ids_hash: string | null
+          calibration_promotion_history_losses: number | null
+          calibration_promotion_history_pool: string | null
+          calibration_promotion_history_ready: boolean | null
+          calibration_promotion_history_start_ts: string | null
+          calibration_promotion_history_window: number | null
+          calibration_promotion_history_wins: number | null
+          calibration_promotion_min_p_correct: number | null
+          calibration_promotion_min_z_score: number | null
+          calibration_promotion_observed_win_rate: number | null
+          calibration_promotion_published: boolean | null
+          calibration_promotion_raw_direction: string | null
+          calibration_promotion_residual_wins: number | null
+          calibration_promotion_standard_deviation: number | null
+          calibration_promotion_variance: number | null
+          calibration_promotion_version: string | null
+          calibration_promotion_z_score: number | null
           canonical_candle_source: string | null
           catchup_completed_at: string | null
           catchup_resolution_error: string | null
@@ -760,6 +786,7 @@ export type Database = {
           operational_gap_reason: string | null
           operational_gap_status: string | null
           p_correct: number | null
+          post_calibration_candidate: boolean | null
           prospective_test_id: string
           quality_mean: number | null
           raw_a2_counterfactual_result: string | null
@@ -818,6 +845,32 @@ export type Database = {
           brake_incremental_value?: number | null
           build_commit_sha?: string | null
           build_identifier?: string | null
+          calibration_promotion_brake_vetoed?: boolean | null
+          calibration_promotion_candidate_before_brake?: boolean | null
+          calibration_promotion_condition_met?: boolean | null
+          calibration_promotion_eligibility_reason?: string | null
+          calibration_promotion_expected_win_rate?: number | null
+          calibration_promotion_expected_wins?: number | null
+          calibration_promotion_history_as_of_ts?: string | null
+          calibration_promotion_history_count?: number | null
+          calibration_promotion_history_end_ts?: string | null
+          calibration_promotion_history_ids_hash?: string | null
+          calibration_promotion_history_losses?: number | null
+          calibration_promotion_history_pool?: string | null
+          calibration_promotion_history_ready?: boolean | null
+          calibration_promotion_history_start_ts?: string | null
+          calibration_promotion_history_window?: number | null
+          calibration_promotion_history_wins?: number | null
+          calibration_promotion_min_p_correct?: number | null
+          calibration_promotion_min_z_score?: number | null
+          calibration_promotion_observed_win_rate?: number | null
+          calibration_promotion_published?: boolean | null
+          calibration_promotion_raw_direction?: string | null
+          calibration_promotion_residual_wins?: number | null
+          calibration_promotion_standard_deviation?: number | null
+          calibration_promotion_variance?: number | null
+          calibration_promotion_version?: string | null
+          calibration_promotion_z_score?: number | null
           canonical_candle_source?: string | null
           catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
@@ -885,6 +938,7 @@ export type Database = {
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
           p_correct?: number | null
+          post_calibration_candidate?: boolean | null
           prospective_test_id?: string
           quality_mean?: number | null
           raw_a2_counterfactual_result?: string | null
@@ -943,6 +997,32 @@ export type Database = {
           brake_incremental_value?: number | null
           build_commit_sha?: string | null
           build_identifier?: string | null
+          calibration_promotion_brake_vetoed?: boolean | null
+          calibration_promotion_candidate_before_brake?: boolean | null
+          calibration_promotion_condition_met?: boolean | null
+          calibration_promotion_eligibility_reason?: string | null
+          calibration_promotion_expected_win_rate?: number | null
+          calibration_promotion_expected_wins?: number | null
+          calibration_promotion_history_as_of_ts?: string | null
+          calibration_promotion_history_count?: number | null
+          calibration_promotion_history_end_ts?: string | null
+          calibration_promotion_history_ids_hash?: string | null
+          calibration_promotion_history_losses?: number | null
+          calibration_promotion_history_pool?: string | null
+          calibration_promotion_history_ready?: boolean | null
+          calibration_promotion_history_start_ts?: string | null
+          calibration_promotion_history_window?: number | null
+          calibration_promotion_history_wins?: number | null
+          calibration_promotion_min_p_correct?: number | null
+          calibration_promotion_min_z_score?: number | null
+          calibration_promotion_observed_win_rate?: number | null
+          calibration_promotion_published?: boolean | null
+          calibration_promotion_raw_direction?: string | null
+          calibration_promotion_residual_wins?: number | null
+          calibration_promotion_standard_deviation?: number | null
+          calibration_promotion_variance?: number | null
+          calibration_promotion_version?: string | null
+          calibration_promotion_z_score?: number | null
           canonical_candle_source?: string | null
           catchup_completed_at?: string | null
           catchup_resolution_error?: string | null
@@ -1010,6 +1090,7 @@ export type Database = {
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
           p_correct?: number | null
+          post_calibration_candidate?: boolean | null
           prospective_test_id?: string
           quality_mean?: number | null
           raw_a2_counterfactual_result?: string | null

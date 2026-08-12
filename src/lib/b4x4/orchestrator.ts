@@ -10,6 +10,8 @@ import {
   B4X4_IMPLEMENTATION_REVISION,
   B4X4_MODEL_NAME,
   B4X4_MODEL_VERSION,
+  B4X4_MODEL_VERSIONS,
+  CALIBRATION_PROMOTION_ACTIVATED_AT,
   B4X4_PROSPECTIVE_TEST_ID,
   B4X4_RESOLVER_VERSION,
   B4X4_REVISION_ACTIVATED_AT,
@@ -113,7 +115,7 @@ export async function loadDailyState(
   const { data } = await supabase
     .from("b4x4_predictions")
     .select("result_score, result")
-    .eq("model_version", B4X4_MODEL_VERSION)
+    .in("model_version", B4X4_MODEL_VERSIONS)
     .eq("local_date", localDate)
     .eq("would_trade", true)
     .not("resolved_at", "is", null)
@@ -209,6 +211,35 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     expansion_eligible: d.expansionEligible,
     base_candidate: d.baseCandidate,
     selected_route: d.selectedRoute,
+
+    // ---- calibration promotion audit ----
+    calibration_promotion_version: d.calibration?.version ?? null,
+    calibration_promotion_history_pool: d.calibration?.historyPool ?? null,
+    calibration_promotion_history_window: d.calibration?.historyWindow ?? null,
+    calibration_promotion_history_count: d.calibration?.historyCount ?? null,
+    calibration_promotion_history_ready: d.calibration?.historyReady ?? null,
+    calibration_promotion_raw_direction: d.calibration?.rawDirection ?? null,
+    calibration_promotion_history_start_ts: d.calibration?.historyStartTs ?? null,
+    calibration_promotion_history_end_ts: d.calibration?.historyEndTs ?? null,
+    calibration_promotion_history_as_of_ts: d.calibration?.historyAsOfTs ?? null,
+    calibration_promotion_history_wins: d.calibration?.historyWins ?? null,
+    calibration_promotion_history_losses: d.calibration?.historyLosses ?? null,
+    calibration_promotion_expected_wins: d.calibration?.expectedWins ?? null,
+    calibration_promotion_observed_win_rate: d.calibration?.observedWinRate ?? null,
+    calibration_promotion_expected_win_rate: d.calibration?.expectedWinRate ?? null,
+    calibration_promotion_variance: d.calibration?.variance ?? null,
+    calibration_promotion_standard_deviation: d.calibration?.standardDeviation ?? null,
+    calibration_promotion_residual_wins: d.calibration?.residualWins ?? null,
+    calibration_promotion_z_score: d.calibration?.zScore ?? null,
+    calibration_promotion_min_p_correct: d.calibration?.minPCorrect ?? null,
+    calibration_promotion_min_z_score: d.calibration?.minZScore ?? null,
+    calibration_promotion_history_ids_hash: d.calibration?.historyIdsHash ?? null,
+    calibration_promotion_eligibility_reason: d.calibration?.eligibilityReason ?? null,
+    calibration_promotion_condition_met: d.calibration?.conditionMet ?? null,
+    calibration_promotion_candidate_before_brake: d.calibration?.candidateBeforeBrake ?? null,
+    calibration_promotion_brake_vetoed: d.calibration?.brakeVetoed ?? null,
+    calibration_promotion_published: d.calibration?.published ?? null,
+    post_calibration_candidate: d.calibration?.postCalibrationCandidate ?? null,
     local_date: d.localDate,
     daily_net_before: d.dailyNetBefore,
     daily_resolved_trade_count_before: d.dailyResolvedTradeCountBefore,
@@ -247,6 +278,23 @@ export async function runB4x4ForA2Combined(
 ): Promise<DbRow | null> {
   const runStartedAt = new Date().toISOString();
   try {
+    // Target-row protection across the whole version lineage: a target that
+    // already has a B4x4 row (under any historical model_version) is never
+    // re-predicted, so the version bump cannot duplicate a target.
+    const { data: priorRow } = await supabase
+      .from("b4x4_predictions")
+      .select("*")
+      .in("model_version", B4X4_MODEL_VERSIONS)
+      .eq("target_candle_ts", ctx.candleTs)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (priorRow) {
+      const existing = priorRow as unknown as DbRow;
+      if (!ctx.deferShadowCapture) await captureB4x4ShadowForRow(supabase, existing);
+      return existing;
+    }
+
     const history = await loadHistory(supabase, ctx.candleTs);
     const daily = await loadDailyState(supabase, ctx.candleTs);
     const source: SourceRow = {
@@ -255,8 +303,15 @@ export async function runB4x4ForA2Combined(
       timingStatus: ctx.timingStatus,
       leakageCheckPassed: ctx.leakageCheckPassed,
       actualDirection: null,
+      runMode: ctx.runMode ?? "LIVE",
+      operationalGapStatus: ctx.operationalGapStatus ?? "NONE",
     };
-    const decision = evaluateB4x4(source, history, daily);
+    const decision = evaluateB4x4(source, history, daily, {
+      promotionEnabled:
+        (ctx.runMode ?? "LIVE") === "LIVE" &&
+        new Date(ctx.candleTs).getTime() >=
+          new Date(CALIBRATION_PROMOTION_ACTIVATED_AT).getTime(),
+    });
     const row = {
       ...decisionToRow(ctx, decision),
       run_started_at: runStartedAt,
@@ -276,7 +331,7 @@ export async function runB4x4ForA2Combined(
       const { data: existing } = await supabase
         .from("b4x4_predictions")
         .select("*")
-        .eq("model_version", B4X4_MODEL_VERSION)
+        .in("model_version", B4X4_MODEL_VERSIONS)
         .eq("target_candle_ts", ctx.candleTs)
         .maybeSingle();
       saved = (existing as unknown as DbRow | null) ?? null;
@@ -395,7 +450,19 @@ export async function resolveB4x4Row(
       { p_target_candle_ts: targetCandleTs, p_model_version: B4X4_MODEL_VERSION } as never,
     );
     if (beginError) throw beginError;
-    const claim = (begin ?? {}) as { found?: boolean; already_resolved?: boolean; id?: string; attempt_count?: number };
+    let claim = (begin ?? {}) as { found?: boolean; already_resolved?: boolean; id?: string; attempt_count?: number };
+    if (!claim.found) {
+      // legacy rows still carry an earlier model_version
+      for (const mv of B4X4_MODEL_VERSIONS) {
+        if (mv === B4X4_MODEL_VERSION) continue;
+        const { data: legacy } = await supabase.rpc(
+          "b4x4_begin_resolution_attempt" as never,
+          { p_target_candle_ts: targetCandleTs, p_model_version: mv } as never,
+        );
+        const legacyClaim = (legacy ?? {}) as typeof claim;
+        if (legacyClaim.found) { claim = legacyClaim; break; }
+      }
+    }
     if (!claim.found) return;
     if (claim.already_resolved) return; // idempotent
     rowId = claim.id ? String(claim.id) : null;
@@ -407,8 +474,10 @@ export async function resolveB4x4Row(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
         "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
       )
-      .eq("model_version", B4X4_MODEL_VERSION)
+      .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("target_candle_ts", targetCandleTs)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
@@ -516,7 +585,7 @@ export async function catchUpMissingB4x4Rows(
     const { data: existingRows } = await supabase
       .from("b4x4_predictions")
       .select("target_candle_ts")
-      .eq("model_version", B4X4_MODEL_VERSION)
+      .in("model_version", B4X4_MODEL_VERSIONS)
       .gte("target_candle_ts", recent[0]!.candleTs);
     const have = new Set(
       ((existingRows ?? []) as unknown as DbRow[]).map((r) =>

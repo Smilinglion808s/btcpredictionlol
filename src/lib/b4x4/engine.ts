@@ -8,6 +8,12 @@
 import {
   BETA_PRIOR_ALPHA,
   BETA_PRIOR_BETA,
+  CALIBRATION_PROMOTION_HISTORY_POOL,
+  CALIBRATION_PROMOTION_HISTORY_WINDOW,
+  CALIBRATION_PROMOTION_MIN_P_CORRECT,
+  CALIBRATION_PROMOTION_MIN_Z_SCORE,
+  CALIBRATION_PROMOTION_OUTCOME_DELAY_MS,
+  CALIBRATION_PROMOTION_VERSION,
   CORE_GLOBAL_RANK_MIN,
   CORE_SAME_SIDE_RANK_MIN,
   EXPANSION_GRID_PERCENTILE_MIN,
@@ -26,12 +32,30 @@ import {
 
 export type Direction = "GREEN" | "RED";
 export type ActualDirection = "GREEN" | "RED" | "PUSH";
-export type SelectedRoute = "CORE" | "EXPANSION" | "CORE_AND_EXPANSION" | "NONE";
+export type SelectedRoute =
+  | "CORE"
+  | "EXPANSION"
+  | "CORE_AND_EXPANSION"
+  | "CALIBRATION_PROMOTION"
+  | "NONE";
+
+export type CalibrationEligibilityReason =
+  | "NOT_APPLICABLE_EXISTING_BASE_ROUTE"
+  | "NOT_APPLICABLE_NOT_EVALUATED"
+  | "HISTORY_NOT_READY"
+  | "CURRENT_P_CORRECT_INVALID"
+  | "CURRENT_P_CORRECT_BELOW_MIN"
+  | "HISTORY_VARIANCE_INVALID"
+  | "Z_SCORE_BELOW_MIN"
+  | "PROMOTED_BEFORE_BRAKE"
+  | "PROMOTED_AND_PUBLISHED"
+  | "PROMOTED_BUT_BRAKE_VETOED";
 
 export type DecisionReason =
   | "PUBLISH_CORE"
   | "PUBLISH_EXPANSION"
   | "PUBLISH_CORE_AND_EXPANSION"
+  | "PUBLISH_CALIBRATION_PROMOTION"
   | "ABSTAIN_A2_PROBABILITY_INVALID"
   | "ABSTAIN_A2_TIMING_INVALID"
   | "ABSTAIN_A2_LEAKAGE_INVALID"
@@ -70,6 +94,9 @@ export interface SourceRow {
   a2ModelFitId?: string | null;
   a2ProductionModelVersion?: string | null;
   createdAt?: string | null;
+  /** Run mode of the B4x4 row this source produced (calibration availability). */
+  runMode?: "LIVE" | "BACKFILL" | null;
+  operationalGapStatus?: string | null;
 }
 
 /** Prediction-time state carried forward for every valid prior source row. */
@@ -85,6 +112,48 @@ export interface HistoryEntry {
   actualDirection: ActualDirection | null;
   /** raw_direction === actual_direction (null when unresolved / PUSH). */
   correct: boolean | null;
+  // ---- prediction-time fields used by the calibration promotion pool ----
+  /** Stored prediction-time grid probability of correctness. Never recomputed. */
+  pCorrect?: number | null;
+  gridCell?: string | null;
+  gridWindowIntegrityPassed?: boolean | null;
+  /** Frozen original B4x4 base decision (Core / Expansion eligibility). */
+  baseCandidate?: boolean;
+  /** 'LIVE' rows respect the resolver delay; 'BACKFILL' rows are already resolved. */
+  runMode?: "LIVE" | "BACKFILL" | null;
+  operationalGapStatus?: string | null;
+  predictionId?: string | null;
+}
+
+/** Prediction-time calibration-promotion audit block. */
+export interface CalibrationPromotion {
+  version: string;
+  historyWindow: number;
+  historyPool: string;
+  historyCount: number;
+  historyReady: boolean;
+  rawDirection: Direction | null;
+  historyStartTs: string | null;
+  historyEndTs: string | null;
+  historyAsOfTs: string | null;
+  historyWins: number | null;
+  historyLosses: number | null;
+  expectedWins: number | null;
+  observedWinRate: number | null;
+  expectedWinRate: number | null;
+  variance: number | null;
+  standardDeviation: number | null;
+  residualWins: number | null;
+  zScore: number | null;
+  minPCorrect: number;
+  minZScore: number;
+  historyIdsHash: string | null;
+  eligibilityReason: CalibrationEligibilityReason;
+  conditionMet: boolean;
+  candidateBeforeBrake: boolean;
+  brakeVetoed: boolean;
+  published: boolean;
+  postCalibrationCandidate: boolean;
 }
 
 export interface GridCell {
@@ -159,6 +228,7 @@ export interface B4x4Decision {
   expansionEligible: boolean;
   baseCandidate: boolean;
   selectedRoute: SelectedRoute;
+  calibration: CalibrationPromotion;
   localDate: string;
   dailyNetBefore: number;
   dailyResolvedTradeCountBefore: number;
@@ -170,6 +240,130 @@ export interface B4x4Decision {
   /** history entry to append after this row is processed */
   historyEntry: HistoryEntry | null;
 }
+
+/** Empty (not-evaluated) calibration audit block. */
+export function emptyCalibration(
+  reason: CalibrationEligibilityReason = "NOT_APPLICABLE_NOT_EVALUATED",
+): CalibrationPromotion {
+  return {
+    version: CALIBRATION_PROMOTION_VERSION,
+    historyWindow: CALIBRATION_PROMOTION_HISTORY_WINDOW,
+    historyPool: CALIBRATION_PROMOTION_HISTORY_POOL,
+    historyCount: 0,
+    historyReady: false,
+    rawDirection: null,
+    historyStartTs: null,
+    historyEndTs: null,
+    historyAsOfTs: null,
+    historyWins: null,
+    historyLosses: null,
+    expectedWins: null,
+    observedWinRate: null,
+    expectedWinRate: null,
+    variance: null,
+    standardDeviation: null,
+    residualWins: null,
+    zScore: null,
+    minPCorrect: CALIBRATION_PROMOTION_MIN_P_CORRECT,
+    minZScore: CALIBRATION_PROMOTION_MIN_Z_SCORE,
+    historyIdsHash: null,
+    eligibilityReason: reason,
+    conditionMet: false,
+    candidateBeforeBrake: false,
+    brakeVetoed: false,
+    published: false,
+    postCalibrationCandidate: false,
+  };
+}
+
+/** Deterministic FNV-1a hash over the ordered promotion history identity. */
+export function calibrationHistoryHash(entries: HistoryEntry[]): string {
+  let h = 0x811c9dc5;
+  const push = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+  };
+  for (const e of entries) {
+    push(
+      [
+        e.predictionId ?? "",
+        e.candleTs,
+        e.direction,
+        e.actualDirection ?? "",
+        String(e.pCorrect ?? ""),
+      ].join("|") + ";",
+    );
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * Eligible same-direction no-active-route history for the promotion pool.
+ * Only outcomes that were genuinely knowable at `decisionAsOfMs` are used.
+ */
+export function calibrationHistoryPool(
+  history: HistoryEntry[],
+  rawDirection: Direction,
+  decisionAsOfMs: number,
+): HistoryEntry[] {
+  const out: HistoryEntry[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const e = history[i]!;
+    if (e.direction !== rawDirection) continue;
+    if (e.baseCandidate !== false) continue;
+    // legacy rows predate the integrity column; only an explicit false disqualifies
+    if (e.gridWindowIntegrityPassed === false) continue;
+    if (e.gridCell == null) continue;
+    if (e.pCorrect == null || !Number.isFinite(e.pCorrect)) continue;
+    if (e.actualDirection !== "GREEN" && e.actualDirection !== "RED") continue;
+    if (e.operationalGapStatus === "CATCHUP") continue;
+    // LIVE outcomes only become knowable after the production resolver delay;
+    // BACKFILL rows are historical and already resolved when replayed.
+    if (e.runMode !== "BACKFILL") {
+      const availableAt =
+        new Date(e.candleTs).getTime() + CALIBRATION_PROMOTION_OUTCOME_DELAY_MS;
+      if (!(availableAt <= decisionAsOfMs)) continue;
+    }
+    out.push(e);
+    if (out.length === CALIBRATION_PROMOTION_HISTORY_WINDOW) break;
+  }
+  return out.reverse();
+}
+
+/** Frozen z-score math over an eligible promotion pool. No intermediate rounding. */
+export function calibrationPoolMetrics(pool: HistoryEntry[]): {
+  historyWins: number;
+  historyLosses: number;
+  expectedWins: number;
+  variance: number;
+  standardDeviation: number;
+  residualWins: number;
+  zScore: number;
+} {
+  let historyWins = 0;
+  let expectedWins = 0;
+  let variance = 0;
+  for (const e of pool) {
+    const p = e.pCorrect!;
+    if (e.direction === e.actualDirection) historyWins++;
+    expectedWins += p;
+    variance += p * (1 - p);
+  }
+  const standardDeviation = Math.sqrt(variance);
+  const residualWins = historyWins - expectedWins;
+  return {
+    historyWins,
+    historyLosses: pool.length - historyWins,
+    expectedWins,
+    variance,
+    standardDeviation,
+    residualWins,
+    zScore: residualWins / standardDeviation,
+  };
+}
+
 
 // ---------------------------------------------------------------- primitives
 
@@ -262,6 +456,17 @@ function abstain(
   return { ...base, ...partial, finalPrediction: null, wouldTrade: false, decisionReason: reason };
 }
 
+/** Optional evaluation context (defaults reproduce the frozen replay exactly). */
+export interface B4x4EvalOptions {
+  /**
+   * Instant the decision is taken. Defaults to the target candle timestamp,
+   * which is when the live prediction is produced.
+   */
+  decisionAsOfMs?: number;
+  /** Calibration promotion route master switch (activation boundary gate). */
+  promotionEnabled?: boolean;
+}
+
 /**
  * Evaluate one source row against its strictly-earlier history.
  * `history` must be ordered oldest → newest and contain only valid prior rows.
@@ -270,7 +475,10 @@ export function evaluateB4x4(
   row: SourceRow,
   history: HistoryEntry[],
   daily: DailyState,
+  opts: B4x4EvalOptions = {},
 ): B4x4Decision {
+  const decisionAsOfMs = opts.decisionAsOfMs ?? new Date(row.candleTs).getTime();
+  const promotionEnabled = opts.promotionEnabled !== false;
   const localDate = daily.localDate || b4x4LocalDate(row.candleTs);
   const base: B4x4Decision = {
     probabilityGreen: row.probabilityGreen,
@@ -323,6 +531,7 @@ export function evaluateB4x4(
     expansionEligible: false,
     baseCandidate: false,
     selectedRoute: "NONE",
+    calibration: emptyCalibration(),
     localDate,
     dailyNetBefore: daily.dailyNetBefore,
     dailyResolvedTradeCountBefore: daily.dailyResolvedTradeCountBefore,
@@ -396,6 +605,13 @@ export function evaluateB4x4(
       row.actualDirection === "GREEN" || row.actualDirection === "RED"
         ? rawDirection === row.actualDirection
         : null,
+    predictionId: row.predictionId ?? null,
+    runMode: row.runMode ?? null,
+    operationalGapStatus: row.operationalGapStatus ?? null,
+    pCorrect: null,
+    gridCell: null,
+    gridWindowIntegrityPassed: null,
+    baseCandidate: false,
   };
 
   const withRanks: Partial<B4x4Decision> = {
@@ -496,11 +712,68 @@ export function evaluateB4x4(
   const expansionEligible =
     percentile >= EXPANSION_GRID_PERCENTILE_MIN && cell.pCorrect > EXPANSION_P_CORRECT_MIN_EXCLUSIVE;
   const baseCandidate = coreEligible || expansionEligible;
-  const selectedRoute: SelectedRoute =
+  let selectedRoute: SelectedRoute =
     coreEligible && expansionEligible ? "CORE_AND_EXPANSION"
       : coreEligible ? "CORE"
         : expansionEligible ? "EXPANSION"
           : "NONE";
+
+  // The frozen prediction-time facts this row contributes to later pools.
+  historyEntry.pCorrect = cell.pCorrect;
+  historyEntry.gridCell = key;
+  historyEntry.gridWindowIntegrityPassed = integrityPassed;
+  historyEntry.baseCandidate = baseCandidate;
+
+  // ---- calibration promotion (only when no base route exists) ----
+  const calibration = emptyCalibration(
+    baseCandidate ? "NOT_APPLICABLE_EXISTING_BASE_ROUTE" : "HISTORY_NOT_READY",
+  );
+  let promoted = false;
+
+  if (!baseCandidate && promotionEnabled) {
+    calibration.rawDirection = rawDirection;
+    const pool = calibrationHistoryPool(history, rawDirection, decisionAsOfMs);
+    calibration.historyCount = pool.length;
+    calibration.historyStartTs = pool[0]?.candleTs ?? null;
+    calibration.historyEndTs = pool[pool.length - 1]?.candleTs ?? null;
+    calibration.historyAsOfTs = new Date(decisionAsOfMs).toISOString();
+    calibration.historyIdsHash = pool.length ? calibrationHistoryHash(pool) : null;
+    calibration.historyReady = pool.length === CALIBRATION_PROMOTION_HISTORY_WINDOW;
+
+    if (!calibration.historyReady) {
+      calibration.eligibilityReason = "HISTORY_NOT_READY";
+    } else {
+      const m = calibrationPoolMetrics(pool);
+      const { historyWins, historyLosses, expectedWins, variance, standardDeviation, residualWins, zScore } = m;
+      calibration.historyWins = historyWins;
+      calibration.historyLosses = historyLosses;
+      calibration.expectedWins = expectedWins;
+      calibration.variance = variance;
+      calibration.standardDeviation = standardDeviation;
+      calibration.residualWins = residualWins;
+      calibration.observedWinRate = historyWins / CALIBRATION_PROMOTION_HISTORY_WINDOW;
+      calibration.expectedWinRate = expectedWins / CALIBRATION_PROMOTION_HISTORY_WINDOW;
+      calibration.zScore = Number.isFinite(zScore) ? zScore : null;
+
+      const currentPCorrect = cell.pCorrect;
+      if (!Number.isFinite(currentPCorrect)) {
+        calibration.eligibilityReason = "CURRENT_P_CORRECT_INVALID";
+      } else if (!(variance > 0) || !Number.isFinite(zScore)) {
+        calibration.eligibilityReason = "HISTORY_VARIANCE_INVALID";
+      } else if (currentPCorrect < CALIBRATION_PROMOTION_MIN_P_CORRECT) {
+        calibration.eligibilityReason = "CURRENT_P_CORRECT_BELOW_MIN";
+      } else if (zScore < CALIBRATION_PROMOTION_MIN_Z_SCORE) {
+        calibration.eligibilityReason = "Z_SCORE_BELOW_MIN";
+      } else {
+        promoted = true;
+        calibration.conditionMet = true;
+        calibration.candidateBeforeBrake = true;
+        calibration.postCalibrationCandidate = true;
+        calibration.eligibilityReason = "PROMOTED_BEFORE_BRAKE";
+        selectedRoute = "CALIBRATION_PROMOTION";
+      }
+    }
+  }
 
   const withRoutes: Partial<B4x4Decision> = {
     ...withPercentile,
@@ -508,9 +781,12 @@ export function evaluateB4x4(
     expansionEligible,
     baseCandidate,
     selectedRoute,
+    calibration,
   };
 
-  if (!baseCandidate) return abstain(withRoutes, "ABSTAIN_NO_ACTIVE_ROUTE", base);
+  if (!baseCandidate && !promoted) {
+    return abstain(withRoutes, "ABSTAIN_NO_ACTIVE_ROUTE", base);
+  }
 
   // ---- intraday brake ----
   const brakeActive = daily.dailyNetBefore <= INTRADAY_BRAKE_TRIGGER_NET;
@@ -520,6 +796,10 @@ export function evaluateB4x4(
   const publish = brakeActive ? brakePasses : true;
 
   if (!publish) {
+    if (promoted) {
+      calibration.brakeVetoed = true;
+      calibration.eligibilityReason = "PROMOTED_BUT_BRAKE_VETOED";
+    }
     return abstain(
       { ...withRoutes, intradayBrakeActive: true, intradayBrakeVetoFired: true },
       "ABSTAIN_INTRADAY_BRAKE",
@@ -527,10 +807,16 @@ export function evaluateB4x4(
     );
   }
 
+  if (promoted) {
+    calibration.published = true;
+    calibration.eligibilityReason = "PROMOTED_AND_PUBLISHED";
+  }
+
   const reason: DecisionReason =
-    selectedRoute === "CORE_AND_EXPANSION" ? "PUBLISH_CORE_AND_EXPANSION"
-      : selectedRoute === "CORE" ? "PUBLISH_CORE"
-        : "PUBLISH_EXPANSION";
+    promoted ? "PUBLISH_CALIBRATION_PROMOTION"
+      : selectedRoute === "CORE_AND_EXPANSION" ? "PUBLISH_CORE_AND_EXPANSION"
+        : selectedRoute === "CORE" ? "PUBLISH_CORE"
+          : "PUBLISH_EXPANSION";
 
   return {
     ...base,
@@ -571,7 +857,10 @@ export function scoreAgainst(
  * Replay B4x4 chronologically over ordered source rows. Used by the historical
  * backfill and by tests; identical decision path to the live orchestrator.
  */
-export function replayB4x4(rows: SourceRow[]): ReplayResult[] {
+export function replayB4x4(
+  rows: SourceRow[],
+  opts: B4x4EvalOptions = {},
+): ReplayResult[] {
   const history: HistoryEntry[] = [];
   const results: ReplayResult[] = [];
   // Published + resolved outcomes per local date, used for the intraday brake.
@@ -585,7 +874,7 @@ export function replayB4x4(rows: SourceRow[]): ReplayResult[] {
       dailyNetBefore: dailyNet.get(localDate) ?? 0,
       dailyResolvedTradeCountBefore: dailyTrades.get(localDate) ?? 0,
     };
-    const decision = evaluateB4x4(row, history, daily);
+    const decision = evaluateB4x4(row, history, daily, opts);
     if (decision.historyEntry) history.push(decision.historyEntry);
 
     const actual = row.actualDirection;
