@@ -88,7 +88,24 @@ export async function maybeSendV6Webhook(
     if (!Number.isFinite(candleMs)) return false;
     if (candleMs < new Date(V6_WEBHOOK_ACTIVATION_TS).getTime()) return false;
 
-    const b4x4Direction = await b4x4DirectionFor(supabase, targetCandleTs);
+    const b4x4 = await b4x4DecisionFor(supabase, targetCandleTs);
+    const b4x4Direction = b4x4.direction;
+
+    // Fail closed: if B4x4's decision never became known we must not risk a
+    // second, conflicting webhook landing later.
+    if (!b4x4.found) {
+      await supabase
+        .from("v6_predictions")
+        .update({
+          webhook_eligible: false,
+          webhook_conflict_with_b4x4: false,
+          b4x4_direction_at_send: null,
+          webhook_suppressed_reason: "B4X4_DECISION_UNAVAILABLE",
+        } as never)
+        .eq("prediction_id", predictionId);
+      return false;
+    }
+
     const conflict = b4x4Direction != null && b4x4Direction !== direction;
 
     if (conflict) {
