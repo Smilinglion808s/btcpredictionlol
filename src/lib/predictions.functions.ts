@@ -452,7 +452,7 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
       a2_counterfactual_result: r.a2_counterfactual_result ?? null,
     };
   });
-}));
+});
 
 /** Shadow predictions on the current pending candle. */
 export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
