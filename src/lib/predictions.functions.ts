@@ -58,9 +58,13 @@ export const listPredictions = createServerFn({ method: "POST" })
     return rows ?? [];
   });
 
-/** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
+/** Model 6 live + archived predictions used by the History CSV page. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
+  // The automatic page load only needs a lightweight history index. Full V6
+  // diagnostics are exported on demand by exportV6Csv, rather than serialized
+  // through this server function on every visit.
+  const HISTORY_COLUMNS = "id,created_at,candle_ts,input_candle_ts,input_candle_age_seconds,input_features_fresh,freshness_action,fetch_source,model_version,prediction,confidence,status,actual_next_candle_open,actual_next_candle_high,actual_next_candle_low,actual_next_candle_close,actual_direction,resolved_at,setup_type,market_condition";
   const PAGE = 500;
   const MAX_LIVE = 5000;
   const MAX_ARCH = 20000;
@@ -72,8 +76,15 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
     const seenIds = new Set<string>();
     let cursor: string | null = null;
     while (out.length < cap) {
-      let q = sb.from(table).select("*").order("created_at", { ascending: false }).limit(PAGE);
-      if (cursor) q = q.lte("created_at", cursor) as never;
+      let q = sb
+        .from(table)
+        .select(HISTORY_COLUMNS)
+        // The History page only renders Model 6 from these two legacy tables;
+        // all other models have dedicated, on-demand CSV exports.
+        .eq("model_version", "6.0")
+        .order("created_at", { ascending: false })
+        .limit(PAGE);
+      if (cursor) q = q.lt("created_at", cursor) as never;
       const { data, error } = await q;
       if (error) throw error;
       const batch = data ?? [];
@@ -86,8 +97,8 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
         added++;
       }
       if (batch.length < PAGE) break;
-      const nextCursor = String((batch[batch.length - 1] as any).created_at);
-      if (added === 0 && nextCursor === cursor) break;
+       const nextCursor = String((batch[batch.length - 1] as any).created_at);
+       if (added === 0 && nextCursor === cursor) break;
       cursor = nextCursor;
     }
     return out.slice(0, cap);
