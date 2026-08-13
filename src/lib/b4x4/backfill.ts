@@ -66,7 +66,8 @@ export async function loadCanonicalSourceRows(
     string,
     { actual_direction?: string | null; model_version?: string | null }
   >();
-  const predictionBatchSize = 400;
+  // Keep the generated PostgREST URL comfortably below proxy/request limits.
+  const predictionBatchSize = 100;
   for (let i = 0; i < predictionIds.length; i += predictionBatchSize) {
     const ids = predictionIds.slice(i, i + predictionBatchSize);
     const { data, error } = await supabase
