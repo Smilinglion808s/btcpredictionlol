@@ -58,10 +58,12 @@ export const listPredictions = createServerFn({ method: "POST" })
     return rows ?? [];
   });
 
-/** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
+/** Model 6 live + archived predictions used by the History CSV page. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const PAGE = 500;
+  // Prediction rows are exceptionally wide. Keep each response small enough
+  // to avoid PostgREST's statement timeout while preserving every CSV field.
+  const PAGE = 200;
   const MAX_LIVE = 5000;
   const MAX_ARCH = 20000;
 
@@ -72,8 +74,15 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
     const seenIds = new Set<string>();
     let cursor: string | null = null;
     while (out.length < cap) {
-      let q = sb.from(table).select("*").order("created_at", { ascending: false }).limit(PAGE);
-      if (cursor) q = q.lte("created_at", cursor) as never;
+      let q = sb
+        .from(table)
+        .select("*")
+        // The History page only renders Model 6 from these two legacy tables;
+        // all other models have dedicated, on-demand CSV exports.
+        .eq("model_version", "6.0")
+        .order("created_at", { ascending: false })
+        .limit(PAGE);
+      if (cursor) q = q.lt("created_at", cursor) as never;
       const { data, error } = await q;
       if (error) throw error;
       const batch = data ?? [];
@@ -86,8 +95,8 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
         added++;
       }
       if (batch.length < PAGE) break;
-      const nextCursor = String((batch[batch.length - 1] as any).created_at);
-      if (added === 0 && nextCursor === cursor) break;
+       const nextCursor = String((batch[batch.length - 1] as any).created_at);
+       if (added === 0 && nextCursor === cursor) break;
       cursor = nextCursor;
     }
     return out.slice(0, cap);
