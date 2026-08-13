@@ -61,31 +61,43 @@ export const listPredictions = createServerFn({ method: "POST" })
 /** Union of live + archived predictions — used by the History CSV page so wipes don't lose data. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  const PAGE = 1000;
+  const PAGE = 500;
   const MAX_LIVE = 5000;
   const MAX_ARCH = 20000;
 
+  // Keyset pagination: deep OFFSET ranges on these very wide tables blow the
+  // statement timeout. Walk backwards on created_at instead.
   async function paginate(table: "predictions" | "predictions_archive", cap: number) {
     const out: any[] = [];
-    for (let from = 0; from < cap; from += PAGE) {
-      const to = Math.min(from + PAGE, cap) - 1;
-      const { data, error } = await sb
-        .from(table)
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(from, to);
+    const seenIds = new Set<string>();
+    let cursor: string | null = null;
+    while (out.length < cap) {
+      let q = sb.from(table).select("*").order("created_at", { ascending: false }).limit(PAGE);
+      if (cursor) q = q.lte("created_at", cursor) as never;
+      const { data, error } = await q;
       if (error) throw error;
       const batch = data ?? [];
-      out.push(...batch);
+      let added = 0;
+      for (const row of batch) {
+        const id = String((row as any).id);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        out.push(row);
+        added++;
+      }
       if (batch.length < PAGE) break;
+      const nextCursor = String((batch[batch.length - 1] as any).created_at);
+      if (added === 0 && nextCursor === cursor) break;
+      cursor = nextCursor;
     }
-    return out;
+    return out.slice(0, cap);
   }
 
-  const [live, arch] = await Promise.all([
-    paginate("predictions", MAX_LIVE),
-    paginate("predictions_archive", MAX_ARCH),
-  ]);
+  // Sequential, not parallel: two concurrent wide scans compete for the same
+  // statement-timeout budget.
+  const live = await paginate("predictions", MAX_LIVE);
+  const arch = await paginate("predictions_archive", MAX_ARCH);
+
 
   const seen = new Set<string>();
   const merged: any[] = [];
