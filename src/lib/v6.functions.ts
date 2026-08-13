@@ -47,8 +47,8 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
     .from("v6_visual_stats_reset")
     .upsert({ id: 1, reset_at, reason: "user-ui-reset" }, { onConflict: "id" });
   if (error) throw error;
-  return { ok: true, reset_at };
   invalidateStats("v6-stats");
+  return { ok: true, reset_at };
 });
 
 /** Aggregate V6 performance. Adjusted net is the primary headline metric. */
