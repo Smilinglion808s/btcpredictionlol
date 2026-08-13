@@ -1,7 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, B4X4_VARIANTS, b4x4LocalDate } from "./b4x4/config";
+import { B4X4_ACTIVE_REVISIONS, B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, B4X4_VARIANTS, b4x4LocalDate } from "./b4x4/config";
 import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
 
 
@@ -185,7 +185,8 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
     "revision_activated_at, webhook_eligible",
   );
 
-  const isRepaired = (r: Row) => r.implementation_revision === B4X4_IMPLEMENTATION_REVISION;
+  const ACTIVE_REVISIONS = new Set(B4X4_ACTIVE_REVISIONS);
+  const isRepaired = (r: Row) => ACTIVE_REVISIONS.has(String(r.implementation_revision ?? ""));
   // Operational catch-up rows are audit artifacts: they are webhook-ineligible
   // and are excluded from LIVE performance AND coverage. BACKFILL rows are
   // likewise never part of the live forward test.
