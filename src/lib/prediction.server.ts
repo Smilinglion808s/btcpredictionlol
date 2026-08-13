@@ -167,7 +167,10 @@ async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number):
   };
 }
 
-export async function runAiPredictionServer(supabase: SupabaseClient) {
+export async function runAiPredictionServer(
+  supabase: SupabaseClient,
+  opts?: { timing?: Awaited<ReturnType<typeof getBtc15mExchangeTiming>> },
+) {
   // Model 6+ routes through the deterministic engine (no LLM in decision path).
   {
     const { data: activeSettings } = await supabase
@@ -178,7 +181,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     const mv = String(activeSettings?.model_version ?? "").trim();
     if (/^6(\.|$)/.test(mv)) {
       const { runModel6Prediction } = await import("./model6/engine");
-      return runModel6Prediction(supabase);
+      return runModel6Prediction(supabase, { timing: opts?.timing });
     }
   }
 
@@ -189,7 +192,7 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
   let errorMessage: string | null = null;
 
   try {
-    const exchangeTiming = await getBtc15mExchangeTiming();
+    const exchangeTiming = opts?.timing ?? (await getBtc15mExchangeTiming());
     let ordered = await loadPredictionCandles(supabase);
     if (ordered.length < 30)
       throw new Error("Not enough candle history. Click Refresh Candles first.");
@@ -284,6 +287,13 @@ export async function runAiPredictionServer(supabase: SupabaseClient) {
     } catch (e) {
       partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
     }
+    // Leakage guard: never use the target candle itself as the "forming" candle.
+    if (partial && new Date(partial.start_ts).getTime() >= new Date(targetCandleTs).getTime()) {
+      partial = null;
+      partialPath = "unavailable";
+      partialAttempts = [...partialAttempts, { source: "leakage_guard", ok: false, reason: "partial_is_target_candle" }];
+    }
+
 
     if (!partial || partialSynthesized) {
       await supabase.from("api_runs").insert({

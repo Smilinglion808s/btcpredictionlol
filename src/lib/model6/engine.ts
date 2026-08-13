@@ -101,10 +101,16 @@ function serializeModulePoints(mp: Record<ModuleName, ModulePoints>): Record<str
   return out;
 }
 
-export async function runModel6Prediction(supabase: SupabaseClient) {
+export async function runModel6Prediction(
+  supabase: SupabaseClient,
+  opts?: { timing?: Awaited<ReturnType<typeof getBtc15mExchangeTiming>> },
+) {
   const started = Date.now();
   try {
-    const exchangeTiming = await getBtc15mExchangeTiming();
+    // Prefer the timing the scheduler already locked in before the boundary
+    // wait. Recomputing here costs two network round trips and, when they were
+    // slow, could cross the boundary and retarget the run one candle ahead.
+    const exchangeTiming = opts?.timing ?? (await getBtc15mExchangeTiming());
     let ordered = await loadCandles(supabase);
     if (ordered.length < 30) throw new Error("Not enough candle history.");
     let latest = ordered[ordered.length - 1];
@@ -166,6 +172,13 @@ export async function runModel6Prediction(supabase: SupabaseClient) {
     } catch (e) {
       partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
       partialRootCause = "build_partial_threw";
+    }
+    // Leakage guard: if the run slipped past the boundary, the "forming"
+    // candle IS the target candle. Never feed it to the decision path.
+    if (partial && new Date(partial.start_ts).getTime() >= new Date(targetCandleTs).getTime()) {
+      partial = null;
+      partialPath = "dropped_target_candle";
+      partialRootCause = "partial_is_target_candle";
     }
     // Fire-and-forget diagnostic log so every fetch attempt is inspectable via api_runs.
     if (!partial || partialSynthesized || partialRootCause) {

@@ -1,7 +1,13 @@
 import { buildKalshiEventTicker } from "./kalshi.server";
 
 export const BTC_15M_TF_MS = 15 * 60 * 1000;
-export const BTC_15M_PREDICTION_LEAD_MS = 20 * 1000;
+/**
+ * How far before the boundary the prediction pass starts. Raised from 20s to
+ * 40s: at 20s a slow exchange-time / Kalshi round trip could push the actual
+ * insert past the boundary, which silently retargeted the run one candle
+ * ahead and dropped a candle entirely.
+ */
+export const BTC_15M_PREDICTION_LEAD_MS = 40 * 1000;
 
 export type Btc15mTiming = {
   serverNowMs: number;
