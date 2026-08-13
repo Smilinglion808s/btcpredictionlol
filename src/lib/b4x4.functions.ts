@@ -1,6 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
+import { cachedStats } from "./statsCache.server";
 import { B4X4_ACTIVE_REVISIONS, B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, B4X4_VARIANTS, b4x4LocalDate } from "./b4x4/config";
 import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
 
@@ -188,7 +189,7 @@ function aggregate(rows: Row[]) {
  * pre-repair row is reported separately as a labeled historical segment and
  * never blended into the active forward test.
  */
-export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () => {
+export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-stats", async () => {
   const rows = await pageAll(
     "target_candle_ts, run_mode, would_trade, final_prediction, raw_direction, decision_reason, " +
     "selected_route, core_eligible, expansion_eligible, base_candidate, result, result_score, " +
@@ -247,7 +248,7 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
       coverage: historical.coverage,
     },
   };
-});
+}));
 
 
 /** Most recent B4x4 row (its decision for the pending candle). */

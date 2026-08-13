@@ -15,7 +15,6 @@ import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
-import { Route as AuthenticatedSettingsModelRouteImport } from './routes/_authenticated/settings.model'
 import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
@@ -58,12 +57,6 @@ const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
   path: '/daily',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSettingsModelRoute =
-  AuthenticatedSettingsModelRouteImport.update({
-    id: '/settings/model',
-    path: '/settings/model',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
   id: '/api/public/timing/btc-15m',
   path: '/api/public/timing/btc-15m',
@@ -142,7 +135,6 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
-  '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -162,7 +154,6 @@ export interface FileRoutesByTo {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
-  '/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -184,7 +175,6 @@ export interface FileRoutesById {
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/settings/model': typeof AuthenticatedSettingsModelRoute
   '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -206,7 +196,6 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
-    | '/settings/model'
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -226,7 +215,6 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/'
-    | '/settings/model'
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -247,7 +235,6 @@ export interface FileRouteTypes {
     | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
-    | '/_authenticated/settings/model'
     | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -320,13 +307,6 @@ declare module '@tanstack/react-router' {
       path: '/daily'
       fullPath: '/daily'
       preLoaderRoute: typeof AuthenticatedDailyRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/settings/model': {
-      id: '/_authenticated/settings/model'
-      path: '/settings/model'
-      fullPath: '/settings/model'
-      preLoaderRoute: typeof AuthenticatedSettingsModelRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/api/public/timing/btc-15m': {
@@ -422,7 +402,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedSettingsModelRoute: typeof AuthenticatedSettingsModelRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -431,7 +410,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedModelsRoute: AuthenticatedModelsRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedSettingsModelRoute: AuthenticatedSettingsModelRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
