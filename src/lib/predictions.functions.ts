@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats } from "./statsCache.server";
+import { cachedStats, invalidateStats } from "./statsCache.server";
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
@@ -1053,13 +1053,17 @@ async function resetTd1RcVisual(resetId: number) {
   return { ok: true, reset_at: new Date().toISOString() };
 }
 
-export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () =>
-  resetTd1RcVisual(1),
-);
+export const resetTd1RcVisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const r = await resetTd1RcVisual(1);
+  invalidateStats("td1-rc-stats");
+  return r;
+});
 
-export const resetTd2RcVisualStats = createServerFn({ method: "POST" }).handler(async () =>
-  resetTd1RcVisual(2),
-);
+export const resetTd2RcVisualStats = createServerFn({ method: "POST" }).handler(async () => {
+  const r = await resetTd1RcVisual(2);
+  invalidateStats("td2-rc-stats");
+  return r;
+});
 
 
 /** Training progress for TD1-RC: shows how many candles remain before the model is ready to make live predictions. */

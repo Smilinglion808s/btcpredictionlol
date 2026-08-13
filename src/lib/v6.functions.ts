@@ -1,7 +1,7 @@
 // V6 server functions: stats card data, pending prediction, and CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats } from "./statsCache.server";
+import { cachedStats, invalidateStats } from "./statsCache.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -48,6 +48,7 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
     .upsert({ id: 1, reset_at, reason: "user-ui-reset" }, { onConflict: "id" });
   if (error) throw error;
   return { ok: true, reset_at };
+  invalidateStats("v6-stats");
 });
 
 /** Aggregate V6 performance. Adjusted net is the primary headline metric. */
