@@ -167,7 +167,10 @@ async function fetchCoinbaseClosedCandle(candleTs: string, timeframeMs: number):
   };
 }
 
-export async function runAiPredictionServer(supabase: SupabaseClient) {
+export async function runAiPredictionServer(
+  supabase: SupabaseClient,
+  opts?: { timing?: Awaited<ReturnType<typeof getBtc15mExchangeTiming>> },
+) {
   // Model 6+ routes through the deterministic engine (no LLM in decision path).
   {
     const { data: activeSettings } = await supabase
