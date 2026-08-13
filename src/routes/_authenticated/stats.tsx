@@ -230,6 +230,11 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["v6-stats"] });
         qc.invalidateQueries({ queryKey: ["v6-pending"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "b4x4_predictions" }, () => {
+        qc.invalidateQueries({ queryKey: ["b4x4-stats"] });
+        qc.invalidateQueries({ queryKey: ["b4x4-pending"] });
+        qc.invalidateQueries({ queryKey: ["b4x4-recent-stats"] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
