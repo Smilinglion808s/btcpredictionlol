@@ -39,12 +39,16 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
         }
 
         const results: Record<string, unknown> = { phase };
+        // Boundary target locked before the pre-close wait, so a slow run can
+        // never silently retarget the following candle.
+        let lockedTiming: Awaited<ReturnType<typeof waitForBtc15mPredictionWindow>> | null = null;
         const timings: Record<string, number> = {};
 
         if (align && (phase === "predict" || phase === "both")) {
           const t0 = Date.now();
           try {
             const timing = await waitForBtc15mPredictionWindow();
+            lockedTiming = timing;
             results.exchange_timing = {
               server_now_ms: timing.serverNowMs,
               next_close_ms: timing.nextCloseMs,
@@ -136,7 +140,9 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
               .eq("is_active", true)
               .maybeSingle();
             if (settings?.auto_run_enabled) {
-              const prediction = await runAiPredictionServer(supabase);
+              const prediction = await runAiPredictionServer(supabase, {
+                timing: lockedTiming ?? undefined,
+              });
               results.prediction_id = prediction.id;
             } else {
               results.auto_run_skipped = true;
