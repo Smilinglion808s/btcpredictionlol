@@ -61,9 +61,11 @@ export const listPredictions = createServerFn({ method: "POST" })
 /** Model 6 live + archived predictions used by the History CSV page. */
 export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).handler(async () => {
   const sb = await admin();
-  // Prediction rows are exceptionally wide. Keep each response small enough
-  // to avoid PostgREST's statement timeout while preserving every CSV field.
-  const PAGE = 200;
+  // The automatic page load only needs a lightweight history index. Full V6
+  // diagnostics are exported on demand by exportV6Csv, rather than serialized
+  // through this server function on every visit.
+  const HISTORY_COLUMNS = "id,created_at,candle_ts,input_candle_ts,input_candle_age_seconds,input_features_fresh,freshness_action,fetch_source,model_version,prediction,confidence,status,actual_next_candle_open,actual_next_candle_high,actual_next_candle_low,actual_next_candle_close,actual_direction,resolved_at,setup_type,market_condition";
+  const PAGE = 500;
   const MAX_LIVE = 5000;
   const MAX_ARCH = 20000;
 
@@ -76,7 +78,7 @@ export const listAllPredictionsForHistory = createServerFn({ method: "GET" }).ha
     while (out.length < cap) {
       let q = sb
         .from(table)
-        .select("*")
+        .select(HISTORY_COLUMNS)
         // The History page only renders Model 6 from these two legacy tables;
         // all other models have dedicated, on-demand CSV exports.
         .eq("model_version", "6.0")
