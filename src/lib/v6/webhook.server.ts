@@ -41,21 +41,28 @@ async function readB4x4(
   }
 }
 
+/** How long V6 will wait for B4x4's decision before failing closed. */
+export const V6_B4X4_WAIT_CEILING_MS = 120_000;
+const V6_B4X4_POLL_MS = 2_000;
+
 /**
- * B4x4 runs first on the critical path, but V6 can occasionally reach this
- * point before the B4x4 row lands. Poll briefly so a conflicting B4x4 trade is
- * never missed; give up quickly so V6 is not delayed materially.
+ * B4x4 is the publication authority: V6 must know B4x4's final decision for
+ * the SAME target candle before it may ship. B4x4 normally lands within a few
+ * seconds, but a slow run or the catch-up watchdog can delay the row. Wait up
+ * to the ceiling; "row still absent" is reported distinctly from "row present,
+ * non-directional" so the caller can fail closed.
  */
-async function b4x4DirectionFor(
+async function b4x4DecisionFor(
   supabase: SupabaseClient,
   targetCandleTs: string,
-): Promise<"GREEN" | "RED" | null> {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+): Promise<{ found: boolean; direction: "GREEN" | "RED" | null }> {
+  const deadline = Date.now() + V6_B4X4_WAIT_CEILING_MS;
+  for (;;) {
     const res = await readB4x4(supabase, targetCandleTs);
-    if (res.found) return res.direction;
-    await new Promise((r) => setTimeout(r, 1000));
+    if (res.found) return res;
+    if (Date.now() >= deadline) return { found: false, direction: null };
+    await new Promise((r) => setTimeout(r, V6_B4X4_POLL_MS));
   }
-  return null;
 }
 
 /**
@@ -81,7 +88,24 @@ export async function maybeSendV6Webhook(
     if (!Number.isFinite(candleMs)) return false;
     if (candleMs < new Date(V6_WEBHOOK_ACTIVATION_TS).getTime()) return false;
 
-    const b4x4Direction = await b4x4DirectionFor(supabase, targetCandleTs);
+    const b4x4 = await b4x4DecisionFor(supabase, targetCandleTs);
+    const b4x4Direction = b4x4.direction;
+
+    // Fail closed: if B4x4's decision never became known we must not risk a
+    // second, conflicting webhook landing later.
+    if (!b4x4.found) {
+      await supabase
+        .from("v6_predictions")
+        .update({
+          webhook_eligible: false,
+          webhook_conflict_with_b4x4: false,
+          b4x4_direction_at_send: null,
+          webhook_suppressed_reason: "B4X4_DECISION_UNAVAILABLE",
+        } as never)
+        .eq("prediction_id", predictionId);
+      return false;
+    }
+
     const conflict = b4x4Direction != null && b4x4Direction !== direction;
 
     if (conflict) {
