@@ -41,21 +41,28 @@ async function readB4x4(
   }
 }
 
+/** How long V6 will wait for B4x4's decision before failing closed. */
+export const V6_B4X4_WAIT_CEILING_MS = 120_000;
+const V6_B4X4_POLL_MS = 2_000;
+
 /**
- * B4x4 runs first on the critical path, but V6 can occasionally reach this
- * point before the B4x4 row lands. Poll briefly so a conflicting B4x4 trade is
- * never missed; give up quickly so V6 is not delayed materially.
+ * B4x4 is the publication authority: V6 must know B4x4's final decision for
+ * the SAME target candle before it may ship. B4x4 normally lands within a few
+ * seconds, but a slow run or the catch-up watchdog can delay the row. Wait up
+ * to the ceiling; "row still absent" is reported distinctly from "row present,
+ * non-directional" so the caller can fail closed.
  */
-async function b4x4DirectionFor(
+async function b4x4DecisionFor(
   supabase: SupabaseClient,
   targetCandleTs: string,
-): Promise<"GREEN" | "RED" | null> {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+): Promise<{ found: boolean; direction: "GREEN" | "RED" | null }> {
+  const deadline = Date.now() + V6_B4X4_WAIT_CEILING_MS;
+  for (;;) {
     const res = await readB4x4(supabase, targetCandleTs);
-    if (res.found) return res.direction;
-    await new Promise((r) => setTimeout(r, 1000));
+    if (res.found) return res;
+    if (Date.now() >= deadline) return { found: false, direction: null };
+    await new Promise((r) => setTimeout(r, V6_B4X4_POLL_MS));
   }
-  return null;
 }
 
 /**
