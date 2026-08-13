@@ -26,7 +26,6 @@ import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/a
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
-import { Route as ApiPublicHooksAas96PreloadRouteImport } from './routes/api/public/hooks/aas96-preload'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -122,12 +121,6 @@ const ApiPublicHooksB4x4BackfillRoute =
     path: '/api/public/hooks/b4x4-backfill',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicHooksAas96PreloadRoute =
-  ApiPublicHooksAas96PreloadRouteImport.update({
-    id: '/api/public/hooks/aas96-preload',
-    path: '/api/public/hooks/aas96-preload',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -135,7 +128,6 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
-  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
@@ -154,7 +146,6 @@ export interface FileRoutesByTo {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
-  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
@@ -175,7 +166,6 @@ export interface FileRoutesById {
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/api/public/hooks/aas96-preload': typeof ApiPublicHooksAas96PreloadRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
@@ -196,7 +186,6 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
-    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
@@ -215,7 +204,6 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/'
-    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
@@ -235,7 +223,6 @@ export interface FileRouteTypes {
     | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
-    | '/api/public/hooks/aas96-preload'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
@@ -251,7 +238,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  ApiPublicHooksAas96PreloadRoute: typeof ApiPublicHooksAas96PreloadRoute
   ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
@@ -386,13 +372,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksB4x4BackfillRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/aas96-preload': {
-      id: '/api/public/hooks/aas96-preload'
-      path: '/api/public/hooks/aas96-preload'
-      fullPath: '/api/public/hooks/aas96-preload'
-      preLoaderRoute: typeof ApiPublicHooksAas96PreloadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -417,7 +396,6 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  ApiPublicHooksAas96PreloadRoute: ApiPublicHooksAas96PreloadRoute,
   ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,
   ApiPublicHooksB4x4ObShadowCaptureRoute:
     ApiPublicHooksB4x4ObShadowCaptureRoute,

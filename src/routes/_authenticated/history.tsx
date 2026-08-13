@@ -8,8 +8,6 @@ import {
   listAllPredictionsForHistory,
   exportTd1RcShadow,
   exportTd3Shadow,
-  exportAas96Shadow,
-  exportA96Csv,
   exportUniversalV2,
 } from "@/lib/predictions.functions";
 import { exportV6Csv } from "@/lib/v6.functions";
@@ -456,8 +454,6 @@ function CsvDataPage() {
   const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportTd3 = useServerFn(exportTd3Shadow);
-  const exportAas96 = useServerFn(exportAas96Shadow);
-  const exportA96 = useServerFn(exportA96Csv);
   const exportV6 = useServerFn(exportV6Csv);
   const [buildingUniversal, setBuildingUniversal] = useState(false);
 
@@ -475,7 +471,7 @@ function CsvDataPage() {
     const map = new Map<string, PredRow[]>();
     (listQ.data ?? []).forEach((p: PredRow) => {
       const key = (p.model_version as string) || "unknown";
-      // Keep only Model 6 variants; TD1-RC / a96 have dedicated buttons below.
+      // Keep only Model 6 variants; TD1-RC / TD3 have dedicated buttons below.
       if (!/^6/i.test(key) && !/model[_\s-]?6/i.test(key)) return;
       const arr = map.get(key) ?? [];
       arr.push(enrich(p as PredRow));
@@ -550,7 +546,7 @@ function CsvDataPage() {
         <div>
           <h1 className="text-xl font-semibold">CSV Training Data</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Universal CSV merges every tracked field across the core engine, TD1-RC, AAS96, and a96 — one row per candle. Model 6, TD1-RC, and a96 per-model exports are available below.
+            Universal CSV merges every tracked field across the core engine, TD1-RC, and the shadow stack — one row per candle. Model 6, TD1-RC, TD3, and V6 per-model exports are available below.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -579,17 +575,6 @@ function CsvDataPage() {
             }}
           >
             <Download className="size-4" /> TD3 CSV
-          </Button>
-          <Button
-            size="lg"
-            variant="secondary"
-            className="gap-2"
-            onClick={async () => {
-              const rows = (await exportA96().catch(() => [])) as any[];
-              downloadJsonRowsAsCsv(rows, "btc15m_a96");
-            }}
-          >
-            <Download className="size-4" /> a96 CSV
           </Button>
           <Button
             size="lg"
