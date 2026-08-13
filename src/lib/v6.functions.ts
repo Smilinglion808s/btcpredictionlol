@@ -1,6 +1,7 @@
 // V6 server functions: stats card data, pending prediction, and CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
+import { cachedStats } from "./statsCache.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -50,7 +51,7 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
 });
 
 /** Aggregate V6 performance. Adjusted net is the primary headline metric. */
-export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => {
+export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => cachedStats("v6-stats", async () => {
   const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
     "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution, structure_confirmation_evaluable, structure_rejection_pass, structure_expansion_pass, structure_confirmation_pass, structure_confirmation_triggered, structure_confirmation_raw_contribution, structure_confirmation_adjusted_contribution, pre_structure_prediction",

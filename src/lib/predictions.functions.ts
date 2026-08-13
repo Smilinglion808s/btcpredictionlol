@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { cachedStats } from "./statsCache.server";
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
@@ -239,17 +240,17 @@ export const getPredictionStats = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ modelVersion: z.string().optional().nullable() }).parse(input ?? {}),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data }) => cachedStats(`prediction-stats:${data.modelVersion ?? "all"}`, async () => {
     const sb = await admin();
     const { data: row, error } = await sb.rpc("prediction_stats_filtered", {
       model_version_filter: data.modelVersion ?? undefined,
     });
     if (error) throw error;
     return (JSON.parse(JSON.stringify(row ?? {})) as JsonValue) as { [k: string]: JsonValue };
-  });
+  }));
 
 /** List of every distinct model_version present across live + archive, newest activity first. */
-export const listModelVersions = createServerFn({ method: "GET" }).handler(async () => {
+export const listModelVersions = createServerFn({ method: "GET" }).handler(async () => cachedStats("model-versions", async () => {
   const sb = await admin();
   const [live, arch] = await Promise.all([
     sb.from("predictions").select("model_version, created_at").order("created_at", { ascending: false }).limit(5000),
@@ -265,10 +266,10 @@ export const listModelVersions = createServerFn({ method: "GET" }).handler(async
   return Array.from(map.entries())
     .sort((a, b) => (b[1] > a[1] ? 1 : -1))
     .map(([version, last_seen]) => ({ version, last_seen }));
-});
+}, 5 * 60_000));
 
 /** Aggregate stats for the Model 7 shadow variants (A frozen, B live-retrained). */
-export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(async () => cachedStats("m7-shadow-stats", async () => {
   const sb = await admin();
   const PAGE = 1000;
   const rows: Array<any> = [];
@@ -958,15 +959,15 @@ async function td1RcStatsFor(variant: string, resetId: number, dayCount = 3) {
 
 
 export const getTd1RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcStatsFor(TD1_VARIANT, 1, 7),
+  cachedStats("td1-rc-stats", () => td1RcStatsFor(TD1_VARIANT, 1, 7)),
 );
 
 export const getTd2RcShadowStats = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcStatsFor(TD2_VARIANT, 2),
+  cachedStats("td2-rc-stats", () => td1RcStatsFor(TD2_VARIANT, 2)),
 );
 
 /** Basic live-forward stats for TD3 (TD1 clone + Toxic Opposing Drift Veto). */
-export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async () => cachedStats("td3-stats", async () => {
   const sb = await admin();
   const rows: any[] = [];
   const PAGE = 1000;
@@ -1062,7 +1063,7 @@ export const resetTd2RcVisualStats = createServerFn({ method: "POST" }).handler(
 
 
 /** Training progress for TD1-RC: shows how many candles remain before the model is ready to make live predictions. */
-export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handler(async () => {
+export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handler(async () => cachedStats("td1-training-progress", async () => {
   const sb = await admin();
   const BASE_VARIANT = "A2_Combined";
   const MIN_SIGNALS_FOR_FIRST_FIT = 108; // MIN_TRAINING_ROWS (100) + 8 prior buffer
