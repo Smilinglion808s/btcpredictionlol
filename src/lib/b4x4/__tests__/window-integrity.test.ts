@@ -54,7 +54,25 @@ function synthRows(n: number): Synth[] {
 /** Minimal Supabase query stub honouring gte/lte/range on candle_ts. */
 function fakeSupabase(rows: Synth[]) {
   return {
-    from() {
+    from(table: string) {
+      if (table === "predictions") {
+        const api: Record<string, unknown> = {
+          select() { return api; },
+          in(_col: string, ids: string[]) {
+            return Promise.resolve({
+              data: rows
+                .filter((r) => ids.includes(r.prediction_id))
+                .map((r) => ({
+                  id: r.prediction_id,
+                  actual_direction: r.predictions.actual_direction,
+                  model_version: r.predictions.model_version,
+                })),
+              error: null,
+            });
+          },
+        };
+        return api;
+      }
       let data = rows;
       let range: [number, number] = [0, 999];
       const api: Record<string, unknown> = {

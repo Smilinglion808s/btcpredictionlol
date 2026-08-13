@@ -582,11 +582,12 @@ export async function catchUpMissingB4x4Rows(
     if (!all.length) return { checked: 0, created: 0, targets: [] };
 
     const recent = all.slice(-lookback);
-    const { data: existingRows } = await supabase
+    const { data: existingRows, error: existingError } = await supabase
       .from("b4x4_predictions")
       .select("target_candle_ts")
       .in("model_version", B4X4_MODEL_VERSIONS)
       .gte("target_candle_ts", recent[0]!.candleTs);
+    if (existingError) throw new Error(`b4x4_catchup_existing:${existingError.message}`);
     const have = new Set(
       ((existingRows ?? []) as unknown as DbRow[]).map((r) =>
         new Date(String(r.target_candle_ts)).toISOString(),
@@ -634,13 +635,14 @@ export async function catchUpMissingB4x4Rows(
         onConflict: "target_candle_ts,model_version",
         ignoreDuplicates: true,
       });
-    if (error) return { checked: recent.length, created: 0, targets: [] };
+    if (error) throw new Error(`b4x4_catchup_upsert:${error.message}`);
     return {
       checked: recent.length,
       created: rows.length,
       targets: rows.map((r) => String(r.target_candle_ts)),
     };
-  } catch {
+  } catch (error) {
+    console.error("b4x4 catch-up failed", error);
     return { checked: 0, created: 0, targets: [] };
   }
 }
