@@ -537,9 +537,6 @@ export async function runShadowForPrediction(
       await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
       const { runA96 } = await import("@/lib/a96/orchestrator");
       await runA96(supabase, predictionRow.id);
-      // V6 — standalone frozen model. Never blocks webhooks or other models.
-      const { runV6 } = await import("@/lib/v6/orchestrator");
-      await runV6(supabase, new Date(String(predictionRow.candle_ts)));
     } catch { /* never block */ }
 
 
@@ -659,6 +656,17 @@ async function runA2Policies(
     const combined = built.find((b) => b.policy === "A2_Combined")!;
     const combinedTimingStatus = String((inherited.timing_status as string | null) ?? "");
 
+    // V6 is standalone and reads the same immutable, boundary-locked candle
+    // history. Start it alongside B4x4 instead of making it wait for the
+    // tracking-only B2/B4.2/B/AAS96/a96 chain. This changes no model inputs or
+    // decisions; it only removes unrelated serial latency before publication.
+    const v6Promise = (async () => {
+      try {
+        const { runV6 } = await import("@/lib/v6/orchestrator");
+        await runV6(supabase, new Date(String(predictionRow.candle_ts)));
+      } catch { /* never block */ }
+    })();
+
     // ---- B4x4 — FIRST on the critical path. It is the only outbound webhook
     // sender, so it is kicked off before any other persistence or model layer
     // so its directional webhook ships with the least possible latency.
@@ -748,7 +756,7 @@ async function runA2Policies(
       }
     })();
 
-    await Promise.all([b4x4Promise, insertPromise, td1Promise]);
+    await Promise.all([b4x4Promise, v6Promise, insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
