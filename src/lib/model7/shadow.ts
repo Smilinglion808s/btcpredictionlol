@@ -530,14 +530,6 @@ export async function runShadowForPrediction(
     await runVariant(supabase, "B", variantB, predictionRow, history, plan, leakage,
       variantB ? undefined : "warming_up");
 
-    // AAS96 shadow — deferred, never blocks webhook. Own storage table.
-    // a96-r1 runs after and consumes AAS96 Layer A/B + base selector only.
-    try {
-      const { runAas96Shadow } = await import("./aas96/orchestrator");
-      await runAas96Shadow(supabase, { prediction: predictionRow as unknown as Record<string, unknown> });
-      const { runA96 } = await import("@/lib/a96/orchestrator");
-      await runA96(supabase, predictionRow.id);
-    } catch { /* never block */ }
 
 
 
@@ -781,12 +773,7 @@ export async function resolveShadowRowsFor(
   predictionId: string,
   actualDirection: "GREEN" | "RED" | "DOJI" | null,
 ): Promise<void> {
-  // AAS96 handles DOJI/null as push; resolve it before the directional gate.
   try {
-    const { resolveAas96Row } = await import("./aas96/orchestrator");
-    await resolveAas96Row(supabase, predictionId, actualDirection);
-    const { resolveA96 } = await import("@/lib/a96/orchestrator");
-    await resolveA96(supabase, predictionId);
     const { resolveDueV6 } = await import("@/lib/v6/orchestrator");
     await resolveDueV6(supabase);
   } catch { /* never block */ }
