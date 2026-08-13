@@ -181,7 +181,7 @@ export async function runAiPredictionServer(
     const mv = String(activeSettings?.model_version ?? "").trim();
     if (/^6(\.|$)/.test(mv)) {
       const { runModel6Prediction } = await import("./model6/engine");
-      return runModel6Prediction(supabase);
+      return runModel6Prediction(supabase, { timing: opts?.timing });
     }
   }
 
