@@ -34,7 +34,7 @@ export async function loadCanonicalSourceRows(
       .from("model7_shadow")
       .select(
         "id, prediction_id, candle_ts, probability_green, timing_status, leakage_check_passed, " +
-        "model_fit_id, created_at, predictions!inner(actual_direction, model_version)",
+        "model_fit_id, created_at",
       )
       .eq("variant", B4X4_SOURCE_VARIANT)
       .order("candle_ts", { ascending: true })
@@ -50,6 +50,38 @@ export async function loadCanonicalSourceRows(
     from += page;
   }
 
+  // Do not join predictions through PostgREST here. The live path previously
+  // made Postgres perform one indexed predictions lookup per shadow row; with
+  // the full canonical stream that regularly crossed statement_timeout and
+  // prevented B4x4 from publishing. Fetch the narrow source stream first, then
+  // resolve its outcomes in bounded primary-key batches.
+  const predictionIds = [
+    ...new Set(
+      collected
+        .map((row) => String(row.prediction_id ?? ""))
+        .filter((id) => id.length > 0),
+    ),
+  ];
+  const predictionsById = new Map<
+    string,
+    { actual_direction?: string | null; model_version?: string | null }
+  >();
+  const predictionBatchSize = 400;
+  for (let i = 0; i < predictionIds.length; i += predictionBatchSize) {
+    const ids = predictionIds.slice(i, i + predictionBatchSize);
+    const { data, error } = await supabase
+      .from("predictions")
+      .select("id, actual_direction, model_version")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const prediction of (data ?? []) as Array<Record<string, unknown>>) {
+      predictionsById.set(String(prediction.id), {
+        actual_direction: prediction.actual_direction as string | null,
+        model_version: prediction.model_version as string | null,
+      });
+    }
+  }
+
   // Deduplicate by target candle, keeping the most recently created row.
   const byTs = new Map<string, DbRow>();
   for (const r of collected) {
@@ -60,8 +92,9 @@ export async function loadCanonicalSourceRows(
 
   const out: BackfillSourceRow[] = [];
   for (const ts of [...byTs.keys()].sort()) {
-    const r = byTs.get(ts)!;
-    const pred = (r.predictions ?? {}) as { actual_direction?: string | null; model_version?: string | null };
+    const r = byTs.get(ts);
+    if (!r) continue;
+    const pred = predictionsById.get(String(r.prediction_id ?? "")) ?? {};
     const p = r.probability_green == null ? null : Number(r.probability_green);
     // Only rows that passed timing and leakage checks are valid source rows.
     if (p == null || !Number.isFinite(p) || p < 0 || p > 1) continue;
