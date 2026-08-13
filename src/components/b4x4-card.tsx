@@ -35,6 +35,8 @@ export function B4x4Card({
   const grid: Array<{ cell: string; resolvedCount: number; wins: number; losses: number; pCorrect: number }> =
     stats.grid ?? [];
   const last7: Array<{ date: string; net: number; wins: number; losses: number }> = stats.last7 ?? [];
+  const last3: Array<{ date: string; net: number; wins: number; losses: number; trades: number; win_rate: number }> =
+    stats.last3 ?? [];
   const hist: Any | null = (stats.historical as Any | undefined) ?? null;
 
 
@@ -229,6 +231,27 @@ export function B4x4Card({
       </div>
 
       <div className="relative">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Last 3 days</span>
+          <span className="h-px flex-1 bg-gradient-to-r from-amber/40 to-transparent" />
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          {last3.map((d, i) => (
+            <div key={d.date} className="b4-chip px-3 py-2">
+              <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground truncate">
+                {i === 0 ? "Today" : i === 1 ? "Yest" : d.date.slice(5)}
+              </div>
+              <div className="text-sm font-mono font-semibold tabular-nums mt-0.5">
+                {d.trades === 0 ? "—" : `${d.win_rate.toFixed(1)}%`}
+              </div>
+              <div
+                className={`text-[10px] font-mono tabular-nums mt-0.5 ${d.net > 0 ? "text-bull" : d.net < 0 ? "text-bear" : "text-muted-foreground"}`}
+              >
+                {d.trades === 0 ? "no trades" : `${signed(d.net)} · ${d.wins}-${d.losses}`}
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Last 7 local days</span>
           <span className="h-px flex-1 bg-gradient-to-r from-amber/40 to-transparent" />
