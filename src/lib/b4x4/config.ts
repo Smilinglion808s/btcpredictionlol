@@ -24,6 +24,16 @@ export const B4X4_TIMEZONE = "America/Boise";
  * (still B4x4-v1); only the implementation was corrected.
  */
 export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+/**
+ * Every implementation revision whose rows belong to the live forward test,
+ * newest last. The calibration-promotion patch keeps the same predictive
+ * policy surface, so its stats card must keep showing the runtime-integrity
+ * rows instead of resetting to an empty panel on the version bump.
+ */
+export const B4X4_ACTIVE_REVISIONS: string[] = [
+  "b4x4-v1-runtime-integrity-r1",
+  "b4x4-calibration-promotion-r1",
+];
 export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_CALIBRATION_PROMOTION_R1_ACTIVE";
 /**
  * Immutable activation instant of the runtime-integrity revision. Every row
