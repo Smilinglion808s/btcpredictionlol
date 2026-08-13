@@ -43,6 +43,8 @@ export const Route = createFileRoute("/_authenticated/stats")({
 });
 
 const ALL_VERSIONS = "__all__";
+const STATS_REFRESH_MS = 60_000;
+const PENDING_REFRESH_MS = 15_000;
 
 function StatsPage() {
   const qc = useQueryClient();
@@ -54,35 +56,35 @@ function StatsPage() {
   const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
-  const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const td3Fn = useServerFn(getTd3ShadowStats);
-  const td3Q = useQuery({ queryKey: ["td3-shadow-stats"], queryFn: () => td3Fn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td3Q = useQuery({ queryKey: ["td3-shadow-stats"], queryFn: () => td3Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const td3PendingFn = useServerFn(getTd3ShadowPending);
-  const td3PendingQ = useQuery({ queryKey: ["td3-shadow-pending"], queryFn: () => td3PendingFn(), refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td3PendingQ = useQuery({ queryKey: ["td3-shadow-pending"], queryFn: () => td3PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
 
   const td1PendingFn = useServerFn(getTd1RcShadowPending);
-  const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
   const exportTd1Fn = useServerFn(exportTd1RcShadow);
   const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
-  const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: 15_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
 
 
   const v6Fn = useServerFn(getV6Stats);
-  const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const v6PendingFn = useServerFn(getV6Pending);
-  const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
   const v6WarmupFn = useServerFn(getV6Warmup);
-  const v6WarmupQ = useQuery({ queryKey: ["v6-warmup"], queryFn: () => v6WarmupFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6WarmupQ = useQuery({ queryKey: ["v6-warmup"], queryFn: () => v6WarmupFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const v6InverterFn = useServerFn(getV6RegimeInverter);
-  const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const exportV6Fn = useServerFn(exportV6Csv);
   const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
   const b4x4Fn = useServerFn(getB4x4Stats);
-  const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const b4x4PendingFn = useServerFn(getB4x4Pending);
-  const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 0 });
+  const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
   const exportB4x4Fn = useServerFn(exportB4x4Csv);
   const [exportingB4x4, setExportingB4x4] = useState(false);
 
@@ -195,15 +197,15 @@ function StatsPage() {
   const statsQ = useQuery({
     queryKey: ["stats", versionFilter ?? "all"],
     queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
-    refetchInterval: 15_000,
+    refetchInterval: STATS_REFRESH_MS,
+    staleTime: 10_000,
   });
   const b4x4RecentFn = useServerFn(listB4x4Recent);
   const listQ = useQuery({
     queryKey: ["b4x4-recent-stats"],
     queryFn: () => b4x4RecentFn(),
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
-    staleTime: 0,
+    refetchInterval: PENDING_REFRESH_MS,
+    staleTime: 5_000,
   });
 
   useEffect(() => {
