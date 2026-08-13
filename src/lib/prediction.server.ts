@@ -287,6 +287,13 @@ export async function runAiPredictionServer(
     } catch (e) {
       partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
     }
+    // Leakage guard: never use the target candle itself as the "forming" candle.
+    if (partial && new Date(partial.start_ts).getTime() >= new Date(targetCandleTs).getTime()) {
+      partial = null;
+      partialPath = "unavailable";
+      partialAttempts = [...partialAttempts, { source: "leakage_guard", ok: false, reason: "partial_is_target_candle" }];
+    }
+
 
     if (!partial || partialSynthesized) {
       await supabase.from("api_runs").insert({
