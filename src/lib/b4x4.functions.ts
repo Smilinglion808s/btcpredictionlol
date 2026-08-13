@@ -248,7 +248,7 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
       coverage: historical.coverage,
     },
   };
-});
+}));
 
 
 /** Most recent B4x4 row (its decision for the pending candle). */

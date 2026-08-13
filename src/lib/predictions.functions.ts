@@ -369,7 +369,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
     }
   }
   return out;
-});
+}));
 
 
 /** Export all Model 7 shadow rows joined with production prediction context. */
@@ -452,7 +452,7 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
       a2_counterfactual_result: r.a2_counterfactual_result ?? null,
     };
   });
-});
+}));
 
 /** Shadow predictions on the current pending candle. */
 export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
@@ -1034,7 +1034,7 @@ export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async
     sacrificed_wins,
     daily_3d,
   };
-});
+}));
 
 export const getTd3ShadowPending = createServerFn({ method: "GET" }).handler(async () =>
   td1RcPendingFor(TD3_VARIANT),
@@ -1112,7 +1112,7 @@ export const getTd1RcTrainingProgress = createServerFn({ method: "GET" }).handle
     fit_id: fit.fit_id,
   };
 
-});
+}));
 
 /** Latest TD1-RC shadow row for the current pending candle. */
 async function td1RcPendingFor(variant: string) {

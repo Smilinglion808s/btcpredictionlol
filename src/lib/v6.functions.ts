@@ -388,7 +388,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
     model_revision: "V6-r4-structure-confirmation",
     breakeven_win_rate: 55.5555556,
   };
-});
+}));
 
 /** Most recent V6 row (the pending target candle when unresolved). */
 export const getV6Pending = createServerFn({ method: "GET" }).handler(async () => {
