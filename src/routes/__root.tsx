@@ -145,16 +145,15 @@ function TopNav() {
   return (
     <header className="border-b border-border bg-card/40 backdrop-blur sticky top-0 z-20">
       <div className="px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 font-semibold">
+        <Link to="/stats" className="flex items-center gap-2 font-semibold">
           <span className="inline-block size-2 rounded-full bg-bull animate-pulse" />
           <span className="font-mono text-sm tracking-wider">BTC 15m</span>
         </Link>
         <nav className="flex items-center gap-1">
-          <Link to="/" className={navItem} activeOptions={{ exact: true }} activeProps={{ className: `${navItem} ${active}` }}>Home</Link>
           <Link to="/stats" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Stats</Link>
           <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>CSV Data</Link>
-          <Link to="/settings/model" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Settings</Link>
         </nav>
+
       </div>
     </header>
   );
