@@ -173,6 +173,13 @@ export async function runModel6Prediction(
       partialAttempts = [{ source: "build_partial", ok: false, reason: e instanceof Error ? e.message : String(e) }];
       partialRootCause = "build_partial_threw";
     }
+    // Leakage guard: if the run slipped past the boundary, the "forming"
+    // candle IS the target candle. Never feed it to the decision path.
+    if (partial && new Date(partial.start_ts).getTime() >= new Date(targetCandleTs).getTime()) {
+      partial = null;
+      partialPath = "dropped_target_candle";
+      partialRootCause = "partial_is_target_candle";
+    }
     // Fire-and-forget diagnostic log so every fetch attempt is inspectable via api_runs.
     if (!partial || partialSynthesized || partialRootCause) {
       try {
