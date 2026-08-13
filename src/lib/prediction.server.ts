@@ -192,7 +192,7 @@ export async function runAiPredictionServer(
   let errorMessage: string | null = null;
 
   try {
-    const exchangeTiming = await getBtc15mExchangeTiming();
+    const exchangeTiming = opts?.timing ?? (await getBtc15mExchangeTiming());
     let ordered = await loadPredictionCandles(supabase);
     if (ordered.length < 30)
       throw new Error("Not enough candle history. Click Refresh Candles first.");
