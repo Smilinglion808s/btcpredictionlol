@@ -27,6 +27,11 @@ import {
   INTRADAY_BRAKE_TRIGGER_NET,
   MIN_SOURCE_HISTORY,
   SAME_SIDE_CONFIDENCE_LOOKBACK,
+  SATURATION_CALIBRATION_VERSION,
+  SATURATION_CAP_SLOPE,
+  SATURATION_MIN_CONFIDENCE_CAP,
+  SATURATION_TRIGGER,
+  SATURATION_WINDOW,
   b4x4LocalDate,
 } from "./config";
 
@@ -65,6 +70,7 @@ export type DecisionReason =
   | "ABSTAIN_GRID_REFERENCE_INVALID"
   | "ABSTAIN_B4X4_GRID_HISTORY_INCOMPLETE"
   | "ABSTAIN_NO_ACTIVE_ROUTE"
+  | "ABSTAIN_DIRECTIONAL_SATURATION_TAIL"
   | "ABSTAIN_INTRADAY_BRAKE"
   | "ABSTAIN_INTERNAL_ERROR";
 
@@ -156,6 +162,149 @@ export interface CalibrationPromotion {
   postCalibrationCandidate: boolean;
 }
 
+/** Where the pre-saturation publishable candidate came from. */
+export type SaturationCandidateSource =
+  | "CORE"
+  | "EXPANSION"
+  | "CORE_AND_EXPANSION"
+  | "CALIBRATION_PROMOTION"
+  | "NONE";
+
+/**
+ * Balanced saturation calibration audit block (prediction-time only).
+ * Probability/reliability calibration over the previous 16 valid canonical A2
+ * source rows. Side-neutral; never flips a direction; never reads outcomes.
+ */
+export interface SaturationCalibration {
+  version: string;
+  window: number;
+  historyCount: number;
+  historyStartTs: string | null;
+  historyEndTs: string | null;
+  ready: boolean;
+  currentRawDirection: Direction | null;
+  sameSideCount: number | null;
+  sameSideShare: number | null;
+  meanAlignedConfidence: number | null;
+  index: number | null;
+  triggerThreshold: number;
+  capSlope: number;
+  minConfidenceCap: number;
+  currentAlignedConfidence: number | null;
+  dynamicConfidenceCap: number | null;
+  regimeActive: boolean;
+  candidateBefore: boolean;
+  candidateSourceBefore: SaturationCandidateSource;
+  conditionMet: boolean;
+  vetoFired: boolean;
+  candidateAfter: boolean;
+  reason: string | null;
+  /** Audit-only prior-policy (no-saturation) decision, brake included. */
+  withoutSaturationDecision: "PUBLISH" | "ABSTAIN" | null;
+  withoutSaturationDirection: Direction | null;
+  withoutSaturationSkipReason: string | null;
+}
+
+export function emptySaturation(): SaturationCalibration {
+  return {
+    version: SATURATION_CALIBRATION_VERSION,
+    window: SATURATION_WINDOW,
+    historyCount: 0,
+    historyStartTs: null,
+    historyEndTs: null,
+    ready: false,
+    currentRawDirection: null,
+    sameSideCount: null,
+    sameSideShare: null,
+    meanAlignedConfidence: null,
+    index: null,
+    triggerThreshold: SATURATION_TRIGGER,
+    capSlope: SATURATION_CAP_SLOPE,
+    minConfidenceCap: SATURATION_MIN_CONFIDENCE_CAP,
+    currentAlignedConfidence: null,
+    dynamicConfidenceCap: null,
+    regimeActive: false,
+    candidateBefore: false,
+    candidateSourceBefore: "NONE",
+    conditionMet: false,
+    vetoFired: false,
+    candidateAfter: false,
+    reason: null,
+    withoutSaturationDecision: null,
+    withoutSaturationDirection: null,
+    withoutSaturationSkipReason: null,
+  };
+}
+
+/** Frozen dynamic tail cap. Never below SATURATION_MIN_CONFIDENCE_CAP. */
+export function saturationConfidenceCap(index: number): number {
+  return Math.max(
+    SATURATION_MIN_CONFIDENCE_CAP,
+    0.5 - SATURATION_CAP_SLOPE * (index - SATURATION_TRIGGER),
+  );
+}
+
+/**
+ * Saturation feature over the previous SATURATION_WINDOW valid canonical A2
+ * source rows (strictly earlier, current row excluded, outcome-free).
+ */
+export function computeSaturationFeature(
+  previous: HistoryEntry[],
+  currentDirection: Direction,
+  currentAlignedConfidence: number,
+): {
+  historyCount: number;
+  ready: boolean;
+  sameSideCount: number | null;
+  sameSideShare: number | null;
+  meanAlignedConfidence: number | null;
+  index: number | null;
+  regimeActive: boolean;
+  dynamicConfidenceCap: number | null;
+  conditionMet: boolean;
+} {
+  const window = previous.slice(-SATURATION_WINDOW);
+  const historyCount = window.length;
+  const ready = historyCount === SATURATION_WINDOW;
+  if (!ready) {
+    return {
+      historyCount,
+      ready: false,
+      sameSideCount: null,
+      sameSideShare: null,
+      meanAlignedConfidence: null,
+      index: null,
+      regimeActive: false,
+      dynamicConfidenceCap: null,
+      conditionMet: false,
+    };
+  }
+  let sameSideCount = 0;
+  let confidenceSum = 0;
+  for (const e of window) {
+    if (e.direction === currentDirection) sameSideCount++;
+    confidenceSum += Math.abs(e.confidence);
+  }
+  const sameSideShare = sameSideCount / SATURATION_WINDOW;
+  const meanAlignedConfidence = confidenceSum / SATURATION_WINDOW;
+  const index = sameSideShare * 2 * meanAlignedConfidence;
+  const regimeActive = index >= SATURATION_TRIGGER;
+  const dynamicConfidenceCap = regimeActive ? saturationConfidenceCap(index) : null;
+  return {
+    historyCount,
+    ready,
+    sameSideCount,
+    sameSideShare,
+    meanAlignedConfidence,
+    index,
+    regimeActive,
+    dynamicConfidenceCap,
+    conditionMet:
+      regimeActive && dynamicConfidenceCap != null &&
+      currentAlignedConfidence >= dynamicConfidenceCap,
+  };
+}
+
 export interface GridCell {
   globalQuartile: number;
   sameSideQuartile: number;
@@ -229,6 +378,7 @@ export interface B4x4Decision {
   baseCandidate: boolean;
   selectedRoute: SelectedRoute;
   calibration: CalibrationPromotion;
+  saturation: SaturationCalibration;
   localDate: string;
   dailyNetBefore: number;
   dailyResolvedTradeCountBefore: number;
@@ -465,6 +615,11 @@ export interface B4x4EvalOptions {
   decisionAsOfMs?: number;
   /** Calibration promotion route master switch (activation boundary gate). */
   promotionEnabled?: boolean;
+  /**
+   * Balanced saturation calibration switch. Defaults to on; set false only to
+   * reproduce the immediately previous (no-saturation) policy for audit.
+   */
+  saturationEnabled?: boolean;
 }
 
 /**
@@ -532,6 +687,7 @@ export function evaluateB4x4(
     baseCandidate: false,
     selectedRoute: "NONE",
     calibration: emptyCalibration(),
+    saturation: emptySaturation(),
     localDate,
     dailyNetBefore: daily.dailyNetBefore,
     dailyResolvedTradeCountBefore: daily.dailyResolvedTradeCountBefore,
@@ -775,6 +931,36 @@ export function evaluateB4x4(
     }
   }
 
+  // ---- balanced saturation calibration (prediction-time, outcome-free) ----
+  const candidateSourceBefore: SaturationCandidateSource =
+    promoted ? "CALIBRATION_PROMOTION"
+      : coreEligible && expansionEligible ? "CORE_AND_EXPANSION"
+        : coreEligible ? "CORE"
+          : expansionEligible ? "EXPANSION"
+            : "NONE";
+  const candidateBefore = baseCandidate || promoted;
+  const feature = computeSaturationFeature(history, rawDirection, confidence);
+  const saturationWindowRows = history.slice(-SATURATION_WINDOW);
+  const saturation: SaturationCalibration = {
+    ...emptySaturation(),
+    historyCount: feature.historyCount,
+    historyStartTs: saturationWindowRows[0]?.candleTs ?? null,
+    historyEndTs: saturationWindowRows[saturationWindowRows.length - 1]?.candleTs ?? null,
+    ready: feature.ready,
+    currentRawDirection: rawDirection,
+    sameSideCount: feature.sameSideCount,
+    sameSideShare: feature.sameSideShare,
+    meanAlignedConfidence: feature.meanAlignedConfidence,
+    index: feature.index,
+    currentAlignedConfidence: confidence,
+    dynamicConfidenceCap: feature.dynamicConfidenceCap,
+    regimeActive: feature.regimeActive,
+    candidateBefore,
+    candidateSourceBefore,
+    conditionMet: feature.conditionMet,
+    candidateAfter: candidateBefore,
+  };
+
   const withRoutes: Partial<B4x4Decision> = {
     ...withPercentile,
     coreEligible,
@@ -782,20 +968,41 @@ export function evaluateB4x4(
     baseCandidate,
     selectedRoute,
     calibration,
+    saturation,
   };
 
-  if (!baseCandidate && !promoted) {
+  if (!candidateBefore) {
+    saturation.reason = "NO_CANDIDATE";
+    saturation.withoutSaturationDecision = "ABSTAIN";
+    saturation.withoutSaturationSkipReason = "ABSTAIN_NO_ACTIVE_ROUTE";
     return abstain(withRoutes, "ABSTAIN_NO_ACTIVE_ROUTE", base);
   }
 
-  // ---- intraday brake ----
+  // ---- intraday brake (frozen) ----
   const brakeActive = daily.dailyNetBefore <= INTRADAY_BRAKE_TRIGGER_NET;
   const brakePasses =
     percentile >= INTRADAY_BRAKE_GRID_PERCENTILE_MIN &&
     cell.pCorrect > INTRADAY_BRAKE_P_CORRECT_MIN_EXCLUSIVE;
-  const publish = brakeActive ? brakePasses : true;
+  const brakeAllows = brakeActive ? brakePasses : true;
 
-  if (!publish) {
+  // Audit-only prior-policy decision: what the previous B4x4 revision (no
+  // saturation) would have decided from this exact prediction-time state.
+  saturation.withoutSaturationDecision = brakeAllows ? "PUBLISH" : "ABSTAIN";
+  saturation.withoutSaturationDirection = brakeAllows ? rawDirection : null;
+  saturation.withoutSaturationSkipReason = brakeAllows ? null : "ABSTAIN_INTRADAY_BRAKE";
+
+  const saturationEnabled = opts.saturationEnabled !== false;
+  if (saturationEnabled && feature.conditionMet) {
+    saturation.vetoFired = true;
+    saturation.candidateAfter = false;
+    saturation.reason = "ABSTAIN_DIRECTIONAL_SATURATION_TAIL";
+    if (promoted) {
+      calibration.postCalibrationCandidate = false;
+    }
+    return abstain(withRoutes, "ABSTAIN_DIRECTIONAL_SATURATION_TAIL", base);
+  }
+
+  if (!brakeAllows) {
     if (promoted) {
       calibration.brakeVetoed = true;
       calibration.eligibilityReason = "PROMOTED_BUT_BRAKE_VETOED";
@@ -840,6 +1047,8 @@ export interface ReplayResult {
   baseNoBrakeScore: number;
   coreOnlyScore: number;
   expansionOnlyScore: number;
+  /** Audit-only score of the prior (no-saturation) policy decision. */
+  withoutSaturationScore: number | null;
 }
 
 export function scoreAgainst(
@@ -899,6 +1108,10 @@ export function replayB4x4(
       baseNoBrakeScore: baseNoBrake.score,
       coreOnlyScore: coreOnly.score,
       expansionOnlyScore: expansionOnly.score,
+      withoutSaturationScore:
+        decision.saturation.withoutSaturationDecision === "PUBLISH" && actual != null
+          ? scoreAgainst(decision.saturation.withoutSaturationDirection, actual).score
+          : null,
     });
   }
   return results;
@@ -918,4 +1131,35 @@ export function brakeAttribution(
   return baseWouldTradeDirection === actual
     ? { klass: "SACRIFICED_WIN", value: -1 }
     : { klass: "AVOIDED_LOSS", value: 1 };
+}
+
+/**
+ * Direct current-state attribution for the balanced saturation calibration.
+ * This is NOT a full alternate-history daily-brake replay: it compares the
+ * active abstention against the prior-policy decision recorded at prediction
+ * time for this exact row.
+ */
+export function saturationAttribution(
+  saturationVetoFired: boolean,
+  withoutSaturationWouldPublish: boolean,
+  withoutSaturationScore: number | null,
+): {
+  klass: "AVOIDED_LOSS" | "SACRIFICED_WIN" | "NO_INCREMENTAL_CHANGE" | "NOT_APPLICABLE";
+  value: number;
+  incrementalChange: boolean;
+} {
+  if (!saturationVetoFired || !withoutSaturationWouldPublish) {
+    return {
+      klass: saturationVetoFired ? "NO_INCREMENTAL_CHANGE" : "NOT_APPLICABLE",
+      value: 0,
+      incrementalChange: false,
+    };
+  }
+  if (withoutSaturationScore === -1) {
+    return { klass: "AVOIDED_LOSS", value: 1, incrementalChange: true };
+  }
+  if (withoutSaturationScore === 1) {
+    return { klass: "SACRIFICED_WIN", value: -1, incrementalChange: true };
+  }
+  return { klass: "NO_INCREMENTAL_CHANGE", value: 0, incrementalChange: false };
 }

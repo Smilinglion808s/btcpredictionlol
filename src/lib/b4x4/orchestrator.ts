@@ -28,6 +28,7 @@ import { b4x4BuildIdentity } from "./build-identity";
 
 import {
   brakeAttribution,
+  saturationAttribution,
   evaluateB4x4,
   scoreAgainst,
   type ActualDirection,
@@ -240,6 +241,35 @@ export function decisionToRow(ctx: B4x4Context, d: B4x4Decision): DbRow {
     calibration_promotion_brake_vetoed: d.calibration?.brakeVetoed ?? null,
     calibration_promotion_published: d.calibration?.published ?? null,
     post_calibration_candidate: d.calibration?.postCalibrationCandidate ?? null,
+
+    // ---- balanced saturation calibration audit (prediction time only) ----
+    saturation_calibration_version: d.saturation?.version ?? null,
+    saturation_window: d.saturation?.window ?? null,
+    saturation_history_count: d.saturation?.historyCount ?? null,
+    saturation_history_start_ts: d.saturation?.historyStartTs ?? null,
+    saturation_history_end_ts: d.saturation?.historyEndTs ?? null,
+    saturation_ready: d.saturation?.ready ?? null,
+    saturation_current_raw_direction: d.saturation?.currentRawDirection ?? null,
+    saturation_same_side_count: d.saturation?.sameSideCount ?? null,
+    saturation_same_side_share: d.saturation?.sameSideShare ?? null,
+    saturation_mean_aligned_confidence: d.saturation?.meanAlignedConfidence ?? null,
+    saturation_index: d.saturation?.index ?? null,
+    saturation_trigger_threshold: d.saturation?.triggerThreshold ?? null,
+    saturation_cap_slope: d.saturation?.capSlope ?? null,
+    saturation_min_confidence_cap: d.saturation?.minConfidenceCap ?? null,
+    saturation_current_aligned_confidence: d.saturation?.currentAlignedConfidence ?? null,
+    saturation_dynamic_confidence_cap: d.saturation?.dynamicConfidenceCap ?? null,
+    saturation_regime_active: d.saturation?.regimeActive ?? null,
+    saturation_candidate_before: d.saturation?.candidateBefore ?? null,
+    saturation_candidate_source_before: d.saturation?.candidateSourceBefore ?? null,
+    saturation_condition_met: d.saturation?.conditionMet ?? null,
+    saturation_veto_fired: d.saturation?.vetoFired ?? null,
+    saturation_candidate_after: d.saturation?.candidateAfter ?? null,
+    saturation_reason: d.saturation?.reason ?? null,
+    without_saturation_decision: d.saturation?.withoutSaturationDecision ?? null,
+    without_saturation_direction: d.saturation?.withoutSaturationDirection ?? null,
+    without_saturation_skip_reason: d.saturation?.withoutSaturationSkipReason ?? null,
+
     local_date: d.localDate,
     daily_net_before: d.dailyNetBefore,
     daily_resolved_trade_count_before: d.dailyResolvedTradeCountBefore,
@@ -472,7 +502,8 @@ export async function resolveB4x4Row(
       .from("b4x4_predictions")
       .select(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
-        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
+        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count, " +
+        "saturation_veto_fired, without_saturation_decision, without_saturation_direction",
       )
       .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("target_candle_ts", targetCandleTs)
@@ -497,6 +528,21 @@ export async function resolveB4x4Row(
       row.base_candidate === true ? rawDir : null,
       actualDirection,
     );
+
+    // ---- balanced saturation attribution (direct current-state, idempotent) ----
+    const withoutSaturationWouldPublish = row.without_saturation_decision === "PUBLISH";
+    const withoutSaturationScore = withoutSaturationWouldPublish
+      ? scoreAgainst(
+          (row.without_saturation_direction as Direction | null) ?? null,
+          actualDirection,
+        ).score
+      : null;
+    const saturationAttr = saturationAttribution(
+      row.saturation_veto_fired === true,
+      withoutSaturationWouldPublish,
+      withoutSaturationScore,
+    );
+
 
     await supabase
       .from("b4x4_predictions")
@@ -523,6 +569,10 @@ export async function resolveB4x4Row(
         base_no_brake_counterfactual_score: baseNoBrake.score,
         brake_attribution_class: attribution.klass,
         brake_incremental_value: attribution.value,
+        without_saturation_score: withoutSaturationScore,
+        saturation_attribution_class: saturationAttr.klass,
+        saturation_incremental_value: saturationAttr.value,
+        saturation_incremental_change: saturationAttr.incrementalChange,
       } as never)
       .eq("id", row.id as string)
       .is("resolved_at", null);

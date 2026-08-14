@@ -8,7 +8,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { B4X4_MODEL_VERSION, B4X4_SOURCE_EPOCH_TS, B4X4_SOURCE_VARIANT, b4x4LocalDate } from "./config";
-import { replayB4x4, brakeAttribution, type ActualDirection, type SourceRow } from "./engine";
+import {
+  replayB4x4,
+  brakeAttribution,
+  saturationAttribution,
+  type ActualDirection,
+  type SourceRow,
+} from "./engine";
 import { decisionToRow } from "./orchestrator";
 
 type DbRow = Record<string, unknown>;
@@ -235,6 +241,15 @@ export async function runB4x4Backfill(
       row.base_no_brake_counterfactual_score = r.baseNoBrakeScore;
       row.brake_attribution_class = attribution.klass;
       row.brake_incremental_value = attribution.value;
+      const satAttr = saturationAttribution(
+        r.decision.saturation.vetoFired,
+        r.decision.saturation.withoutSaturationDecision === "PUBLISH",
+        r.withoutSaturationScore,
+      );
+      row.without_saturation_score = r.withoutSaturationScore;
+      row.saturation_attribution_class = satAttr.klass;
+      row.saturation_incremental_value = satAttr.value;
+      row.saturation_incremental_change = satAttr.incrementalChange;
     }
     return row;
   });

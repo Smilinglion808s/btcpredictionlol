@@ -2,18 +2,26 @@
 import { createHash } from "crypto";
 
 export const B4X4_MODEL_NAME = "B4x4";
-export const B4X4_MODEL_VERSION = "b4x4-calibration-promotion-r1";
+export const B4X4_MODEL_VERSION = "b4x4-balanced-saturation-r1";
 /**
  * Every model_version this model has ever written rows under, newest last.
  * History, daily-ledger and resolver lookups span all of them so the
  * calibration-promotion patch does not orphan earlier rows.
  */
-export const B4X4_MODEL_VERSION_LINEAGE = ["b4x4-v1", "b4x4-calibration-promotion-r1"] as const;
+export const B4X4_MODEL_VERSION_LINEAGE = [
+  "b4x4-v1",
+  "b4x4-calibration-promotion-r1",
+  "b4x4-balanced-saturation-r1",
+] as const;
 /** Mutable copy for Supabase `.in("model_version", ...)` filters. */
 export const B4X4_MODEL_VERSIONS: string[] = [...B4X4_MODEL_VERSION_LINEAGE];
-export const B4X4_VARIANT = "balanced-4x4-calibration-promotion";
+export const B4X4_VARIANT = "promotion-plus-balanced-saturation";
 /** Every variant label this model has written rows under, newest last. */
-export const B4X4_VARIANTS: string[] = ["a2-core-grid40-brake80", "balanced-4x4-calibration-promotion"];
+export const B4X4_VARIANTS: string[] = [
+  "a2-core-grid40-brake80",
+  "balanced-4x4-calibration-promotion",
+  "promotion-plus-balanced-saturation",
+];
 export const B4X4_PROSPECTIVE_TEST_ID = "B4X4_CORE_GRID40_BRAKE80_V1";
 export const B4X4_SOURCE_VARIANT = "A2_Combined";
 export const B4X4_TIMEFRAME = "15m";
@@ -23,7 +31,7 @@ export const B4X4_TIMEZONE = "America/Boise";
  * Runtime-integrity repair identity. The predictive policy is unchanged
  * (still B4x4-v1); only the implementation was corrected.
  */
-export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+export const B4X4_IMPLEMENTATION_REVISION = "b4x4-balanced-saturation-r1";
 /**
  * Every implementation revision whose rows belong to the live forward test,
  * newest last. The calibration-promotion patch keeps the same predictive
@@ -33,14 +41,25 @@ export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
 export const B4X4_ACTIVE_REVISIONS: string[] = [
   "b4x4-v1-runtime-integrity-r1",
   "b4x4-calibration-promotion-r1",
+  "b4x4-balanced-saturation-r1",
 ];
-export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_CALIBRATION_PROMOTION_R1_ACTIVE";
+/** Previous revision, preserved for rollback and audit attribution. */
+export const B4X4_PREVIOUS_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+export const B4X4_REVISION_PROSPECTIVE_TEST_ID =
+  "B4X4_BALANCED_SATURATION_16_064_015_047_R1";
 /**
  * Immutable activation instant of the runtime-integrity revision. Every row
  * produced by this build carries it so the prospective test window is
  * reconstructable from the data alone. Never change this value.
  */
-export const B4X4_REVISION_ACTIVATED_AT = "2026-08-11T00:00:00.000Z";
+export const B4X4_REVISION_ACTIVATED_AT = "2026-08-14T05:00:00.000Z";
+
+// ---- balanced saturation calibration (active route, frozen) ----
+export const SATURATION_CALIBRATION_VERSION = "balanced-saturation-r1";
+export const SATURATION_WINDOW = 16;
+export const SATURATION_TRIGGER = 0.64;
+export const SATURATION_CAP_SLOPE = 0.15;
+export const SATURATION_MIN_CONFIDENCE_CAP = 0.47;
 /** Reporting label for rows produced before the repair. */
 export const B4X4_PRE_REPAIR_SEGMENT = "B4X4_V1_PRE_RUNTIME_REPAIR";
 /** Absolute source index scheme version. */
@@ -122,6 +141,11 @@ export const B4X4_CONFIG = {
   CALIBRATION_PROMOTION_MIN_Z_SCORE,
   CALIBRATION_PROMOTION_HISTORY_POOL,
   CALIBRATION_PROMOTION_OUTCOME_DELAY_MS,
+  SATURATION_CALIBRATION_VERSION,
+  SATURATION_WINDOW,
+  SATURATION_TRIGGER,
+  SATURATION_CAP_SLOPE,
+  SATURATION_MIN_CONFIDENCE_CAP,
   implementation_revision: B4X4_IMPLEMENTATION_REVISION,
   revision_prospective_test_id: B4X4_REVISION_PROSPECTIVE_TEST_ID,
   source_index_version: B4X4_SOURCE_INDEX_VERSION,
