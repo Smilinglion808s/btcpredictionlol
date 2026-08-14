@@ -31,7 +31,7 @@ export const B4X4_TIMEZONE = "America/Boise";
  * Runtime-integrity repair identity. The predictive policy is unchanged
  * (still B4x4-v1); only the implementation was corrected.
  */
-export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+export const B4X4_IMPLEMENTATION_REVISION = "b4x4-balanced-saturation-r1";
 /**
  * Every implementation revision whose rows belong to the live forward test,
  * newest last. The calibration-promotion patch keeps the same predictive
@@ -41,8 +41,12 @@ export const B4X4_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
 export const B4X4_ACTIVE_REVISIONS: string[] = [
   "b4x4-v1-runtime-integrity-r1",
   "b4x4-calibration-promotion-r1",
+  "b4x4-balanced-saturation-r1",
 ];
-export const B4X4_REVISION_PROSPECTIVE_TEST_ID = "B4X4_CALIBRATION_PROMOTION_R1_ACTIVE";
+/** Previous revision, preserved for rollback and audit attribution. */
+export const B4X4_PREVIOUS_IMPLEMENTATION_REVISION = "b4x4-calibration-promotion-r1";
+export const B4X4_REVISION_PROSPECTIVE_TEST_ID =
+  "B4X4_BALANCED_SATURATION_16_064_015_047_R1";
 /**
  * Immutable activation instant of the runtime-integrity revision. Every row
  * produced by this build carries it so the prospective test window is
