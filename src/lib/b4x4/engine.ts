@@ -926,6 +926,36 @@ export function evaluateB4x4(
     }
   }
 
+  // ---- balanced saturation calibration (prediction-time, outcome-free) ----
+  const candidateSourceBefore: SaturationCandidateSource =
+    promoted ? "CALIBRATION_PROMOTION"
+      : coreEligible && expansionEligible ? "CORE_AND_EXPANSION"
+        : coreEligible ? "CORE"
+          : expansionEligible ? "EXPANSION"
+            : "NONE";
+  const candidateBefore = baseCandidate || promoted;
+  const feature = computeSaturationFeature(history, rawDirection, confidence);
+  const saturationWindowRows = history.slice(-SATURATION_WINDOW);
+  const saturation: SaturationCalibration = {
+    ...emptySaturation(),
+    historyCount: feature.historyCount,
+    historyStartTs: saturationWindowRows[0]?.candleTs ?? null,
+    historyEndTs: saturationWindowRows[saturationWindowRows.length - 1]?.candleTs ?? null,
+    ready: feature.ready,
+    currentRawDirection: rawDirection,
+    sameSideCount: feature.sameSideCount,
+    sameSideShare: feature.sameSideShare,
+    meanAlignedConfidence: feature.meanAlignedConfidence,
+    index: feature.index,
+    currentAlignedConfidence: confidence,
+    dynamicConfidenceCap: feature.dynamicConfidenceCap,
+    regimeActive: feature.regimeActive,
+    candidateBefore,
+    candidateSourceBefore,
+    conditionMet: feature.conditionMet,
+    candidateAfter: candidateBefore,
+  };
+
   const withRoutes: Partial<B4x4Decision> = {
     ...withPercentile,
     coreEligible,
@@ -933,20 +963,41 @@ export function evaluateB4x4(
     baseCandidate,
     selectedRoute,
     calibration,
+    saturation,
   };
 
-  if (!baseCandidate && !promoted) {
+  if (!candidateBefore) {
+    saturation.reason = "NO_CANDIDATE";
+    saturation.withoutSaturationDecision = "ABSTAIN";
+    saturation.withoutSaturationSkipReason = "ABSTAIN_NO_ACTIVE_ROUTE";
     return abstain(withRoutes, "ABSTAIN_NO_ACTIVE_ROUTE", base);
   }
 
-  // ---- intraday brake ----
+  // ---- intraday brake (frozen) ----
   const brakeActive = daily.dailyNetBefore <= INTRADAY_BRAKE_TRIGGER_NET;
   const brakePasses =
     percentile >= INTRADAY_BRAKE_GRID_PERCENTILE_MIN &&
     cell.pCorrect > INTRADAY_BRAKE_P_CORRECT_MIN_EXCLUSIVE;
-  const publish = brakeActive ? brakePasses : true;
+  const brakeAllows = brakeActive ? brakePasses : true;
 
-  if (!publish) {
+  // Audit-only prior-policy decision: what the previous B4x4 revision (no
+  // saturation) would have decided from this exact prediction-time state.
+  saturation.withoutSaturationDecision = brakeAllows ? "PUBLISH" : "ABSTAIN";
+  saturation.withoutSaturationDirection = brakeAllows ? rawDirection : null;
+  saturation.withoutSaturationSkipReason = brakeAllows ? null : "ABSTAIN_INTRADAY_BRAKE";
+
+  const saturationEnabled = opts.saturationEnabled !== false;
+  if (saturationEnabled && feature.conditionMet) {
+    saturation.vetoFired = true;
+    saturation.candidateAfter = false;
+    saturation.reason = "ABSTAIN_DIRECTIONAL_SATURATION_TAIL";
+    if (promoted) {
+      calibration.postCalibrationCandidate = false;
+    }
+    return abstain(withRoutes, "ABSTAIN_DIRECTIONAL_SATURATION_TAIL", base);
+  }
+
+  if (!brakeAllows) {
     if (promoted) {
       calibration.brakeVetoed = true;
       calibration.eligibilityReason = "PROMOTED_BUT_BRAKE_VETOED";
