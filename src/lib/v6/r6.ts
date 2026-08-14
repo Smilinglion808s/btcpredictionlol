@@ -177,7 +177,7 @@ export function evaluatePromotionRules(inputs: R6PromotionInputs) {
 export function applyPromotionRouter(
   baseDecision: Direction,
   baseSource: string,
-  baseReason: string | null,
+  _baseReason: string | null,
   inputs: R6PromotionInputs,
 ): R6RouterResult {
   const { p1, p2, p3, p4, p5, p6 } = evaluatePromotionRules(inputs);
@@ -237,8 +237,7 @@ export function applyPromotionRouter(
     prediction,
     source,
     reason,
-    baseReasonEcho: baseReason,
-  } as R6RouterResult;
+  };
 }
 
 /**
