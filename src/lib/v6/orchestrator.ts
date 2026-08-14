@@ -102,6 +102,19 @@ import {
   V6_R6_MODEL_REVISION,
   V6_R6_ROUTER_VERSION,
 } from "./r6";
+import {
+  evaluateR7,
+  classifyAction,
+  gradeR7,
+  rawContributionVsR6,
+  R7_PUBLICATION_ENABLED,
+  R7_SHADOW_ENABLED,
+  R7_HISTORY_WINDOW,
+  V6_R7_ACTIVATED_AT,
+  V6_R7_MODEL_REVISION,
+  V6_R7_VERSION,
+} from "./r7";
+import { loadR7History } from "./r7Store";
 
 
 
@@ -479,6 +492,18 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       dist_to_low20_pct: current.dist_to_low20_pct,
     });
 
+    // --- V6-r7 Adaptive Opportunity Selector — SHADOW ONLY -------------------
+    // Layered strictly above r6. It reads completed decisions and can never
+    // modify the published r6 output while R7_PUBLICATION_ENABLED is false.
+    const r7History = await loadR7History(sb, targetTs);
+    const r7 = evaluateR7({
+      broadPercentile: inf.broadPercentile,
+      anchorPercentile: inf.anchorPercentile,
+      r6Prediction: r6.prediction,
+      frozenCorePrediction: inf.basePrediction,
+      r4ShadowPrediction: r4Prediction,
+      history: r7History.history,
+    });
 
 
     const timing = timingPosture(targetTs);
@@ -813,6 +838,69 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       regime_inverter_original_prediction: accepted ? inverter.originalPrediction : null,
       regime_inverter_replacement_prediction: accepted ? inverter.replacementPrediction : null,
       regime_inverter_reason: accepted && inverter.triggered ? inverter.reason : null,
+
+      // --- V6-r7 Adaptive Opportunity Selector — SHADOW ONLY ---------------
+      r7_version: r7.version,
+      r7_model_revision: V6_R7_MODEL_REVISION,
+      r7_activated_at: V6_R7_ACTIVATED_AT,
+      r7_shadow_enabled: R7_SHADOW_ENABLED,
+      r7_publication_enabled: R7_PUBLICATION_ENABLED,
+      r7_history_window: R7_HISTORY_WINDOW,
+      r7_history_ready: r7History.ready,
+      r7_history_error: r7History.error,
+      r7_prior_valid_opportunity_count: r7.priorValidOpportunityCount,
+      r7_state_evaluable: accepted && r7.stateEvaluable,
+      r7_broad_bin: r7.broadBin,
+      r7_anchor_bin: r7.anchorBin,
+      r7_state_id: r7.stateId,
+      r7_state_sample_count: r7.state.sampleCount,
+      r7_state_green_count: r7.state.greenCount,
+      r7_state_red_count: r7.state.redCount,
+      r7_state_green_win_rate: r7.state.greenWinRate,
+      r7_state_red_win_rate: r7.state.redWinRate,
+      r7_e4_candidate: r7.candidates.E4_STATE_MAP,
+      r7_e1_candidate: r7.candidates.E1_R6,
+      r7_e1_state_samples: r7.stats.E1_R6.samples,
+      r7_e1_state_wins: r7.stats.E1_R6.wins,
+      r7_e1_state_losses: r7.stats.E1_R6.losses,
+      r7_e1_state_raw_net: r7.stats.E1_R6.rawNet,
+      r7_e1_state_win_rate: r7.stats.E1_R6.winRate,
+      r7_e1_state_edge_rate: r7.stats.E1_R6.rawEdgeRate,
+      r7_e1_qualified: r7.stats.E1_R6.qualified,
+      r7_e2_candidate: r7.candidates.E2_FROZEN_CORE,
+      r7_e2_state_samples: r7.stats.E2_FROZEN_CORE.samples,
+      r7_e2_state_wins: r7.stats.E2_FROZEN_CORE.wins,
+      r7_e2_state_losses: r7.stats.E2_FROZEN_CORE.losses,
+      r7_e2_state_raw_net: r7.stats.E2_FROZEN_CORE.rawNet,
+      r7_e2_state_win_rate: r7.stats.E2_FROZEN_CORE.winRate,
+      r7_e2_state_edge_rate: r7.stats.E2_FROZEN_CORE.rawEdgeRate,
+      r7_e2_qualified: r7.stats.E2_FROZEN_CORE.qualified,
+      r7_e3_candidate: r7.candidates.E3_R4,
+      r7_e3_state_samples: r7.stats.E3_R4.samples,
+      r7_e3_state_wins: r7.stats.E3_R4.wins,
+      r7_e3_state_losses: r7.stats.E3_R4.losses,
+      r7_e3_state_raw_net: r7.stats.E3_R4.rawNet,
+      r7_e3_state_win_rate: r7.stats.E3_R4.winRate,
+      r7_e3_state_edge_rate: r7.stats.E3_R4.rawEdgeRate,
+      r7_e3_qualified: r7.stats.E3_R4.qualified,
+      r7_e4_state_samples: r7.stats.E4_STATE_MAP.samples,
+      r7_e4_state_wins: r7.stats.E4_STATE_MAP.wins,
+      r7_e4_state_losses: r7.stats.E4_STATE_MAP.losses,
+      r7_e4_state_raw_net: r7.stats.E4_STATE_MAP.rawNet,
+      r7_e4_state_win_rate: r7.stats.E4_STATE_MAP.winRate,
+      r7_e4_state_edge_rate: r7.stats.E4_STATE_MAP.rawEdgeRate,
+      r7_e4_qualified: r7.stats.E4_STATE_MAP.qualified,
+      r7_best_green_expert: r7.selection.bestGreenExpert,
+      r7_best_green_edge_rate: r7.selection.bestGreenEdgeRate,
+      r7_best_green_samples: r7.selection.bestGreenSamples,
+      r7_best_red_expert: r7.selection.bestRedExpert,
+      r7_best_red_edge_rate: r7.selection.bestRedEdgeRate,
+      r7_best_red_samples: r7.selection.bestRedSamples,
+      r7_selected_expert: accepted ? r7.selection.selectedExpert : null,
+      r7_shadow_prediction: accepted ? r7.selection.prediction : "OP_FAIL",
+      r7_shadow_reason: accepted ? r7.selection.reason : "OP_FAIL",
+      r7_r6_reference_prediction: accepted ? r6.prediction : "OP_FAIL",
+      r7_action_vs_r6: accepted ? r7.action : null,
     };
 
 
@@ -841,7 +929,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction, r6_base_prediction, r6_p1_green_candidate, r6_p2_red_candidate, r6_p3_green_candidate, r6_p4_red_candidate, r6_p5_green_candidate, r6_p6_green_candidate, r6_green_promotion_candidate, r6_red_promotion_candidate, r6_promotion_conflict, r6_final_prediction, r6_promotion_final_prediction, r5_route_brake_shadow_prediction",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction, r6_base_prediction, r6_p1_green_candidate, r6_p2_red_candidate, r6_p3_green_candidate, r6_p4_red_candidate, r6_p5_green_candidate, r6_p6_green_candidate, r6_green_promotion_candidate, r6_red_promotion_candidate, r6_promotion_conflict, r6_final_prediction, r6_promotion_final_prediction, r5_route_brake_shadow_prediction, r7_shadow_prediction, r7_action_vs_r6, r7_e1_candidate, r7_e2_candidate, r7_e3_candidate, r7_e4_candidate",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -1036,6 +1124,16 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         (r6PromotedDir ?? "ABSTAIN") as Direction,
         gradeable,
       );
+      // --- V6-r7 shadow outcomes -----------------------------------------
+      const r7Prediction = opFail ? null : (r.r7_shadow_prediction as string | null);
+      const r7Action = (r.r7_action_vs_r6 as ReturnType<typeof classifyAction> | null)
+        ?? classifyAction(r.r6_final_prediction ?? final, r7Prediction);
+      const r7Shadow = gradeR7(r7Prediction, gradeable);
+      const r7E1 = gradeR7(opFail ? null : r.r7_e1_candidate, gradeable);
+      const r7E2 = gradeR7(opFail ? null : r.r7_e2_candidate, gradeable);
+      const r7E3 = gradeR7(opFail ? null : r.r7_e3_candidate, gradeable);
+      const r7E4 = gradeR7(opFail ? null : r.r7_e4_candidate, gradeable);
+
       const brakeShadowPrediction =
         (r.r5_route_brake_shadow_prediction as Direction | null) ?? null;
       const brakeShadowDirectional =
@@ -1261,6 +1359,21 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           r6_promotion_result: r6Promotion.result,
           r6_promotion_raw_contribution: r6Promotion.raw,
           r6_promotion_adjusted_contribution: r6Promotion.adjusted,
+
+          // --- V6-r7 shadow grading (RAW only, never touches r6 accounting) --
+          r7_shadow_result: r7Shadow.result,
+          r7_shadow_raw_score: opFail ? null : r7Shadow.raw,
+          r7_raw_contribution_vs_r6: opFail
+            ? null
+            : rawContributionVsR6(r7Action, r.r6_final_prediction ?? final, r7Prediction, actual),
+          r7_e1_shadow_result: r7E1.result,
+          r7_e1_shadow_raw_score: opFail ? null : r7E1.raw,
+          r7_e2_shadow_result: r7E2.result,
+          r7_e2_shadow_raw_score: opFail ? null : r7E2.raw,
+          r7_e3_shadow_result: r7E3.result,
+          r7_e3_shadow_raw_score: opFail ? null : r7E3.raw,
+          r7_e4_shadow_result: r7E4.result,
+          r7_e4_shadow_raw_score: opFail ? null : r7E4.raw,
 
         } as never)
         .eq("prediction_id", String(r.prediction_id))

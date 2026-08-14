@@ -161,6 +161,27 @@ export const V6_CSV_COLUMNS = [
   "r6_p5_evaluable","r6_p5_green_candidate","r6_p5_dist_to_low20_pct","r6_p5_dist_low20_threshold","r6_p5_condition_a","r6_p5_change_pct","r6_p5_change_pct_threshold","r6_p5_condition_b","r6_p5_shadow_result","r6_p5_shadow_raw_score","r6_p5_shadow_adjusted_score",
   "r6_p6_evaluable","r6_p6_green_candidate","r6_p6_path_efficiency_4","r6_p6_path_efficiency_threshold","r6_p6_condition_a","r6_p6_mean_body_to_range_2","r6_p6_mean_body_threshold","r6_p6_condition_b","r6_p6_shadow_result","r6_p6_shadow_raw_score","r6_p6_shadow_adjusted_score",
   "r6_green_promotion_candidate","r6_red_promotion_candidate","r6_green_promotion_rule_count","r6_red_promotion_rule_count","r6_green_promotion_rules_triggered","r6_red_promotion_rules_triggered","r6_promotion_conflict","r6_promotion_primary_rule","r6_promotion_all_rules","r6_final_prediction","r6_final_source","r6_final_reason","r6_final_result","r6_final_raw_score","r6_final_adjusted_score","r6_green_promotion_shadow_result","r6_green_promotion_shadow_raw_score","r6_green_promotion_shadow_adjusted_score","r6_red_promotion_shadow_result","r6_red_promotion_shadow_raw_score","r6_red_promotion_shadow_adjusted_score","r6_conflict_green_result","r6_conflict_red_result","r6_base_r5_result","r6_base_r5_raw_score","r6_base_r5_adjusted_score","r6_promotion_underlying_r5_prediction","r6_promotion_final_prediction","r6_promotion_result","r6_promotion_raw_contribution","r6_promotion_adjusted_contribution","r6_valid_opportunities","r6_directional_predictions","r6_coverage","r6_wins","r6_losses","r6_win_rate","r6_cumulative_raw_net","r6_cumulative_adjusted_net","r6_running_raw_drawdown","r6_running_adjusted_drawdown","r6_max_raw_drawdown","r6_max_adjusted_drawdown","r6_current_directional_loss_streak","r6_max_directional_loss_streak","r6_rolling96_valid_opportunities","r6_rolling96_directional_predictions","r6_rolling96_coverage","r6_rolling96_raw_net","r6_rolling96_adjusted_net","r6_base_r5_trade_count","r6_base_r5_wins","r6_base_r5_losses","r6_base_r5_raw_net","r6_base_r5_adjusted_net","r6_promotion_trade_count","r6_promotion_wins","r6_promotion_losses","r6_promotion_raw_net","r6_promotion_adjusted_net","r6_promotion_green_count","r6_promotion_green_wins","r6_promotion_green_losses","r6_promotion_green_raw_net","r6_promotion_green_adjusted_net","r6_promotion_red_count","r6_promotion_red_wins","r6_promotion_red_losses","r6_promotion_red_raw_net","r6_promotion_red_adjusted_net","r6_promotion_conflict_count","r5_route_brake_shadow_trigger_count","r5_route_brake_shadow_avoided_losses","r5_route_brake_shadow_sacrificed_wins","r5_route_brake_shadow_raw_contribution","r5_route_brake_shadow_adjusted_contribution","r6_p1_count","r6_p1_wins","r6_p1_losses","r6_p1_raw_net","r6_p1_adjusted_net","r6_p2_count","r6_p2_wins","r6_p2_losses","r6_p2_raw_net","r6_p2_adjusted_net","r6_p3_count","r6_p3_wins","r6_p3_losses","r6_p3_raw_net","r6_p3_adjusted_net","r6_p4_count","r6_p4_wins","r6_p4_losses","r6_p4_raw_net","r6_p4_adjusted_net","r6_p5_count","r6_p5_wins","r6_p5_losses","r6_p5_raw_net","r6_p5_adjusted_net","r6_p6_count","r6_p6_wins","r6_p6_losses","r6_p6_raw_net","r6_p6_adjusted_net",
+  // --- V6-r7 Adaptive Opportunity Selector (shadow) ---
+  "r7_version","r7_model_revision","r7_activated_at","r7_shadow_enabled","r7_publication_enabled",
+  "r7_history_window","r7_history_ready","r7_history_error","r7_prior_valid_opportunity_count",
+  "r7_state_evaluable","r7_broad_bin","r7_anchor_bin","r7_state_id",
+  "r7_state_sample_count","r7_state_green_count","r7_state_red_count",
+  "r7_state_green_win_rate","r7_state_red_win_rate",
+  "r7_e1_candidate","r7_e1_state_samples","r7_e1_state_wins","r7_e1_state_losses","r7_e1_state_raw_net","r7_e1_state_win_rate","r7_e1_state_edge_rate","r7_e1_qualified","r7_e1_shadow_result","r7_e1_shadow_raw_score",
+  "r7_e2_candidate","r7_e2_state_samples","r7_e2_state_wins","r7_e2_state_losses","r7_e2_state_raw_net","r7_e2_state_win_rate","r7_e2_state_edge_rate","r7_e2_qualified","r7_e2_shadow_result","r7_e2_shadow_raw_score",
+  "r7_e3_candidate","r7_e3_state_samples","r7_e3_state_wins","r7_e3_state_losses","r7_e3_state_raw_net","r7_e3_state_win_rate","r7_e3_state_edge_rate","r7_e3_qualified","r7_e3_shadow_result","r7_e3_shadow_raw_score",
+  "r7_e4_candidate","r7_e4_state_samples","r7_e4_state_wins","r7_e4_state_losses","r7_e4_state_raw_net","r7_e4_state_win_rate","r7_e4_state_edge_rate","r7_e4_qualified","r7_e4_shadow_result","r7_e4_shadow_raw_score",
+  "r7_best_green_expert","r7_best_green_edge_rate","r7_best_green_samples",
+  "r7_best_red_expert","r7_best_red_edge_rate","r7_best_red_samples",
+  "r7_selected_expert","r7_shadow_prediction","r7_shadow_reason",
+  "r7_r6_reference_prediction","r7_action_vs_r6",
+  "r7_shadow_result","r7_shadow_raw_score","r7_raw_contribution_vs_r6",
+  "r7_valid_opportunities","r7_directional_predictions","r7_coverage","r7_wins","r7_losses","r7_win_rate",
+  "r7_cumulative_raw_net","r7_max_raw_drawdown","r7_current_directional_loss_streak","r7_max_directional_loss_streak",
+  "r7_rolling96_directional_predictions","r7_rolling96_raw_net",
+  "r7_cumulative_raw_contribution_vs_r6",
+  "r7_keep_r6_count","r7_reject_r6_count","r7_add_opportunity_count","r7_reroute_direction_count",
+  "r7_e1_selected_count","r7_e2_selected_count","r7_e3_selected_count","r7_e4_selected_count",
 ] as const;
 
 
@@ -213,6 +234,12 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
     p6: { n: 0, w: 0, l: 0, raw: 0, adj: 0 },
   };
   let conflictCount = 0;
+  // --- V6-r7 shadow running aggregates (RAW only) ---
+  let r7Opps = 0, r7Dir = 0, r7Wins = 0, r7Losses = 0, r7Raw = 0;
+  let r7PeakRaw = 0, r7MaxDd = 0, r7Streak = 0, r7MaxStreak = 0, r7Contrib = 0;
+  const r7Window: Array<{ raw: number; directional: boolean }> = [];
+  const r7Actions = { KEEP_R6: 0, REJECT_R6: 0, ADD_OPPORTUNITY: 0, REROUTE_DIRECTION: 0 } as Record<string, number>;
+  const r7Selected = { E1_R6: 0, E2_FROZEN_CORE: 0, E3_R4: 0, E4_STATE_MAP: 0 } as Record<string, number>;
   let brakeShadowTriggers = 0, brakeShadowAvoided = 0, brakeShadowSacrificed = 0;
   let brakeShadowRaw = 0, brakeShadowAdj = 0;
 
@@ -230,6 +257,31 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
 
 
   return rowsOldestFirst.map((r) => {
+    // --- V6-r7 shadow accumulation (RAW only; op-fail rows never score) ---
+    if (r.operational_status === "OK" && r.r7_shadow_result != null) {
+      const r7res = String(r.r7_shadow_result);
+      const r7raw = num(r.r7_shadow_raw_score) ?? 0;
+      const r7dir = r.r7_shadow_prediction === "GREEN" || r.r7_shadow_prediction === "RED";
+      if (r7res !== "PUSH") {
+        r7Opps += 1;
+        r7Raw += r7raw;
+        r7PeakRaw = Math.max(r7PeakRaw, r7Raw);
+        r7MaxDd = Math.max(r7MaxDd, r7PeakRaw - r7Raw);
+        if (r7dir) {
+          r7Dir += 1;
+          if (r7res === "WIN") { r7Wins += 1; r7Streak = 0; }
+          if (r7res === "LOSS") { r7Losses += 1; r7Streak += 1; r7MaxStreak = Math.max(r7MaxStreak, r7Streak); }
+        }
+        r7Window.push({ raw: r7raw, directional: r7dir });
+        if (r7Window.length > 96) r7Window.shift();
+        r7Contrib += num(r.r7_raw_contribution_vs_r6) ?? 0;
+        const action = String(r.r7_action_vs_r6 ?? "");
+        if (action in r7Actions) r7Actions[action] += 1;
+        const sel = String(r.r7_selected_expert ?? "");
+        if (sel in r7Selected) r7Selected[sel] += 1;
+      }
+    }
+
     const raw = num(r.final_raw_score);
     const adj = num(r.final_adjusted_score);
     const scored = raw !== null && adj !== null;
@@ -409,6 +461,27 @@ export function withV6DerivedMetrics(rowsOldestFirst: Row[]): Row[] {
       r6_p3_count: agg.p3.n, r6_p3_wins: agg.p3.w, r6_p3_losses: agg.p3.l, r6_p3_raw_net: agg.p3.raw, r6_p3_adjusted_net: agg.p3.adj,
       r6_p4_count: agg.p4.n, r6_p4_wins: agg.p4.w, r6_p4_losses: agg.p4.l, r6_p4_raw_net: agg.p4.raw, r6_p4_adjusted_net: agg.p4.adj,
       r6_p5_count: agg.p5.n, r6_p5_wins: agg.p5.w, r6_p5_losses: agg.p5.l, r6_p5_raw_net: agg.p5.raw, r6_p5_adjusted_net: agg.p5.adj,
+      r7_valid_opportunities: r7Opps,
+      r7_directional_predictions: r7Dir,
+      r7_coverage: r7Opps > 0 ? r7Dir / r7Opps : null,
+      r7_wins: r7Wins,
+      r7_losses: r7Losses,
+      r7_win_rate: r7Wins + r7Losses > 0 ? r7Wins / (r7Wins + r7Losses) : null,
+      r7_cumulative_raw_net: r7Raw,
+      r7_max_raw_drawdown: r7MaxDd,
+      r7_current_directional_loss_streak: r7Streak,
+      r7_max_directional_loss_streak: r7MaxStreak,
+      r7_rolling96_directional_predictions: r7Window.filter((w) => w.directional).length,
+      r7_rolling96_raw_net: r7Window.reduce((a, w) => a + w.raw, 0),
+      r7_cumulative_raw_contribution_vs_r6: r7Contrib,
+      r7_keep_r6_count: r7Actions.KEEP_R6,
+      r7_reject_r6_count: r7Actions.REJECT_R6,
+      r7_add_opportunity_count: r7Actions.ADD_OPPORTUNITY,
+      r7_reroute_direction_count: r7Actions.REROUTE_DIRECTION,
+      r7_e1_selected_count: r7Selected.E1_R6,
+      r7_e2_selected_count: r7Selected.E2_FROZEN_CORE,
+      r7_e3_selected_count: r7Selected.E3_R4,
+      r7_e4_selected_count: r7Selected.E4_STATE_MAP,
       r6_p6_count: agg.p6.n, r6_p6_wins: agg.p6.w, r6_p6_losses: agg.p6.l, r6_p6_raw_net: agg.p6.raw, r6_p6_adjusted_net: agg.p6.adj,
     };
 
