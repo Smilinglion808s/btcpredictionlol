@@ -56,15 +56,15 @@ function finite(value: unknown): number | null {
 }
 
 export interface R6PromotionInputs {
-  path_efficiency_4?: number | null;
-  momentum_8_over_atr?: number | null;
-  roc_8?: number | null;
-  volume_expansion?: number | null;
-  channel_position_0_1?: number | null;
-  change_pct?: number | null;
-  mean_body_to_range_2?: number | null;
-  macd_hist_over_atr14?: number | null;
-  dist_to_low20_pct?: number | null;
+  path_efficiency_4?: unknown;
+  momentum_8_over_atr?: unknown;
+  roc_8?: unknown;
+  volume_expansion?: unknown;
+  channel_position_0_1?: unknown;
+  change_pct?: unknown;
+  mean_body_to_range_2?: unknown;
+  macd_hist_over_atr14?: unknown;
+  dist_to_low20_pct?: unknown;
 }
 
 export interface R6RuleEval {
