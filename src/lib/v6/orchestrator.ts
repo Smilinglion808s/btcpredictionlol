@@ -479,6 +479,18 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       dist_to_low20_pct: current.dist_to_low20_pct,
     });
 
+    // --- V6-r7 Adaptive Opportunity Selector — SHADOW ONLY -------------------
+    // Layered strictly above r6. It reads completed decisions and can never
+    // modify the published r6 output while R7_PUBLICATION_ENABLED is false.
+    const r7History = await loadR7History(sb, targetTs);
+    const r7 = evaluateR7({
+      broadPercentile: inf.broadPercentile,
+      anchorPercentile: inf.anchorPercentile,
+      r6Prediction: r6.prediction,
+      frozenCorePrediction: inf.basePrediction,
+      r4ShadowPrediction: r4Prediction,
+      history: r7History.history,
+    });
 
 
     const timing = timingPosture(targetTs);
