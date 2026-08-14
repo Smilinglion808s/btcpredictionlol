@@ -841,7 +841,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction, r6_base_prediction, r6_p1_green_candidate, r6_p2_red_candidate, r6_p3_green_candidate, r6_p4_red_candidate, r6_p5_green_candidate, r6_p6_green_candidate, r6_green_promotion_candidate, r6_red_promotion_candidate, r6_promotion_conflict, r6_final_prediction, r6_promotion_final_prediction, r5_route_brake_shadow_prediction",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -1017,6 +1017,30 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
 
 
 
+      // --- V6-r6 promotion router grading ---------------------------------
+      // Every promotion rule is graded independently of publication, and the
+      // unbraked r5 base keeps its own counterfactual record.
+      const r6BaseR5 = ((r.r6_base_prediction as Direction | null) ?? "ABSTAIN");
+      const r6P1 = gradeBranch(Boolean(r.r6_p1_green_candidate), "GREEN", gradeable);
+      const r6P2 = gradeBranch(Boolean(r.r6_p2_red_candidate), "RED", gradeable);
+      const r6P3 = gradeBranch(Boolean(r.r6_p3_green_candidate), "GREEN", gradeable);
+      const r6P4 = gradeBranch(Boolean(r.r6_p4_red_candidate), "RED", gradeable);
+      const r6P5 = gradeBranch(Boolean(r.r6_p5_green_candidate), "GREEN", gradeable);
+      const r6P6 = gradeBranch(Boolean(r.r6_p6_green_candidate), "GREEN", gradeable);
+      const r6GreenAgg = gradeBranch(Boolean(r.r6_green_promotion_candidate), "GREEN", gradeable);
+      const r6RedAgg = gradeBranch(Boolean(r.r6_red_promotion_candidate), "RED", gradeable);
+      const r6Conflicted = Boolean(r.r6_promotion_conflict) && !opFail;
+      const r6PromotedDir = (r.r6_promotion_final_prediction as Direction | null) ?? null;
+      const r6Promotion = promotionContribution(
+        !opFail && (r6PromotedDir === "GREEN" || r6PromotedDir === "RED"),
+        (r6PromotedDir ?? "ABSTAIN") as Direction,
+        gradeable,
+      );
+      const brakeShadowPrediction =
+        (r.r5_route_brake_shadow_prediction as Direction | null) ?? null;
+      const brakeShadowDirectional =
+        !opFail && (brakeShadowPrediction === "GREEN" || brakeShadowPrediction === "RED");
+
       await sb
         .from("v6_predictions")
         .update({
@@ -1180,6 +1204,63 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
             anchorTransition ? anchorTransition.before.pauseActive : null,
           r5_anchor_red_route_pause_after_resolution:
             anchorTransition ? anchorTransition.after.pauseActive : null,
+
+          // --- V6-r5.1 brake, graded as a pure shadow under r6 --------------
+          r5_route_brake_shadow_result: brakeShadowDirectional
+            ? (brakeShadowPrediction === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS")
+            : opFail ? null : "ABSTAIN",
+          r5_route_brake_shadow_raw_score:
+            opFail ? null : rawScore(asDir(brakeShadowPrediction), actual),
+          r5_route_brake_shadow_adjusted_score:
+            opFail ? null : adjustedScore(asDir(brakeShadowPrediction), actual),
+
+          // --- V6-r6 promotion router outcomes ------------------------------
+          r6_base_r5_result: opFail
+            ? null
+            : (r6BaseR5 === "GREEN" || r6BaseR5 === "RED")
+              ? (r6BaseR5 === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS")
+              : "ABSTAIN",
+          r6_base_r5_raw_score: opFail ? null : rawScore(r6BaseR5, actual),
+          r6_base_r5_adjusted_score: opFail ? null : adjustedScore(r6BaseR5, actual),
+
+          r6_p1_shadow_result: r6P1.result,
+          r6_p1_shadow_raw_score: r6P1.raw,
+          r6_p1_shadow_adjusted_score: r6P1.adjusted,
+          r6_p2_shadow_result: r6P2.result,
+          r6_p2_shadow_raw_score: r6P2.raw,
+          r6_p2_shadow_adjusted_score: r6P2.adjusted,
+          r6_p3_shadow_result: r6P3.result,
+          r6_p3_shadow_raw_score: r6P3.raw,
+          r6_p3_shadow_adjusted_score: r6P3.adjusted,
+          r6_p4_shadow_result: r6P4.result,
+          r6_p4_shadow_raw_score: r6P4.raw,
+          r6_p4_shadow_adjusted_score: r6P4.adjusted,
+          r6_p5_shadow_result: r6P5.result,
+          r6_p5_shadow_raw_score: r6P5.raw,
+          r6_p5_shadow_adjusted_score: r6P5.adjusted,
+          r6_p6_shadow_result: r6P6.result,
+          r6_p6_shadow_raw_score: r6P6.raw,
+          r6_p6_shadow_adjusted_score: r6P6.adjusted,
+
+          r6_green_promotion_shadow_result: r6GreenAgg.result,
+          r6_green_promotion_shadow_raw_score: r6GreenAgg.raw,
+          r6_green_promotion_shadow_adjusted_score: r6GreenAgg.adjusted,
+          r6_red_promotion_shadow_result: r6RedAgg.result,
+          r6_red_promotion_shadow_raw_score: r6RedAgg.raw,
+          r6_red_promotion_shadow_adjusted_score: r6RedAgg.adjusted,
+
+          r6_conflict_green_result: r6Conflicted ? r6GreenAgg.result : null,
+          r6_conflict_red_result: r6Conflicted ? r6RedAgg.result : null,
+
+          r6_final_result: finalDirectional
+            ? (final === actual ? "WIN" : actual === "PUSH" ? "PUSH" : "LOSS")
+            : opFail ? null : "ABSTAIN",
+          r6_final_raw_score: opFail ? null : rawScore(final, actual),
+          r6_final_adjusted_score: opFail ? null : adjustedScore(final, actual),
+
+          r6_promotion_result: r6Promotion.result,
+          r6_promotion_raw_contribution: r6Promotion.raw,
+          r6_promotion_adjusted_contribution: r6Promotion.adjusted,
 
         } as never)
         .eq("prediction_id", String(r.prediction_id))
