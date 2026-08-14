@@ -1047,6 +1047,8 @@ export interface ReplayResult {
   baseNoBrakeScore: number;
   coreOnlyScore: number;
   expansionOnlyScore: number;
+  /** Audit-only score of the prior (no-saturation) policy decision. */
+  withoutSaturationScore: number | null;
 }
 
 export function scoreAgainst(
