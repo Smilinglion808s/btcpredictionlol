@@ -2,7 +2,7 @@
 import { createHash } from "crypto";
 
 export const B4X4_MODEL_NAME = "B4x4";
-export const B4X4_MODEL_VERSION = "b4x4-calibration-promotion-r1";
+export const B4X4_MODEL_VERSION = "b4x4-balanced-saturation-r1";
 /**
  * Every model_version this model has ever written rows under, newest last.
  * History, daily-ledger and resolver lookups span all of them so the
