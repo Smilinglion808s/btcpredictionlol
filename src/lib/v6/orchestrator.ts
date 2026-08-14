@@ -93,6 +93,15 @@ import {
   V6_R5_1_MODEL_REVISION,
 } from "./routeBrake";
 import { ensureRouteBrakeStates, recordResolvedRouteOutcome } from "./routeBrakeStore";
+import {
+  applyPromotionRouter,
+  promotionContribution,
+  R5_ROUTE_BRAKE_PUBLICATION_ENABLED,
+  R5_ROUTE_BRAKE_SHADOW_ONLY,
+  V6_R6_ACTIVATED_AT,
+  V6_R6_MODEL_REVISION,
+  V6_R6_ROUTER_VERSION,
+} from "./r6";
 
 
 
@@ -257,8 +266,20 @@ function opFailRow(targetTs: Date, reason: string, extra: Record<string, unknown
     final_prediction: "OP_FAIL",
     final_prediction_source: "OP_FAIL",
     final_reason: "OP_FAIL",
-    model_revision: V6_R5_MODEL_REVISION,
-    model_revision_activated_at: V6_R5_ACTIVATED_AT,
+    model_revision: V6_R6_MODEL_REVISION,
+    model_revision_activated_at: V6_R6_ACTIVATED_AT,
+    r6_router_version: V6_R6_ROUTER_VERSION,
+    r6_base_prediction: "OP_FAIL",
+    r6_base_source: "OP_FAIL",
+    r6_base_reason: "OP_FAIL",
+    r6_final_prediction: "OP_FAIL",
+    r6_final_source: "OP_FAIL",
+    r6_final_reason: "OP_FAIL",
+    r6_green_promotion_candidate: false,
+    r6_red_promotion_candidate: false,
+    r6_promotion_conflict: false,
+    r5_route_brake_shadow_only: R5_ROUTE_BRAKE_SHADOW_ONLY,
+    r5_route_brake_publication_enabled: R5_ROUTE_BRAKE_PUBLICATION_ENABLED,
     r5_router_version: V6_R5_ROUTER_VERSION,
     r5_green_evaluable: false,
     r5_green_candidate: false,
@@ -442,6 +463,22 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       brakeStates.anchorRed,
     );
 
+    // --- V6-r6 Promotion Router — the ONLY live publication authority -------
+    // The r5.1 brake is shadow-only under r6, so the promotion base is the
+    // UNBRAKED r5 router result. Promotions act only on r5 abstains and can
+    // never flip or veto an existing r5 direction.
+    const r6 = applyPromotionRouter(r5.decision, r5.source, r5.reason, {
+      path_efficiency_4: current.path_efficiency_4,
+      momentum_8_over_atr: current.momentum_8_over_atr,
+      roc_8: current.roc_8,
+      volume_expansion: current.volume_expansion,
+      channel_position_0_1: current.channel_position_0_1,
+      change_pct: current.change_pct,
+      mean_body_to_range_2: current.mean_body_to_range_2,
+      macd_hist_over_atr14: current.macd_hist_over_atr14,
+      dist_to_low20_pct: current.dist_to_low20_pct,
+    });
+
 
 
     const timing = timingPosture(targetTs);
@@ -589,13 +626,87 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       prediction_source_after_structure_confirmation: accepted ? r4Source : "OP_FAIL",
       structure_underlying_prediction: accepted ? structure.underlyingPrediction : null,
 
-      // --- V6-r5.1 publication (router + route drawdown brake) -------------
-      final_prediction: accepted ? brake.prediction : "OP_FAIL",
-      final_prediction_source: accepted ? brake.source : "OP_FAIL",
-      final_reason: accepted ? brake.reason : "OP_FAIL",
+      // --- V6-r6 publication (r5 router + promotion router) ----------------
+      final_prediction: accepted ? r6.prediction : "OP_FAIL",
+      final_prediction_source: accepted ? r6.source : "OP_FAIL",
+      final_reason: accepted ? r6.reason : "OP_FAIL",
       // Strategic ABSTAIN is never an operational failure and vice versa.
-      abstain_status: accepted && brake.prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
-      abstain_reason: accepted && brake.prediction === "ABSTAIN" ? brake.reason : null,
+      abstain_status: accepted && r6.prediction === "ABSTAIN" ? "STRATEGIC_ABSTAIN" : null,
+      abstain_reason: accepted && r6.prediction === "ABSTAIN" ? r6.reason : null,
+
+      // --- V6-r6 promotion router audit (prediction-time, immutable) -------
+      r6_router_version: r6.routerVersion,
+      r6_base_prediction: accepted ? r5.decision : "OP_FAIL",
+      r6_base_source: accepted ? r5.source : "OP_FAIL",
+      r6_base_reason: accepted ? r5.reason : "OP_FAIL",
+      r6_p1_evaluable: r6.p1.evaluable,
+      r6_p1_green_candidate: accepted && r6.p1.candidate,
+      r6_p1_path_efficiency_4: r6.p1.a.value,
+      r6_p1_path_efficiency_threshold: r6.p1.a.threshold,
+      r6_p1_condition_a: r6.p1.a.pass,
+      r6_p1_momentum_8_over_atr: r6.p1.b.value,
+      r6_p1_momentum_threshold: r6.p1.b.threshold,
+      r6_p1_condition_b: r6.p1.b.pass,
+      r6_p2_evaluable: r6.p2.evaluable,
+      r6_p2_red_candidate: accepted && r6.p2.candidate,
+      r6_p2_roc_8: r6.p2.a.value,
+      r6_p2_roc_threshold: r6.p2.a.threshold,
+      r6_p2_condition_a: r6.p2.a.pass,
+      r6_p2_volume_expansion: r6.p2.b.value,
+      r6_p2_volume_expansion_threshold: r6.p2.b.threshold,
+      r6_p2_condition_b: r6.p2.b.pass,
+      r6_p3_evaluable: r6.p3.evaluable,
+      r6_p3_green_candidate: accepted && r6.p3.candidate,
+      r6_p3_channel_position_0_1: r6.p3.a.value,
+      r6_p3_channel_position_threshold: r6.p3.a.threshold,
+      r6_p3_condition_a: r6.p3.a.pass,
+      r6_p3_change_pct: r6.p3.b.value,
+      r6_p3_change_pct_threshold: r6.p3.b.threshold,
+      r6_p3_condition_b: r6.p3.b.pass,
+      r6_p4_evaluable: r6.p4.evaluable,
+      r6_p4_red_candidate: accepted && r6.p4.candidate,
+      r6_p4_mean_body_to_range_2: r6.p4.a.value,
+      r6_p4_mean_body_threshold: r6.p4.a.threshold,
+      r6_p4_condition_a: r6.p4.a.pass,
+      r6_p4_macd_hist_over_atr14: r6.p4.b.value,
+      r6_p4_macd_threshold: r6.p4.b.threshold,
+      r6_p4_condition_b: r6.p4.b.pass,
+      r6_p5_evaluable: r6.p5.evaluable,
+      r6_p5_green_candidate: accepted && r6.p5.candidate,
+      r6_p5_dist_to_low20_pct: r6.p5.a.value,
+      r6_p5_dist_low20_threshold: r6.p5.a.threshold,
+      r6_p5_condition_a: r6.p5.a.pass,
+      r6_p5_change_pct: r6.p5.b.value,
+      r6_p5_change_pct_threshold: r6.p5.b.threshold,
+      r6_p5_condition_b: r6.p5.b.pass,
+      r6_p6_evaluable: r6.p6.evaluable,
+      r6_p6_green_candidate: accepted && r6.p6.candidate,
+      r6_p6_path_efficiency_4: r6.p6.a.value,
+      r6_p6_path_efficiency_threshold: r6.p6.a.threshold,
+      r6_p6_condition_a: r6.p6.a.pass,
+      r6_p6_mean_body_to_range_2: r6.p6.b.value,
+      r6_p6_mean_body_threshold: r6.p6.b.threshold,
+      r6_p6_condition_b: r6.p6.b.pass,
+      r6_green_promotion_candidate: accepted && r6.greenCandidate,
+      r6_red_promotion_candidate: accepted && r6.redCandidate,
+      r6_green_promotion_rule_count: accepted ? r6.greenRuleCount : 0,
+      r6_red_promotion_rule_count: accepted ? r6.redRuleCount : 0,
+      r6_green_promotion_rules_triggered: accepted ? r6.greenRulesTriggered : [],
+      r6_red_promotion_rules_triggered: accepted ? r6.redRulesTriggered : [],
+      r6_promotion_conflict: accepted && r6.conflict,
+      r6_promotion_primary_rule: accepted ? r6.primaryRule : null,
+      r6_promotion_all_rules: accepted ? r6.allRules : [],
+      r6_final_prediction: accepted ? r6.prediction : "OP_FAIL",
+      r6_final_source: accepted ? r6.source : "OP_FAIL",
+      r6_final_reason: accepted ? r6.reason : "OP_FAIL",
+      r6_promotion_underlying_r5_prediction: accepted ? r5.decision : null,
+      r6_promotion_final_prediction: accepted && r6.promoted ? r6.prediction : null,
+
+      // The r5.1 route brake is SHADOW ONLY under r6.
+      r5_route_brake_shadow_only: R5_ROUTE_BRAKE_SHADOW_ONLY,
+      r5_route_brake_publication_enabled: R5_ROUTE_BRAKE_PUBLICATION_ENABLED,
+      r5_route_brake_shadow_prediction: accepted ? brake.prediction : null,
+      r5_route_brake_shadow_reason: accepted ? brake.reason : null,
 
       // Pre-brake router decision, retained verbatim for attribution.
       r5_pre_brake_prediction: accepted ? r5.decision : "OP_FAIL",
@@ -624,7 +735,8 @@ export async function runV6(sb: SupabaseClient, targetTs: Date): Promise<void> {
       r5_route_brake_reason: accepted ? brake.brakeReason : null,
       r5_route_brake_underlying_prediction: accepted ? brake.underlyingPrediction : null,
 
-      model_revision: V6_R5_1_MODEL_REVISION,
+      model_revision: V6_R6_MODEL_REVISION,
+      model_revision_activated_at: V6_R6_ACTIVATED_AT,
 
       r5_router_version: r5.routerVersion,
       r5_green_evaluable: r5.greenEvaluable,
