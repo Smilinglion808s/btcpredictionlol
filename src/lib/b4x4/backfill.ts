@@ -235,6 +235,15 @@ export async function runB4x4Backfill(
       row.base_no_brake_counterfactual_score = r.baseNoBrakeScore;
       row.brake_attribution_class = attribution.klass;
       row.brake_incremental_value = attribution.value;
+      const satAttr = saturationAttribution(
+        r.decision.saturation.vetoFired,
+        r.decision.saturation.withoutSaturationDecision === "PUBLISH",
+        r.withoutSaturationScore,
+      );
+      row.without_saturation_score = r.withoutSaturationScore;
+      row.saturation_attribution_class = satAttr.klass;
+      row.saturation_incremental_value = satAttr.value;
+      row.saturation_incremental_change = satAttr.incrementalChange;
     }
     return row;
   });
