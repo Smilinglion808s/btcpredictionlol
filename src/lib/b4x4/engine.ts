@@ -615,6 +615,11 @@ export interface B4x4EvalOptions {
   decisionAsOfMs?: number;
   /** Calibration promotion route master switch (activation boundary gate). */
   promotionEnabled?: boolean;
+  /**
+   * Balanced saturation calibration switch. Defaults to on; set false only to
+   * reproduce the immediately previous (no-saturation) policy for audit.
+   */
+  saturationEnabled?: boolean;
 }
 
 /**
