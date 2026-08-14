@@ -162,6 +162,149 @@ export interface CalibrationPromotion {
   postCalibrationCandidate: boolean;
 }
 
+/** Where the pre-saturation publishable candidate came from. */
+export type SaturationCandidateSource =
+  | "CORE"
+  | "EXPANSION"
+  | "CORE_AND_EXPANSION"
+  | "CALIBRATION_PROMOTION"
+  | "NONE";
+
+/**
+ * Balanced saturation calibration audit block (prediction-time only).
+ * Probability/reliability calibration over the previous 16 valid canonical A2
+ * source rows. Side-neutral; never flips a direction; never reads outcomes.
+ */
+export interface SaturationCalibration {
+  version: string;
+  window: number;
+  historyCount: number;
+  historyStartTs: string | null;
+  historyEndTs: string | null;
+  ready: boolean;
+  currentRawDirection: Direction | null;
+  sameSideCount: number | null;
+  sameSideShare: number | null;
+  meanAlignedConfidence: number | null;
+  index: number | null;
+  triggerThreshold: number;
+  capSlope: number;
+  minConfidenceCap: number;
+  currentAlignedConfidence: number | null;
+  dynamicConfidenceCap: number | null;
+  regimeActive: boolean;
+  candidateBefore: boolean;
+  candidateSourceBefore: SaturationCandidateSource;
+  conditionMet: boolean;
+  vetoFired: boolean;
+  candidateAfter: boolean;
+  reason: string | null;
+  /** Audit-only prior-policy (no-saturation) decision, brake included. */
+  withoutSaturationDecision: "PUBLISH" | "ABSTAIN" | null;
+  withoutSaturationDirection: Direction | null;
+  withoutSaturationSkipReason: string | null;
+}
+
+export function emptySaturation(): SaturationCalibration {
+  return {
+    version: SATURATION_CALIBRATION_VERSION,
+    window: SATURATION_WINDOW,
+    historyCount: 0,
+    historyStartTs: null,
+    historyEndTs: null,
+    ready: false,
+    currentRawDirection: null,
+    sameSideCount: null,
+    sameSideShare: null,
+    meanAlignedConfidence: null,
+    index: null,
+    triggerThreshold: SATURATION_TRIGGER,
+    capSlope: SATURATION_CAP_SLOPE,
+    minConfidenceCap: SATURATION_MIN_CONFIDENCE_CAP,
+    currentAlignedConfidence: null,
+    dynamicConfidenceCap: null,
+    regimeActive: false,
+    candidateBefore: false,
+    candidateSourceBefore: "NONE",
+    conditionMet: false,
+    vetoFired: false,
+    candidateAfter: false,
+    reason: null,
+    withoutSaturationDecision: null,
+    withoutSaturationDirection: null,
+    withoutSaturationSkipReason: null,
+  };
+}
+
+/** Frozen dynamic tail cap. Never below SATURATION_MIN_CONFIDENCE_CAP. */
+export function saturationConfidenceCap(index: number): number {
+  return Math.max(
+    SATURATION_MIN_CONFIDENCE_CAP,
+    0.5 - SATURATION_CAP_SLOPE * (index - SATURATION_TRIGGER),
+  );
+}
+
+/**
+ * Saturation feature over the previous SATURATION_WINDOW valid canonical A2
+ * source rows (strictly earlier, current row excluded, outcome-free).
+ */
+export function computeSaturationFeature(
+  previous: HistoryEntry[],
+  currentDirection: Direction,
+  currentAlignedConfidence: number,
+): {
+  historyCount: number;
+  ready: boolean;
+  sameSideCount: number | null;
+  sameSideShare: number | null;
+  meanAlignedConfidence: number | null;
+  index: number | null;
+  regimeActive: boolean;
+  dynamicConfidenceCap: number | null;
+  conditionMet: boolean;
+} {
+  const window = previous.slice(-SATURATION_WINDOW);
+  const historyCount = window.length;
+  const ready = historyCount === SATURATION_WINDOW;
+  if (!ready) {
+    return {
+      historyCount,
+      ready: false,
+      sameSideCount: null,
+      sameSideShare: null,
+      meanAlignedConfidence: null,
+      index: null,
+      regimeActive: false,
+      dynamicConfidenceCap: null,
+      conditionMet: false,
+    };
+  }
+  let sameSideCount = 0;
+  let confidenceSum = 0;
+  for (const e of window) {
+    if (e.direction === currentDirection) sameSideCount++;
+    confidenceSum += Math.abs(e.confidence);
+  }
+  const sameSideShare = sameSideCount / SATURATION_WINDOW;
+  const meanAlignedConfidence = confidenceSum / SATURATION_WINDOW;
+  const index = sameSideShare * 2 * meanAlignedConfidence;
+  const regimeActive = index >= SATURATION_TRIGGER;
+  const dynamicConfidenceCap = regimeActive ? saturationConfidenceCap(index) : null;
+  return {
+    historyCount,
+    ready,
+    sameSideCount,
+    sameSideShare,
+    meanAlignedConfidence,
+    index,
+    regimeActive,
+    dynamicConfidenceCap,
+    conditionMet:
+      regimeActive && dynamicConfidenceCap != null &&
+      currentAlignedConfidence >= dynamicConfidenceCap,
+  };
+}
+
 export interface GridCell {
   globalQuartile: number;
   sameSideQuartile: number;
