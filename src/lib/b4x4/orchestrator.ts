@@ -528,6 +528,21 @@ export async function resolveB4x4Row(
       actualDirection,
     );
 
+    // ---- balanced saturation attribution (direct current-state, idempotent) ----
+    const withoutSaturationWouldPublish = row.without_saturation_decision === "PUBLISH";
+    const withoutSaturationScore = withoutSaturationWouldPublish
+      ? scoreAgainst(
+          (row.without_saturation_direction as Direction | null) ?? null,
+          actualDirection,
+        ).score
+      : null;
+    const saturationAttr = saturationAttribution(
+      row.saturation_veto_fired === true,
+      withoutSaturationWouldPublish,
+      withoutSaturationScore,
+    );
+
+
     await supabase
       .from("b4x4_predictions")
       .update({
