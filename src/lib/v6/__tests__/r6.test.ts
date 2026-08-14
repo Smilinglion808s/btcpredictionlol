@@ -30,7 +30,12 @@ import {
   evaluateR5Router,
 } from "../r5";
 import { V6_CSV_COLUMNS } from "../csv";
-import { R5_ROUTE_BRAKE_PAUSE_LOSSES, R5_ROUTE_BRAKE_RESUME_WINS, applyRouteBrake } from "../routeBrake";
+import {
+  R5_ROUTE_BRAKE_PAUSE_LOSSES,
+  R5_ROUTE_BRAKE_RESUME_WINS,
+  applyRouteBrake,
+  emptyRouteBrakeState,
+} from "../routeBrake";
 
 // Inputs that trigger no promotion rule at all.
 const NEUTRAL = {
@@ -92,8 +97,8 @@ describe("V6-r6 core / r5 preservation", () => {
 });
 
 describe("V6-r5.1 brake demotion", () => {
-  const paused = { pauseActive: true, consecutiveShadowLosses: 2 };
-  const open = { pauseActive: false, consecutiveShadowLosses: 0 };
+  const paused = { ...emptyRouteBrakeState("R5_GREEN"), pauseActive: true, consecutiveShadowLosses: 2 };
+  const open = emptyRouteBrakeState("R5_ANCHOR_RED");
 
   it("is flagged shadow-only with publication disabled", () => {
     expect(R5_ROUTE_BRAKE_SHADOW_ONLY).toBe(true);
