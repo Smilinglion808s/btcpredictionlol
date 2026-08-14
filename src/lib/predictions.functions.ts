@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats, invalidateStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.server";
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
@@ -455,7 +455,7 @@ export const exportModel7Shadow = createServerFn({ method: "GET" }).handler(asyn
 });
 
 /** Shadow predictions on the current pending candle. */
-export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => {
+export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(async () => cachedStats("m7-shadow-pending", async () => {
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_shadow")
@@ -477,7 +477,7 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2"),
     A2_Conflict: pick("A2_Conflict"), A2_MidBand: pick("A2_MidBand"), A2_Combined: pick("A2_Combined"),
   };
-});
+}, PENDING_TTL_MS));
 
 
 
@@ -541,7 +541,7 @@ export const getVariantB2Latest = createServerFn({ method: "GET" }).handler(asyn
 });
 
 /** Recent B2 shadow rows shaped for the home page's last-5-trades + last-result cards. */
-export const listVariantB2Recent = createServerFn({ method: "GET" }).handler(async () => {
+export const listVariantB2Recent = createServerFn({ method: "GET" }).handler(async () => cachedStats("b2-recent", async () => {
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_shadow")
@@ -563,7 +563,7 @@ export const listVariantB2Recent = createServerFn({ method: "GET" }).handler(asy
     }
   }
   return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
-});
+}));
 
 /** Latest B4.2 shadow row shaped for the home page's current/upcoming cards. */
 export const getVariantB4_2Latest = createServerFn({ method: "GET" }).handler(async () => {
@@ -701,7 +701,7 @@ export const getTd1RcLatest = createServerFn({ method: "GET" }).handler(async ()
 });
 
 /** Recent TD1-RC rows shaped for the home page's last-5-trades + last-result cards. */
-export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async () => {
+export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async () => cachedStats("td1-rc-recent", async () => {
   const sb = await admin();
   const { data, error } = await sb
     .from("model7_td1_rc_shadow")
@@ -726,7 +726,7 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
     ...shapeTd1RcRow(r, prodMap.get(r.prediction_id) ?? null),
     a2_combined: (r.a2_original_decision as string | null) ?? null,
   }));
-});
+}));
 
 
 /** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant).
@@ -1037,7 +1037,7 @@ export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async
 }));
 
 export const getTd3ShadowPending = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcPendingFor(TD3_VARIANT),
+  cachedStats("td3-pending", () => td1RcPendingFor(TD3_VARIANT), PENDING_TTL_MS),
 );
 
 
@@ -1133,11 +1133,11 @@ async function td1RcPendingFor(variant: string) {
 }
 
 export const getTd1RcShadowPending = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcPendingFor(TD1_VARIANT),
+  cachedStats("td1-rc-pending", () => td1RcPendingFor(TD1_VARIANT), PENDING_TTL_MS),
 );
 
 export const getTd2RcShadowPending = createServerFn({ method: "GET" }).handler(async () =>
-  td1RcPendingFor(TD2_VARIANT),
+  cachedStats("td2-rc-pending", () => td1RcPendingFor(TD2_VARIANT), PENDING_TTL_MS),
 );
 
 /** Export TD1-RC shadow rows as CSV-ready records — full tracker payload.

@@ -19,7 +19,10 @@ type Entry = {
 
 const store = new Map<string, Entry>();
 
-export const STATS_TTL_MS = 45_000;
+export const STATS_TTL_MS = 150_000;
+/** Short TTL for "pending candle" reads that must stay near-live but still
+ *  collapse many concurrent viewers into a single database round-trip. */
+export const PENDING_TTL_MS = 12_000;
 /** How long a stale value may still be served when the database misbehaves. */
 const STALE_GRACE_MS = 10 * 60_000;
 

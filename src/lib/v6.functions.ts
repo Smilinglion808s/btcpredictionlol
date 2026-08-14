@@ -1,7 +1,7 @@
 // V6 server functions: stats card data, pending prediction, and CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats, invalidateStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -392,7 +392,7 @@ export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => 
 }));
 
 /** Most recent V6 row (the pending target candle when unresolved). */
-export const getV6Pending = createServerFn({ method: "GET" }).handler(async () => {
+export const getV6Pending = createServerFn({ method: "GET" }).handler(async () => cachedStats("v6-pending", async () => {
   const sb = await admin();
   const { data } = await sb
     .from("v6_predictions")
@@ -403,10 +403,10 @@ export const getV6Pending = createServerFn({ method: "GET" }).handler(async () =
     .limit(1)
     .maybeSingle();
   return data ?? null;
-});
+}, PENDING_TTL_MS));
 
 /** Live Regime Inverter state (rolling shadow window) for the stats panel. */
-export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(async () => {
+export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(async () => cachedStats("v6-regime-inverter", async () => {
   const sb = await admin();
   const { data } = await sb
     .from("v6_regime_inverter_state")
@@ -414,7 +414,7 @@ export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(asy
     .eq("model_version", "V6")
     .maybeSingle();
   return (data as Record<string, string | number | boolean | null> | null) ?? null;
-});
+}, PENDING_TTL_MS));
 
 /** Rebuild the rolling shadow window from canonical resolved history. */
 export const rebuildV6RegimeInverter = createServerFn({ method: "POST" }).handler(async () => {
