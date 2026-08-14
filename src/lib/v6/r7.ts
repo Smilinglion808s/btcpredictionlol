@@ -58,6 +58,7 @@ export type R7Action = "KEEP_R6" | "REJECT_R6" | "ADD_OPPORTUNITY" | "REROUTE_DI
 
 /** Bin a percentile into the fixed 4-wide grid. 1.00 belongs to bin 3. */
 export function percentileBin(value: unknown): number | null {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 1) return null;
   if (n < 0.25) return 0;
