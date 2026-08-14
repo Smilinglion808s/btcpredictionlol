@@ -8,7 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Master kill switch for V6 outbound directional webhooks. */
-export const V6_WEBHOOKS_ENABLED = true;
+export const V6_WEBHOOKS_ENABLED = false;
 
 /** First target boundary eligible for a live V6 webhook. */
 export const V6_WEBHOOK_ACTIVATION_TS = "2026-08-11T02:00:00.000Z";
