@@ -929,7 +929,7 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
     const { data } = await sb
       .from("v6_predictions")
       .select(
-        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction, r6_base_prediction, r6_p1_green_candidate, r6_p2_red_candidate, r6_p3_green_candidate, r6_p4_red_candidate, r6_p5_green_candidate, r6_p6_green_candidate, r6_green_promotion_candidate, r6_red_promotion_candidate, r6_promotion_conflict, r6_final_prediction, r6_promotion_final_prediction, r5_route_brake_shadow_prediction",
+        "prediction_id, target_candle_ts, base_v6_prediction, pre_weak_red_veto_prediction, final_prediction, operational_status, saturation_veto_triggered, red_pickup_triggered, green_pickup_triggered, weak_broad_red_veto_triggered, prediction_source, original_v6_base_prediction, original_v6_base_source, pre_inverter_prediction, regime_inverter_triggered, regime_inverter_would_trigger, regime_inverter_would_publish, weak_red_veto_candidate, weak_red_recovery_triggered, prediction_after_weak_red_recovery, selected_component, broad_percentile, anchor_percentile, broad_conflict_veto_triggered, broad_conflict_original_prediction, broad_red_reliability_veto_triggered, prediction_after_broad_conflict_veto, structure_confirmation_triggered, structure_underlying_prediction, pre_structure_prediction, pre_structure_source, r5_green_candidate, r5_red_anchor_candidate, r5_red_broad_candidate, r5_conflict, r5_router_decision, r5_aligned_wick_red_shadow_candidate, legacy_r4_shadow_prediction, consensus_red_shadow_prediction, momentum_green_shadow_prediction, r5_route_brake_triggered, r5_route_brake_route_key, r5_route_brake_underlying_prediction, r6_base_prediction, r6_p1_green_candidate, r6_p2_red_candidate, r6_p3_green_candidate, r6_p4_red_candidate, r6_p5_green_candidate, r6_p6_green_candidate, r6_green_promotion_candidate, r6_red_promotion_candidate, r6_promotion_conflict, r6_final_prediction, r6_promotion_final_prediction, r5_route_brake_shadow_prediction, r7_shadow_prediction, r7_action_vs_r6, r7_e1_candidate, r7_e2_candidate, r7_e3_candidate, r7_e4_candidate",
       )
       .eq("model_version", V6_MODEL_VERSION)
       .is("resolution_timestamp", null)
@@ -1124,6 +1124,16 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
         (r6PromotedDir ?? "ABSTAIN") as Direction,
         gradeable,
       );
+      // --- V6-r7 shadow outcomes -----------------------------------------
+      const r7Prediction = opFail ? null : (r.r7_shadow_prediction as string | null);
+      const r7Action = (r.r7_action_vs_r6 as ReturnType<typeof classifyAction> | null)
+        ?? classifyAction(r.r6_final_prediction ?? final, r7Prediction);
+      const r7Shadow = gradeR7(r7Prediction, gradeable);
+      const r7E1 = gradeR7(opFail ? null : r.r7_e1_candidate, gradeable);
+      const r7E2 = gradeR7(opFail ? null : r.r7_e2_candidate, gradeable);
+      const r7E3 = gradeR7(opFail ? null : r.r7_e3_candidate, gradeable);
+      const r7E4 = gradeR7(opFail ? null : r.r7_e4_candidate, gradeable);
+
       const brakeShadowPrediction =
         (r.r5_route_brake_shadow_prediction as Direction | null) ?? null;
       const brakeShadowDirectional =
@@ -1349,6 +1359,21 @@ export async function resolveDueV6(sb: SupabaseClient): Promise<void> {
           r6_promotion_result: r6Promotion.result,
           r6_promotion_raw_contribution: r6Promotion.raw,
           r6_promotion_adjusted_contribution: r6Promotion.adjusted,
+
+          // --- V6-r7 shadow grading (RAW only, never touches r6 accounting) --
+          r7_shadow_result: r7Shadow.result,
+          r7_shadow_raw_score: opFail ? null : r7Shadow.raw,
+          r7_raw_contribution_vs_r6: opFail
+            ? null
+            : rawContributionVsR6(r7Action, r.r6_final_prediction ?? final, r7Prediction, actual),
+          r7_e1_shadow_result: r7E1.result,
+          r7_e1_shadow_raw_score: opFail ? null : r7E1.raw,
+          r7_e2_shadow_result: r7E2.result,
+          r7_e2_shadow_raw_score: opFail ? null : r7E2.raw,
+          r7_e3_shadow_result: r7E3.result,
+          r7_e3_shadow_raw_score: opFail ? null : r7E3.raw,
+          r7_e4_shadow_result: r7E4.result,
+          r7_e4_shadow_raw_score: opFail ? null : r7E4.raw,
 
         } as never)
         .eq("prediction_id", String(r.prediction_id))
