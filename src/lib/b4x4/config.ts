@@ -52,7 +52,14 @@ export const B4X4_REVISION_PROSPECTIVE_TEST_ID =
  * produced by this build carries it so the prospective test window is
  * reconstructable from the data alone. Never change this value.
  */
-export const B4X4_REVISION_ACTIVATED_AT = "2026-08-11T00:00:00.000Z";
+export const B4X4_REVISION_ACTIVATED_AT = "2026-08-14T05:00:00.000Z";
+
+// ---- balanced saturation calibration (active route, frozen) ----
+export const SATURATION_CALIBRATION_VERSION = "balanced-saturation-r1";
+export const SATURATION_WINDOW = 16;
+export const SATURATION_TRIGGER = 0.64;
+export const SATURATION_CAP_SLOPE = 0.15;
+export const SATURATION_MIN_CONFIDENCE_CAP = 0.47;
 /** Reporting label for rows produced before the repair. */
 export const B4X4_PRE_REPAIR_SEGMENT = "B4X4_V1_PRE_RUNTIME_REPAIR";
 /** Absolute source index scheme version. */
