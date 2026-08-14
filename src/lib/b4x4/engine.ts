@@ -682,6 +682,7 @@ export function evaluateB4x4(
     baseCandidate: false,
     selectedRoute: "NONE",
     calibration: emptyCalibration(),
+    saturation: emptySaturation(),
     localDate,
     dailyNetBefore: daily.dailyNetBefore,
     dailyResolvedTradeCountBefore: daily.dailyResolvedTradeCountBefore,
