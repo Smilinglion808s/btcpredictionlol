@@ -403,7 +403,7 @@ export const getV6Pending = createServerFn({ method: "GET" }).handler(async () =
     .limit(1)
     .maybeSingle();
   return data ?? null;
-});
+}, PENDING_TTL_MS));
 
 /** Live Regime Inverter state (rolling shadow window) for the stats panel. */
 export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(async () => cachedStats("v6-regime-inverter", async () => {
@@ -414,7 +414,7 @@ export const getV6RegimeInverter = createServerFn({ method: "GET" }).handler(asy
     .eq("model_version", "V6")
     .maybeSingle();
   return (data as Record<string, string | number | boolean | null> | null) ?? null;
-});
+}, PENDING_TTL_MS));
 
 /** Rebuild the rolling shadow window from canonical resolved history. */
 export const rebuildV6RegimeInverter = createServerFn({ method: "POST" }).handler(async () => {

@@ -477,7 +477,7 @@ export const getModel7ShadowPending = createServerFn({ method: "GET" }).handler(
     A: pick("A"), B: pick("B"), B2: pick("B2"), B4_2: pick("B4_2"),
     A2_Conflict: pick("A2_Conflict"), A2_MidBand: pick("A2_MidBand"), A2_Combined: pick("A2_Combined"),
   };
-});
+}, PENDING_TTL_MS));
 
 
 
@@ -563,7 +563,7 @@ export const listVariantB2Recent = createServerFn({ method: "GET" }).handler(asy
     }
   }
   return rows.map((r: any) => shapeB2Row(r, prodMap.get(r.prediction_id) ?? null));
-});
+}));
 
 /** Latest B4.2 shadow row shaped for the home page's current/upcoming cards. */
 export const getVariantB4_2Latest = createServerFn({ method: "GET" }).handler(async () => {
@@ -726,7 +726,7 @@ export const listTd1RcRecent = createServerFn({ method: "GET" }).handler(async (
     ...shapeTd1RcRow(r, prodMap.get(r.prediction_id) ?? null),
     a2_combined: (r.a2_original_decision as string | null) ?? null,
   }));
-});
+}));
 
 
 /** Aggregate stats for TD1-RC shadow (A2_Combined_TD1_RC variant).

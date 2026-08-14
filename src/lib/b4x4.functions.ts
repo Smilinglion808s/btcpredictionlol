@@ -266,7 +266,7 @@ export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async ()
     .limit(1)
     .maybeSingle();
   return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
-});
+}, PENDING_TTL_MS));
 
 /** Audit-only shadow market-data coverage. Never affects B4x4 decisions. */
 export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-shadow-coverage", async () => {
@@ -286,7 +286,7 @@ export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(a
     flow_conflicts: rows.filter((r) => r.flow_conflicts_a2 === true).length,
     strong_coherent: rows.filter((r) => r.flow_strong_coherent === true).length,
   };
-});
+}));
 
 /**
  * Order-book shadow audit panel data (b4x4-ob-shadow-v1).
@@ -358,7 +358,7 @@ export const getB4x4ObShadowAudit = createServerFn({ method: "GET" }).handler(as
     unavailable_count: shadow.filter((r) => r.raw_direction_relationship === "UNAVAILABLE").length,
     strong_coherent: bucket((r) => r.flow_strong_coherent === true),
   };
-});
+}));
 
 /** Insert placeholder shadow rows for prior LIVE predictions with no capture. */
 export const backfillB4x4ShadowPlaceholders = createServerFn({ method: "POST" }).handler(async () => {
@@ -496,4 +496,4 @@ export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async ()
     actual_close: r.actual_close != null ? Number(r.actual_close) : null,
     status: r.resolved_at ? String(r.result ?? "—") : r.would_trade === true ? "PENDING" : "SKIPPED",
   }));
-});
+}));
