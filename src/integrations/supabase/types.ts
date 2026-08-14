@@ -811,6 +811,32 @@ export type Database = {
           same_side_rank: number | null
           same_side_rank_quartile: number | null
           same_side_raw_direction_filter: string | null
+          saturation_attribution_class: string | null
+          saturation_calibration_version: string | null
+          saturation_candidate_after: boolean | null
+          saturation_candidate_before: boolean | null
+          saturation_candidate_source_before: string | null
+          saturation_cap_slope: number | null
+          saturation_condition_met: boolean | null
+          saturation_current_aligned_confidence: number | null
+          saturation_current_raw_direction: string | null
+          saturation_dynamic_confidence_cap: number | null
+          saturation_history_count: number | null
+          saturation_history_end_ts: string | null
+          saturation_history_start_ts: string | null
+          saturation_incremental_change: boolean | null
+          saturation_incremental_value: number | null
+          saturation_index: number | null
+          saturation_mean_aligned_confidence: number | null
+          saturation_min_confidence_cap: number | null
+          saturation_ready: boolean | null
+          saturation_reason: string | null
+          saturation_regime_active: boolean | null
+          saturation_same_side_count: number | null
+          saturation_same_side_share: number | null
+          saturation_trigger_threshold: number | null
+          saturation_veto_fired: boolean | null
+          saturation_window: number | null
           scheduler_invocation_id: string | null
           selected_route: string | null
           source_a2_row_id: string | null
@@ -826,6 +852,10 @@ export type Database = {
           watchdog_detected_at: string | null
           webhook_eligible: boolean
           webhook_sent_at: string | null
+          without_saturation_decision: string | null
+          without_saturation_direction: string | null
+          without_saturation_score: number | null
+          without_saturation_skip_reason: string | null
           would_trade: boolean
         }
         Insert: {
@@ -963,6 +993,32 @@ export type Database = {
           same_side_rank?: number | null
           same_side_rank_quartile?: number | null
           same_side_raw_direction_filter?: string | null
+          saturation_attribution_class?: string | null
+          saturation_calibration_version?: string | null
+          saturation_candidate_after?: boolean | null
+          saturation_candidate_before?: boolean | null
+          saturation_candidate_source_before?: string | null
+          saturation_cap_slope?: number | null
+          saturation_condition_met?: boolean | null
+          saturation_current_aligned_confidence?: number | null
+          saturation_current_raw_direction?: string | null
+          saturation_dynamic_confidence_cap?: number | null
+          saturation_history_count?: number | null
+          saturation_history_end_ts?: string | null
+          saturation_history_start_ts?: string | null
+          saturation_incremental_change?: boolean | null
+          saturation_incremental_value?: number | null
+          saturation_index?: number | null
+          saturation_mean_aligned_confidence?: number | null
+          saturation_min_confidence_cap?: number | null
+          saturation_ready?: boolean | null
+          saturation_reason?: string | null
+          saturation_regime_active?: boolean | null
+          saturation_same_side_count?: number | null
+          saturation_same_side_share?: number | null
+          saturation_trigger_threshold?: number | null
+          saturation_veto_fired?: boolean | null
+          saturation_window?: number | null
           scheduler_invocation_id?: string | null
           selected_route?: string | null
           source_a2_row_id?: string | null
@@ -978,6 +1034,10 @@ export type Database = {
           watchdog_detected_at?: string | null
           webhook_eligible?: boolean
           webhook_sent_at?: string | null
+          without_saturation_decision?: string | null
+          without_saturation_direction?: string | null
+          without_saturation_score?: number | null
+          without_saturation_skip_reason?: string | null
           would_trade?: boolean
         }
         Update: {
@@ -1115,6 +1175,32 @@ export type Database = {
           same_side_rank?: number | null
           same_side_rank_quartile?: number | null
           same_side_raw_direction_filter?: string | null
+          saturation_attribution_class?: string | null
+          saturation_calibration_version?: string | null
+          saturation_candidate_after?: boolean | null
+          saturation_candidate_before?: boolean | null
+          saturation_candidate_source_before?: string | null
+          saturation_cap_slope?: number | null
+          saturation_condition_met?: boolean | null
+          saturation_current_aligned_confidence?: number | null
+          saturation_current_raw_direction?: string | null
+          saturation_dynamic_confidence_cap?: number | null
+          saturation_history_count?: number | null
+          saturation_history_end_ts?: string | null
+          saturation_history_start_ts?: string | null
+          saturation_incremental_change?: boolean | null
+          saturation_incremental_value?: number | null
+          saturation_index?: number | null
+          saturation_mean_aligned_confidence?: number | null
+          saturation_min_confidence_cap?: number | null
+          saturation_ready?: boolean | null
+          saturation_reason?: string | null
+          saturation_regime_active?: boolean | null
+          saturation_same_side_count?: number | null
+          saturation_same_side_share?: number | null
+          saturation_trigger_threshold?: number | null
+          saturation_veto_fired?: boolean | null
+          saturation_window?: number | null
           scheduler_invocation_id?: string | null
           selected_route?: string | null
           source_a2_row_id?: string | null
@@ -1130,6 +1216,10 @@ export type Database = {
           watchdog_detected_at?: string | null
           webhook_eligible?: boolean
           webhook_sent_at?: string | null
+          without_saturation_decision?: string | null
+          without_saturation_direction?: string | null
+          without_saturation_score?: number | null
+          without_saturation_skip_reason?: string | null
           would_trade?: boolean
         }
         Relationships: []
