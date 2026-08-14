@@ -8,7 +8,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { B4X4_MODEL_VERSION, B4X4_SOURCE_EPOCH_TS, B4X4_SOURCE_VARIANT, b4x4LocalDate } from "./config";
-import { replayB4x4, brakeAttribution, type ActualDirection, type SourceRow } from "./engine";
+import {
+  replayB4x4,
+  brakeAttribution,
+  saturationAttribution,
+  type ActualDirection,
+  type SourceRow,
+} from "./engine";
 import { decisionToRow } from "./orchestrator";
 
 type DbRow = Record<string, unknown>;
