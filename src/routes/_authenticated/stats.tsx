@@ -43,7 +43,7 @@ export const Route = createFileRoute("/_authenticated/stats")({
 });
 
 const ALL_VERSIONS = "__all__";
-const STATS_REFRESH_MS = 60_000;
+const STATS_REFRESH_MS = 120_000;
 const PENDING_REFRESH_MS = 15_000;
 
 function StatsPage() {

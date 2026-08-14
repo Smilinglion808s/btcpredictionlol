@@ -1,7 +1,7 @@
 // B4x4 server functions: dashboard stats, pending row, grid heatmap, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats } from "./statsCache.server";
 import { B4X4_ACTIVE_REVISIONS, B4X4_IMPLEMENTATION_REVISION, B4X4_MODEL_VERSION, B4X4_MODEL_VERSIONS, B4X4_VARIANT, B4X4_VARIANTS, b4x4LocalDate } from "./b4x4/config";
 import { SHADOW_A_VARIANT, SHADOW_B_VARIANT } from "./b4x4/shadows";
 
@@ -252,7 +252,7 @@ export const getB4x4Stats = createServerFn({ method: "GET" }).handler(async () =
 
 
 /** Most recent B4x4 row (its decision for the pending candle). */
-export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async () => {
+export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-pending", async () => {
   const sb = await admin();
   const { data } = await sb
     .from("b4x4_predictions")
@@ -269,7 +269,7 @@ export const getB4x4Pending = createServerFn({ method: "GET" }).handler(async ()
 });
 
 /** Audit-only shadow market-data coverage. Never affects B4x4 decisions. */
-export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(async () => {
+export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-shadow-coverage", async () => {
   const sb = await admin();
   const { data } = await sb
     .from("b4x4_shadow_market_data")
@@ -292,7 +292,7 @@ export const getB4x4ShadowCoverage = createServerFn({ method: "GET" }).handler(a
  * Order-book shadow audit panel data (b4x4-ob-shadow-v1).
  * SHADOW ONLY — never used in B4x4 decisions.
  */
-export const getB4x4ObShadowAudit = createServerFn({ method: "GET" }).handler(async () => {
+export const getB4x4ObShadowAudit = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-ob-audit", async () => {
   const sb = await admin();
   const { data: preds } = await sb
     .from("b4x4_predictions")
@@ -472,7 +472,7 @@ export const exportB4x4Csv = createServerFn({ method: "GET" }).handler(async () 
 
 
 /** Recent B4x4 rows for the Stats page history table. */
-export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async () => {
+export const listB4x4Recent = createServerFn({ method: "GET" }).handler(async () => cachedStats("b4x4-recent", async () => {
   const sb = await admin();
   const { data } = await sb
     .from("b4x4_predictions")
