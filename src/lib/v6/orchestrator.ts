@@ -102,6 +102,19 @@ import {
   V6_R6_MODEL_REVISION,
   V6_R6_ROUTER_VERSION,
 } from "./r6";
+import {
+  evaluateR7,
+  classifyAction,
+  gradeR7,
+  rawContributionVsR6,
+  R7_PUBLICATION_ENABLED,
+  R7_SHADOW_ENABLED,
+  R7_HISTORY_WINDOW,
+  V6_R7_ACTIVATED_AT,
+  V6_R7_MODEL_REVISION,
+  V6_R7_VERSION,
+} from "./r7";
+import { loadR7History } from "./r7Store";
 
 
 
