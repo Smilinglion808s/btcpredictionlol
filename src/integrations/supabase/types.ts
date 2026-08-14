@@ -5041,11 +5041,18 @@ export type Database = {
           r5_route_brake_activated_at: string | null
           r5_route_brake_adjusted_contribution: number | null
           r5_route_brake_pause_loss_threshold: number | null
+          r5_route_brake_publication_enabled: boolean | null
           r5_route_brake_raw_contribution: number | null
           r5_route_brake_reason: string | null
           r5_route_brake_resume_win_threshold: number | null
           r5_route_brake_revision: string | null
           r5_route_brake_route_key: string | null
+          r5_route_brake_shadow_adjusted_score: number | null
+          r5_route_brake_shadow_only: boolean | null
+          r5_route_brake_shadow_prediction: string | null
+          r5_route_brake_shadow_raw_score: number | null
+          r5_route_brake_shadow_reason: string | null
+          r5_route_brake_shadow_result: string | null
           r5_route_brake_state_rebuilt: boolean | null
           r5_route_brake_triggered: boolean | null
           r5_route_brake_underlying_actual: string | null
@@ -5057,6 +5064,107 @@ export type Database = {
           r5_router_reason: string | null
           r5_router_source: string | null
           r5_router_version: string | null
+          r6_base_prediction: string | null
+          r6_base_r5_adjusted_score: number | null
+          r6_base_r5_raw_score: number | null
+          r6_base_r5_result: string | null
+          r6_base_reason: string | null
+          r6_base_source: string | null
+          r6_conflict_green_result: string | null
+          r6_conflict_red_result: string | null
+          r6_final_adjusted_score: number | null
+          r6_final_prediction: string | null
+          r6_final_raw_score: number | null
+          r6_final_reason: string | null
+          r6_final_result: string | null
+          r6_final_source: string | null
+          r6_green_promotion_candidate: boolean | null
+          r6_green_promotion_rule_count: number | null
+          r6_green_promotion_rules_triggered: Json | null
+          r6_green_promotion_shadow_adjusted_score: number | null
+          r6_green_promotion_shadow_raw_score: number | null
+          r6_green_promotion_shadow_result: string | null
+          r6_p1_condition_a: boolean | null
+          r6_p1_condition_b: boolean | null
+          r6_p1_evaluable: boolean | null
+          r6_p1_green_candidate: boolean | null
+          r6_p1_momentum_8_over_atr: number | null
+          r6_p1_momentum_threshold: number | null
+          r6_p1_path_efficiency_4: number | null
+          r6_p1_path_efficiency_threshold: number | null
+          r6_p1_shadow_adjusted_score: number | null
+          r6_p1_shadow_raw_score: number | null
+          r6_p1_shadow_result: string | null
+          r6_p2_condition_a: boolean | null
+          r6_p2_condition_b: boolean | null
+          r6_p2_evaluable: boolean | null
+          r6_p2_red_candidate: boolean | null
+          r6_p2_roc_8: number | null
+          r6_p2_roc_threshold: number | null
+          r6_p2_shadow_adjusted_score: number | null
+          r6_p2_shadow_raw_score: number | null
+          r6_p2_shadow_result: string | null
+          r6_p2_volume_expansion: number | null
+          r6_p2_volume_expansion_threshold: number | null
+          r6_p3_change_pct: number | null
+          r6_p3_change_pct_threshold: number | null
+          r6_p3_channel_position_0_1: number | null
+          r6_p3_channel_position_threshold: number | null
+          r6_p3_condition_a: boolean | null
+          r6_p3_condition_b: boolean | null
+          r6_p3_evaluable: boolean | null
+          r6_p3_green_candidate: boolean | null
+          r6_p3_shadow_adjusted_score: number | null
+          r6_p3_shadow_raw_score: number | null
+          r6_p3_shadow_result: string | null
+          r6_p4_condition_a: boolean | null
+          r6_p4_condition_b: boolean | null
+          r6_p4_evaluable: boolean | null
+          r6_p4_macd_hist_over_atr14: number | null
+          r6_p4_macd_threshold: number | null
+          r6_p4_mean_body_threshold: number | null
+          r6_p4_mean_body_to_range_2: number | null
+          r6_p4_red_candidate: boolean | null
+          r6_p4_shadow_adjusted_score: number | null
+          r6_p4_shadow_raw_score: number | null
+          r6_p4_shadow_result: string | null
+          r6_p5_change_pct: number | null
+          r6_p5_change_pct_threshold: number | null
+          r6_p5_condition_a: boolean | null
+          r6_p5_condition_b: boolean | null
+          r6_p5_dist_low20_threshold: number | null
+          r6_p5_dist_to_low20_pct: number | null
+          r6_p5_evaluable: boolean | null
+          r6_p5_green_candidate: boolean | null
+          r6_p5_shadow_adjusted_score: number | null
+          r6_p5_shadow_raw_score: number | null
+          r6_p5_shadow_result: string | null
+          r6_p6_condition_a: boolean | null
+          r6_p6_condition_b: boolean | null
+          r6_p6_evaluable: boolean | null
+          r6_p6_green_candidate: boolean | null
+          r6_p6_mean_body_threshold: number | null
+          r6_p6_mean_body_to_range_2: number | null
+          r6_p6_path_efficiency_4: number | null
+          r6_p6_path_efficiency_threshold: number | null
+          r6_p6_shadow_adjusted_score: number | null
+          r6_p6_shadow_raw_score: number | null
+          r6_p6_shadow_result: string | null
+          r6_promotion_adjusted_contribution: number | null
+          r6_promotion_all_rules: Json | null
+          r6_promotion_conflict: boolean | null
+          r6_promotion_final_prediction: string | null
+          r6_promotion_primary_rule: string | null
+          r6_promotion_raw_contribution: number | null
+          r6_promotion_result: string | null
+          r6_promotion_underlying_r5_prediction: string | null
+          r6_red_promotion_candidate: boolean | null
+          r6_red_promotion_rule_count: number | null
+          r6_red_promotion_rules_triggered: Json | null
+          r6_red_promotion_shadow_adjusted_score: number | null
+          r6_red_promotion_shadow_raw_score: number | null
+          r6_red_promotion_shadow_result: string | null
+          r6_router_version: string | null
           range_expansion_vs_avg20: number | null
           red_pickup_adjusted_contribution: number | null
           red_pickup_evaluable: boolean
@@ -5382,11 +5490,18 @@ export type Database = {
           r5_route_brake_activated_at?: string | null
           r5_route_brake_adjusted_contribution?: number | null
           r5_route_brake_pause_loss_threshold?: number | null
+          r5_route_brake_publication_enabled?: boolean | null
           r5_route_brake_raw_contribution?: number | null
           r5_route_brake_reason?: string | null
           r5_route_brake_resume_win_threshold?: number | null
           r5_route_brake_revision?: string | null
           r5_route_brake_route_key?: string | null
+          r5_route_brake_shadow_adjusted_score?: number | null
+          r5_route_brake_shadow_only?: boolean | null
+          r5_route_brake_shadow_prediction?: string | null
+          r5_route_brake_shadow_raw_score?: number | null
+          r5_route_brake_shadow_reason?: string | null
+          r5_route_brake_shadow_result?: string | null
           r5_route_brake_state_rebuilt?: boolean | null
           r5_route_brake_triggered?: boolean | null
           r5_route_brake_underlying_actual?: string | null
@@ -5398,6 +5513,107 @@ export type Database = {
           r5_router_reason?: string | null
           r5_router_source?: string | null
           r5_router_version?: string | null
+          r6_base_prediction?: string | null
+          r6_base_r5_adjusted_score?: number | null
+          r6_base_r5_raw_score?: number | null
+          r6_base_r5_result?: string | null
+          r6_base_reason?: string | null
+          r6_base_source?: string | null
+          r6_conflict_green_result?: string | null
+          r6_conflict_red_result?: string | null
+          r6_final_adjusted_score?: number | null
+          r6_final_prediction?: string | null
+          r6_final_raw_score?: number | null
+          r6_final_reason?: string | null
+          r6_final_result?: string | null
+          r6_final_source?: string | null
+          r6_green_promotion_candidate?: boolean | null
+          r6_green_promotion_rule_count?: number | null
+          r6_green_promotion_rules_triggered?: Json | null
+          r6_green_promotion_shadow_adjusted_score?: number | null
+          r6_green_promotion_shadow_raw_score?: number | null
+          r6_green_promotion_shadow_result?: string | null
+          r6_p1_condition_a?: boolean | null
+          r6_p1_condition_b?: boolean | null
+          r6_p1_evaluable?: boolean | null
+          r6_p1_green_candidate?: boolean | null
+          r6_p1_momentum_8_over_atr?: number | null
+          r6_p1_momentum_threshold?: number | null
+          r6_p1_path_efficiency_4?: number | null
+          r6_p1_path_efficiency_threshold?: number | null
+          r6_p1_shadow_adjusted_score?: number | null
+          r6_p1_shadow_raw_score?: number | null
+          r6_p1_shadow_result?: string | null
+          r6_p2_condition_a?: boolean | null
+          r6_p2_condition_b?: boolean | null
+          r6_p2_evaluable?: boolean | null
+          r6_p2_red_candidate?: boolean | null
+          r6_p2_roc_8?: number | null
+          r6_p2_roc_threshold?: number | null
+          r6_p2_shadow_adjusted_score?: number | null
+          r6_p2_shadow_raw_score?: number | null
+          r6_p2_shadow_result?: string | null
+          r6_p2_volume_expansion?: number | null
+          r6_p2_volume_expansion_threshold?: number | null
+          r6_p3_change_pct?: number | null
+          r6_p3_change_pct_threshold?: number | null
+          r6_p3_channel_position_0_1?: number | null
+          r6_p3_channel_position_threshold?: number | null
+          r6_p3_condition_a?: boolean | null
+          r6_p3_condition_b?: boolean | null
+          r6_p3_evaluable?: boolean | null
+          r6_p3_green_candidate?: boolean | null
+          r6_p3_shadow_adjusted_score?: number | null
+          r6_p3_shadow_raw_score?: number | null
+          r6_p3_shadow_result?: string | null
+          r6_p4_condition_a?: boolean | null
+          r6_p4_condition_b?: boolean | null
+          r6_p4_evaluable?: boolean | null
+          r6_p4_macd_hist_over_atr14?: number | null
+          r6_p4_macd_threshold?: number | null
+          r6_p4_mean_body_threshold?: number | null
+          r6_p4_mean_body_to_range_2?: number | null
+          r6_p4_red_candidate?: boolean | null
+          r6_p4_shadow_adjusted_score?: number | null
+          r6_p4_shadow_raw_score?: number | null
+          r6_p4_shadow_result?: string | null
+          r6_p5_change_pct?: number | null
+          r6_p5_change_pct_threshold?: number | null
+          r6_p5_condition_a?: boolean | null
+          r6_p5_condition_b?: boolean | null
+          r6_p5_dist_low20_threshold?: number | null
+          r6_p5_dist_to_low20_pct?: number | null
+          r6_p5_evaluable?: boolean | null
+          r6_p5_green_candidate?: boolean | null
+          r6_p5_shadow_adjusted_score?: number | null
+          r6_p5_shadow_raw_score?: number | null
+          r6_p5_shadow_result?: string | null
+          r6_p6_condition_a?: boolean | null
+          r6_p6_condition_b?: boolean | null
+          r6_p6_evaluable?: boolean | null
+          r6_p6_green_candidate?: boolean | null
+          r6_p6_mean_body_threshold?: number | null
+          r6_p6_mean_body_to_range_2?: number | null
+          r6_p6_path_efficiency_4?: number | null
+          r6_p6_path_efficiency_threshold?: number | null
+          r6_p6_shadow_adjusted_score?: number | null
+          r6_p6_shadow_raw_score?: number | null
+          r6_p6_shadow_result?: string | null
+          r6_promotion_adjusted_contribution?: number | null
+          r6_promotion_all_rules?: Json | null
+          r6_promotion_conflict?: boolean | null
+          r6_promotion_final_prediction?: string | null
+          r6_promotion_primary_rule?: string | null
+          r6_promotion_raw_contribution?: number | null
+          r6_promotion_result?: string | null
+          r6_promotion_underlying_r5_prediction?: string | null
+          r6_red_promotion_candidate?: boolean | null
+          r6_red_promotion_rule_count?: number | null
+          r6_red_promotion_rules_triggered?: Json | null
+          r6_red_promotion_shadow_adjusted_score?: number | null
+          r6_red_promotion_shadow_raw_score?: number | null
+          r6_red_promotion_shadow_result?: string | null
+          r6_router_version?: string | null
           range_expansion_vs_avg20?: number | null
           red_pickup_adjusted_contribution?: number | null
           red_pickup_evaluable?: boolean
@@ -5723,11 +5939,18 @@ export type Database = {
           r5_route_brake_activated_at?: string | null
           r5_route_brake_adjusted_contribution?: number | null
           r5_route_brake_pause_loss_threshold?: number | null
+          r5_route_brake_publication_enabled?: boolean | null
           r5_route_brake_raw_contribution?: number | null
           r5_route_brake_reason?: string | null
           r5_route_brake_resume_win_threshold?: number | null
           r5_route_brake_revision?: string | null
           r5_route_brake_route_key?: string | null
+          r5_route_brake_shadow_adjusted_score?: number | null
+          r5_route_brake_shadow_only?: boolean | null
+          r5_route_brake_shadow_prediction?: string | null
+          r5_route_brake_shadow_raw_score?: number | null
+          r5_route_brake_shadow_reason?: string | null
+          r5_route_brake_shadow_result?: string | null
           r5_route_brake_state_rebuilt?: boolean | null
           r5_route_brake_triggered?: boolean | null
           r5_route_brake_underlying_actual?: string | null
@@ -5739,6 +5962,107 @@ export type Database = {
           r5_router_reason?: string | null
           r5_router_source?: string | null
           r5_router_version?: string | null
+          r6_base_prediction?: string | null
+          r6_base_r5_adjusted_score?: number | null
+          r6_base_r5_raw_score?: number | null
+          r6_base_r5_result?: string | null
+          r6_base_reason?: string | null
+          r6_base_source?: string | null
+          r6_conflict_green_result?: string | null
+          r6_conflict_red_result?: string | null
+          r6_final_adjusted_score?: number | null
+          r6_final_prediction?: string | null
+          r6_final_raw_score?: number | null
+          r6_final_reason?: string | null
+          r6_final_result?: string | null
+          r6_final_source?: string | null
+          r6_green_promotion_candidate?: boolean | null
+          r6_green_promotion_rule_count?: number | null
+          r6_green_promotion_rules_triggered?: Json | null
+          r6_green_promotion_shadow_adjusted_score?: number | null
+          r6_green_promotion_shadow_raw_score?: number | null
+          r6_green_promotion_shadow_result?: string | null
+          r6_p1_condition_a?: boolean | null
+          r6_p1_condition_b?: boolean | null
+          r6_p1_evaluable?: boolean | null
+          r6_p1_green_candidate?: boolean | null
+          r6_p1_momentum_8_over_atr?: number | null
+          r6_p1_momentum_threshold?: number | null
+          r6_p1_path_efficiency_4?: number | null
+          r6_p1_path_efficiency_threshold?: number | null
+          r6_p1_shadow_adjusted_score?: number | null
+          r6_p1_shadow_raw_score?: number | null
+          r6_p1_shadow_result?: string | null
+          r6_p2_condition_a?: boolean | null
+          r6_p2_condition_b?: boolean | null
+          r6_p2_evaluable?: boolean | null
+          r6_p2_red_candidate?: boolean | null
+          r6_p2_roc_8?: number | null
+          r6_p2_roc_threshold?: number | null
+          r6_p2_shadow_adjusted_score?: number | null
+          r6_p2_shadow_raw_score?: number | null
+          r6_p2_shadow_result?: string | null
+          r6_p2_volume_expansion?: number | null
+          r6_p2_volume_expansion_threshold?: number | null
+          r6_p3_change_pct?: number | null
+          r6_p3_change_pct_threshold?: number | null
+          r6_p3_channel_position_0_1?: number | null
+          r6_p3_channel_position_threshold?: number | null
+          r6_p3_condition_a?: boolean | null
+          r6_p3_condition_b?: boolean | null
+          r6_p3_evaluable?: boolean | null
+          r6_p3_green_candidate?: boolean | null
+          r6_p3_shadow_adjusted_score?: number | null
+          r6_p3_shadow_raw_score?: number | null
+          r6_p3_shadow_result?: string | null
+          r6_p4_condition_a?: boolean | null
+          r6_p4_condition_b?: boolean | null
+          r6_p4_evaluable?: boolean | null
+          r6_p4_macd_hist_over_atr14?: number | null
+          r6_p4_macd_threshold?: number | null
+          r6_p4_mean_body_threshold?: number | null
+          r6_p4_mean_body_to_range_2?: number | null
+          r6_p4_red_candidate?: boolean | null
+          r6_p4_shadow_adjusted_score?: number | null
+          r6_p4_shadow_raw_score?: number | null
+          r6_p4_shadow_result?: string | null
+          r6_p5_change_pct?: number | null
+          r6_p5_change_pct_threshold?: number | null
+          r6_p5_condition_a?: boolean | null
+          r6_p5_condition_b?: boolean | null
+          r6_p5_dist_low20_threshold?: number | null
+          r6_p5_dist_to_low20_pct?: number | null
+          r6_p5_evaluable?: boolean | null
+          r6_p5_green_candidate?: boolean | null
+          r6_p5_shadow_adjusted_score?: number | null
+          r6_p5_shadow_raw_score?: number | null
+          r6_p5_shadow_result?: string | null
+          r6_p6_condition_a?: boolean | null
+          r6_p6_condition_b?: boolean | null
+          r6_p6_evaluable?: boolean | null
+          r6_p6_green_candidate?: boolean | null
+          r6_p6_mean_body_threshold?: number | null
+          r6_p6_mean_body_to_range_2?: number | null
+          r6_p6_path_efficiency_4?: number | null
+          r6_p6_path_efficiency_threshold?: number | null
+          r6_p6_shadow_adjusted_score?: number | null
+          r6_p6_shadow_raw_score?: number | null
+          r6_p6_shadow_result?: string | null
+          r6_promotion_adjusted_contribution?: number | null
+          r6_promotion_all_rules?: Json | null
+          r6_promotion_conflict?: boolean | null
+          r6_promotion_final_prediction?: string | null
+          r6_promotion_primary_rule?: string | null
+          r6_promotion_raw_contribution?: number | null
+          r6_promotion_result?: string | null
+          r6_promotion_underlying_r5_prediction?: string | null
+          r6_red_promotion_candidate?: boolean | null
+          r6_red_promotion_rule_count?: number | null
+          r6_red_promotion_rules_triggered?: Json | null
+          r6_red_promotion_shadow_adjusted_score?: number | null
+          r6_red_promotion_shadow_raw_score?: number | null
+          r6_red_promotion_shadow_result?: string | null
+          r6_router_version?: string | null
           range_expansion_vs_avg20?: number | null
           red_pickup_adjusted_contribution?: number | null
           red_pickup_evaluable?: boolean
