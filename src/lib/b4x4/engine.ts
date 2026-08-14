@@ -1108,6 +1108,10 @@ export function replayB4x4(
       baseNoBrakeScore: baseNoBrake.score,
       coreOnlyScore: coreOnly.score,
       expansionOnlyScore: expansionOnly.score,
+      withoutSaturationScore:
+        decision.saturation.withoutSaturationDecision === "PUBLISH" && actual != null
+          ? scoreAgainst(decision.saturation.withoutSaturationDirection, actual).score
+          : null,
     });
   }
   return results;
