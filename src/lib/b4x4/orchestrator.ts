@@ -501,7 +501,8 @@ export async function resolveB4x4Row(
       .from("b4x4_predictions")
       .select(
         "id, raw_direction, final_prediction, would_trade, base_candidate, core_eligible, " +
-        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count",
+        "expansion_eligible, intraday_brake_veto_fired, resolved_at, resolution_attempt_count, " +
+        "saturation_veto_fired, without_saturation_decision, without_saturation_direction",
       )
       .in("model_version", B4X4_MODEL_VERSIONS)
       .eq("target_candle_ts", targetCandleTs)
