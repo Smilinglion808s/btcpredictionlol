@@ -378,6 +378,7 @@ export interface B4x4Decision {
   baseCandidate: boolean;
   selectedRoute: SelectedRoute;
   calibration: CalibrationPromotion;
+  saturation: SaturationCalibration;
   localDate: string;
   dailyNetBefore: number;
   dailyResolvedTradeCountBefore: number;
