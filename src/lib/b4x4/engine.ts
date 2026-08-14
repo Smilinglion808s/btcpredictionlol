@@ -1126,3 +1126,34 @@ export function brakeAttribution(
     ? { klass: "SACRIFICED_WIN", value: -1 }
     : { klass: "AVOIDED_LOSS", value: 1 };
 }
+
+/**
+ * Direct current-state attribution for the balanced saturation calibration.
+ * This is NOT a full alternate-history daily-brake replay: it compares the
+ * active abstention against the prior-policy decision recorded at prediction
+ * time for this exact row.
+ */
+export function saturationAttribution(
+  saturationVetoFired: boolean,
+  withoutSaturationWouldPublish: boolean,
+  withoutSaturationScore: number | null,
+): {
+  klass: "AVOIDED_LOSS" | "SACRIFICED_WIN" | "NO_INCREMENTAL_CHANGE" | "NOT_APPLICABLE";
+  value: number;
+  incrementalChange: boolean;
+} {
+  if (!saturationVetoFired || !withoutSaturationWouldPublish) {
+    return {
+      klass: saturationVetoFired ? "NO_INCREMENTAL_CHANGE" : "NOT_APPLICABLE",
+      value: 0,
+      incrementalChange: false,
+    };
+  }
+  if (withoutSaturationScore === -1) {
+    return { klass: "AVOIDED_LOSS", value: 1, incrementalChange: true };
+  }
+  if (withoutSaturationScore === 1) {
+    return { klass: "SACRIFICED_WIN", value: -1, incrementalChange: true };
+  }
+  return { klass: "NO_INCREMENTAL_CHANGE", value: 0, incrementalChange: false };
+}
