@@ -569,6 +569,10 @@ export async function resolveB4x4Row(
         base_no_brake_counterfactual_score: baseNoBrake.score,
         brake_attribution_class: attribution.klass,
         brake_incremental_value: attribution.value,
+        without_saturation_score: withoutSaturationScore,
+        saturation_attribution_class: saturationAttr.klass,
+        saturation_incremental_value: saturationAttr.value,
+        saturation_incremental_change: saturationAttr.incrementalChange,
       } as never)
       .eq("id", row.id as string)
       .is("resolved_at", null);
