@@ -8,12 +8,20 @@ export const B4X4_MODEL_VERSION = "b4x4-balanced-saturation-r1";
  * History, daily-ledger and resolver lookups span all of them so the
  * calibration-promotion patch does not orphan earlier rows.
  */
-export const B4X4_MODEL_VERSION_LINEAGE = ["b4x4-v1", "b4x4-calibration-promotion-r1"] as const;
+export const B4X4_MODEL_VERSION_LINEAGE = [
+  "b4x4-v1",
+  "b4x4-calibration-promotion-r1",
+  "b4x4-balanced-saturation-r1",
+] as const;
 /** Mutable copy for Supabase `.in("model_version", ...)` filters. */
 export const B4X4_MODEL_VERSIONS: string[] = [...B4X4_MODEL_VERSION_LINEAGE];
-export const B4X4_VARIANT = "balanced-4x4-calibration-promotion";
+export const B4X4_VARIANT = "promotion-plus-balanced-saturation";
 /** Every variant label this model has written rows under, newest last. */
-export const B4X4_VARIANTS: string[] = ["a2-core-grid40-brake80", "balanced-4x4-calibration-promotion"];
+export const B4X4_VARIANTS: string[] = [
+  "a2-core-grid40-brake80",
+  "balanced-4x4-calibration-promotion",
+  "promotion-plus-balanced-saturation",
+];
 export const B4X4_PROSPECTIVE_TEST_ID = "B4X4_CORE_GRID40_BRAKE80_V1";
 export const B4X4_SOURCE_VARIANT = "A2_Combined";
 export const B4X4_TIMEFRAME = "15m";
