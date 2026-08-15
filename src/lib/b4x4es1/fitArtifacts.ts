@@ -213,12 +213,23 @@ export function resolveEs1FitDetailed(
   const minted = trainEs1Fit(rows, boundary, "lbfgs");
   if (minted && certifiedMintIsValid(minted, rows, boundary)) {
     return {
-      fit: {
-        ...minted,
-        fitSource: "ts-lbfgs-certified",
-        priceFitCertified: true,
-        windowFingerprint: fingerprint,
-      },
+      // Canonicalise so a mint and its later replay from storage are identical.
+      fit: fitFromArtifact(
+        {
+          boundary,
+          trainingRowCount: minted.trainingRowCount,
+          trainingStartTs: minted.trainingStartTs,
+          trainingEndTs: minted.trainingEndTs,
+          trainingStartIndex: minted.trainingStartIndex,
+          trainingEndIndex: minted.trainingEndIndex,
+          windowFingerprint: fingerprint,
+          center: minted.scaler.center,
+          scale: minted.scaler.scale,
+          coefficients: minted.coefficients,
+          intercept: minted.intercept,
+        },
+        "ts-lbfgs-certified",
+      ),
       source: "ts-lbfgs-certified",
       certified: true,
       windowFingerprint: fingerprint,
