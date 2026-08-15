@@ -16,7 +16,7 @@
 import { ES1_MIN_TRAIN_ROWS, OB_HISTORY_WINDOW } from "./config";
 import type { FeatureRow } from "./features";
 import { decideEs1, type Es1Decision, type Es1HistoryEntry, type ObSnapshot } from "./engine";
-import { resolveEs1Fit } from "./fitArtifacts";
+import { resolveEs1FitDetailed, type MintedFitArtifact, type ResolvedEs1Fit } from "./fitArtifacts";
 import {
   fitBoundaryFor,
   predictProbabilityGreen,
