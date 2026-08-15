@@ -60,11 +60,16 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         };
 
 
+        if (targetMs - now > MAX_WAIT_FOR_BOUNDARY_MS) {
+          out.skipped = "no boundary due — next scheduled run owns this candle";
+          out.elapsed_ms = Date.now() - started;
+          return new Response(JSON.stringify(out), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         try {
-          const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
-          const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
-            "@/lib/b4x4es1/orchestrator.server"
-          );
+
 
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
