@@ -194,6 +194,8 @@ export function B4x4Es1Card({
           {warmup.total_opportunities ?? 0} opportunities.
         </p>
       )}
+      </div>
     </Card>
+
   );
 }
