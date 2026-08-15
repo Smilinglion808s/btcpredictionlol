@@ -55,11 +55,16 @@ export interface ReplayResult {
   fits: Es1Fit[];
 }
 
-/** The eligible ES1 feature stream: valid features, PUSH targets excluded. */
+/**
+ * The eligible ES1 feature stream: valid features, PUSH targets excluded.
+ * A still-unresolved tail target (no candle yet) is provisionally eligible so
+ * the live path can score it; it contributes no training row and no history
+ * entry until it resolves.
+ */
 export function eligibleFeatureRows(rows: readonly FeatureRow[]): FeatureRow[] {
   return [...rows]
     .sort((a, b) => a.targetTs.localeCompare(b.targetTs))
-    .filter((r) => r.valid && r.actualDirection != null && r.actualDirection !== "PUSH");
+    .filter((r) => r.valid && r.actualDirection !== "PUSH");
 }
 
 /** Full chronological replay over the canonical feature stream. */
@@ -113,7 +118,8 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       history,
     );
 
-    if (decision.historyEntry) {
+    const resolved = fr.actualDirection === "GREEN" || fr.actualDirection === "RED";
+    if (decision.historyEntry && resolved) {
       decision.historyEntry.actualDirection = fr.actualDirection;
       history.push(decision.historyEntry);
     }
@@ -128,12 +134,14 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       obHistory.push({ targetTs: fr.targetTs, absDepth: Math.abs(snap.depthImbalance10bps) });
     }
 
-    trainingPool.push({
-      targetTs: fr.targetTs,
-      vector: fr.vector,
-      label: fr.actualDirection === "GREEN" ? 1 : 0,
-      index: eligibleIndex,
-    });
+    if (resolved) {
+      trainingPool.push({
+        targetTs: fr.targetTs,
+        vector: fr.vector,
+        label: fr.actualDirection === "GREEN" ? 1 : 0,
+        index: eligibleIndex,
+      });
+    }
 
     out.push({ targetTs: fr.targetTs, eligibleIndex, featureRow: fr, a2, fit, decision });
   });
