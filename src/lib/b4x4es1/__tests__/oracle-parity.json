@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-08-15T02:40:00.000Z",
+  "checkpoint_ts": "2026-08-14T22:00:00.000Z",
+  "oracle": "python3 + scikit-learn LogisticRegression(C=0.01, lbfgs) / RobustScaler(10,90)",
+  "common_rows": 3605,
+  "final_decision_mismatches": 0,
+  "decision_reason_mismatches": 0,
+  "clean_fields": 24,
+  "compared_fields": 37,
+  "numeric_only_fields": [
+    "features",
+    "priceProbabilityGreen",
+    "priceConfidence",
+    "hybridEvidence",
+    "priceConfidenceRank",
+    "combinedConfidenceRank",
+    "b4GlobalRank",
+    "b4SameSideRank",
+    "b4Cell",
+    "b4CellResolvedCount",
+    "b4CellWins",
+    "b4CellLosses",
+    "b4PCorrect"
+  ],
+  "max_probability_delta": 0.0000486,
+  "oracle_totals": {
+    "opportunities": 1330,
+    "published": 558,
+    "wins": 308,
+    "losses": 248,
+    "pushes": 2,
+    "net": 60,
+    "guard_vetoes": 22,
+    "guard_veto_wins": 9,
+    "guard_veto_losses": 13
+  }
+}
