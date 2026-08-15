@@ -265,6 +265,9 @@ export function decideEs1(input: Es1Input, history: readonly Es1HistoryEntry[]):
   const d = emptyDecision("ABSTAIN_ES1_PRICE_NOT_READY", null);
 
   // ---- 2/3. price head ----
+  if (input.priceFitCertified === false) {
+    return emptyDecision("ABSTAIN_ES1_CERTIFIED_ARTIFACT_NOT_READY", null);
+  }
   const p = input.priceProbabilityGreen;
   if (p == null || !Number.isFinite(p) || !input.priceFitId) {
     return d;
