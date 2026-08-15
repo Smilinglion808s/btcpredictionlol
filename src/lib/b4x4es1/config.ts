@@ -9,11 +9,11 @@ export const ES1_VARIANT = "es1-r2-a2-agreement-rank20-b4-p045";
 export const ES1_DIRECTIONAL_VERSION = "es1-r2-hybrid";
 export const ES1_B4_GUARD_VERSION = "es1-b4-pooled-p045-r1";
 export const ES1_PROSPECTIVE_TEST_ID = "B4X4_ES1_ALIGNED_P045_R1_ACTIVE";
-export const ES1_IMPLEMENTATION_REVISION = "b4x4-es1-active-r1";
+export const ES1_IMPLEMENTATION_REVISION = "b4x4-es1-active-r2-frozen-parity";
 
 export const ES1_PUBLICATION_ENABLED = true;
 // Held OFF pending row-level parity reconciliation against the frozen replay.
-export const ES1_WEBHOOKS_ENABLED = false;
+export const ES1_WEBHOOKS_ENABLED = true;
 
 // ---- canonical market ----
 export const ES1_SYMBOL = "BTC-USDT";
@@ -36,6 +36,12 @@ export const ES1_FIT_INTERCEPT = true;
 export const ES1_CLASS_WEIGHT = "none";
 export const ES1_SOLVER = "lbfgs";
 export const ES1_MAX_ITER = 5000;
+// Feature-stream eligibility (frozen-oracle reconciled): a target is eligible
+// only when its source candle has 32 contiguous prior candles inside a segment
+// of at least 40 candles.
+export const ES1_SEGMENT_WARMUP = 32;
+export const ES1_MIN_SEGMENT_LENGTH = 40;
+
 export const ES1_FEATURES = [
   "return_1",
   "return_2",
@@ -99,6 +105,9 @@ export const ES1_CONFIG = {
   solver: ES1_SOLVER,
   max_iter: ES1_MAX_ITER,
   features: ES1_FEATURES,
+  segment_warmup: ES1_SEGMENT_WARMUP,
+  min_segment_length: ES1_MIN_SEGMENT_LENGTH,
+  exclude_push_targets: true,
   ob_history_window: OB_HISTORY_WINDOW,
   ob_min_history: OB_MIN_HISTORY,
   ob_abs_imbalance_percentile: OB_ABS_IMBALANCE_PERCENTILE,

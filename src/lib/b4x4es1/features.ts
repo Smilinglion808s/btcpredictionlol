@@ -4,7 +4,14 @@
 // T-15m. A gap in the canonical stream starts a new feature segment: no
 // return, efficiency or rolling value is ever computed across a gap.
 
-import { ES1_FEATURES, TF_MS, sha256, type Es1FeatureName } from "./config";
+import {
+  ES1_FEATURES,
+  ES1_MIN_SEGMENT_LENGTH,
+  ES1_SEGMENT_WARMUP,
+  TF_MS,
+  sha256,
+  type Es1FeatureName,
+} from "./config";
 
 export interface CanonicalCandle {
   candleTs: string; // ISO, boundary of the candle
@@ -77,7 +84,8 @@ export function computeFeatures(
     Es1FeatureName,
     number
   >;
-  if (t < 16) return { values: empty, valid: false, reason: "insufficient_segment_history" };
+  if (t < ES1_SEGMENT_WARMUP)
+    return { values: empty, valid: false, reason: "insufficient_segment_history" };
   const c = seg[t];
   const closeAt = (k: number) => seg[t - k].close;
 
@@ -117,11 +125,16 @@ export function buildFeatureRows(candles: readonly CanonicalCandle[]): FeatureRo
   const segments = segmentCandles(candles);
   const out: FeatureRow[] = [];
   segments.forEach((seg, segmentId) => {
+    const shortSegment = seg.length < ES1_MIN_SEGMENT_LENGTH;
     for (let t = 0; t < seg.length; t++) {
       const sourceMs = new Date(seg[t].candleTs).getTime();
       const targetMs = sourceMs + TF_MS;
-      const { values, valid, reason } = computeFeatures(seg, t);
+      const computed = computeFeatures(seg, t);
+      const valid = computed.valid && !shortSegment;
+      const reason = computed.valid && shortSegment ? "short_segment" : computed.reason;
+      const values = computed.values;
       const vector = ES1_FEATURES.map((f) => values[f]);
+
       const target = byTs.get(targetMs) ?? null;
       out.push({
         targetTs: new Date(targetMs).toISOString(),

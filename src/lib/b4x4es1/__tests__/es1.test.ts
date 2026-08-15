@@ -8,6 +8,8 @@ import {
   OB_MIN_HISTORY,
   TF_MS,
 } from "../config";
+import { eligibleFeatureRows } from "../replay";
+import { frozenFitCount, resolveEs1Fit, trainingWindowFingerprint } from "../fitArtifacts";
 import {
   buildFeatureRows,
   computeFeatures,
@@ -86,20 +88,20 @@ function rankHistory(n: number, evidence = 0.001): Es1HistoryEntry[] {
 // ---- features ---------------------------------------------------------
 describe("ES1 features", () => {
   it("computes each frozen formula exactly", () => {
-    const seg = series(20);
-    const { values, valid } = computeFeatures(seg, 19);
+    const seg = series(50);
+    const { values, valid } = computeFeatures(seg, 49);
     const closes = seg.map((c) => c.close);
     expect(valid).toBe(true);
     for (const n of [1, 2, 4, 8, 16]) {
       expect(values[`return_${n}` as never]).toBeCloseTo(
-        Math.log(closes[19]) - Math.log(closes[19 - n]),
+        Math.log(closes[49]) - Math.log(closes[49 - n]),
         12,
       );
     }
     let path = 0;
-    for (let k = 0; k < 8; k++) path += Math.abs(closes[19 - k] - closes[18 - k]);
-    expect(values.signed_efficiency_8).toBeCloseTo((closes[19] - closes[11]) / path, 12);
-    const c = seg[19];
+    for (let k = 0; k < 8; k++) path += Math.abs(closes[49 - k] - closes[48 - k]);
+    expect(values.signed_efficiency_8).toBeCloseTo((closes[49] - closes[41]) / path, 12);
+    const c = seg[49];
     const range = c.high - c.low;
     expect(values.close_location).toBeCloseTo((2 * (c.close - c.low)) / range - 1, 12);
     const upper = c.high - Math.max(c.open, c.close);
@@ -108,31 +110,37 @@ describe("ES1 features", () => {
   });
 
   it("invalidates zero range and zero path without imputing", () => {
-    const seg = series(20);
-    seg[19] = candle(new Date(seg[19].candleTs).getTime(), 100, 100, 100, 100);
-    expect(computeFeatures(seg, 19).valid).toBe(false);
-    const flat = Array.from({ length: 20 }, (_, i) =>
+    const seg = series(50);
+    seg[49] = candle(new Date(seg[49].candleTs).getTime(), 100, 100, 100, 100);
+    expect(computeFeatures(seg, 49).valid).toBe(false);
+    const flat = Array.from({ length: 50 }, (_, i) =>
       candle(Date.UTC(2026, 6, 1) + i * TF_MS, 100, 101, 99, 100),
     );
-    expect(computeFeatures(flat, 19).reason).toBe("zero_path");
+    expect(computeFeatures(flat, 49).reason).toBe("zero_path");
   });
 
-  it("requires 16 prior candles inside the segment", () => {
-    const seg = series(20);
-    expect(computeFeatures(seg, 15).valid).toBe(false);
-    expect(computeFeatures(seg, 16).valid).toBe(true);
+  it("requires 32 prior candles inside the segment", () => {
+    const seg = series(50);
+    expect(computeFeatures(seg, 31).valid).toBe(false);
+    expect(computeFeatures(seg, 32).valid).toBe(true);
+  });
+
+  it("invalidates every row of a segment shorter than 40 candles", () => {
+    expect(buildFeatureRows(series(39)).some((r) => r.valid)).toBe(false);
+    expect(buildFeatureRows(series(39)).every((r) => r.invalidReason != null)).toBe(true);
+    expect(buildFeatureRows(series(50)).some((r) => r.valid)).toBe(true);
   });
 
   it("segments on canonical gaps and never spans them", () => {
-    const a = series(20);
-    const b = series(20, Date.UTC(2026, 6, 2, 0, 0, 0));
+    const a = series(50);
+    const b = series(50, Date.UTC(2026, 6, 2, 0, 0, 0));
     const segs = segmentCandles([...a, ...b]);
     expect(segs.length).toBe(2);
-    expect(segs[0].length).toBe(20);
+    expect(segs[0].length).toBe(50);
   });
 
   it("shifts the feature vector one target forward and never reads the target candle", () => {
-    const seg = series(20);
+    const seg = series(50);
     const rows = buildFeatureRows(seg);
     const row = rows.find((r) => r.valid)!;
     const sourceMs = new Date(row.latestSourceTs).getTime();
@@ -435,7 +443,10 @@ describe("ES1 external oracle parity", () => {
   it("has zero final-decision mismatches against the independent sklearn oracle", () => {
     expect(oracleParity.final_decision_mismatches).toBe(0);
     expect(oracleParity.decision_reason_mismatches).toBe(0);
-    expect(oracleParity.common_rows).toBeGreaterThan(3000);
+    expect(oracleParity.common_rows).toBeGreaterThan(1000);
+    expect(oracleParity.direction_mismatches).toBe(0);
+    expect(oracleParity.totals.published).toBe(504);
+    expect(oracleParity.totals.net).toBe(82);
     expect(oracleParity.max_probability_delta).toBeLessThan(1e-3);
   });
 });
@@ -450,7 +461,7 @@ describe("ES1 activation boundary", () => {
   });
 
   it("marks rows before the committed boundary webhook-ineligible", () => {
-    const fr = buildFeatureRows(series(20)).find((r) => r.valid)!;
+    const fr = buildFeatureRows(series(50)).find((r) => r.valid)!;
     const decision = decideEs1(
       { ...baseInput(), targetTs: fr.targetTs },
       rankHistory(400, 0.00001),
@@ -465,7 +476,7 @@ describe("ES1 activation boundary", () => {
         { targetTs: targetCandleTs, featureRow: fr, a2: null, fit: null, decision } as never,
       );
     const before = mk("2026-08-15T01:30:00.000Z");
-    const after = mk("2026-08-15T02:00:00.000Z");
+    const after = mk("2026-08-15T05:00:00.000Z");
     expect(before.webhook_eligible).toBe(false);
     expect(after.webhook_eligible).toBe(true);
   });
@@ -535,4 +546,50 @@ describe("ES1 webhook gating", () => {
       } as never),
     ).toBe(false);
   });
+});
+
+// ---- frozen-oracle reconciled stream ----------------------------------
+describe("ES1 eligible stream (frozen-oracle reconciled)", () => {
+  const mk = (n: number, start = Date.UTC(2026, 6, 1, 0, 0, 0)) => series(n, start);
+
+  it("excludes PUSH targets from the stream entirely", () => {
+    const seg = mk(60);
+    // make one target a PUSH (open == close)
+    const t = 45;
+    seg[t] = candle(new Date(seg[t].candleTs).getTime(), 100, 101, 99, 100);
+    const rows = buildFeatureRows(seg);
+    const eligible = eligibleFeatureRows(rows);
+    expect(rows.some((r) => r.targetTs === seg[t].candleTs)).toBe(true);
+    expect(eligible.some((r) => r.targetTs === seg[t].candleTs)).toBe(false);
+    expect(eligible.every((r) => r.actualDirection !== "PUSH")).toBe(true);
+  });
+
+  it("excludes historical gap targets but keeps the pending tail target", () => {
+    const seg = mk(60);
+    const rows = buildFeatureRows(seg);
+    const eligible = eligibleFeatureRows(rows);
+    // last row's target candle does not exist yet -> provisionally eligible
+    expect(eligible[eligible.length - 1].actualDirection).toBeNull();
+    // an interior unresolved row is a data gap and must be dropped
+    const withGap = rows.map((r, i) =>
+      i === rows.length - 10 ? { ...r, actualDirection: null } : r,
+    );
+    const gapEligible = eligibleFeatureRows(withGap);
+    expect(gapEligible.filter((r) => r.actualDirection == null).length).toBe(1);
+  });
+
+  it("binds frozen sklearn fit artifacts by exact training-window fingerprint", () => {
+    expect(frozenFitCount()).toBeGreaterThan(0);
+    const rows = Array.from({ length: ES1_MIN_TRAIN_ROWS }, (_, i) => ({
+      targetTs: new Date(Date.UTC(2026, 6, 1) + i * TF_MS).toISOString(),
+      vector: ES1_FEATURES.map((_, j) => Math.sin(i + j) / 10),
+      label: (i % 2) as 0 | 1,
+      index: i,
+    }));
+    const fp = trainingWindowFingerprint(rows);
+    expect(fp).toMatch(/^[0-9a-f]{64}$/);
+    // a window that matches no artifact must fall back to the in-repo solver
+    const fit = resolveEs1Fit(rows, 768)!;
+    expect(fit.fitSource).toBe("irls-fallback");
+  }, 30_000);
 });

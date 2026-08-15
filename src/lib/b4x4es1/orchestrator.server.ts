@@ -36,7 +36,7 @@ type DbRow = Record<string, unknown>;
  * resolved dynamically from `b4x4_es1_activation` (committed the first time
  * readiness is verified) and can only ever be at or after this floor.
  */
-export const ES1_WEBHOOK_ACTIVATION_FLOOR_TS = "2026-08-15T01:45:00.000Z";
+export const ES1_WEBHOOK_ACTIVATION_FLOOR_TS = "2026-08-15T04:15:00.000Z";
 /** @deprecated kept as the floor alias for existing callers/tests. */
 export const ES1_WEBHOOK_ACTIVATION_TS = ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
 
