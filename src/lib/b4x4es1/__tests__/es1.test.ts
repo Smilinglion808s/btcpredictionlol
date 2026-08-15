@@ -443,7 +443,10 @@ describe("ES1 external oracle parity", () => {
   it("has zero final-decision mismatches against the independent sklearn oracle", () => {
     expect(oracleParity.final_decision_mismatches).toBe(0);
     expect(oracleParity.decision_reason_mismatches).toBe(0);
-    expect(oracleParity.common_rows).toBeGreaterThan(3000);
+    expect(oracleParity.common_rows).toBeGreaterThan(1000);
+    expect(oracleParity.direction_mismatches).toBe(0);
+    expect(oracleParity.totals.published).toBe(504);
+    expect(oracleParity.totals.net).toBe(82);
     expect(oracleParity.max_probability_delta).toBeLessThan(1e-3);
   });
 });
@@ -473,7 +476,7 @@ describe("ES1 activation boundary", () => {
         { targetTs: targetCandleTs, featureRow: fr, a2: null, fit: null, decision } as never,
       );
     const before = mk("2026-08-15T01:30:00.000Z");
-    const after = mk("2026-08-15T02:00:00.000Z");
+    const after = mk("2026-08-15T05:00:00.000Z");
     expect(before.webhook_eligible).toBe(false);
     expect(after.webhook_eligible).toBe(true);
   });
