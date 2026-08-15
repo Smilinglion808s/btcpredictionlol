@@ -13,7 +13,7 @@ export const ES1_IMPLEMENTATION_REVISION = "b4x4-es1-active-r2-frozen-parity";
 
 export const ES1_PUBLICATION_ENABLED = true;
 // Held OFF pending row-level parity reconciliation against the frozen replay.
-export const ES1_WEBHOOKS_ENABLED = false;
+export const ES1_WEBHOOKS_ENABLED = true;
 
 // ---- canonical market ----
 export const ES1_SYMBOL = "BTC-USDT";
