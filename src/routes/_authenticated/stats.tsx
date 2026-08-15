@@ -336,6 +336,13 @@ function StatsPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <B4x4Es1Card
+          stats={(es1Q.data as any) ?? {}}
+          pending={(es1PendingQ.data as any) ?? null}
+          onExport={downloadEs1Csv}
+          exporting={exportingEs1}
+        />
+
         <TD1Card
           title="TD1-RC"
           eyebrow="Active layer · webhook source"
@@ -353,11 +360,6 @@ function StatsPage() {
 
         <TD3Card stats={(td3Q.data as any) ?? {}} pending={(td3PendingQ.data as any) ?? null} />
 
-
-
-
-
-
         <V6Card
           stats={v6Stats}
           pending={v6Pending}
@@ -369,18 +371,8 @@ function StatsPage() {
           onReset={doResetV6Stats}
           resetting={resettingV6}
         />
-
-
       </div>
 
-      <div className="grid grid-cols-1 gap-5">
-        <B4x4Es1Card
-          stats={(es1Q.data as any) ?? {}}
-          pending={(es1PendingQ.data as any) ?? null}
-          onExport={downloadEs1Csv}
-          exporting={exportingEs1}
-        />
-      </div>
 
 
 
