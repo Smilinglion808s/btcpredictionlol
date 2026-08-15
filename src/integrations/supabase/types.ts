@@ -485,16 +485,20 @@ export type Database = {
         Row: {
           artifact_sha256: string
           block_index: number
+          certified_fitter_code_hash: string | null
           coefficients: Json
           config_hash: string | null
           converged: boolean | null
           created_at: string
           feature_schema_hash: string
           fit_id: string
+          fit_source: string | null
           gradient_norm: number | null
           intercept: number
           iterations: number | null
           logistic_c: number
+          model_version: string | null
+          price_fit_certified: boolean | null
           scaler_center: Json
           scaler_name: string
           scaler_scale: Json
@@ -505,20 +509,25 @@ export type Database = {
           training_row_count: number
           training_start_index: number | null
           training_start_ts: string | null
+          window_fingerprint: string | null
         }
         Insert: {
           artifact_sha256: string
           block_index: number
+          certified_fitter_code_hash?: string | null
           coefficients: Json
           config_hash?: string | null
           converged?: boolean | null
           created_at?: string
           feature_schema_hash: string
           fit_id: string
+          fit_source?: string | null
           gradient_norm?: number | null
           intercept: number
           iterations?: number | null
           logistic_c: number
+          model_version?: string | null
+          price_fit_certified?: boolean | null
           scaler_center: Json
           scaler_name: string
           scaler_scale: Json
@@ -529,20 +538,25 @@ export type Database = {
           training_row_count: number
           training_start_index?: number | null
           training_start_ts?: string | null
+          window_fingerprint?: string | null
         }
         Update: {
           artifact_sha256?: string
           block_index?: number
+          certified_fitter_code_hash?: string | null
           coefficients?: Json
           config_hash?: string | null
           converged?: boolean | null
           created_at?: string
           feature_schema_hash?: string
           fit_id?: string
+          fit_source?: string | null
           gradient_norm?: number | null
           intercept?: number
           iterations?: number | null
           logistic_c?: number
+          model_version?: string | null
+          price_fit_certified?: boolean | null
           scaler_center?: Json
           scaler_name?: string
           scaler_scale?: Json
@@ -553,6 +567,7 @@ export type Database = {
           training_row_count?: number
           training_start_index?: number | null
           training_start_ts?: string | null
+          window_fingerprint?: string | null
         }
         Relationships: []
       }
@@ -605,6 +620,7 @@ export type Database = {
           build_identifier: string | null
           canonical_candle_source: string | null
           catchup_target_ts: string | null
+          certified_fitter_code_hash: string | null
           combined_confidence_rank: number | null
           combined_rank_qualified: boolean | null
           config_hash: string | null
@@ -612,6 +628,8 @@ export type Database = {
           data_invalid_reason: string | null
           data_valid: boolean | null
           decision_reason: string | null
+          decision_state_certified: boolean | null
+          decision_state_checksum: string | null
           deploy_environment: string | null
           directional_version: string | null
           feature_cutoff_ts: string | null
@@ -646,13 +664,19 @@ export type Database = {
           ob_snapshot_ts: string | null
           operational_gap_reason: string | null
           operational_gap_status: string | null
+          parity_certified: boolean | null
           price_confidence: number | null
           price_confidence_rank: number | null
           price_direction: string | null
           price_fit_artifact_sha256: string | null
+          price_fit_certified: boolean | null
           price_fit_id: string | null
+          price_fit_source: string | null
+          price_fit_window_fingerprint: string | null
           price_probability_green: number | null
           price_rank_history_count: number | null
+          price_shadow_fit_id: string | null
+          price_shadow_probability_green: number | null
           price_training_end_ts: string | null
           price_training_row_count: number | null
           price_training_start_ts: string | null
@@ -730,6 +754,7 @@ export type Database = {
           build_identifier?: string | null
           canonical_candle_source?: string | null
           catchup_target_ts?: string | null
+          certified_fitter_code_hash?: string | null
           combined_confidence_rank?: number | null
           combined_rank_qualified?: boolean | null
           config_hash?: string | null
@@ -737,6 +762,8 @@ export type Database = {
           data_invalid_reason?: string | null
           data_valid?: boolean | null
           decision_reason?: string | null
+          decision_state_certified?: boolean | null
+          decision_state_checksum?: string | null
           deploy_environment?: string | null
           directional_version?: string | null
           feature_cutoff_ts?: string | null
@@ -771,13 +798,19 @@ export type Database = {
           ob_snapshot_ts?: string | null
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
+          parity_certified?: boolean | null
           price_confidence?: number | null
           price_confidence_rank?: number | null
           price_direction?: string | null
           price_fit_artifact_sha256?: string | null
+          price_fit_certified?: boolean | null
           price_fit_id?: string | null
+          price_fit_source?: string | null
+          price_fit_window_fingerprint?: string | null
           price_probability_green?: number | null
           price_rank_history_count?: number | null
+          price_shadow_fit_id?: string | null
+          price_shadow_probability_green?: number | null
           price_training_end_ts?: string | null
           price_training_row_count?: number | null
           price_training_start_ts?: string | null
@@ -855,6 +888,7 @@ export type Database = {
           build_identifier?: string | null
           canonical_candle_source?: string | null
           catchup_target_ts?: string | null
+          certified_fitter_code_hash?: string | null
           combined_confidence_rank?: number | null
           combined_rank_qualified?: boolean | null
           config_hash?: string | null
@@ -862,6 +896,8 @@ export type Database = {
           data_invalid_reason?: string | null
           data_valid?: boolean | null
           decision_reason?: string | null
+          decision_state_certified?: boolean | null
+          decision_state_checksum?: string | null
           deploy_environment?: string | null
           directional_version?: string | null
           feature_cutoff_ts?: string | null
@@ -896,13 +932,19 @@ export type Database = {
           ob_snapshot_ts?: string | null
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
+          parity_certified?: boolean | null
           price_confidence?: number | null
           price_confidence_rank?: number | null
           price_direction?: string | null
           price_fit_artifact_sha256?: string | null
+          price_fit_certified?: boolean | null
           price_fit_id?: string | null
+          price_fit_source?: string | null
+          price_fit_window_fingerprint?: string | null
           price_probability_green?: number | null
           price_rank_history_count?: number | null
+          price_shadow_fit_id?: string | null
+          price_shadow_probability_green?: number | null
           price_training_end_ts?: string | null
           price_training_row_count?: number | null
           price_training_start_ts?: string | null

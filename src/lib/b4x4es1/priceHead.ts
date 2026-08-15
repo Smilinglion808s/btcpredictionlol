@@ -22,6 +22,9 @@ import {
   es1LocalDate,
   sha256,
 } from "./config";
+import { fitCertifiedLogistic } from "./certifiedFit";
+
+export type Es1FitSource = "sklearn-frozen" | "ts-lbfgs-certified" | "irls-shadow";
 
 export interface Scaler {
   center: number[];
@@ -48,8 +51,19 @@ export interface Es1Fit {
   iterations: number;
   gradientNorm: number;
   C: number;
-  /** Provenance of the coefficients: frozen sklearn artifact or IRLS fallback. */
-  fitSource?: "sklearn-frozen" | "irls-fallback";
+  /**
+   * Provenance of the coefficients:
+   *   sklearn-frozen      — bundled immutable artifact produced by the offline
+   *                         sklearn oracle (parity-certified in CI);
+   *   ts-lbfgs-certified  — minted at runtime by the pinned TypeScript L-BFGS
+   *                         fitter, which reproduces the oracle numerically;
+   *   irls-shadow         — legacy Newton/IRLS solve; NEVER publishable.
+   */
+  fitSource?: Es1FitSource;
+  /** True only for sklearn-frozen and ts-lbfgs-certified fits. */
+  priceFitCertified?: boolean;
+  /** Fingerprint of the exact training window this fit was produced from. */
+  windowFingerprint?: string;
 }
 
 export interface TrainingRow {
@@ -225,21 +239,33 @@ export function solveWeightedL2Logistic(
   };
 }
 
-/** Train one immutable fit artifact from labeled training rows. */
-export function trainEs1Fit(rows: readonly TrainingRow[], blockIndex: number): Es1Fit | null {
+/**
+ * Train one immutable fit artifact from labeled training rows.
+ * `solverMode` selects the pinned TypeScript L-BFGS fitter (the certified path,
+ * numerically equivalent to the sklearn oracle) or the legacy IRLS shadow.
+ */
+export function trainEs1Fit(
+  rows: readonly TrainingRow[],
+  blockIndex: number,
+  solverMode: "lbfgs" | "irls" = "lbfgs",
+): Es1Fit | null {
   if (rows.length < ES1_MIN_TRAIN_ROWS) return null;
   const X = rows.map((r) => r.vector);
   const y = rows.map((r) => r.label);
   const scaler = fitRobustScaler(X);
   const Z = X.map((x) => applyScaler(scaler, x));
   const weights = dayBalancedWeights(rows.map((r) => r.targetTs));
-  const solved = solveWeightedL2Logistic(Z, y, weights);
+  const solved =
+    solverMode === "lbfgs"
+      ? fitCertifiedLogistic(Z, y, weights)
+      : solveWeightedL2Logistic(Z, y, weights);
+  const solverName = solverMode === "lbfgs" ? "ts-lbfgs" : ES1_SOLVER;
   const artifact = {
     specification: ES1_PRICE_SPEC,
     scaler: ES1_SCALER,
     features: ES1_FEATURES,
     C: ES1_LOGISTIC_C,
-    solver: ES1_SOLVER,
+    solver: solverName,
     max_iter: ES1_MAX_ITER,
     center: scaler.center,
     scale: scaler.scale,
@@ -266,7 +292,7 @@ export function trainEs1Fit(rows: readonly TrainingRow[], blockIndex: number): E
     trainingStartIndex: rows[0].index,
     trainingEndIndex: rows[rows.length - 1].index,
     blockIndex,
-    solver: ES1_SOLVER,
+    solver: solverName,
     converged: solved.converged,
     iterations: solved.iterations,
     gradientNorm: solved.gradientNorm,

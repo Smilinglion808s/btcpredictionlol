@@ -16,7 +16,7 @@
 import { ES1_MIN_TRAIN_ROWS, OB_HISTORY_WINDOW } from "./config";
 import type { FeatureRow } from "./features";
 import { decideEs1, type Es1Decision, type Es1HistoryEntry, type ObSnapshot } from "./engine";
-import { resolveEs1Fit } from "./fitArtifacts";
+import { resolveEs1FitDetailed, type MintedFitArtifact, type ResolvedEs1Fit } from "./fitArtifacts";
 import {
   fitBoundaryFor,
   predictProbabilityGreen,
@@ -38,7 +38,20 @@ export interface ReplayInput {
   featureRows: readonly FeatureRow[];
   a2: ReadonlyMap<string, A2Row>;
   ob: ReadonlyMap<string, ObSnapshot>;
+  /** Certified artifacts previously minted and persisted, keyed by boundary. */
+  mintedArtifacts?: ReadonlyMap<number, MintedFitArtifact>;
 }
+
+/** Rolling FNV-1a (64-bit) checksum of the decision-state history stream. */
+function rollHistoryChecksum(prev: string, entry: string): string {
+  let h = BigInt("0x" + prev);
+  for (let i = 0; i < entry.length; i++) {
+    h ^= BigInt(entry.charCodeAt(i));
+    h = (h * 1099511628211n) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, "0");
+}
+const HISTORY_CHECKSUM_SEED = "cbf29ce484222325";
 
 export interface ReplayRow {
   targetTs: string;
@@ -47,12 +60,21 @@ export interface ReplayRow {
   featureRow: FeatureRow;
   a2: A2Row | null;
   fit: Es1Fit | null;
+  /** Provenance/certification of the fit used for this row. */
+  resolvedFit: ResolvedEs1Fit | null;
+  /** Independently verifiable checksum of the rolling history at decision time. */
+  historyChecksum: string;
+  historyCount: number;
+  /** Rolling decision state was rebuilt contiguously from the canonical stream. */
+  decisionStateCertified: boolean;
   decision: Es1Decision;
 }
 
 export interface ReplayResult {
   rows: ReplayRow[];
   fits: Es1Fit[];
+  /** Every resolved fit with provenance, in boundary order. */
+  resolvedFits: ResolvedEs1Fit[];
 }
 
 /**
@@ -77,24 +99,37 @@ export function replayEs1(input: ReplayInput): ReplayResult {
   const eligible = eligibleFeatureRows(input.featureRows);
 
   const trainingPool: TrainingRow[] = [];
-  const fitsByBoundary = new Map<number, Es1Fit | null>();
+  const fitsByBoundary = new Map<number, ResolvedEs1Fit | null>();
   const fits: Es1Fit[] = [];
+  const resolvedFits: ResolvedEs1Fit[] = [];
   const history: Es1HistoryEntry[] = [];
   const obHistory: Array<{ targetTs: string; absDepth: number }> = [];
+  let historyChecksum = HISTORY_CHECKSUM_SEED;
+  let historyContiguous = true;
+  let lastHistoryTs = "";
   const out: ReplayRow[] = [];
 
   eligible.forEach((fr, eligibleIndex) => {
     const boundary = fitBoundaryFor(eligibleIndex);
-    let fit: Es1Fit | null = null;
+    let resolvedFit: ResolvedEs1Fit | null = null;
     if (boundary != null) {
       if (!fitsByBoundary.has(boundary)) {
         const { start, end } = trainingWindowFor(boundary);
-        const trained = resolveEs1Fit(trainingPool.slice(start, end), boundary);
+        const trained = resolveEs1FitDetailed(trainingPool.slice(start, end), boundary, {
+          mintedArtifacts: input.mintedArtifacts,
+        });
         fitsByBoundary.set(boundary, trained);
-        if (trained) fits.push(trained);
+        if (trained) {
+          fits.push(trained.fit);
+          resolvedFits.push(trained);
+        }
       }
-      fit = fitsByBoundary.get(boundary) ?? null;
+      resolvedFit = fitsByBoundary.get(boundary) ?? null;
     }
+    const fit: Es1Fit | null = resolvedFit?.fit ?? null;
+
+    const rowHistoryChecksum = historyChecksum;
+    const rowHistoryCount = history.length;
 
     const a2 = input.a2.get(fr.targetTs) ?? null;
     const priceProbability = fit ? predictProbabilityGreen(fit, fr.vector) : null;
@@ -113,6 +148,7 @@ export function replayEs1(input: ReplayInput): ReplayResult {
         timingInvalidReason: null,
         priceProbabilityGreen: priceProbability,
         priceFitId: fit?.fitId ?? null,
+        priceFitCertified: resolvedFit?.certified ?? true,
         a2ProbabilityGreen: a2?.probabilityGreen ?? null,
         a2RowId: a2?.rowId ?? null,
         a2PredictionId: a2?.predictionId ?? null,
@@ -127,6 +163,12 @@ export function replayEs1(input: ReplayInput): ReplayResult {
     if (decision.historyEntry && resolved) {
       decision.historyEntry.actualDirection = fr.actualDirection;
       history.push(decision.historyEntry);
+      if (fr.targetTs <= lastHistoryTs) historyContiguous = false;
+      lastHistoryTs = fr.targetTs;
+      historyChecksum = rollHistoryChecksum(
+        historyChecksum,
+        `${fr.targetTs}|${fr.actualDirection}|${decision.finalPrediction ?? "NONE"}|${decision.decisionReason};`,
+      );
     }
 
     const snap = input.ob.get(fr.targetTs);
@@ -148,8 +190,19 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       });
     }
 
-    out.push({ targetTs: fr.targetTs, eligibleIndex, featureRow: fr, a2, fit, decision });
+    out.push({
+      targetTs: fr.targetTs,
+      eligibleIndex,
+      featureRow: fr,
+      a2,
+      fit,
+      resolvedFit,
+      historyChecksum: rowHistoryChecksum,
+      historyCount: rowHistoryCount,
+      decisionStateCertified: historyContiguous,
+      decision,
+    });
   });
 
-  return { rows: out, fits };
+  return { rows: out, fits, resolvedFits };
 }

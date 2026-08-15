@@ -473,7 +473,16 @@ describe("ES1 activation boundary", () => {
           runMode: "LIVE",
           activationTargetTs: ES1_WEBHOOK_ACTIVATION_FLOOR_TS,
         } as never,
-        { targetTs: targetCandleTs, featureRow: fr, a2: null, fit: null, decision } as never,
+        {
+          targetTs: targetCandleTs,
+          featureRow: fr,
+          a2: null,
+          fit: null,
+          resolvedFit: { certified: true, source: "sklearn-frozen", windowFingerprint: "fp", shadow: null },
+          historyChecksum: "0",
+          decisionStateCertified: true,
+          decision,
+        } as never,
       );
     const before = mk("2026-08-15T01:30:00.000Z");
     const after = mk("2026-08-15T05:00:00.000Z");
@@ -588,8 +597,10 @@ describe("ES1 eligible stream (frozen-oracle reconciled)", () => {
     }));
     const fp = trainingWindowFingerprint(rows);
     expect(fp).toMatch(/^[0-9a-f]{64}$/);
-    // a window that matches no artifact must fall back to the in-repo solver
+    // a window that matches no bundled artifact is minted by the pinned
+    // TypeScript L-BFGS fitter and is certified; IRLS is shadow-only.
     const fit = resolveEs1Fit(rows, 768)!;
-    expect(fit.fitSource).toBe("irls-fallback");
+    expect(fit.fitSource).toBe("ts-lbfgs-certified");
+    expect(fit.priceFitCertified).toBe(true);
   }, 30_000);
 });

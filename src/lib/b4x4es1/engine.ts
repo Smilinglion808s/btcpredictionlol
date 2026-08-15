@@ -64,6 +64,12 @@ export interface Es1Input {
   timingInvalidReason: string | null;
   priceProbabilityGreen: number | null;
   priceFitId: string | null;
+  /**
+   * Fail-closed certification gate: false when the price head is running on an
+   * uncertified (IRLS shadow) fit. Defaults to certified for replay callers
+   * that pre-filter uncertified fits themselves.
+   */
+  priceFitCertified?: boolean;
   a2ProbabilityGreen: number | null;
   a2RowId: string | null;
   a2PredictionId: string | null;
@@ -259,6 +265,9 @@ export function decideEs1(input: Es1Input, history: readonly Es1HistoryEntry[]):
   const d = emptyDecision("ABSTAIN_ES1_PRICE_NOT_READY", null);
 
   // ---- 2/3. price head ----
+  if (input.priceFitCertified === false) {
+    return emptyDecision("ABSTAIN_ES1_CERTIFIED_ARTIFACT_NOT_READY", null);
+  }
   const p = input.priceProbabilityGreen;
   if (p == null || !Number.isFinite(p) || !input.priceFitId) {
     return d;
