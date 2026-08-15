@@ -120,6 +120,8 @@ export interface Es1Context {
   catchupTargetTs?: string | null;
   /** Effective activation boundary for this run (defaults to the frozen floor). */
   activationTargetTs?: string | null;
+  /** Boundary route owns its bounded source-candle retries. */
+  recoverMissingSource?: boolean;
 }
 
 export function decisionToRow(ctx: Es1Context, row: ReplayRow): DbRow {
@@ -456,7 +458,7 @@ export async function runEs1ForTarget(
     // cache does not already cover this target boundary.
     let { rows, fits } = await buildEs1Replay(supabase, {});
     let match = rows.find((r) => r.targetTs === targetTs);
-    if (!match) {
+    if (!match && ctx.recoverMissingSource !== false) {
       ({ rows, fits } = await buildEs1Replay(supabase, { force: true }));
       match = rows.find((r) => r.targetTs === targetTs);
     }
