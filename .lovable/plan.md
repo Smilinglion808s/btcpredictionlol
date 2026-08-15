@@ -43,6 +43,7 @@ Publication requires `parity_certified`. When it is false:
 3. Rebuild ranks, hybrid evidence and B4 cell state from the last certified checkpoint forward using certified values.
 4. Verify independently: the canonical checksum covers artifact hashes, canonical candle identities, A2 row IDs, OB snapshot IDs, ranks and B4 state. The rebuild is computed twice independently and both runs must agree; for 2112 the result must also match an offline reference checksum. The previously stored running checksum is not trusted as the comparison target. Publication resumes only on pass, and the four original rows stay excluded from parity-certified forward statistics.
 
+## 4. Pinned numerical specification
 
 The fitter is certified against a pinned oracle, not assumed equivalent. Pinned and asserted in the artifact metadata and tests:
 
