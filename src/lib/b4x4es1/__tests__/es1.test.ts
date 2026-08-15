@@ -393,7 +393,8 @@ describe("ES1 confidence-rank semantics", () => {
   it("abstains with a null rank when no prior raw history exists", () => {
     const d = decideEs1(baseInput(), []);
     expect(d.combinedConfidenceRank).toBeNull();
-    expect(d.decisionReason).toBe("ABSTAIN_COMBINED_CONFIDENCE_BELOW_020");
+    expect(d.decisionReason).toBe("ABSTAIN_CONFIDENCE_RANK_NOT_READY");
+    expect(d.wouldTrade).toBe(false);
   });
 
   it("excludes pre-raw-epoch rows and never back-fills the 384 window", () => {
