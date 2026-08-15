@@ -2,6 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 
 const TF_MS = 15 * 60 * 1000;
+/** How far into a candle we still consider ourselves "at" its boundary. */
+const FRESH_WINDOW_MS = 60_000;
+/** Longest we are willing to sit and wait for a future boundary to arrive. */
+const MAX_WAIT_FOR_BOUNDARY_MS = 120_000;
+
 
 /**
  * B4x4-ES1 live boundary run.
