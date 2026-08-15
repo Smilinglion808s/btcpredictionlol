@@ -691,14 +691,25 @@ async function runA2Policies(
     // publishes its own directional webhook; it never touches B4x4 state.
     const es1Promise = (async () => {
       try {
-        const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
-          "@/lib/b4x4es1/orchestrator.server"
+        const {
+          runEs1ForTarget,
+          maybeSendEs1Webhook,
+          ES1_LIVE_RUN_TIMEOUT_MS,
+        } = await import("@/lib/b4x4es1/orchestrator.server");
+        // Hard ceiling: ES1 can never hang the boundary the way legacy B4x4 did.
+        const guard = <T,>(p: Promise<T>, ms: number) =>
+          Promise.race([
+            p,
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+          ]);
+        const row = await guard(
+          runEs1ForTarget(supabase, {
+            targetCandleTs: String(predictionRow.candle_ts),
+            runMode: "LIVE",
+          }),
+          ES1_LIVE_RUN_TIMEOUT_MS,
         );
-        const row = await runEs1ForTarget(supabase, {
-          targetCandleTs: String(predictionRow.candle_ts),
-          runMode: "LIVE",
-        });
-        await maybeSendEs1Webhook(supabase, row);
+        if (row) await guard(maybeSendEs1Webhook(supabase, row), 10_000);
       } catch { /* never block */ }
     })();
 

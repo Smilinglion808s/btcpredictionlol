@@ -36,7 +36,13 @@ type DbRow = Record<string, unknown>;
  * 15-minute boundary after deployment readiness; earlier rows (including every
  * warmup/backfill row) can never emit a webhook.
  */
-export const ES1_WEBHOOK_ACTIVATION_TS = "2026-08-15T02:00:00.000Z";
+export const ES1_WEBHOOK_ACTIVATION_TS = "2026-08-15T01:45:00.000Z";
+
+/**
+ * Hard ceiling for one live ES1 run. The old B4x4 path could hang on a slow
+ * dependency and never publish; ES1 fails fast instead of stalling the boundary.
+ */
+export const ES1_LIVE_RUN_TIMEOUT_MS = 25_000;
 
 export const ES1_RESOLVER_VERSION = "es1-resolver-r1";
 
@@ -321,8 +327,14 @@ export async function runEs1ForTarget(
       .maybeSingle();
     if (prior) return prior as unknown as DbRow;
 
-    const { rows, fits } = await buildEs1Replay(supabase, { force: true });
-    const match = rows.find((r) => r.targetTs === targetTs);
+    // Use the short-lived cache first; only pay for a full replay when the
+    // cache does not already cover this target boundary.
+    let { rows, fits } = await buildEs1Replay(supabase, {});
+    let match = rows.find((r) => r.targetTs === targetTs);
+    if (!match) {
+      ({ rows, fits } = await buildEs1Replay(supabase, { force: true }));
+      match = rows.find((r) => r.targetTs === targetTs);
+    }
     if (!match) return null;
     await persistFits(supabase, fits).catch(() => 0);
 
