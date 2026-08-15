@@ -97,8 +97,9 @@ A simulated missing-artifact run must demonstrate, end to end:
 
 ## Technical notes
 
-- `src/lib/b4x4es1/fitArtifacts.ts`: three-way source enum, JSON-authoritative resolution, DB artifact loader with collision/mismatch fail-closed.
+- `src/lib/b4x4es1/fitArtifacts.ts`: three-way source enum, composite-key identity, canonical artifact payload hashing, JSON-authoritative resolution, DB artifact loader with collision/mismatch fail-closed.
 - `src/lib/b4x4es1/priceHead.ts`: add the pinned L-BFGS fitter alongside the existing IRLS solver; IRLS demoted to shadow.
 - `src/lib/b4x4es1/orchestrator.server.ts`: certification gate before publication and webhook emission; shadow fields always populated.
-- Migration: provenance and certification columns on `b4x4_es1_predictions` (`price_fit_source`, `price_fit_boundary`, `price_fit_window_fingerprint`, `price_fit_certified`, `decision_state_certified`, `parity_certified`, `irls_shadow_*`), plus artifact/oracle-version columns and a uniqueness constraint on `b4x4_es1_fits(boundary)`.
-- Tests: reproduce all 14 bundled sklearn artifacts within the pinned tolerances, plus the missing-artifact simulation.
+- Offline script (sandbox Python with pinned sklearn/NumPy/SciPy) generates the 2112 artifact and the offline reference checksum; sklearn is installed there for generation only, never at runtime.
+- Migration: provenance and certification columns on `b4x4_es1_predictions` (`price_fit_source`, `price_fit_boundary`, `price_fit_window_fingerprint`, `price_fit_certified`, `decision_state_certified`, `parity_certified`, `irls_shadow_*`, `certified_cf_*`), oracle-version and fitter-code-hash columns, plus a unique constraint on `b4x4_es1_fits(model_version, feature_schema_hash, boundary)`.
+- Tests: reproduce all 15 sklearn artifacts within the pinned tolerances, degenerate fixtures, and the missing-artifact simulation.
