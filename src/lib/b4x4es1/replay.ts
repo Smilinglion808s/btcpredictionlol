@@ -62,9 +62,14 @@ export interface ReplayResult {
  * entry until it resolves.
  */
 export function eligibleFeatureRows(rows: readonly FeatureRow[]): FeatureRow[] {
-  return [...rows]
+  const sorted = [...rows]
     .sort((a, b) => a.targetTs.localeCompare(b.targetTs))
     .filter((r) => r.valid && r.actualDirection !== "PUSH");
+  // A missing historical target candle is a data gap, not a stream member: only
+  // targets after the last known outcome may be provisionally eligible.
+  let lastResolved = "";
+  for (const r of sorted) if (r.actualDirection != null && r.targetTs > lastResolved) lastResolved = r.targetTs;
+  return sorted.filter((r) => r.actualDirection != null || r.targetTs > lastResolved);
 }
 
 /** Full chronological replay over the canonical feature stream. */
