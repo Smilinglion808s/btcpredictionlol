@@ -32,11 +32,14 @@ import type { Es1Fit } from "./priceHead";
 type DbRow = Record<string, unknown>;
 
 /**
- * First target boundary eligible for live ES1 webhooks. Set to the first clean
- * 15-minute boundary after deployment readiness; earlier rows (including every
- * warmup/backfill row) can never emit a webhook.
+ * Hard floor for live ES1 webhooks. The effective activation boundary is
+ * resolved dynamically from `b4x4_es1_activation` (committed the first time
+ * readiness is verified) and can only ever be at or after this floor.
  */
-export const ES1_WEBHOOK_ACTIVATION_TS = "2026-08-15T01:45:00.000Z";
+export const ES1_WEBHOOK_ACTIVATION_FLOOR_TS = "2026-08-15T01:45:00.000Z";
+/** @deprecated kept as the floor alias for existing callers/tests. */
+export const ES1_WEBHOOK_ACTIVATION_TS = ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
+
 
 /**
  * Hard ceiling for one live ES1 run. The old B4x4 path could hang on a slow
