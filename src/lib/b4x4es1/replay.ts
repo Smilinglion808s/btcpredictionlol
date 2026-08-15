@@ -79,8 +79,9 @@ export function replayEs1(input: ReplayInput): ReplayResult {
   const eligible = eligibleFeatureRows(input.featureRows);
 
   const trainingPool: TrainingRow[] = [];
-  const fitsByBoundary = new Map<number, Es1Fit | null>();
+  const fitsByBoundary = new Map<number, ResolvedEs1Fit | null>();
   const fits: Es1Fit[] = [];
+  const resolvedFits: ResolvedEs1Fit[] = [];
   const history: Es1HistoryEntry[] = [];
   const obHistory: Array<{ targetTs: string; absDepth: number }> = [];
   const out: ReplayRow[] = [];
