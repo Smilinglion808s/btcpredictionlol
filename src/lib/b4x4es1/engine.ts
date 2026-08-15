@@ -64,6 +64,12 @@ export interface Es1Input {
   timingInvalidReason: string | null;
   priceProbabilityGreen: number | null;
   priceFitId: string | null;
+  /**
+   * Fail-closed certification gate: false when the price head is running on an
+   * uncertified (IRLS shadow) fit. Defaults to certified for replay callers
+   * that pre-filter uncertified fits themselves.
+   */
+  priceFitCertified?: boolean;
   a2ProbabilityGreen: number | null;
   a2RowId: string | null;
   a2PredictionId: string | null;
