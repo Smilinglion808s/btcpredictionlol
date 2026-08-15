@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import { buildEs1Replay, runEs1ForTarget } from "../src/lib/b4x4es1/orchestrator.server";
+import { fetchAndUpsertCandles } from "../src/lib/okx.server";
+import { runEs1ForTarget } from "../src/lib/b4x4es1/orchestrator.server";
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {auth:{persistSession:false}});
-const { rows } = await buildEs1Replay(sb, { force: true });
-console.log("rows", rows.length, "tail", rows.slice(-4).map(r=>r.targetTs));
+const f = await fetchAndUpsertCandles(sb);
+console.log("fetch", f.primary_source, f.candles.length);
+const target = new Date(Math.floor(Date.now()/900000)*900000).toISOString();
+console.log("target", target);
+const row = await runEs1ForTarget(sb, { targetCandleTs: target, runMode: "LIVE" });
+console.log("row", row && { t: row.target_candle_ts, mode: row.run_mode, fp: row.final_prediction, wt: row.would_trade, we: row.webhook_eligible });
