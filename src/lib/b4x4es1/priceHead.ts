@@ -291,7 +291,7 @@ export function trainEs1Fit(
     trainingStartIndex: rows[0].index,
     trainingEndIndex: rows[rows.length - 1].index,
     blockIndex,
-    solver: ES1_SOLVER,
+    solver: solverName,
     converged: solved.converged,
     iterations: solved.iterations,
     gradientNorm: solved.gradientNorm,
