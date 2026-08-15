@@ -32,7 +32,7 @@ console.log("candles", candles.length, "eligible", eligible.length, "pool", pool
 
 const boundaries = Number(process.argv[2] ?? 2112);
 const out: any = { boundaries: [] };
-for (const b of [2016, boundaries]) {
+for (const b of Array.from({length: 15}, (_, k) => 768 + 96 * k)) {
   const { start, end } = trainingWindowFor(b);
   const rows = pool.slice(start, end);
   if (rows.length !== 1536) {
