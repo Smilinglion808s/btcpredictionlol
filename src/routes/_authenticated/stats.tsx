@@ -18,8 +18,8 @@ import {
 
 import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
-import { getB4x4Stats, getB4x4Pending, exportB4x4Csv, listB4x4Recent } from "@/lib/b4x4.functions";
-import { B4x4Card } from "@/components/b4x4-card";
+import { listB4x4Recent } from "@/lib/b4x4.functions";
+
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
@@ -83,12 +83,7 @@ function StatsPage() {
   const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const b4x4Fn = useServerFn(getB4x4Stats);
-  const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const b4x4PendingFn = useServerFn(getB4x4Pending);
-  const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
-  const exportB4x4Fn = useServerFn(exportB4x4Csv);
-  const [exportingB4x4, setExportingB4x4] = useState(false);
+
 
   const es1Fn = useServerFn(getEs1Stats);
   const es1Q = useQuery({ queryKey: ["b4x4-es1-stats"], queryFn: () => es1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
@@ -112,16 +107,6 @@ function StatsPage() {
 
 
 
-  async function downloadB4x4Csv() {
-    try {
-      setExportingB4x4(true);
-      const res = await exportB4x4Fn();
-      if (!res || res.rows === 0) { alert("No B4x4 rows to export."); return; }
-      triggerDownload(res.csv, `B4x4-${stamp()}.csv`);
-    } finally {
-      setExportingB4x4(false);
-    }
-  }
 
   const [exportingV6, setExportingV6] = useState(false);
   const [resettingV6, setResettingV6] = useState(false);
@@ -389,12 +374,6 @@ function StatsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-5">
-        <B4x4Card
-          stats={(b4x4Q.data as any) ?? {}}
-          pending={(b4x4PendingQ.data as any) ?? null}
-          onExport={downloadB4x4Csv}
-          exporting={exportingB4x4}
-        />
         <B4x4Es1Card
           stats={(es1Q.data as any) ?? {}}
           pending={(es1PendingQ.data as any) ?? null}
@@ -402,6 +381,7 @@ function StatsPage() {
           exporting={exportingEs1}
         />
       </div>
+
 
 
 
