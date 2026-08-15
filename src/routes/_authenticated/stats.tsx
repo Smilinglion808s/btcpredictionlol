@@ -389,12 +389,6 @@ function StatsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-5">
-        <B4x4Card
-          stats={(b4x4Q.data as any) ?? {}}
-          pending={(b4x4PendingQ.data as any) ?? null}
-          onExport={downloadB4x4Csv}
-          exporting={exportingB4x4}
-        />
         <B4x4Es1Card
           stats={(es1Q.data as any) ?? {}}
           pending={(es1PendingQ.data as any) ?? null}
@@ -402,6 +396,7 @@ function StatsPage() {
           exporting={exportingEs1}
         />
       </div>
+
 
 
 
