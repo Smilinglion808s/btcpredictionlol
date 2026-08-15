@@ -85,10 +85,7 @@ function StatsPage() {
 
   const b4x4Fn = useServerFn(getB4x4Stats);
   const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const b4x4PendingFn = useServerFn(getB4x4Pending);
-  const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
-  const exportB4x4Fn = useServerFn(exportB4x4Csv);
-  const [exportingB4x4, setExportingB4x4] = useState(false);
+
 
   const es1Fn = useServerFn(getEs1Stats);
   const es1Q = useQuery({ queryKey: ["b4x4-es1-stats"], queryFn: () => es1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
