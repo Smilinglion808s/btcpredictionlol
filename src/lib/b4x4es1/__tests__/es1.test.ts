@@ -350,7 +350,7 @@ describe("ES1 B4 correctness guard", () => {
   it("passes at pCorrect equality of 0.45 and is veto-only", () => {
     expect(betaPCorrect(14, 30)).toBeGreaterThan(0.45);
     // 0.45 exactly: (wins+8)/(n+16) = 0.45 -> wins=13, n=30
-    expect(betaPCorrect(13, 30)).toBeCloseTo(0.45, 12);
+    expect(betaPCorrect(28, 64)).toBeCloseTo(0.45, 12);
   });
 
   it("attributes guard outcomes without changing direction", () => {
