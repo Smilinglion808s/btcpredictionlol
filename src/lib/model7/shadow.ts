@@ -765,7 +765,7 @@ async function runA2Policies(
       }
     })();
 
-    await Promise.all([b4x4Promise, v6Promise, insertPromise, td1Promise]);
+    await Promise.all([b4x4Promise, es1Promise, v6Promise, insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
