@@ -63,7 +63,11 @@ function normalizeOkxRow(row: string[]): NormalizedCandle {
     close: Number(c),
     volume: Number(vol),
     volume_quote: Number(volCcyQuote ?? 0),
-    confirm: confirm === "1",
+    // OKX can lag a few seconds before flipping `confirm` on a candle whose
+    // window has fully elapsed. A candle whose entire 15m window is in the
+    // past is closed by definition.
+    confirm: confirm === "1" || Date.now() >= Number(ts) + TF_MS + 2000,
+
     fetch_source: "okx",
     raw: row,
   };
