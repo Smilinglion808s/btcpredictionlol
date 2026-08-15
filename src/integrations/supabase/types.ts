@@ -454,6 +454,459 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_es1_fits: {
+        Row: {
+          artifact_sha256: string
+          block_index: number
+          coefficients: Json
+          config_hash: string | null
+          converged: boolean | null
+          created_at: string
+          feature_schema_hash: string
+          fit_id: string
+          gradient_norm: number | null
+          intercept: number
+          iterations: number | null
+          logistic_c: number
+          scaler_center: Json
+          scaler_name: string
+          scaler_scale: Json
+          solver: string
+          specification: string
+          training_end_index: number | null
+          training_end_ts: string | null
+          training_row_count: number
+          training_start_index: number | null
+          training_start_ts: string | null
+        }
+        Insert: {
+          artifact_sha256: string
+          block_index: number
+          coefficients: Json
+          config_hash?: string | null
+          converged?: boolean | null
+          created_at?: string
+          feature_schema_hash: string
+          fit_id: string
+          gradient_norm?: number | null
+          intercept: number
+          iterations?: number | null
+          logistic_c: number
+          scaler_center: Json
+          scaler_name: string
+          scaler_scale: Json
+          solver: string
+          specification: string
+          training_end_index?: number | null
+          training_end_ts?: string | null
+          training_row_count: number
+          training_start_index?: number | null
+          training_start_ts?: string | null
+        }
+        Update: {
+          artifact_sha256?: string
+          block_index?: number
+          coefficients?: Json
+          config_hash?: string | null
+          converged?: boolean | null
+          created_at?: string
+          feature_schema_hash?: string
+          fit_id?: string
+          gradient_norm?: number | null
+          intercept?: number
+          iterations?: number | null
+          logistic_c?: number
+          scaler_center?: Json
+          scaler_name?: string
+          scaler_scale?: Json
+          solver?: string
+          specification?: string
+          training_end_index?: number | null
+          training_end_ts?: string | null
+          training_row_count?: number
+          training_start_index?: number | null
+          training_start_ts?: string | null
+        }
+        Relationships: []
+      }
+      b4x4_es1_predictions: {
+        Row: {
+          a2_agrees: boolean | null
+          a2_confidence: number | null
+          a2_confidence_rank: number | null
+          a2_direction: string | null
+          a2_model_fit_id: string | null
+          a2_prediction_id: string | null
+          a2_probability_green: number | null
+          a2_production_model_version: string | null
+          a2_rank_history_count: number | null
+          a2_row_id: string | null
+          a2_source_variant: string | null
+          actual_close: number | null
+          actual_direction: string | null
+          actual_high: number | null
+          actual_low: number | null
+          actual_open: number | null
+          actual_volume: number | null
+          aligned_candidate_before_b4: boolean | null
+          aligned_candidate_direction: string | null
+          b4_cell: string | null
+          b4_cell_losses: number | null
+          b4_cell_resolved_count: number | null
+          b4_cell_wins: number | null
+          b4_global_history_count: number | null
+          b4_global_quartile: number | null
+          b4_global_rank: number | null
+          b4_guard_attribution_class: string | null
+          b4_guard_incremental_value: number | null
+          b4_guard_version: string | null
+          b4_guard_veto_fired: boolean | null
+          b4_not_ready_reason: string | null
+          b4_p_correct: number | null
+          b4_quality_percentile: number | null
+          b4_ready: boolean | null
+          b4_reference_count: number | null
+          b4_reference_end_index: number | null
+          b4_reference_start_index: number | null
+          b4_same_side_history_count: number | null
+          b4_same_side_input_count: number | null
+          b4_same_side_quartile: number | null
+          b4_same_side_rank: number | null
+          b4_training_end_index: number | null
+          b4_training_start_index: number | null
+          build_commit_sha: string | null
+          build_identifier: string | null
+          canonical_candle_source: string | null
+          catchup_target_ts: string | null
+          combined_confidence_rank: number | null
+          combined_rank_qualified: boolean | null
+          config_hash: string | null
+          created_at: string
+          data_invalid_reason: string | null
+          data_valid: boolean | null
+          decision_reason: string | null
+          deploy_environment: string | null
+          directional_version: string | null
+          feature_cutoff_ts: string | null
+          feature_invalid_reason: string | null
+          feature_schema_hash: string | null
+          feature_valid: boolean | null
+          feature_values_json: Json | null
+          feature_vector_hash: string | null
+          final_prediction: string | null
+          hybrid_direction: string | null
+          hybrid_evidence: number | null
+          hybrid_route: string | null
+          id: string
+          implementation_revision: string | null
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          latest_source_candle_ts: string | null
+          local_date: string | null
+          model_name: string
+          model_version: string
+          ob_abs_depth: number | null
+          ob_abs_percentile: number | null
+          ob_book_complete: boolean | null
+          ob_capture_status: string | null
+          ob_depth_imbalance_10bps: number | null
+          ob_history_cap: number | null
+          ob_history_count: number | null
+          ob_history_end_ts: string | null
+          ob_history_start_ts: string | null
+          ob_route_qualified: boolean | null
+          ob_route_reject_reason: string | null
+          ob_snapshot_ts: string | null
+          operational_gap_reason: string | null
+          operational_gap_status: string | null
+          price_confidence: number | null
+          price_confidence_rank: number | null
+          price_direction: string | null
+          price_fit_artifact_sha256: string | null
+          price_fit_id: string | null
+          price_probability_green: number | null
+          price_rank_history_count: number | null
+          price_training_end_ts: string | null
+          price_training_row_count: number | null
+          price_training_start_ts: string | null
+          prospective_test_id: string | null
+          raw_counterfactual_result: string | null
+          raw_counterfactual_score: number | null
+          resolution_attempt_count: number
+          resolved_at: string | null
+          resolver_version: string | null
+          result: string | null
+          result_score: number | null
+          run_finished_at: string | null
+          run_mode: string
+          run_started_at: string | null
+          scheduler_invocation_id: string | null
+          source_index_absolute: number | null
+          target_candle_ts: string
+          timing_invalid_reason: string | null
+          timing_valid: boolean | null
+          updated_at: string
+          variant: string | null
+          webhook_eligible: boolean
+          webhook_sent_at: string | null
+          without_b4_guard_decision_reason: string | null
+          without_b4_guard_direction: string | null
+          without_b4_guard_score: number | null
+          without_b4_guard_would_trade: boolean | null
+          would_trade: boolean
+        }
+        Insert: {
+          a2_agrees?: boolean | null
+          a2_confidence?: number | null
+          a2_confidence_rank?: number | null
+          a2_direction?: string | null
+          a2_model_fit_id?: string | null
+          a2_prediction_id?: string | null
+          a2_probability_green?: number | null
+          a2_production_model_version?: string | null
+          a2_rank_history_count?: number | null
+          a2_row_id?: string | null
+          a2_source_variant?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          aligned_candidate_before_b4?: boolean | null
+          aligned_candidate_direction?: string | null
+          b4_cell?: string | null
+          b4_cell_losses?: number | null
+          b4_cell_resolved_count?: number | null
+          b4_cell_wins?: number | null
+          b4_global_history_count?: number | null
+          b4_global_quartile?: number | null
+          b4_global_rank?: number | null
+          b4_guard_attribution_class?: string | null
+          b4_guard_incremental_value?: number | null
+          b4_guard_version?: string | null
+          b4_guard_veto_fired?: boolean | null
+          b4_not_ready_reason?: string | null
+          b4_p_correct?: number | null
+          b4_quality_percentile?: number | null
+          b4_ready?: boolean | null
+          b4_reference_count?: number | null
+          b4_reference_end_index?: number | null
+          b4_reference_start_index?: number | null
+          b4_same_side_history_count?: number | null
+          b4_same_side_input_count?: number | null
+          b4_same_side_quartile?: number | null
+          b4_same_side_rank?: number | null
+          b4_training_end_index?: number | null
+          b4_training_start_index?: number | null
+          build_commit_sha?: string | null
+          build_identifier?: string | null
+          canonical_candle_source?: string | null
+          catchup_target_ts?: string | null
+          combined_confidence_rank?: number | null
+          combined_rank_qualified?: boolean | null
+          config_hash?: string | null
+          created_at?: string
+          data_invalid_reason?: string | null
+          data_valid?: boolean | null
+          decision_reason?: string | null
+          deploy_environment?: string | null
+          directional_version?: string | null
+          feature_cutoff_ts?: string | null
+          feature_invalid_reason?: string | null
+          feature_schema_hash?: string | null
+          feature_valid?: boolean | null
+          feature_values_json?: Json | null
+          feature_vector_hash?: string | null
+          final_prediction?: string | null
+          hybrid_direction?: string | null
+          hybrid_evidence?: number | null
+          hybrid_route?: string | null
+          id?: string
+          implementation_revision?: string | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          latest_source_candle_ts?: string | null
+          local_date?: string | null
+          model_name: string
+          model_version: string
+          ob_abs_depth?: number | null
+          ob_abs_percentile?: number | null
+          ob_book_complete?: boolean | null
+          ob_capture_status?: string | null
+          ob_depth_imbalance_10bps?: number | null
+          ob_history_cap?: number | null
+          ob_history_count?: number | null
+          ob_history_end_ts?: string | null
+          ob_history_start_ts?: string | null
+          ob_route_qualified?: boolean | null
+          ob_route_reject_reason?: string | null
+          ob_snapshot_ts?: string | null
+          operational_gap_reason?: string | null
+          operational_gap_status?: string | null
+          price_confidence?: number | null
+          price_confidence_rank?: number | null
+          price_direction?: string | null
+          price_fit_artifact_sha256?: string | null
+          price_fit_id?: string | null
+          price_probability_green?: number | null
+          price_rank_history_count?: number | null
+          price_training_end_ts?: string | null
+          price_training_row_count?: number | null
+          price_training_start_ts?: string | null
+          prospective_test_id?: string | null
+          raw_counterfactual_result?: string | null
+          raw_counterfactual_score?: number | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          resolver_version?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_finished_at?: string | null
+          run_mode?: string
+          run_started_at?: string | null
+          scheduler_invocation_id?: string | null
+          source_index_absolute?: number | null
+          target_candle_ts: string
+          timing_invalid_reason?: string | null
+          timing_valid?: boolean | null
+          updated_at?: string
+          variant?: string | null
+          webhook_eligible?: boolean
+          webhook_sent_at?: string | null
+          without_b4_guard_decision_reason?: string | null
+          without_b4_guard_direction?: string | null
+          without_b4_guard_score?: number | null
+          without_b4_guard_would_trade?: boolean | null
+          would_trade?: boolean
+        }
+        Update: {
+          a2_agrees?: boolean | null
+          a2_confidence?: number | null
+          a2_confidence_rank?: number | null
+          a2_direction?: string | null
+          a2_model_fit_id?: string | null
+          a2_prediction_id?: string | null
+          a2_probability_green?: number | null
+          a2_production_model_version?: string | null
+          a2_rank_history_count?: number | null
+          a2_row_id?: string | null
+          a2_source_variant?: string | null
+          actual_close?: number | null
+          actual_direction?: string | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_open?: number | null
+          actual_volume?: number | null
+          aligned_candidate_before_b4?: boolean | null
+          aligned_candidate_direction?: string | null
+          b4_cell?: string | null
+          b4_cell_losses?: number | null
+          b4_cell_resolved_count?: number | null
+          b4_cell_wins?: number | null
+          b4_global_history_count?: number | null
+          b4_global_quartile?: number | null
+          b4_global_rank?: number | null
+          b4_guard_attribution_class?: string | null
+          b4_guard_incremental_value?: number | null
+          b4_guard_version?: string | null
+          b4_guard_veto_fired?: boolean | null
+          b4_not_ready_reason?: string | null
+          b4_p_correct?: number | null
+          b4_quality_percentile?: number | null
+          b4_ready?: boolean | null
+          b4_reference_count?: number | null
+          b4_reference_end_index?: number | null
+          b4_reference_start_index?: number | null
+          b4_same_side_history_count?: number | null
+          b4_same_side_input_count?: number | null
+          b4_same_side_quartile?: number | null
+          b4_same_side_rank?: number | null
+          b4_training_end_index?: number | null
+          b4_training_start_index?: number | null
+          build_commit_sha?: string | null
+          build_identifier?: string | null
+          canonical_candle_source?: string | null
+          catchup_target_ts?: string | null
+          combined_confidence_rank?: number | null
+          combined_rank_qualified?: boolean | null
+          config_hash?: string | null
+          created_at?: string
+          data_invalid_reason?: string | null
+          data_valid?: boolean | null
+          decision_reason?: string | null
+          deploy_environment?: string | null
+          directional_version?: string | null
+          feature_cutoff_ts?: string | null
+          feature_invalid_reason?: string | null
+          feature_schema_hash?: string | null
+          feature_valid?: boolean | null
+          feature_values_json?: Json | null
+          feature_vector_hash?: string | null
+          final_prediction?: string | null
+          hybrid_direction?: string | null
+          hybrid_evidence?: number | null
+          hybrid_route?: string | null
+          id?: string
+          implementation_revision?: string | null
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          latest_source_candle_ts?: string | null
+          local_date?: string | null
+          model_name?: string
+          model_version?: string
+          ob_abs_depth?: number | null
+          ob_abs_percentile?: number | null
+          ob_book_complete?: boolean | null
+          ob_capture_status?: string | null
+          ob_depth_imbalance_10bps?: number | null
+          ob_history_cap?: number | null
+          ob_history_count?: number | null
+          ob_history_end_ts?: string | null
+          ob_history_start_ts?: string | null
+          ob_route_qualified?: boolean | null
+          ob_route_reject_reason?: string | null
+          ob_snapshot_ts?: string | null
+          operational_gap_reason?: string | null
+          operational_gap_status?: string | null
+          price_confidence?: number | null
+          price_confidence_rank?: number | null
+          price_direction?: string | null
+          price_fit_artifact_sha256?: string | null
+          price_fit_id?: string | null
+          price_probability_green?: number | null
+          price_rank_history_count?: number | null
+          price_training_end_ts?: string | null
+          price_training_row_count?: number | null
+          price_training_start_ts?: string | null
+          prospective_test_id?: string | null
+          raw_counterfactual_result?: string | null
+          raw_counterfactual_score?: number | null
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          resolver_version?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_finished_at?: string | null
+          run_mode?: string
+          run_started_at?: string | null
+          scheduler_invocation_id?: string | null
+          source_index_absolute?: number | null
+          target_candle_ts?: string
+          timing_invalid_reason?: string | null
+          timing_valid?: boolean | null
+          updated_at?: string
+          variant?: string | null
+          webhook_eligible?: boolean
+          webhook_sent_at?: string | null
+          without_b4_guard_decision_reason?: string | null
+          without_b4_guard_direction?: string | null
+          without_b4_guard_score?: number | null
+          without_b4_guard_would_trade?: boolean | null
+          would_trade?: boolean
+        }
+        Relationships: []
+      }
       b4x4_ob_capture_auth: {
         Row: {
           created_at: string
