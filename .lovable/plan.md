@@ -33,17 +33,16 @@ Persist three flags per prediction row:
 Publication requires `parity_certified`. When it is false:
 
 - `final_prediction = null`, `would_trade = false`, `webhook_eligible = false`
-- reason `ABSTAIN_ES1_SKLEARN_ARTIFACT_NOT_READY` (missing/mismatched fit) or `ABSTAIN_ES1_DECISION_STATE_UNCERTIFIED` (contaminated rolling state)
+- reason `ABSTAIN_ES1_CERTIFIED_ARTIFACT_NOT_READY` (missing/mismatched fit) or `ABSTAIN_ES1_DECISION_STATE_UNCERTIFIED` (contaminated rolling state)
 - IRLS shadow direction/probability/outcome still computed and stored for audit.
 
 ### Repair of the four IRLS rows at 2112
 
-1. Mint and install the 2112 artifact via the certified fitter.
-2. Compute certified counterfactual values for the four fallback rows into shadow columns; original predictions, reasons and sent webhooks are left untouched.
-3. Rebuild ranks, hybrid evidence and B4 cell state from index 2112 forward using the certified values.
-4. Compare rebuilt state to a recorded checksum; publication resumes only on pass. The four original rows stay excluded from parity-certified forward statistics.
+1. Generate the 2112 artifact with the pinned Python/sklearn oracle offline, label it `sklearn-frozen`, and install it into `frozen-fits.json`. It also becomes the 15th (and most recent) certification fixture for the TypeScript fitter.
+2. Compute certified counterfactual values for the four fallback rows into dedicated `certified_cf_*` columns, kept separate from `irls_shadow_*`. Original predictions, reasons and sent webhooks are untouched; the four rows stay uncertified, but their certified counterfactual values may feed the rebuilt forward state.
+3. Rebuild ranks, hybrid evidence and B4 cell state from the last certified checkpoint forward using certified values.
+4. Verify independently: the canonical checksum covers artifact hashes, canonical candle identities, A2 row IDs, OB snapshot IDs, ranks and B4 state. The rebuild is computed twice independently and both runs must agree; for 2112 the result must also match an offline reference checksum. The previously stored running checksum is not trusted as the comparison target. Publication resumes only on pass, and the four original rows stay excluded from parity-certified forward statistics.
 
-## 4. Pinned numerical specification
 
 The fitter is certified against a pinned oracle, not assumed equivalent. Pinned and asserted in the artifact metadata and tests:
 
