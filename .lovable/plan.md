@@ -56,22 +56,34 @@ The fitter is certified against a pinned oracle, not assumed equivalent. Pinned 
 - Binary class ordering (label 0/1 orientation) fixed.
 - RobustScaler: median center, (10, 90) quantile range, linear percentile interpolation matching NumPy, and zero-scale columns mapped to scale 1.
 
-Binding gates for `ts-lbfgs-certified` (all must pass, else the artifact is rejected and ES1 abstains):
+### CI certification (offline, with sklearn)
 
-- exact scaler and window-fingerprint identity
-- tight probability tolerance vs oracle
+Run against all 15 sklearn artifacts (768–2016 plus 2112) and synthetic/degenerate fixtures (separable data, constant columns, zero-scale features, extreme weights):
+
+- tight probability tolerance vs the oracle
 - identical price directions
 - identical confidence ranks, B4 cells and final decisions
-- convergence flag true and finite gradient norm
-- deterministic repeated-fit hash (fit twice, byte-identical artifact)
+- exact scaler identity
 
-Coefficient tolerance is recorded as a diagnostic only.
+Coefficient tolerance is recorded as a diagnostic only. A fitter build only ships with a recorded certified code hash after CI passes.
 
-## 5. Minting inputs
+### Runtime validation (Cloudflare, no oracle available)
+
+Live minting cannot compare against sklearn — there is no Python oracle in the worker, and literal per-boundary sklearn verification would require an external Python service. Runtime therefore gates on:
+
+- certified fitter code hash matches the CI-certified hash
+- exact training-window fingerprint match
+- convergence true and finite gradient norm
+- deterministic repeated-fit hash (fit twice, byte-identical canonical payload)
+- scaler invariants (finite center/scale, zero-scale handling)
+
+Any failure → no artifact, `ABSTAIN_ES1_CERTIFIED_ARTIFACT_NOT_READY`, no webhook.
+
+## 5. Minting inputs and timing
 
 Minting reads canonical confirmed candle rows directly from the candle store, never `is_resolved` on the prediction table (which lags up to 16m15s). A boundary is mintable only when every row of its exact preceding training window exists as a confirmed candle; future boundaries are never pre-generated.
 
-Minting is triggered automatically as each block's window completes, ahead of the 96-row boundary, with an `api_runs` alert before the rollover and a fail-closed alert if generation fails.
+Timing: the final training row only becomes available at the new block boundary itself. A pre-check runs ahead of the boundary (window completeness, artifact absence, alerting), but final minting happens after the T−15m candle is confirmed and must complete inside the accepted 20-second scoring window. If confirmation or fitting fails or overruns, ES1 abstains and emits no webhook, with a fail-closed `api_runs` alert.
 
 ## 6. Proof test
 
@@ -79,8 +91,9 @@ A simulated missing-artifact run must demonstrate, end to end:
 
 - no webhook emitted
 - IRLS shadow row written and labelled `irls-shadow`
-- primary row marked uncertified with the correct abstain reason
-- publication resumes only after certified replay rebuilds state and the checksum matches
+- primary row marked uncertified with `ABSTAIN_ES1_CERTIFIED_ARTIFACT_NOT_READY`
+- publication resumes only after certified replay rebuilds state from the last certified checkpoint and both independent rebuild checksums agree
+
 
 ## Technical notes
 
