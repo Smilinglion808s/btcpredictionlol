@@ -117,11 +117,16 @@ export function buildFeatureRows(candles: readonly CanonicalCandle[]): FeatureRo
   const segments = segmentCandles(candles);
   const out: FeatureRow[] = [];
   segments.forEach((seg, segmentId) => {
+    const shortSegment = seg.length < ES1_MIN_SEGMENT_LENGTH;
     for (let t = 0; t < seg.length; t++) {
       const sourceMs = new Date(seg[t].candleTs).getTime();
       const targetMs = sourceMs + TF_MS;
-      const { values, valid, reason } = computeFeatures(seg, t);
+      const computed = computeFeatures(seg, t);
+      const valid = computed.valid && !shortSegment;
+      const reason = computed.valid && shortSegment ? "short_segment" : computed.invalidReason;
+      const values = computed.values;
       const vector = ES1_FEATURES.map((f) => values[f]);
+
       const target = byTs.get(targetMs) ?? null;
       out.push({
         targetTs: new Date(targetMs).toISOString(),
