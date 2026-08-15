@@ -10,7 +10,6 @@ import {
 } from "../config";
 import { eligibleFeatureRows } from "../replay";
 import { frozenFitCount, resolveEs1Fit, trainingWindowFingerprint } from "../fitArtifacts";
-import { ES1_FEATURES } from "../config";
 import {
   buildFeatureRows,
   computeFeatures,
