@@ -296,7 +296,10 @@ export function decideEs1(input: Es1Input, history: readonly Es1HistoryEntry[]):
     if (history96.length < OB_MIN_HISTORY) {
       d.obRouteRejectReason = "INSUFFICIENT_OB_HISTORY";
     } else {
-      const values = history96.map((h) => h.absDepth).slice().sort((a, b) => a - b);
+      const values = history96
+        .map((h) => h.absDepth)
+        .slice()
+        .sort((a, b) => a - b);
       const cap = quantile(values, OB_ABS_IMBALANCE_PERCENTILE);
       d.obHistoryCap = cap;
       d.obAbsPercentile = empiricalRank(values, absDepth);
@@ -465,14 +468,12 @@ export function decideEs1(input: Es1Input, history: readonly Es1HistoryEntry[]):
   d.withoutB4GuardWouldTrade = true;
   d.withoutB4GuardDirection = d.hybridDirection;
   d.withoutB4GuardDecisionReason =
-    d.hybridRoute === "OB_DEPTH10_FADE" ? "PUBLISH_ES1_ALIGNED_OB_FADE" : "PUBLISH_ES1_ALIGNED_PRICE";
+    d.hybridRoute === "OB_DEPTH10_FADE"
+      ? "PUBLISH_ES1_ALIGNED_OB_FADE"
+      : "PUBLISH_ES1_ALIGNED_PRICE";
 
   // ---- 9. mature B4 state expected but inputs invalid ----
-  if (
-    idx != null &&
-    idx >= B4_READY_MIN_SOURCE_INDEX &&
-    !d.b4Ready
-  ) {
+  if (idx != null && idx >= B4_READY_MIN_SOURCE_INDEX && !d.b4Ready) {
     d.decisionReason = "ABSTAIN_ES1_B4_GUARD_INVALID";
     return d;
   }

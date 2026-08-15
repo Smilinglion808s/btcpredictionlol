@@ -16,7 +16,10 @@ import type { A2Row } from "./replay";
 type DbRow = Record<string, unknown>;
 
 async function pageAll(
-  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  build: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
   page = 1000,
 ): Promise<DbRow[]> {
   const out: DbRow[] = [];

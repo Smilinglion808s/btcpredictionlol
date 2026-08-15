@@ -3,11 +3,7 @@
 // path share this single implementation, so a live row and its replay are
 // bit-identical.
 
-import {
-  ES1_RAW_PREDICTION_EPOCH_TS,
-  GRID_OUTCOME_DELAY_MS,
-  OB_HISTORY_WINDOW,
-} from "./config";
+import { ES1_RAW_PREDICTION_EPOCH_TS, GRID_OUTCOME_DELAY_MS, OB_HISTORY_WINDOW } from "./config";
 import type { FeatureRow } from "./features";
 import { decideEs1, type Es1Decision, type Es1HistoryEntry, type ObSnapshot } from "./engine";
 import {
@@ -80,8 +76,7 @@ export function replayEs1(input: ReplayInput): ReplayResult {
     }
 
     const a2 = input.a2.get(fr.targetTs) ?? null;
-    const priceProbability =
-      fit && fr.valid ? predictProbabilityGreen(fit, fr.vector) : null;
+    const priceProbability = fit && fr.valid ? predictProbabilityGreen(fit, fr.vector) : null;
 
     const decision = decideEs1(
       {

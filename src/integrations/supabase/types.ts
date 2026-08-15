@@ -454,6 +454,33 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_es1_activation: {
+        Row: {
+          activation_readiness_snapshot: Json
+          activation_set_at: string
+          activation_target_ts: string
+          forward_test_sequence_number: number
+          id: string
+          model_version: string
+        }
+        Insert: {
+          activation_readiness_snapshot?: Json
+          activation_set_at?: string
+          activation_target_ts: string
+          forward_test_sequence_number?: number
+          id: string
+          model_version: string
+        }
+        Update: {
+          activation_readiness_snapshot?: Json
+          activation_set_at?: string
+          activation_target_ts?: string
+          forward_test_sequence_number?: number
+          id?: string
+          model_version?: string
+        }
+        Relationships: []
+      }
       b4x4_es1_fits: {
         Row: {
           artifact_sha256: string

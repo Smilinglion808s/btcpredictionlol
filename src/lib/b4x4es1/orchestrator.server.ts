@@ -32,11 +32,13 @@ import type { Es1Fit } from "./priceHead";
 type DbRow = Record<string, unknown>;
 
 /**
- * First target boundary eligible for live ES1 webhooks. Set to the first clean
- * 15-minute boundary after deployment readiness; earlier rows (including every
- * warmup/backfill row) can never emit a webhook.
+ * Hard floor for live ES1 webhooks. The effective activation boundary is
+ * resolved dynamically from `b4x4_es1_activation` (committed the first time
+ * readiness is verified) and can only ever be at or after this floor.
  */
-export const ES1_WEBHOOK_ACTIVATION_TS = "2026-08-15T01:45:00.000Z";
+export const ES1_WEBHOOK_ACTIVATION_FLOOR_TS = "2026-08-15T01:45:00.000Z";
+/** @deprecated kept as the floor alias for existing callers/tests. */
+export const ES1_WEBHOOK_ACTIVATION_TS = ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
 
 /**
  * Hard ceiling for one live ES1 run. The old B4x4 path could hang on a slow
@@ -46,6 +48,67 @@ export const ES1_LIVE_RUN_TIMEOUT_MS = 25_000;
 
 export const ES1_RESOLVER_VERSION = "es1-resolver-r1";
 
+const ES1_ACTIVATION_ID = "b4x4-es1";
+
+export interface Es1ActivationRecord {
+  activation_target_ts: string;
+  activation_set_at: string;
+  forward_test_sequence_number: number;
+  activation_readiness_snapshot: Record<string, unknown>;
+}
+
+/** Next clean 15-minute boundary strictly after `fromMs`. */
+export function nextCleanBoundaryTs(fromMs: number): string {
+  return new Date(Math.floor(fromMs / TF_MS) * TF_MS + TF_MS).toISOString();
+}
+
+/** Read the committed activation record, if any. */
+export async function readEs1Activation(
+  supabase: SupabaseClient,
+): Promise<Es1ActivationRecord | null> {
+  const { data } = await supabase
+    .from("b4x4_es1_activation")
+    .select("*")
+    .eq("id", ES1_ACTIVATION_ID)
+    .maybeSingle();
+  return (data as unknown as Es1ActivationRecord | null) ?? null;
+}
+
+/**
+ * Commit the activation boundary exactly once, on the first target for which
+ * the grid is genuinely ready. Returns the effective activation timestamp.
+ */
+export async function ensureEs1Activation(
+  supabase: SupabaseClient,
+  readiness: Record<string, unknown>,
+): Promise<string> {
+  const existing = await readEs1Activation(supabase);
+  if (existing) return new Date(existing.activation_target_ts).toISOString();
+
+  const floorMs = new Date(ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime();
+  const nextMs = new Date(nextCleanBoundaryTs(Date.now())).getTime();
+  const activationTs = new Date(Math.max(floorMs, nextMs)).toISOString();
+  await supabase.from("b4x4_es1_activation").upsert(
+    {
+      id: ES1_ACTIVATION_ID,
+      model_version: ES1_MODEL_VERSION,
+      activation_target_ts: activationTs,
+      activation_set_at: new Date().toISOString(),
+      forward_test_sequence_number: 0,
+      activation_readiness_snapshot: readiness,
+    } as never,
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+  const committed = await readEs1Activation(supabase);
+  return committed ? new Date(committed.activation_target_ts).toISOString() : activationTs;
+}
+
+/** Effective activation boundary: committed record, else the frozen floor. */
+export async function effectiveEs1ActivationTs(supabase: SupabaseClient): Promise<string> {
+  const rec = await readEs1Activation(supabase);
+  return rec ? new Date(rec.activation_target_ts).toISOString() : ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
+}
+
 export interface Es1Context {
   targetCandleTs: string;
   runMode?: "LIVE" | "BACKFILL";
@@ -53,12 +116,11 @@ export interface Es1Context {
   operationalGapStatus?: string | null;
   operationalGapReason?: string | null;
   catchupTargetTs?: string | null;
+  /** Effective activation boundary for this run (defaults to the frozen floor). */
+  activationTargetTs?: string | null;
 }
 
-export function decisionToRow(
-  ctx: Es1Context,
-  row: ReplayRow,
-): DbRow {
+export function decisionToRow(ctx: Es1Context, row: ReplayRow): DbRow {
   const d: Es1Decision = row.decision;
   const runMode = ctx.runMode ?? "LIVE";
   const build = b4x4BuildIdentity();
@@ -127,8 +189,7 @@ export function decisionToRow(
     a2_row_id: row.a2?.rowId ?? null,
     a2_prediction_id: row.a2?.predictionId ?? null,
     a2_model_fit_id: row.a2?.modelFitId ?? null,
-    a2_production_model_version:
-      row.a2?.productionModelVersion ?? ES1_A2_PRODUCTION_MODEL_VERSION,
+    a2_production_model_version: row.a2?.productionModelVersion ?? ES1_A2_PRODUCTION_MODEL_VERSION,
     a2_probability_green: d.a2ProbabilityGreen,
     a2_direction: d.a2Direction,
     a2_confidence: d.a2Confidence,
@@ -177,7 +238,8 @@ export function decisionToRow(
       runMode === "LIVE" &&
       d.wouldTrade &&
       (ctx.operationalGapStatus ?? "NONE") === "NONE" &&
-      targetMs >= new Date(ES1_WEBHOOK_ACTIVATION_TS).getTime(),
+      targetMs >= new Date(ctx.activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime(),
+
     resolver_version: ES1_RESOLVER_VERSION,
   };
 }
@@ -231,12 +293,10 @@ export async function buildEs1Replay(
 
 async function persistFits(supabase: SupabaseClient, fits: readonly Es1Fit[]): Promise<number> {
   if (!fits.length) return 0;
-  const { error } = await supabase
-    .from("b4x4_es1_fits")
-    .upsert(fits.map(fitToRow) as never, {
-      onConflict: "block_index,feature_schema_hash",
-      ignoreDuplicates: true,
-    });
+  const { error } = await supabase.from("b4x4_es1_fits").upsert(fits.map(fitToRow) as never, {
+    onConflict: "block_index,feature_schema_hash",
+    ignoreDuplicates: true,
+  });
   if (error) throw new Error(`es1_fits_upsert:${error.message}`);
   return fits.length;
 }
@@ -338,11 +398,38 @@ export async function runEs1ForTarget(
     if (!match) return null;
     await persistFits(supabase, fits).catch(() => 0);
 
+    // Commit (or read) the activation boundary from the persisted record. The
+    // boundary is committed the first time the grid is genuinely ready, so a
+    // late deployment activates on the next clean boundary, never mid-candle.
+    let activationTargetTs = ctx.activationTargetTs ?? null;
+    if (!activationTargetTs) {
+      const d = match.decision;
+      activationTargetTs = d.b4Ready
+        ? await ensureEs1Activation(supabase, {
+            source_index_absolute: d.sourceIndexAbsolute ?? null,
+            b4_ready: d.b4Ready,
+            b4_cell: d.b4Cell ?? null,
+            b4_p_correct: d.b4PCorrect ?? null,
+            price_fit_id: d.priceFitId ?? null,
+            readiness_checked_at: new Date().toISOString(),
+          }).catch(() => null)
+        : await effectiveEs1ActivationTs(supabase).catch(() => null);
+    }
+
     const row = {
-      ...decisionToRow({ ...ctx, targetCandleTs: targetTs, runMode: ctx.runMode ?? "LIVE" }, match),
+      ...decisionToRow(
+        {
+          ...ctx,
+          targetCandleTs: targetTs,
+          runMode: ctx.runMode ?? "LIVE",
+          activationTargetTs: activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS,
+        },
+        match,
+      ),
       run_started_at: runStartedAt,
       run_finished_at: new Date().toISOString(),
     };
+
     const { data, error } = await supabase
       .from("b4x4_es1_predictions")
       .upsert(row as never, {
@@ -371,7 +458,9 @@ export async function runEs1ForTarget(
         success: false,
         error_message: e instanceof Error ? e.message : String(e),
       });
-    } catch { /* never block */ }
+    } catch {
+      /* never block */
+    }
     return null;
   }
 }
@@ -391,7 +480,8 @@ export async function maybeSendEs1Webhook(
     if (row.final_prediction !== "GREEN" && row.final_prediction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
-    if (targetMs < new Date(ES1_WEBHOOK_ACTIVATION_TS).getTime()) return false;
+    const activationTs = await effectiveEs1ActivationTs(supabase);
+    if (targetMs < new Date(activationTs).getTime()) return false;
 
     const { data: claimed } = await supabase
       .from("b4x4_es1_predictions")
@@ -427,7 +517,13 @@ export async function resolveEs1Row(
   supabase: SupabaseClient,
   targetCandleTs: string,
   actualDirection: ActualDirection,
-  ohlc?: { open?: number | null; high?: number | null; low?: number | null; close?: number | null; volume?: number | null },
+  ohlc?: {
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
+    close?: number | null;
+    volume?: number | null;
+  },
 ): Promise<void> {
   const targetTs = new Date(targetCandleTs).toISOString();
   let rowId: string | null = null;
@@ -436,7 +532,7 @@ export async function resolveEs1Row(
       .from("b4x4_es1_predictions")
       .select(
         "id, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
-        "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction",
+          "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction",
       )
       .eq("model_version", ES1_MODEL_VERSION)
       .eq("target_candle_ts", targetTs)
@@ -497,7 +593,9 @@ export async function resolveEs1Row(
           .eq("id", rowId)
           .is("resolved_at", null);
       }
-    } catch { /* never block */ }
+    } catch {
+      /* never block */
+    }
   }
 }
 
@@ -525,8 +623,7 @@ export async function resolveEs1Backlog(
   for (const ts of targets) {
     const c = byTs.get(ts);
     if (!c) continue;
-    const dir: ActualDirection =
-      c.close > c.open ? "GREEN" : c.close < c.open ? "RED" : "PUSH";
+    const dir: ActualDirection = c.close > c.open ? "GREEN" : c.close < c.open ? "RED" : "PUSH";
     await resolveEs1Row(supabase, ts, dir, {
       open: c.open,
       high: c.high,
