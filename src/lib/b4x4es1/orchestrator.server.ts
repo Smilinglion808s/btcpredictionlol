@@ -49,6 +49,71 @@ export const ES1_LIVE_RUN_TIMEOUT_MS = 25_000;
 
 export const ES1_RESOLVER_VERSION = "es1-resolver-r1";
 
+const ES1_ACTIVATION_ID = "b4x4-es1";
+
+export interface Es1ActivationRecord {
+  activation_target_ts: string;
+  activation_set_at: string;
+  forward_test_sequence_number: number;
+  activation_readiness_snapshot: Record<string, unknown>;
+}
+
+/** Next clean 15-minute boundary strictly after `fromMs`. */
+export function nextCleanBoundaryTs(fromMs: number): string {
+  return new Date(Math.floor(fromMs / TF_MS) * TF_MS + TF_MS).toISOString();
+}
+
+/** Read the committed activation record, if any. */
+export async function readEs1Activation(
+  supabase: SupabaseClient,
+): Promise<Es1ActivationRecord | null> {
+  const { data } = await supabase
+    .from("b4x4_es1_activation")
+    .select("*")
+    .eq("id", ES1_ACTIVATION_ID)
+    .maybeSingle();
+  return (data as unknown as Es1ActivationRecord | null) ?? null;
+}
+
+/**
+ * Commit the activation boundary exactly once, on the first target for which
+ * the grid is genuinely ready. Returns the effective activation timestamp.
+ */
+export async function ensureEs1Activation(
+  supabase: SupabaseClient,
+  readiness: Record<string, unknown>,
+): Promise<string> {
+  const existing = await readEs1Activation(supabase);
+  if (existing) return new Date(existing.activation_target_ts).toISOString();
+
+  const floorMs = new Date(ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime();
+  const nextMs = new Date(nextCleanBoundaryTs(Date.now())).getTime();
+  const activationTs = new Date(Math.max(floorMs, nextMs)).toISOString();
+  await supabase.from("b4x4_es1_activation").upsert(
+    {
+      id: ES1_ACTIVATION_ID,
+      model_version: ES1_MODEL_VERSION,
+      activation_target_ts: activationTs,
+      activation_set_at: new Date().toISOString(),
+      forward_test_sequence_number: 0,
+      activation_readiness_snapshot: readiness,
+    } as never,
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+  const committed = await readEs1Activation(supabase);
+  return committed
+    ? new Date(committed.activation_target_ts).toISOString()
+    : activationTs;
+}
+
+/** Effective activation boundary: committed record, else the frozen floor. */
+export async function effectiveEs1ActivationTs(supabase: SupabaseClient): Promise<string> {
+  const rec = await readEs1Activation(supabase);
+  return rec
+    ? new Date(rec.activation_target_ts).toISOString()
+    : ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
+}
+
 export interface Es1Context {
   targetCandleTs: string;
   runMode?: "LIVE" | "BACKFILL";
@@ -56,7 +121,10 @@ export interface Es1Context {
   operationalGapStatus?: string | null;
   operationalGapReason?: string | null;
   catchupTargetTs?: string | null;
+  /** Effective activation boundary for this run (defaults to the frozen floor). */
+  activationTargetTs?: string | null;
 }
+
 
 export function decisionToRow(
   ctx: Es1Context,
