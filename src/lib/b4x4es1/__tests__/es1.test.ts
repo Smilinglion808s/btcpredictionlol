@@ -114,7 +114,7 @@ describe("ES1 features", () => {
     const flat = Array.from({ length: 20 }, (_, i) =>
       candle(Date.UTC(2026, 6, 1) + i * TF_MS, 100, 101, 99, 100),
     );
-    expect(computeFeatures(flat, 19).reason).toBe("zero_path");
+    expect(computeFeatures(flat, 49).reason).toBe("zero_path");
   });
 
   it("requires 32 prior candles inside the segment", () => {
