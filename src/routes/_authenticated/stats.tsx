@@ -112,16 +112,6 @@ function StatsPage() {
 
 
 
-  async function downloadB4x4Csv() {
-    try {
-      setExportingB4x4(true);
-      const res = await exportB4x4Fn();
-      if (!res || res.rows === 0) { alert("No B4x4 rows to export."); return; }
-      triggerDownload(res.csv, `B4x4-${stamp()}.csv`);
-    } finally {
-      setExportingB4x4(false);
-    }
-  }
 
   const [exportingV6, setExportingV6] = useState(false);
   const [resettingV6, setResettingV6] = useState(false);
