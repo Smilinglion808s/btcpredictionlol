@@ -3,7 +3,6 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ES1_A2_SOURCE_VARIANT,
   ES1_EXCHANGE,
   ES1_SYMBOL,
   ES1_TIMEFRAME,
