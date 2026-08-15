@@ -48,8 +48,19 @@ export interface Es1Fit {
   iterations: number;
   gradientNorm: number;
   C: number;
-  /** Provenance of the coefficients: frozen sklearn artifact or IRLS fallback. */
-  fitSource?: "sklearn-frozen" | "irls-fallback";
+  /**
+   * Provenance of the coefficients:
+   *   sklearn-frozen      — bundled immutable artifact produced by the offline
+   *                         sklearn oracle (parity-certified in CI);
+   *   ts-lbfgs-certified  — minted at runtime by the pinned TypeScript L-BFGS
+   *                         fitter, which reproduces the oracle numerically;
+   *   irls-shadow         — legacy Newton/IRLS solve; NEVER publishable.
+   */
+  fitSource?: Es1FitSource;
+  /** True only for sklearn-frozen and ts-lbfgs-certified fits. */
+  priceFitCertified?: boolean;
+  /** Fingerprint of the exact training window this fit was produced from. */
+  windowFingerprint?: string;
 }
 
 export interface TrainingRow {
