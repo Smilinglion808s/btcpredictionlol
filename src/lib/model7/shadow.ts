@@ -687,31 +687,13 @@ async function runA2Policies(
       } catch { /* never block */ }
     })();
 
-    // ---- B4x4-ES1 — isolated active model. Runs in parallel with B4x4 and
-    // publishes its own directional webhook; it never touches B4x4 state.
-    const es1Promise = (async () => {
-      try {
-        const {
-          runEs1ForTarget,
-          maybeSendEs1Webhook,
-          ES1_LIVE_RUN_TIMEOUT_MS,
-        } = await import("@/lib/b4x4es1/orchestrator.server");
-        // Hard ceiling: ES1 can never hang the boundary the way legacy B4x4 did.
-        const guard = <T,>(p: Promise<T>, ms: number) =>
-          Promise.race([
-            p,
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
-          ]);
-        const row = await guard(
-          runEs1ForTarget(supabase, {
-            targetCandleTs: String(predictionRow.candle_ts),
-            runMode: "LIVE",
-          }),
-          ES1_LIVE_RUN_TIMEOUT_MS,
-        );
-        if (row) await guard(maybeSendEs1Webhook(supabase, row), 10_000);
-      } catch { /* never block */ }
-    })();
+    // ---- B4x4-ES1 — runs OFF this pre-boundary pass. ES1 builds its feature
+    // row from the fully closed source candle (target - 15m), which does not
+    // exist yet at boundary - 40s; running it here made it publish one candle
+    // late. It now fires on the boundary itself via
+    // /api/public/hooks/es1-boundary-run (pg_cron :00,:15,:30,:45).
+    const es1Promise = Promise.resolve();
+
 
 
 
