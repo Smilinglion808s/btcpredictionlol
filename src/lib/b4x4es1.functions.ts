@@ -84,6 +84,7 @@ function aggregate(rows: Row[]) {
 
     if (r.would_trade !== true) continue;
     c.trades++;
+    c.published++;
     if (r.hybrid_route === "OB_DEPTH10_FADE") c.ob_route_trades++;
     else c.price_route_trades++;
     if (!r.resolved_at) {
@@ -92,9 +93,14 @@ function aggregate(rows: Row[]) {
     }
     const res = String(r.result ?? "");
     const score = Number(r.result_score ?? 0);
-    if (res === "WIN") c.wins++;
-    else if (res === "LOSS") c.losses++;
-    else c.pushes++;
+    c.resolved++;
+    if (res === "WIN") {
+      c.wins++;
+      c.evaluable++;
+    } else if (res === "LOSS") {
+      c.losses++;
+      c.evaluable++;
+    } else c.pushes++;
     c.net += score;
     running += score;
     peak = Math.max(peak, running);
@@ -146,6 +152,10 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
       warmup: {
         total_opportunities: warmup.total_opportunities,
         trades: warmup.trades,
+        published: warmup.published,
+        resolved: warmup.resolved,
+        evaluable: warmup.evaluable,
+        pushes: warmup.pushes,
         wins: warmup.wins,
         losses: warmup.losses,
         net: warmup.net,
