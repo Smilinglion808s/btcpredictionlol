@@ -14,7 +14,7 @@ interface Endpoint {
 
 const BACKOFFS_MS = [0, 2_000, 10_000, 30_000];
 
-function formatMountainTime(iso: string): string {
+export function formatMountainTime(iso: string): string {
   const d = new Date(iso);
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Denver",

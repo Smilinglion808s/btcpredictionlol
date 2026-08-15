@@ -510,22 +510,56 @@ export async function maybeSendEs1Webhook(
       .maybeSingle();
     if (!claimed) return false;
 
-    const { deliverWebhook } = await import("../webhooks.server");
+    const { deliverWebhook, formatMountainTime } = await import("../webhooks.server");
+    const startsAt = new Date(targetMs).toISOString();
+    const endsAt = new Date(targetMs + 15 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
+    const predictionLabel = row.final_prediction === "GREEN" ? "YES" : "NO";
+    const conf = row.hybrid_evidence != null ? Number(row.hybrid_evidence) : null;
     await deliverWebhook(supabase, "prediction.created", {
       model: ES1_MODEL_NAME,
+      model_name: ES1_MODEL_NAME,
       model_version: ES1_MODEL_VERSION,
+      decision_policy_version: ES1_VARIANT,
       variant: ES1_VARIANT,
-      target_candle_ts: row.target_candle_ts,
-      target_candle_close_ts: new Date(targetMs + 15 * 60 * 1000).toISOString(),
+
+      // TD1-RC compatible core contract
+      prediction: predictionLabel,
+      decision: predictionLabel,
+      direction_label: predictionLabel,
+      direction: row.final_prediction,
+      trade: true,
+      confidence: conf == null ? 0 : Math.round(conf * 100),
+      probability_green: null,
+      base_decision: predictionLabel,
+      override_reasons: [],
+
+      // Candle timing (required by the bot)
+      candle_starts_at: startsAt,
+      candle_starts_at_mt: formatMountainTime(startsAt),
+      candle_ends_at: endsAt,
+      candle_ends_at_mt: formatMountainTime(endsAt),
+      target_candle_ts: startsAt,
+      target_candle_close_at: endsAt,
+      target_candle_close_ts: endsAt,
       target_is_upcoming: true,
 
-      prediction: row.final_prediction,
-      direction: row.final_prediction,
+      dedupe_key: `BTC-USDT-15m-${startsAt}-es1`,
+      idempotency_key: `${row.id}:${ES1_MODEL_VERSION}`,
+      prediction_id: row.id ?? null,
+      es1_row_id: row.id ?? null,
+
       route: row.hybrid_route,
-      confidence: row.hybrid_evidence,
+      selected_route: row.hybrid_route ?? null,
+      hybrid_evidence: conf,
       combined_confidence_rank: row.combined_confidence_rank,
       p_correct: row.b4_p_correct,
       decision_reason: row.decision_reason,
+
+      timing_status: "ON_TIME",
+      sent_at: nowIso,
+      sent_at_mt: formatMountainTime(nowIso),
+      timezone: "America/Denver",
     } as never);
     return true;
   } catch {
