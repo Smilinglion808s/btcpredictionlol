@@ -23,6 +23,8 @@ import {
   sha256,
 } from "./config";
 
+export type Es1FitSource = "sklearn-frozen" | "ts-lbfgs-certified" | "irls-shadow";
+
 export interface Scaler {
   center: number[];
   scale: number[];
