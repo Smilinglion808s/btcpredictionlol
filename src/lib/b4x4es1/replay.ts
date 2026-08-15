@@ -42,6 +42,17 @@ export interface ReplayInput {
   mintedArtifacts?: ReadonlyMap<number, MintedFitArtifact>;
 }
 
+/** Rolling FNV-1a (64-bit) checksum of the decision-state history stream. */
+function rollHistoryChecksum(prev: string, entry: string): string {
+  let h = BigInt("0x" + prev);
+  for (let i = 0; i < entry.length; i++) {
+    h ^= BigInt(entry.charCodeAt(i));
+    h = (h * 1099511628211n) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, "0");
+}
+const HISTORY_CHECKSUM_SEED = "cbf29ce484222325";
+
 export interface ReplayRow {
   targetTs: string;
   /** Index inside the eligible feature stream. */
@@ -51,6 +62,11 @@ export interface ReplayRow {
   fit: Es1Fit | null;
   /** Provenance/certification of the fit used for this row. */
   resolvedFit: ResolvedEs1Fit | null;
+  /** Independently verifiable checksum of the rolling history at decision time. */
+  historyChecksum: string;
+  historyCount: number;
+  /** Rolling decision state was rebuilt contiguously from the canonical stream. */
+  decisionStateCertified: boolean;
   decision: Es1Decision;
 }
 
@@ -88,6 +104,9 @@ export function replayEs1(input: ReplayInput): ReplayResult {
   const resolvedFits: ResolvedEs1Fit[] = [];
   const history: Es1HistoryEntry[] = [];
   const obHistory: Array<{ targetTs: string; absDepth: number }> = [];
+  let historyChecksum = HISTORY_CHECKSUM_SEED;
+  let historyContiguous = true;
+  let lastHistoryTs = "";
   const out: ReplayRow[] = [];
 
   eligible.forEach((fr, eligibleIndex) => {
@@ -108,6 +127,9 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       resolvedFit = fitsByBoundary.get(boundary) ?? null;
     }
     const fit: Es1Fit | null = resolvedFit?.fit ?? null;
+
+    const rowHistoryChecksum = historyChecksum;
+    const rowHistoryCount = history.length;
 
     const a2 = input.a2.get(fr.targetTs) ?? null;
     const priceProbability = fit ? predictProbabilityGreen(fit, fr.vector) : null;
@@ -141,6 +163,12 @@ export function replayEs1(input: ReplayInput): ReplayResult {
     if (decision.historyEntry && resolved) {
       decision.historyEntry.actualDirection = fr.actualDirection;
       history.push(decision.historyEntry);
+      if (fr.targetTs <= lastHistoryTs) historyContiguous = false;
+      lastHistoryTs = fr.targetTs;
+      historyChecksum = rollHistoryChecksum(
+        historyChecksum,
+        `${fr.targetTs}|${fr.actualDirection}|${decision.finalPrediction ?? "NONE"}|${decision.decisionReason};`,
+      );
     }
 
     const snap = input.ob.get(fr.targetTs);
@@ -162,7 +190,18 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       });
     }
 
-    out.push({ targetTs: fr.targetTs, eligibleIndex, featureRow: fr, a2, fit, resolvedFit, decision });
+    out.push({
+      targetTs: fr.targetTs,
+      eligibleIndex,
+      featureRow: fr,
+      a2,
+      fit,
+      resolvedFit,
+      historyChecksum: rowHistoryChecksum,
+      historyCount: rowHistoryCount,
+      decisionStateCertified: historyContiguous,
+      decision,
+    });
   });
 
   return { rows: out, fits, resolvedFits };
