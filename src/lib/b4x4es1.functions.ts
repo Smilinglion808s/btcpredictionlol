@@ -193,14 +193,46 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Full ES1 CSV export — every tracked column. */
+/** Full ES1 CSV export — every tracked column plus explicit outcome flags. */
 export const exportEs1Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
-  const columns = Object.keys(rows[0]);
+  const base = Object.keys(rows[0]);
+  const derived = [
+    "is_published",
+    "is_resolved",
+    "is_resolved_evaluable",
+    "is_win",
+    "is_loss",
+    "is_push",
+  ];
+  const columns = [...base, ...derived];
+  const flag = (r: Row, col: string): boolean => {
+    const published = r.would_trade === true;
+    const res = String(r.result ?? "");
+    const resolved = published && r.resolved_at != null;
+    switch (col) {
+      case "is_published":
+        return published;
+      case "is_resolved":
+        return resolved;
+      case "is_resolved_evaluable":
+        return resolved && (res === "WIN" || res === "LOSS");
+      case "is_win":
+        return resolved && res === "WIN";
+      case "is_loss":
+        return resolved && res === "LOSS";
+      default:
+        return resolved && res === "PUSH";
+    }
+  };
   const header = columns.join(",");
   const body = rows
-    .map((r) => columns.map((col) => csvEscape(r[col])).join(","))
+    .map((r) =>
+      columns
+        .map((col) => (derived.includes(col) ? String(flag(r, col)) : csvEscape(r[col])))
+        .join(","),
+    )
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
