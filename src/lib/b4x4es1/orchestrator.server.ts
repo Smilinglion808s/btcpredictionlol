@@ -494,8 +494,12 @@ export async function maybeSendEs1Webhook(
     if (row.final_prediction !== "GREEN" && row.final_prediction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
+    // Never publish for a candle that is already meaningfully underway or
+    // closed — the webhook must always describe the upcoming candle.
+    if (Date.now() - targetMs > 90_000) return false;
     const activationTs = await effectiveEs1ActivationTs(supabase);
     if (targetMs < new Date(activationTs).getTime()) return false;
+
 
     const { data: claimed } = await supabase
       .from("b4x4_es1_predictions")
@@ -512,6 +516,9 @@ export async function maybeSendEs1Webhook(
       model_version: ES1_MODEL_VERSION,
       variant: ES1_VARIANT,
       target_candle_ts: row.target_candle_ts,
+      target_candle_close_ts: new Date(targetMs + 15 * 60 * 1000).toISOString(),
+      target_is_upcoming: true,
+
       prediction: row.final_prediction,
       direction: row.final_prediction,
       route: row.hybrid_route,
