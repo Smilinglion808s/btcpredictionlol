@@ -78,16 +78,22 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
 
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
+          //
+          // Fast path: the source candle is often already ingested by the
+          // shared candle pipeline, so try scoring first and only pay the
+          // exchange-fetch latency when it is genuinely missing.
           let row = null as Awaited<ReturnType<typeof runEs1ForTarget>>;
-          for (let attempt = 0; attempt < 6 && !row; attempt++) {
-            if (attempt > 0) await new Promise((r) => setTimeout(r, 4_000));
-            if (Date.now() < targetMs + 1_500) {
-              await new Promise((r) => setTimeout(r, targetMs + 1_500 - Date.now()));
+          for (let attempt = 0; attempt < 7 && !row; attempt++) {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, attempt === 1 ? 1_500 : 4_000));
+            if (Date.now() < targetMs + 800) {
+              await new Promise((r) => setTimeout(r, targetMs + 800 - Date.now()));
             }
-            try {
-              await fetchAndUpsertCandles(supabase);
-            } catch {
-              /* retryable */
+            if (attempt > 0) {
+              try {
+                await fetchAndUpsertCandles(supabase);
+              } catch {
+                /* retryable */
+              }
             }
             row = await runEs1ForTarget(supabase, { targetCandleTs: targetTs, runMode: "LIVE" });
             out.attempts = attempt + 1;
