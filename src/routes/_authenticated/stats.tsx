@@ -20,6 +20,8 @@ import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter
 import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { getB4x4Stats, getB4x4Pending, exportB4x4Csv, listB4x4Recent } from "@/lib/b4x4.functions";
 import { B4x4Card } from "@/components/b4x4-card";
+import { B4x4Es1Card } from "@/components/b4x4-es1-card";
+import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -87,6 +89,24 @@ function StatsPage() {
   const b4x4PendingQ = useQuery({ queryKey: ["b4x4-pending"], queryFn: () => b4x4PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
   const exportB4x4Fn = useServerFn(exportB4x4Csv);
   const [exportingB4x4, setExportingB4x4] = useState(false);
+
+  const es1Fn = useServerFn(getEs1Stats);
+  const es1Q = useQuery({ queryKey: ["b4x4-es1-stats"], queryFn: () => es1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const es1PendingFn = useServerFn(getEs1Pending);
+  const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
+  const exportEs1Fn = useServerFn(exportEs1Csv);
+  const [exportingEs1, setExportingEs1] = useState(false);
+
+  async function downloadEs1Csv() {
+    try {
+      setExportingEs1(true);
+      const res = await exportEs1Fn();
+      if (!res || res.rows === 0) { alert("No B4x4-ES1 rows to export."); return; }
+      triggerDownload(res.csv, `B4x4-ES1-${stamp()}.csv`);
+    } finally {
+      setExportingEs1(false);
+    }
+  }
 
 
 
@@ -374,6 +394,12 @@ function StatsPage() {
           pending={(b4x4PendingQ.data as any) ?? null}
           onExport={downloadB4x4Csv}
           exporting={exportingB4x4}
+        />
+        <B4x4Es1Card
+          stats={(es1Q.data as any) ?? {}}
+          pending={(es1PendingQ.data as any) ?? null}
+          onExport={downloadEs1Csv}
+          exporting={exportingEs1}
         />
       </div>
 

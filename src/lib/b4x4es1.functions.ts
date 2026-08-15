@@ -1,0 +1,190 @@
+// B4x4-ES1 server functions: dashboard stats, pending row, CSV export.
+
+import { createServerFn } from "@tanstack/react-start";
+import { cachedStats } from "./statsCache.server";
+import { ES1_MODEL_VERSION, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
+
+type Row = Record<string, unknown>;
+const PAGE = 1000;
+
+async function admin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+
+async function pageAll(select: string): Promise<Row[]> {
+  const sb = await admin();
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from("b4x4_es1_predictions")
+      .select(select)
+      .eq("model_version", ES1_MODEL_VERSION)
+      .order("target_candle_ts", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...(data as unknown as Row[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+function aggregate(rows: Row[]) {
+  const daily = new Map<string, { net: number; wins: number; losses: number; trades: number }>();
+  const c = {
+    model_version: ES1_MODEL_VERSION,
+    variant: ES1_VARIANT,
+    total_opportunities: rows.length,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    pushes: 0,
+    pending: 0,
+    net: 0,
+    win_rate: 0,
+    coverage: 0,
+    max_drawdown: 0,
+    green_wins: 0,
+    green_losses: 0,
+    red_wins: 0,
+    red_losses: 0,
+    price_route_trades: 0,
+    ob_route_trades: 0,
+    guard_avoided_losses: 0,
+    guard_sacrificed_wins: 0,
+    guard_incremental_net: 0,
+    abstain_disagree: 0,
+    abstain_confidence: 0,
+    abstain_guard: 0,
+    abstain_not_ready: 0,
+    today_local_date: es1LocalDate(new Date().toISOString()),
+    today_net: 0,
+    today_trades: 0,
+    last7: [] as Array<{ date: string; net: number; wins: number; losses: number; trades: number }>,
+  };
+  let running = 0;
+  let peak = 0;
+
+  for (const r of rows) {
+    const reason = String(r.decision_reason ?? "");
+    if (reason === "ABSTAIN_ES1_A2_DISAGREE") c.abstain_disagree++;
+    else if (reason === "ABSTAIN_COMBINED_CONFIDENCE_BELOW_020") c.abstain_confidence++;
+    else if (reason === "ABSTAIN_ES1_B4_PCORRECT_BELOW_045") c.abstain_guard++;
+    else if (reason.startsWith("ABSTAIN")) c.abstain_not_ready++;
+
+    if (r.b4_guard_attribution_class === "AVOIDED_LOSS") c.guard_avoided_losses++;
+    if (r.b4_guard_attribution_class === "SACRIFICED_WIN") c.guard_sacrificed_wins++;
+    c.guard_incremental_net += Number(r.b4_guard_incremental_value ?? 0);
+
+    if (r.would_trade !== true) continue;
+    c.trades++;
+    if (r.hybrid_route === "OB_DEPTH10_FADE") c.ob_route_trades++;
+    else c.price_route_trades++;
+    if (!r.resolved_at) {
+      c.pending++;
+      continue;
+    }
+    const res = String(r.result ?? "");
+    const score = Number(r.result_score ?? 0);
+    if (res === "WIN") c.wins++;
+    else if (res === "LOSS") c.losses++;
+    else c.pushes++;
+    c.net += score;
+    running += score;
+    peak = Math.max(peak, running);
+    c.max_drawdown = Math.max(c.max_drawdown, peak - running);
+    if (r.final_prediction === "GREEN") {
+      if (res === "WIN") c.green_wins++;
+      else if (res === "LOSS") c.green_losses++;
+    } else if (r.final_prediction === "RED") {
+      if (res === "WIN") c.red_wins++;
+      else if (res === "LOSS") c.red_losses++;
+    }
+    const day = String(r.local_date ?? es1LocalDate(String(r.target_candle_ts)));
+    const cur = daily.get(day) ?? { net: 0, wins: 0, losses: 0, trades: 0 };
+    cur.net += score;
+    cur.trades++;
+    if (res === "WIN") cur.wins++;
+    else if (res === "LOSS") cur.losses++;
+    daily.set(day, cur);
+  }
+
+  c.win_rate = c.wins + c.losses ? (c.wins / (c.wins + c.losses)) * 100 : 0;
+  c.coverage = c.total_opportunities ? (c.trades / c.total_opportunities) * 100 : 0;
+  const today = daily.get(c.today_local_date);
+  c.today_net = today?.net ?? 0;
+  c.today_trades = today?.trades ?? 0;
+  c.last7 = [...daily.keys()]
+    .sort()
+    .slice(-7)
+    .map((d) => ({ date: d, ...daily.get(d)! }));
+  return c;
+}
+
+/** Live forward-test performance for the active ES1 model. */
+export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
+  cachedStats("b4x4-es1-stats", async () => {
+    const rows = await pageAll(
+      "target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
+        "decision_reason, result, result_score, resolved_at, b4_guard_attribution_class, " +
+        "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status",
+    );
+    const live = rows.filter(
+      (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
+    );
+    const warm = rows.filter((r) => r.run_mode === "BACKFILL");
+    const active = aggregate(live);
+    const warmup = aggregate(warm);
+    return {
+      ...active,
+      warmup: {
+        total_opportunities: warmup.total_opportunities,
+        trades: warmup.trades,
+        wins: warmup.wins,
+        losses: warmup.losses,
+        net: warmup.net,
+        win_rate: warmup.win_rate,
+        coverage: warmup.coverage,
+      },
+    };
+  }),
+);
+
+/** Most recent ES1 row — its decision for the pending candle. */
+export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () =>
+  cachedStats("b4x4-es1-pending", async () => {
+    const sb = await admin();
+    const { data } = await sb
+      .from("b4x4_es1_predictions")
+      .select(
+        "target_candle_ts, run_mode, final_prediction, would_trade, decision_reason, hybrid_route, " +
+          "hybrid_direction, hybrid_evidence, price_direction, price_probability_green, " +
+          "a2_direction, a2_agrees, combined_confidence_rank, b4_cell, b4_p_correct, b4_ready, " +
+          "b4_guard_veto_fired, ob_route_qualified, ob_depth_imbalance_10bps, result, " +
+          "result_score, resolved_at, webhook_sent_at",
+      )
+      .eq("model_version", ES1_MODEL_VERSION)
+      .order("target_candle_ts", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
+  }),
+);
+
+function csvEscape(v: unknown): string {
+  if (v == null) return "";
+  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Full ES1 CSV export — every tracked column. */
+export const exportEs1Csv = createServerFn({ method: "GET" }).handler(async () => {
+  const rows = await pageAll("*");
+  if (rows.length === 0) return { csv: "", rows: 0 };
+  const columns = Object.keys(rows[0]);
+  const header = columns.join(",");
+  const body = rows
+    .map((r) => columns.map((col) => csvEscape(r[col])).join(","))
+    .join("\n");
+  return { csv: `${header}\n${body}\n`, rows: rows.length };
+});

@@ -687,6 +687,23 @@ async function runA2Policies(
       } catch { /* never block */ }
     })();
 
+    // ---- B4x4-ES1 — isolated active model. Runs in parallel with B4x4 and
+    // publishes its own directional webhook; it never touches B4x4 state.
+    const es1Promise = (async () => {
+      try {
+        const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
+          "@/lib/b4x4es1/orchestrator.server"
+        );
+        const row = await runEs1ForTarget(supabase, {
+          targetCandleTs: String(predictionRow.candle_ts),
+          runMode: "LIVE",
+        });
+        await maybeSendEs1Webhook(supabase, row);
+      } catch { /* never block */ }
+    })();
+
+
+
     // ---- Insert all three A2 rows in parallel (no webhook here). ----
     const insertPromise = Promise.all(built.map(async ({ row }) => {
       try {
@@ -748,7 +765,7 @@ async function runA2Policies(
       }
     })();
 
-    await Promise.all([b4x4Promise, v6Promise, insertPromise, td1Promise]);
+    await Promise.all([b4x4Promise, es1Promise, v6Promise, insertPromise, td1Promise]);
   } catch (e) {
     try {
       await supabase.from("api_runs").insert({
@@ -877,6 +894,14 @@ export async function resolveShadowRowsFor(
       });
     }
   } catch { /* never block */ }
+
+  // B4x4-ES1 resolution (isolated active model). Never blocks the resolver.
+  try {
+    const { resolveEs1Backlog } = await import("@/lib/b4x4es1/orchestrator.server");
+    await resolveEs1Backlog(supabase, { limit: 96 });
+  } catch { /* never block */ }
+
+
 
   // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.
   try {
