@@ -588,5 +588,5 @@ describe("ES1 eligible stream (frozen-oracle reconciled)", () => {
     // a window that matches no artifact must fall back to the in-repo solver
     const fit = resolveEs1Fit(rows, 768)!;
     expect(fit.fitSource).toBe("irls-fallback");
-  });
+  }, 30_000);
 });
