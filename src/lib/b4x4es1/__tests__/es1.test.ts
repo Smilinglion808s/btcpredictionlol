@@ -8,6 +8,9 @@ import {
   OB_MIN_HISTORY,
   TF_MS,
 } from "../config";
+import { eligibleFeatureRows } from "../replay";
+import { frozenFitCount, resolveEs1Fit, trainingWindowFingerprint } from "../fitArtifacts";
+import { ES1_FEATURES } from "../config";
 import {
   buildFeatureRows,
   computeFeatures,
@@ -540,5 +543,51 @@ describe("ES1 webhook gating", () => {
         webhook_sent_at: "2026-09-01T00:00:05.000Z",
       } as never),
     ).toBe(false);
+  });
+});
+
+// ---- frozen-oracle reconciled stream ----------------------------------
+describe("ES1 eligible stream (frozen-oracle reconciled)", () => {
+  const mk = (n: number, start = Date.UTC(2026, 6, 1, 0, 0, 0)) => series(n, start);
+
+  it("excludes PUSH targets from the stream entirely", () => {
+    const seg = mk(60);
+    // make one target a PUSH (open == close)
+    const t = 45;
+    seg[t] = candle(new Date(seg[t].candleTs).getTime(), 100, 101, 99, 100);
+    const rows = buildFeatureRows(seg);
+    const eligible = eligibleFeatureRows(rows);
+    expect(rows.some((r) => r.targetTs === seg[t].candleTs)).toBe(true);
+    expect(eligible.some((r) => r.targetTs === seg[t].candleTs)).toBe(false);
+    expect(eligible.every((r) => r.actualDirection !== "PUSH")).toBe(true);
+  });
+
+  it("excludes historical gap targets but keeps the pending tail target", () => {
+    const seg = mk(60);
+    const rows = buildFeatureRows(seg);
+    const eligible = eligibleFeatureRows(rows);
+    // last row's target candle does not exist yet -> provisionally eligible
+    expect(eligible[eligible.length - 1].actualDirection).toBeNull();
+    // an interior unresolved row is a data gap and must be dropped
+    const withGap = rows.map((r, i) =>
+      i === rows.length - 10 ? { ...r, actualDirection: null } : r,
+    );
+    const gapEligible = eligibleFeatureRows(withGap);
+    expect(gapEligible.filter((r) => r.actualDirection == null).length).toBe(1);
+  });
+
+  it("binds frozen sklearn fit artifacts by exact training-window fingerprint", () => {
+    expect(frozenFitCount()).toBeGreaterThan(0);
+    const rows = Array.from({ length: ES1_MIN_TRAIN_ROWS }, (_, i) => ({
+      targetTs: new Date(Date.UTC(2026, 6, 1) + i * TF_MS).toISOString(),
+      vector: ES1_FEATURES.map((_, j) => Math.sin(i + j) / 10),
+      label: (i % 2) as 0 | 1,
+      index: i,
+    }));
+    const fp = trainingWindowFingerprint(rows);
+    expect(fp).toMatch(/^[0-9a-f]{64}$/);
+    // a window that matches no artifact must fall back to the in-repo solver
+    const fit = resolveEs1Fit(rows, 768)!;
+    expect(fit.fitSource).toBe("irls-fallback");
   });
 });
