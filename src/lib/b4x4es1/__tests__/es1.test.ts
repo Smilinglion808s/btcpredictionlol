@@ -348,7 +348,7 @@ describe("ES1 B4 correctness guard", () => {
   });
 
   it("passes at pCorrect equality of 0.45 and is veto-only", () => {
-    expect(betaPCorrect(6, 20)).toBeGreaterThan(0.45);
+    expect(betaPCorrect(14, 30)).toBeGreaterThan(0.45);
     // 0.45 exactly: (wins+8)/(n+16) = 0.45 -> wins=13, n=30
     expect(betaPCorrect(13, 30)).toBeCloseTo(0.45, 12);
   });
@@ -356,6 +356,6 @@ describe("ES1 B4 correctness guard", () => {
   it("attributes guard outcomes without changing direction", () => {
     expect(guardAttribution(true, true, -1, "GREEN").klass).toBe("AVOIDED_LOSS");
     expect(guardAttribution(true, true, 1, "GREEN").klass).toBe("SACRIFICED_WIN");
-    expect(guardAttribution(false, true, 1, "GREEN").klass).toBe("NONE");
+    expect(guardAttribution(false, true, 1, "GREEN").klass).toBe("NO_INCREMENTAL_CHANGE");
   });
 });
