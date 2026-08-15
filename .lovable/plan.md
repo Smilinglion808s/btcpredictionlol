@@ -1,6 +1,6 @@
-# ES1 Fail-Closed Certification (amended)
+# ES1 Fail-Closed Certification (final)
 
-Accepting all four amendments. ES1 stops publishing whenever the price head is not backed by a certified artifact, and it only resumes after certified state is rebuilt and checksum-verified.
+All four amendments plus the six final corrections are accepted. ES1 stops publishing whenever the price head is not backed by a certified artifact, and it only resumes after certified state is rebuilt and independently verified.
 
 ## 1. Honest provenance labels
 
