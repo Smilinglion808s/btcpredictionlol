@@ -22,6 +22,7 @@ import {
   es1LocalDate,
   sha256,
 } from "./config";
+import { fitCertifiedLogistic } from "./certifiedFit";
 
 export type Es1FitSource = "sklearn-frozen" | "ts-lbfgs-certified" | "irls-shadow";
 
