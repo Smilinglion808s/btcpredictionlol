@@ -121,7 +121,7 @@ function solveSymmetric(A: number[][], b: number[]): number[] | null {
       for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
     }
   }
-  return M.map((row, i) => row[n] / row[i][i]);
+  return M.map((row, i) => row[n] / M[i][i]);
 }
 
 export interface SolveResult {
