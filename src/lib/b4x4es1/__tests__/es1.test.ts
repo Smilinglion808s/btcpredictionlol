@@ -8,7 +8,12 @@ import {
   OB_MIN_HISTORY,
   TF_MS,
 } from "../config";
-import { buildFeatureRows, computeFeatures, segmentCandles, type CanonicalCandle } from "../features";
+import {
+  buildFeatureRows,
+  computeFeatures,
+  segmentCandles,
+  type CanonicalCandle,
+} from "../features";
 import {
   betaPCorrect,
   cellKey,
@@ -152,11 +157,7 @@ describe("ES1 price head windows and weights", () => {
   });
 
   it("balances Boise-day weights to mean 1", () => {
-    const ts = [
-      "2026-08-01T18:00:00Z",
-      "2026-08-01T19:00:00Z",
-      "2026-08-02T18:00:00Z",
-    ];
+    const ts = ["2026-08-01T18:00:00Z", "2026-08-01T19:00:00Z", "2026-08-02T18:00:00Z"];
     const w = dayBalancedWeights(ts);
     expect(w[0]).toBeCloseTo(w[1], 12);
     expect(w[2]).toBeCloseTo(2 * w[0], 12);
@@ -320,9 +321,7 @@ describe("ES1 B4 correctness guard", () => {
       ...h,
       targetTs: new Date(now - (base.length - i) * TF_MS).toISOString(),
       actualDirection:
-        i >= base.length - cellWins - cellLosses && i < base.length - cellLosses
-          ? "GREEN"
-          : "RED",
+        i >= base.length - cellWins - cellLosses && i < base.length - cellLosses ? "GREEN" : "RED",
     }));
   }
 

@@ -73,7 +73,10 @@ export function computeFeatures(
   seg: readonly CanonicalCandle[],
   t: number,
 ): { values: Record<Es1FeatureName, number>; valid: boolean; reason: string | null } {
-  const empty = Object.fromEntries(ES1_FEATURES.map((f) => [f, NaN])) as Record<Es1FeatureName, number>;
+  const empty = Object.fromEntries(ES1_FEATURES.map((f) => [f, NaN])) as Record<
+    Es1FeatureName,
+    number
+  >;
   if (t < 16) return { values: empty, valid: false, reason: "insufficient_segment_history" };
   const c = seg[t];
   const closeAt = (k: number) => seg[t - k].close;

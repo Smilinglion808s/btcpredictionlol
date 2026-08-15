@@ -40,7 +40,6 @@ export const ES1_WEBHOOK_ACTIVATION_FLOOR_TS = "2026-08-15T01:45:00.000Z";
 /** @deprecated kept as the floor alias for existing callers/tests. */
 export const ES1_WEBHOOK_ACTIVATION_TS = ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
 
-
 /**
  * Hard ceiling for one live ES1 run. The old B4x4 path could hang on a slow
  * dependency and never publish; ES1 fails fast instead of stalling the boundary.
@@ -101,17 +100,13 @@ export async function ensureEs1Activation(
     { onConflict: "id", ignoreDuplicates: true },
   );
   const committed = await readEs1Activation(supabase);
-  return committed
-    ? new Date(committed.activation_target_ts).toISOString()
-    : activationTs;
+  return committed ? new Date(committed.activation_target_ts).toISOString() : activationTs;
 }
 
 /** Effective activation boundary: committed record, else the frozen floor. */
 export async function effectiveEs1ActivationTs(supabase: SupabaseClient): Promise<string> {
   const rec = await readEs1Activation(supabase);
-  return rec
-    ? new Date(rec.activation_target_ts).toISOString()
-    : ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
+  return rec ? new Date(rec.activation_target_ts).toISOString() : ES1_WEBHOOK_ACTIVATION_FLOOR_TS;
 }
 
 export interface Es1Context {
@@ -125,11 +120,7 @@ export interface Es1Context {
   activationTargetTs?: string | null;
 }
 
-
-export function decisionToRow(
-  ctx: Es1Context,
-  row: ReplayRow,
-): DbRow {
+export function decisionToRow(ctx: Es1Context, row: ReplayRow): DbRow {
   const d: Es1Decision = row.decision;
   const runMode = ctx.runMode ?? "LIVE";
   const build = b4x4BuildIdentity();
@@ -198,8 +189,7 @@ export function decisionToRow(
     a2_row_id: row.a2?.rowId ?? null,
     a2_prediction_id: row.a2?.predictionId ?? null,
     a2_model_fit_id: row.a2?.modelFitId ?? null,
-    a2_production_model_version:
-      row.a2?.productionModelVersion ?? ES1_A2_PRODUCTION_MODEL_VERSION,
+    a2_production_model_version: row.a2?.productionModelVersion ?? ES1_A2_PRODUCTION_MODEL_VERSION,
     a2_probability_green: d.a2ProbabilityGreen,
     a2_direction: d.a2Direction,
     a2_confidence: d.a2Confidence,
@@ -248,8 +238,7 @@ export function decisionToRow(
       runMode === "LIVE" &&
       d.wouldTrade &&
       (ctx.operationalGapStatus ?? "NONE") === "NONE" &&
-      targetMs >=
-        new Date(ctx.activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime(),
+      targetMs >= new Date(ctx.activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime(),
 
     resolver_version: ES1_RESOLVER_VERSION,
   };
@@ -304,12 +293,10 @@ export async function buildEs1Replay(
 
 async function persistFits(supabase: SupabaseClient, fits: readonly Es1Fit[]): Promise<number> {
   if (!fits.length) return 0;
-  const { error } = await supabase
-    .from("b4x4_es1_fits")
-    .upsert(fits.map(fitToRow) as never, {
-      onConflict: "block_index,feature_schema_hash",
-      ignoreDuplicates: true,
-    });
+  const { error } = await supabase.from("b4x4_es1_fits").upsert(fits.map(fitToRow) as never, {
+    onConflict: "block_index,feature_schema_hash",
+    ignoreDuplicates: true,
+  });
   if (error) throw new Error(`es1_fits_upsert:${error.message}`);
   return fits.length;
 }
@@ -471,7 +458,9 @@ export async function runEs1ForTarget(
         success: false,
         error_message: e instanceof Error ? e.message : String(e),
       });
-    } catch { /* never block */ }
+    } catch {
+      /* never block */
+    }
     return null;
   }
 }
@@ -493,7 +482,6 @@ export async function maybeSendEs1Webhook(
     if (!Number.isFinite(targetMs)) return false;
     const activationTs = await effectiveEs1ActivationTs(supabase);
     if (targetMs < new Date(activationTs).getTime()) return false;
-
 
     const { data: claimed } = await supabase
       .from("b4x4_es1_predictions")
@@ -529,7 +517,13 @@ export async function resolveEs1Row(
   supabase: SupabaseClient,
   targetCandleTs: string,
   actualDirection: ActualDirection,
-  ohlc?: { open?: number | null; high?: number | null; low?: number | null; close?: number | null; volume?: number | null },
+  ohlc?: {
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
+    close?: number | null;
+    volume?: number | null;
+  },
 ): Promise<void> {
   const targetTs = new Date(targetCandleTs).toISOString();
   let rowId: string | null = null;
@@ -538,7 +532,7 @@ export async function resolveEs1Row(
       .from("b4x4_es1_predictions")
       .select(
         "id, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
-        "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction",
+          "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction",
       )
       .eq("model_version", ES1_MODEL_VERSION)
       .eq("target_candle_ts", targetTs)
@@ -599,7 +593,9 @@ export async function resolveEs1Row(
           .eq("id", rowId)
           .is("resolved_at", null);
       }
-    } catch { /* never block */ }
+    } catch {
+      /* never block */
+    }
   }
 }
 
@@ -627,8 +623,7 @@ export async function resolveEs1Backlog(
   for (const ts of targets) {
     const c = byTs.get(ts);
     if (!c) continue;
-    const dir: ActualDirection =
-      c.close > c.open ? "GREEN" : c.close < c.open ? "RED" : "PUSH";
+    const dir: ActualDirection = c.close > c.open ? "GREEN" : c.close < c.open ? "RED" : "PUSH";
     await resolveEs1Row(supabase, ts, dir, {
       open: c.open,
       high: c.high,

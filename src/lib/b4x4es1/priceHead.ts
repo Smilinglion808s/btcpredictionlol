@@ -199,7 +199,10 @@ export function solveWeightedL2Logistic(
       converged = true;
       break;
     }
-    const step = solveSymmetric(H, g.map((v) => -v));
+    const step = solveSymmetric(
+      H,
+      g.map((v) => -v),
+    );
     if (!step) break;
     // Backtracking line search keeps the Newton step monotone.
     const base = loss(theta);

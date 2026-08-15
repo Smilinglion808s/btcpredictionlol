@@ -28,8 +28,8 @@ export const ES1_MIN_TRAIN_ROWS = 768;
 export const ES1_TRAIN_WINDOW = 1536;
 export const ES1_RETRAIN_BLOCK = 96;
 export const ES1_SCALER = "RobustScaler(10,90)";
-export const ES1_SCALER_Q_LOW = 0.10;
-export const ES1_SCALER_Q_HIGH = 0.90;
+export const ES1_SCALER_Q_LOW = 0.1;
+export const ES1_SCALER_Q_HIGH = 0.9;
 export const ES1_LOGISTIC_C = 0.01;
 export const ES1_FIT_INTERCEPT = true;
 export const ES1_CLASS_WEIGHT = "none";
@@ -50,7 +50,7 @@ export type Es1FeatureName = (typeof ES1_FEATURES)[number];
 // ---- order-book hybrid route ----
 export const OB_HISTORY_WINDOW = 96;
 export const OB_MIN_HISTORY = 32;
-export const OB_ABS_IMBALANCE_PERCENTILE = 0.60;
+export const OB_ABS_IMBALANCE_PERCENTILE = 0.6;
 
 // ---- A2 corroboration (read-only pin) ----
 export const ES1_A2_SOURCE_VARIANT = "A2_Combined";
@@ -59,7 +59,7 @@ export const ES1_A2_PRODUCTION_MODEL_VERSION = "6.0";
 
 // ---- causal confidence ranks ----
 export const CONFIDENCE_RANK_WINDOW = 384;
-export const COMBINED_CONFIDENCE_MIN = 0.20;
+export const COMBINED_CONFIDENCE_MIN = 0.2;
 
 // ---- ES1-specific B4 correctness guard ----
 export const ES1_TRAINING_SOURCE_EPOCH_TS = "2026-07-04T17:45:00.000Z";
