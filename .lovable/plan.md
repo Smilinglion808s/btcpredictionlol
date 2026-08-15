@@ -1,42 +1,63 @@
-# ES1 fit 02112: confirmation and remediation
+# ES1: fail-closed on missing sklearn artifact + automated artifact minting
 
-## Answer
+Confirmed first: `es1-fit-02112-ef3018838c14` is **IRLS fallback**, not sklearn-backed. `frozen-fits.json` holds artifacts only for boundaries 768…2016 (14 fits); boundary 2112 has none, so `resolveEs1Fit` falls through to the in-repo IRLS solver. Four live rows in `b4x4_es1_predictions` carry this fit id.
 
-`es1-fit-02112-ef3018838c14` is **not** sklearn-backed. It is an **IRLS fallback** fit.
+Your correction is accepted: only 2112 is generatable today; 2208/2304 windows contain rows that do not exist yet and will be minted at their own boundaries.
 
-Evidence gathered:
-- `src/lib/b4x4es1/frozen-fits.json` contains exactly 14 frozen sklearn artifacts, at block boundaries 768, 864, 960, 1056, 1152, 1248, 1344, 1440, 1536, 1632, 1728, 1824, 1920, 2016. There is no artifact for boundary **2112**.
-- `resolveEs1Fit()` returns a sklearn artifact only when `ARTIFACTS.get(boundary)` exists and the recomputed window fingerprint matches; with no artifact at 2112 it always falls through to `trainEs1Fit(...)` tagged `irls-fallback`.
-- Live rows confirm the fit is in use: 4 rows in `b4x4_es1_predictions` carry `price_fit_id = es1-fit-02112-ef3018838c14` (artifact sha `ef3018838c14...`).
+## 1. Fail-closed publication gate
 
-So live scoring has rolled past the end of the frozen artifact coverage and is now running the in-repo IRLS solver. Decisions are still produced, but they are no longer bit-identical to the certified sklearn oracle, so the parity certification does not cover any prediction made under this fit.
+In the ES1 decision chain, resolve the fit **before** scoring and branch on provenance:
 
-## Options
+- Artifact present **and** recomputed window fingerprint matches → normal certified scoring, webhook eligible as today.
+- Artifact missing **or** fingerprint mismatch →
+  - `final_prediction = null`
+  - `would_trade = false`
+  - `webhook_eligible = false`
+  - `decision_reason = ABSTAIN_ES1_SKLEARN_ARTIFACT_NOT_READY`
+  - the IRLS fit still runs and its direction, probability, confidence and (later) outcome are written to shadow-only columns for audit.
 
-**A. Extend frozen coverage (recommended)** — generate the sklearn artifact for boundary 2112 (and the next few boundaries ahead of the live cursor), verify each window fingerprint matches, and append them to `frozen-fits.json`. Once merged, `resolveEs1Fit` picks the sklearn path automatically and the 2112 fit id changes to the sklearn-derived id.
+Webhook suppression is enforced at the send site as well, so no path can publish an uncertified row.
 
-**B. Add a coverage guard** — make the orchestrator record and surface `fit_source` (currently not persisted to the table), and optionally abstain or flag when a boundary has no frozen artifact, so this can never go unnoticed again.
+## 2. Provenance persistence
 
-Recommended: do both — A restores parity now, B prevents silent drift later.
+New columns on `b4x4_es1_predictions` (and the archive table, matching shape):
 
-## Implementation
+- `price_fit_source` — `sklearn-frozen` | `sklearn-minted` | `irls-fallback`
+- `price_fit_boundary` — integer block boundary
+- `price_fit_window_fingerprint` — recomputed fingerprint of the exact training window
+- `parity_certified` — boolean; true only for sklearn-backed with matching fingerprint
+- `irls_shadow_direction`, `irls_shadow_probability`, `irls_shadow_confidence`, `irls_shadow_result` — audit-only fallback track
 
-1. **Artifact generation (offline, deterministic)**
-   - Rebuild the exact training window for boundary 2112 from the canonical candle source, using the same row-selection rules `resolveEs1Fit` feeds to `trainEs1Fit`.
-   - Fit `LogisticRegression(C=0.01, lbfgs)` on `RobustScaler(10, 90)`-scaled features with day-balanced weights, matching `ES1_PRICE_SPEC` / `ES1_SCALER` / `ES1_LOGISTIC_C`.
-   - Emit `boundary`, `trainingRowCount`, `trainingStartTs`, `trainingEndTs`, `trainingStartIndex`, `trainingEndIndex`, `windowFingerprint`, `center`, `scale`, `coefficients`, `intercept`.
-   - Repeat for boundaries 2208 and 2304 so live scoring stays inside frozen coverage for the next several days.
+Forward parity-certified statistics (stats page + CSV) filter on `parity_certified = true`, which naturally excludes the four existing 2112 rows. Those rows are left untouched.
 
-2. **Fingerprint verification** — before appending, recompute `trainingWindowFingerprint()` in TypeScript over the same rows and assert an exact match; a mismatch means the window reconstruction is wrong and the artifact must not be shipped.
+## 3. The 2112 artifact
 
-3. **Append to `src/lib/b4x4es1/frozen-fits.json`** — no code change needed in `fitArtifacts.ts`; the map is built from the JSON.
+Reconstruct boundary 2112's exact training window from the canonical source rows using the same selection `resolveEs1Fit` feeds `trainEs1Fit`, fit `LogisticRegression(C=0.01, lbfgs)` on `RobustScaler(10,90)` features with day-balanced weights, and emit the full artifact record (center, scale, coefficients, intercept, window indices/timestamps, `windowFingerprint`). Before install, recompute `trainingWindowFingerprint()` in TypeScript over the same rows and require an exact match; a mismatch aborts the install.
 
-4. **Persist fit provenance** — add a `price_fit_source` column to `b4x4_es1_predictions` (and the archive table) and write `fit.fitSource` on every row, so `sklearn-frozen` vs `irls-fallback` is auditable from the database instead of inferred from the JSON.
+## 4. Automated minting worker (the durable fix)
 
-5. **Coverage alarm** — in the ES1 boundary run, when the resolved fit is `irls-fallback`, log a distinct `api_runs` warning entry naming the uncovered boundary. Whether that should also suppress the webhook is your call (see question below).
+Static JSON stops at history, so artifacts move to the database (`b4x4_es1_fits`, already present) with the JSON kept as the immutable historical seed. Loader order: DB artifact → bundled JSON → fail closed.
 
-6. **Backfill note** — the 4 existing rows under this fit stay as-is (history is never rewritten); after the artifact lands, later boundaries score sklearn-backed and the affected window is identifiable via the new provenance column plus these fit ids.
+The Cloudflare worker runtime cannot run scikit-learn, so the minting engine is a **certified TypeScript L-BFGS fitter**:
 
-## Question for you
+- Implement L-BFGS with the exact sklearn objective (L2 on weights, unpenalized intercept, `C = 0.01`), plus the same RobustScaler and day-balanced weights.
+- Certify it by refitting all 14 existing frozen windows and requiring coefficients/intercept to match the sklearn artifacts to a tight tolerance (target ≤ 1e-9, and identical decisions/ranks on the full replay). The fitter is only enabled after this certification test passes in CI.
+- At each 96-row block boundary the ES1 boundary run mints the new artifact from the just-completed window, stores it with its fingerprint and `source = 'sklearn-minted'`, then scores. Fitting 1,536 rows × 8 features is milliseconds — well inside the timing window.
+- Minting is idempotent and advisory-locked per boundary so concurrent runs cannot produce divergent artifacts.
 
-When a boundary has no frozen artifact, should ES1 (a) keep publishing with the IRLS fallback as it does today, or (b) abstain and skip the webhook until frozen coverage is extended? Option (b) guarantees every published ES1 prediction is parity-certified, at the cost of missed candles when coverage lapses.
+## 5. Alerting and fail-closed behaviour
+
+- One boundary ahead of each 96-row rollover, a pre-check logs an `api_runs` warning naming the upcoming boundary and whether its window is complete.
+- If minting fails or the fingerprint mismatches, the run logs an error-level `api_runs` entry and the candle abstains under `ABSTAIN_ES1_SKLEARN_ARTIFACT_NOT_READY` — never publishes.
+
+## 6. Verification before this is called done
+
+- Replay across the full certified history produces zero decision/direction/reason changes for boundaries 768…2016.
+- 2112 replay switches from `irls-fallback` to sklearn-backed with a matching fingerprint.
+- A simulated missing artifact yields abstain + no webhook + populated IRLS shadow fields.
+- The TS fitter reproduces all 14 sklearn artifacts within tolerance.
+
+## Notes
+
+- The four existing 2112 IRLS rows stay in history exactly as written, flagged `parity_certified = false`.
+- Nothing in the frozen ES1 spec (features, scaler, C, thresholds, agreement gate) changes; this is a provenance and publication-eligibility change only.
