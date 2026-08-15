@@ -150,16 +150,17 @@ export function B4x4Es1Card({
       </div>
 
       <div className="relative grid grid-cols-4 gap-2 mb-4">
-        <Stat label="Wins" value={String(wins)} tone="text-bull" />
-        <Stat label="Losses" value={String(losses)} tone="text-bear" />
+        <Stat label="Published" value={String(stats.published ?? stats.trades ?? 0)} />
+        <Stat label="Resolved" value={String(stats.resolved ?? 0)} />
         <Stat label="Pushes" value={String(pushes)} />
         <Stat label="Pending" value={String(pendingCount)} />
       </div>
 
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        <Stat label="W / L" value={`${wins} / ${losses}`} />
+        <Stat label="Wins" value={String(wins)} tone="text-bull" />
+        <Stat label="Losses" value={String(losses)} tone="text-bear" />
+        <Stat label="Evaluable" value={String(stats.evaluable ?? wins + losses)} />
         <Stat label="Coverage" value={`${coverage.toFixed(1)}%`} />
-        <Stat label="Trades" value={String(stats.trades ?? 0)} />
         <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
         <Stat label="Price route" value={String(stats.price_route_trades ?? 0)} />
         <Stat label="OB route" value={String(stats.ob_route_trades ?? 0)} />

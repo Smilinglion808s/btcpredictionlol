@@ -358,3 +358,181 @@ describe("ES1 B4 correctness guard", () => {
     expect(guardAttribution(false, true, 1, "GREEN").klass).toBe("NO_INCREMENTAL_CHANGE");
   });
 });
+
+// ---- parity / boundary / webhook regressions --------------------------
+import oracleParity from "./oracle-parity.json";
+import {
+  ES1_WEBHOOK_ACTIVATION_FLOOR_TS,
+  decisionToRow,
+  maybeSendEs1Webhook,
+  nextCleanBoundaryTs,
+} from "../orchestrator.server";
+import { CONFIDENCE_RANK_WINDOW } from "../config";
+
+describe("ES1 confidence-rank semantics", () => {
+  it("allows partial history with a single finite prior value", () => {
+    const one: Es1HistoryEntry[] = [
+      {
+        targetTs: "2026-08-01T06:15:00.000Z",
+        sourceIndex: 0,
+        direction: "GREEN",
+        evidence: 0.0001,
+        priceConfidence: 0.0001,
+        a2Confidence: 0.0001,
+        cell: null,
+        pCorrect: null,
+        actualDirection: "GREEN",
+      },
+    ];
+    const d = decideEs1(baseInput(), one);
+    expect(d.priceRankHistoryCount).toBe(1);
+    expect(d.combinedConfidenceRank).toBe(1);
+    expect(d.finalPrediction).toBe("GREEN");
+  });
+
+  it("abstains with a null rank when no prior raw history exists", () => {
+    const d = decideEs1(baseInput(), []);
+    expect(d.combinedConfidenceRank).toBeNull();
+    expect(d.decisionReason).toBe("ABSTAIN_CONFIDENCE_RANK_NOT_READY");
+    expect(d.wouldTrade).toBe(false);
+  });
+
+  it("excludes pre-raw-epoch rows and never back-fills the 384 window", () => {
+    const preEpoch: Es1HistoryEntry[] = Array.from({ length: 200 }, (_, i) => ({
+      targetTs: new Date(Date.UTC(2026, 6, 10) + i * TF_MS).toISOString(),
+      sourceIndex: null,
+      direction: "GREEN" as const,
+      evidence: 0.9,
+      priceConfidence: 0.9,
+      a2Confidence: 0.9,
+      cell: null,
+      pCorrect: null,
+      actualDirection: "GREEN" as const,
+    }));
+    const raw = rankHistory(10, 0.00001);
+    const d = decideEs1(baseInput(), [...preEpoch, ...raw]);
+    expect(d.priceRankHistoryCount).toBe(10);
+    expect(d.a2RankHistoryCount).toBe(10);
+
+    const many = rankHistory(CONFIDENCE_RANK_WINDOW + 50, 0.00001);
+    const capped = decideEs1(baseInput(), [...preEpoch, ...many]);
+    expect(capped.priceRankHistoryCount).toBe(CONFIDENCE_RANK_WINDOW);
+  });
+});
+
+describe("ES1 B4 pre-readiness pass-through", () => {
+  it("preserves the aligned base decision before the 768-source grid is ready", () => {
+    const d = decideEs1(baseInput({ sourceIndexAbsolute: 10 }), rankHistory(400, 0.00001));
+    expect(d.b4Ready).toBe(false);
+    expect(d.b4GuardVetoFired).toBe(false);
+    expect(d.alignedCandidateBeforeB4).toBe(true);
+    expect(d.finalPrediction).toBe(d.hybridDirection);
+    expect(d.wouldTrade).toBe(true);
+  });
+});
+
+describe("ES1 external oracle parity", () => {
+  it("has zero final-decision mismatches against the independent sklearn oracle", () => {
+    expect(oracleParity.final_decision_mismatches).toBe(0);
+    expect(oracleParity.decision_reason_mismatches).toBe(0);
+    expect(oracleParity.common_rows).toBeGreaterThan(3000);
+    expect(oracleParity.max_probability_delta).toBeLessThan(1e-3);
+  });
+});
+
+describe("ES1 activation boundary", () => {
+  it("always lands on a future clean 15-minute boundary", () => {
+    const t = Date.UTC(2026, 7, 15, 1, 37, 12);
+    const b = new Date(nextCleanBoundaryTs(t)).getTime();
+    expect(b % TF_MS).toBe(0);
+    expect(b).toBeGreaterThan(t);
+    expect(b - t).toBeLessThanOrEqual(TF_MS);
+  });
+
+  it("marks rows before the committed boundary webhook-ineligible", () => {
+    const fr = buildFeatureRows(series(20)).find((r) => r.valid)!;
+    const decision = decideEs1(
+      { ...baseInput(), targetTs: fr.targetTs },
+      rankHistory(400, 0.00001),
+    );
+    const mk = (targetCandleTs: string) =>
+      decisionToRow(
+        {
+          targetCandleTs,
+          runMode: "LIVE",
+          activationTargetTs: ES1_WEBHOOK_ACTIVATION_FLOOR_TS,
+        } as never,
+        { targetTs: targetCandleTs, featureRow: fr, a2: null, fit: null, decision } as never,
+      );
+    const before = mk("2026-08-15T01:30:00.000Z");
+    const after = mk("2026-08-15T02:00:00.000Z");
+    expect(before.webhook_eligible).toBe(false);
+    expect(after.webhook_eligible).toBe(true);
+  });
+});
+
+describe("ES1 webhook gating", () => {
+  function fakeSupabase(claim: boolean) {
+    let claims = 0;
+    const api = {
+      claims: () => claims,
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: async () => ({ data: null }) }),
+            maybeSingle: async () => ({ data: null }),
+          }),
+          update: () => ({
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  maybeSingle: async () => {
+                    claims++;
+                    return { data: claim ? { id: "row" } : null };
+                  },
+                }),
+              }),
+            }),
+          }),
+        };
+      },
+    };
+    return api;
+  }
+
+  const liveRow = {
+    id: "row",
+    run_mode: "LIVE",
+    would_trade: true,
+    webhook_eligible: true,
+    webhook_sent_at: null,
+    final_prediction: "GREEN",
+    target_candle_ts: "2026-09-01T00:00:00.000Z",
+  };
+
+  it("rejects BACKFILL and CATCHUP rows", async () => {
+    const sb = fakeSupabase(true);
+    expect(
+      await maybeSendEs1Webhook(sb as never, { ...liveRow, run_mode: "BACKFILL" } as never),
+    ).toBe(false);
+    expect(
+      await maybeSendEs1Webhook(sb as never, {
+        ...liveRow,
+        run_mode: "LIVE",
+        webhook_eligible: false,
+      } as never),
+    ).toBe(false);
+    expect(sb.claims()).toBe(0);
+  });
+
+  it("never re-sends a LIVE row that already claimed the send", async () => {
+    const sb = fakeSupabase(false);
+    expect(await maybeSendEs1Webhook(sb as never, liveRow as never)).toBe(false);
+    expect(
+      await maybeSendEs1Webhook(sb as never, {
+        ...liveRow,
+        webhook_sent_at: "2026-09-01T00:00:05.000Z",
+      } as never),
+    ).toBe(false);
+  });
+});

@@ -35,6 +35,12 @@ function aggregate(rows: Row[]) {
     model_version: ES1_MODEL_VERSION,
     variant: ES1_VARIANT,
     total_opportunities: rows.length,
+    /** rows that actually published a direction */
+    published: 0,
+    /** published rows with any resolved outcome (wins + losses + pushes) */
+    resolved: 0,
+    /** published rows with a directional (evaluable) outcome (wins + losses) */
+    evaluable: 0,
     trades: 0,
     wins: 0,
     losses: 0,
@@ -78,6 +84,7 @@ function aggregate(rows: Row[]) {
 
     if (r.would_trade !== true) continue;
     c.trades++;
+    c.published++;
     if (r.hybrid_route === "OB_DEPTH10_FADE") c.ob_route_trades++;
     else c.price_route_trades++;
     if (!r.resolved_at) {
@@ -86,9 +93,14 @@ function aggregate(rows: Row[]) {
     }
     const res = String(r.result ?? "");
     const score = Number(r.result_score ?? 0);
-    if (res === "WIN") c.wins++;
-    else if (res === "LOSS") c.losses++;
-    else c.pushes++;
+    c.resolved++;
+    if (res === "WIN") {
+      c.wins++;
+      c.evaluable++;
+    } else if (res === "LOSS") {
+      c.losses++;
+      c.evaluable++;
+    } else c.pushes++;
     c.net += score;
     running += score;
     peak = Math.max(peak, running);
@@ -140,6 +152,10 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
       warmup: {
         total_opportunities: warmup.total_opportunities,
         trades: warmup.trades,
+        published: warmup.published,
+        resolved: warmup.resolved,
+        evaluable: warmup.evaluable,
+        pushes: warmup.pushes,
         wins: warmup.wins,
         losses: warmup.losses,
         net: warmup.net,
@@ -177,14 +193,46 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Full ES1 CSV export — every tracked column. */
+/** Full ES1 CSV export — every tracked column plus explicit outcome flags. */
 export const exportEs1Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
-  const columns = Object.keys(rows[0]);
+  const base = Object.keys(rows[0]);
+  const derived = [
+    "is_published",
+    "is_resolved",
+    "is_resolved_evaluable",
+    "is_win",
+    "is_loss",
+    "is_push",
+  ];
+  const columns = [...base, ...derived];
+  const flag = (r: Row, col: string): boolean => {
+    const published = r.would_trade === true;
+    const res = String(r.result ?? "");
+    const resolved = published && r.resolved_at != null;
+    switch (col) {
+      case "is_published":
+        return published;
+      case "is_resolved":
+        return resolved;
+      case "is_resolved_evaluable":
+        return resolved && (res === "WIN" || res === "LOSS");
+      case "is_win":
+        return resolved && res === "WIN";
+      case "is_loss":
+        return resolved && res === "LOSS";
+      default:
+        return resolved && res === "PUSH";
+    }
+  };
   const header = columns.join(",");
   const body = rows
-    .map((r) => columns.map((col) => csvEscape(r[col])).join(","))
+    .map((r) =>
+      columns
+        .map((col) => (derived.includes(col) ? String(flag(r, col)) : csvEscape(r[col])))
+        .join(","),
+    )
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 });
