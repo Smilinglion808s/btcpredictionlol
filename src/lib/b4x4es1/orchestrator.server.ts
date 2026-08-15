@@ -327,8 +327,14 @@ export async function runEs1ForTarget(
       .maybeSingle();
     if (prior) return prior as unknown as DbRow;
 
-    const { rows, fits } = await buildEs1Replay(supabase, { force: true });
-    const match = rows.find((r) => r.targetTs === targetTs);
+    // Use the short-lived cache first; only pay for a full replay when the
+    // cache does not already cover this target boundary.
+    let { rows, fits } = await buildEs1Replay(supabase, {});
+    let match = rows.find((r) => r.targetTs === targetTs);
+    if (!match) {
+      ({ rows, fits } = await buildEs1Replay(supabase, { force: true }));
+      match = rows.find((r) => r.targetTs === targetTs);
+    }
     if (!match) return null;
     await persistFits(supabase, fits).catch(() => 0);
 
