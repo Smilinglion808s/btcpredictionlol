@@ -26,6 +26,8 @@ import { b4x4BuildIdentity } from "../b4x4/build-identity";
 import { buildFeatureRows, type ActualDirection, type Direction } from "./features";
 import { guardAttribution, scoreAgainst, type Es1Decision } from "./engine";
 import { replayEs1, type ReplayRow } from "./replay";
+import { type MintedFitArtifact } from "./fitArtifacts";
+import { CERTIFIED_FITTER_CODE_HASH } from "./certifiedFit";
 import { loadEs1Inputs } from "./data.server";
 import type { Es1Fit } from "./priceHead";
 
@@ -164,6 +166,18 @@ export function decisionToRow(ctx: Es1Context, row: ReplayRow): DbRow {
     price_training_start_ts: fit?.trainingStartTs ?? null,
     price_training_end_ts: fit?.trainingEndTs ?? null,
     price_training_row_count: fit?.trainingRowCount ?? null,
+    price_fit_source: row.resolvedFit?.source ?? null,
+    price_fit_certified: row.resolvedFit?.certified ?? null,
+    price_fit_window_fingerprint: row.resolvedFit?.windowFingerprint ?? null,
+    certified_fitter_code_hash: row.resolvedFit?.certifiedFitterCodeHash ?? null,
+    price_shadow_probability_green:
+      row.resolvedFit?.shadow && row.featureRow.valid
+        ? predictProbabilityGreen(row.resolvedFit.shadow, row.featureRow.vector)
+        : null,
+    price_shadow_fit_id: row.resolvedFit?.shadow?.fitId ?? null,
+    decision_state_checksum: row.historyChecksum,
+    decision_state_certified: row.decisionStateCertified,
+    parity_certified: (row.resolvedFit?.certified ?? false) && row.decisionStateCertified,
     price_probability_green: d.priceProbabilityGreen,
     price_direction: d.priceDirection,
     price_confidence: d.priceConfidence,
@@ -237,6 +251,8 @@ export function decisionToRow(ctx: Es1Context, row: ReplayRow): DbRow {
       ES1_PUBLICATION_ENABLED &&
       runMode === "LIVE" &&
       d.wouldTrade &&
+      row.resolvedFit?.certified === true &&
+      row.decisionStateCertified &&
       (ctx.operationalGapStatus ?? "NONE") === "NONE" &&
       targetMs >= new Date(ctx.activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime(),
 
@@ -267,7 +283,55 @@ function fitToRow(fit: Es1Fit): DbRow {
     training_start_index: fit.trainingStartIndex,
     training_end_index: fit.trainingEndIndex,
     block_index: fit.blockIndex,
+    model_version: ES1_MODEL_VERSION,
+    fit_source: fit.fitSource ?? null,
+    window_fingerprint: fit.windowFingerprint ?? null,
+    price_fit_certified: fit.priceFitCertified ?? false,
+    certified_fitter_code_hash: CERTIFIED_FITTER_CODE_HASH,
   };
+}
+
+/**
+ * Load previously minted certified artifacts so a replay reuses the exact
+ * artifact that was live, instead of re-minting it. Frozen JSON artifacts
+ * always win over these.
+ */
+async function loadMintedArtifacts(
+  supabase: SupabaseClient,
+): Promise<Map<number, MintedFitArtifact>> {
+  const out = new Map<number, MintedFitArtifact>();
+  const { data, error } = await supabase
+    .from("b4x4_es1_fits")
+    .select(
+      "block_index, model_version, feature_schema_hash, fit_source, window_fingerprint, price_fit_certified, artifact_sha256, scaler_center, scaler_scale, coefficients, intercept, training_row_count, training_start_ts, training_end_ts, training_start_index, training_end_index",
+    )
+    .eq("model_version", ES1_MODEL_VERSION)
+    .eq("feature_schema_hash", es1FeatureSchemaHash())
+    .eq("fit_source", "ts-lbfgs-certified")
+    .eq("price_fit_certified", true);
+  if (error || !data) return out;
+  for (const r of data as unknown as Array<Record<string, never>>) {
+    const row = r as Record<string, unknown>;
+    if (typeof row["block_index"] !== "number" || typeof row["window_fingerprint"] !== "string") continue;
+    out.set(row["block_index"] as number, {
+      boundary: row["block_index"] as number,
+      modelVersion: String(row["model_version"]),
+      featureSchemaHash: String(row["feature_schema_hash"]),
+      fitSource: "ts-lbfgs-certified",
+      artifactSha256: String(row["artifact_sha256"]),
+      windowFingerprint: row["window_fingerprint"] as string,
+      center: row["scaler_center"] as number[],
+      scale: row["scaler_scale"] as number[],
+      coefficients: row["coefficients"] as number[],
+      intercept: Number(row["intercept"]),
+      trainingRowCount: Number(row["training_row_count"]),
+      trainingStartTs: String(row["training_start_ts"]),
+      trainingEndTs: String(row["training_end_ts"]),
+      trainingStartIndex: Number(row["training_start_index"]),
+      trainingEndIndex: Number(row["training_end_index"]),
+    });
+  }
+  return out;
 }
 
 // ---- replay cache -----------------------------------------------------
@@ -286,7 +350,8 @@ export async function buildEs1Replay(
   }
   const inputs = await loadEs1Inputs(supabase, { upTo: opts.upTo });
   const featureRows = buildFeatureRows(inputs.candles);
-  const result = replayEs1({ featureRows, a2: inputs.a2, ob: inputs.ob });
+  const mintedArtifacts = await loadMintedArtifacts(supabase);
+  const result = replayEs1({ featureRows, a2: inputs.a2, ob: inputs.ob, mintedArtifacts });
   cache = { key, at: Date.now(), rows: result.rows, fits: result.fits };
   return result;
 }
