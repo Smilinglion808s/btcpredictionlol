@@ -13,11 +13,12 @@ import fixture from "./oracle-parity-fixture.json";
 // The fixture is produced offline by scikit-learn on a deterministic dataset
 // that this test regenerates bit-identically.
 function lcg(n: number): number[] {
-  let s = 123456789;
+  let s = 123456789n;
   const out: number[] = [];
+  const mod = 2n ** 31n;
   for (let i = 0; i < n; i++) {
-    s = (1103515245 * s + 12345) % 2 ** 31;
-    out.push(s / 2 ** 31);
+    s = (1103515245n * s + 12345n) % mod;
+    out.push(Number(s) / 2 ** 31);
   }
   return out;
 }
@@ -73,10 +74,10 @@ describe("ES1 certified fitter parity with the sklearn oracle", () => {
   });
 
   it("is deterministic: identical inputs produce an identical artifact hash", () => {
-    const rows: TrainingRow[] = X.map((vector, i) => ({
-      targetTs: new Date(Date.UTC(2026, 0, 1, 0, 15 * i)).toISOString(),
-      vector,
-      label: (y[i] as 1 | 0),
+    const rows: TrainingRow[] = Array.from({ length: 800 }, (_, i) => ({
+      targetTs: new Date(Date.UTC(2026, 0, 1) + i * 900_000).toISOString(),
+      vector: X[i % X.length],
+      label: (y[i % y.length] as 1 | 0),
       index: i,
     }));
     const a = trainEs1Fit(rows, 768, "lbfgs");
