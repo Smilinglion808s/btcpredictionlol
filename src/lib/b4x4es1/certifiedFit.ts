@@ -14,6 +14,14 @@
 
 import { lbfgsMinimize, LBFGS_GTOL } from "./lbfgs";
 
+/**
+ * Identity of the pinned numerical specification. Any change to the solver
+ * settings below (or to `lbfgs.ts`) must bump this string, which is recorded
+ * on every artifact minted at runtime.
+ */
+export const CERTIFIED_FITTER_CODE_HASH =
+  "es1-ts-lbfgs-v1:maxcor=10,maxls=50,gtol=1e-4,ftol=64eps,ls(ftol=1e-3,gtol=0.9,xtol=0.1),C=0.01,maxiter=1000,robust(10,90)";
+
 export const CERTIFIED_FIT_C = 0.01;
 export const CERTIFIED_FIT_TOL = 1e-4;
 export const CERTIFIED_FIT_MAX_ITER = 1000;
