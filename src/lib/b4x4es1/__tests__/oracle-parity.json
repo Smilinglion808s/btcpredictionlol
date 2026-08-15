@@ -1,37 +1,38 @@
 {
-  "generated_at": "2026-08-15T02:40:00.000Z",
+  "generated_at": "2026-08-15T03:50:00.000Z",
   "checkpoint_ts": "2026-08-14T22:00:00.000Z",
-  "oracle": "python3 + scikit-learn LogisticRegression(C=0.01, lbfgs) / RobustScaler(10,90)",
-  "common_rows": 3605,
+  "oracle": "B4x4_ES1_Frozen_Oracle_Package_20260814 (sha256 cef1c5dbb86c3530b15e569fafe8834096ad4ffd6d31fb10efff0e59d0985d30)",
+  "reconciliation": {
+    "stream_rules_applied": [
+      "PUSH targets excluded from the eligible stream",
+      "segment warmup 32 bars, minimum segment length 40 bars",
+      "training pool = every eligible row strictly before the block boundary (no outcome-delay filter)",
+      "interior targets with a missing candle are data gaps and never enter the stream"
+    ],
+    "price_head": "frozen scikit-learn artifacts (LogisticRegression C=0.01, lbfgs) persisted per block; TypeScript performs inference only"
+  },
+  "common_rows": 1310,
+  "missing_keys": 0,
+  "extra_keys": 0,
   "final_decision_mismatches": 0,
+  "direction_mismatches": 0,
   "decision_reason_mismatches": 0,
-  "clean_fields": 24,
-  "compared_fields": 37,
-  "numeric_only_fields": [
-    "features",
-    "priceProbabilityGreen",
-    "priceConfidence",
-    "hybridEvidence",
-    "priceConfidenceRank",
-    "combinedConfidenceRank",
-    "b4GlobalRank",
-    "b4SameSideRank",
-    "b4Cell",
-    "b4CellResolvedCount",
-    "b4CellWins",
-    "b4CellLosses",
-    "b4PCorrect"
-  ],
-  "max_probability_delta": 0.0000486,
+  "max_probability_delta": 1.4338530363033897e-13,
+  "totals": {
+    "published": 504,
+    "wins": 293,
+    "losses": 211,
+    "pushes": 0,
+    "net": 82,
+    "guard_vetoes": 20,
+    "guard_avoided_losses": 14,
+    "guard_sacrificed_wins": 6
+  },
   "oracle_totals": {
-    "opportunities": 1330,
-    "published": 558,
-    "wins": 308,
-    "losses": 248,
-    "pushes": 2,
-    "net": 60,
-    "guard_vetoes": 22,
-    "guard_veto_wins": 9,
-    "guard_veto_losses": 13
+    "published": 504,
+    "wins": 293,
+    "losses": 211,
+    "net": 82,
+    "guard_vetoes": 20
   }
 }
