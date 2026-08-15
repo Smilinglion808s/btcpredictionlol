@@ -35,14 +35,25 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         );
 
         const now = Date.now();
-        // Target = the candle currently opening. If the cron fires a hair
-        // early, snap forward to the boundary that is at most 20s away.
+        // Target must always be an UPCOMING candle — the one that is opening
+        // right now (cron fires on the boundary) or, if we fired early/late,
+        // the next boundary. We never publish for a candle that is already
+        // meaningfully underway.
         const floor = Math.floor(now / TF_MS) * TF_MS;
-        const targetMs = floor + TF_MS - now <= 20_000 ? floor + TF_MS : floor;
+        const intoCandle = now - floor; // ms elapsed since the current candle opened
+        const targetMs =
+          intoCandle <= FRESH_WINDOW_MS
+            ? floor // fired on the boundary: predict the candle just opening
+            : floor + TF_MS; // fired early or late: predict the next boundary
         const targetTs = new Date(targetMs).toISOString();
         const sourceTs = new Date(targetMs - TF_MS).toISOString();
 
-        const out: Record<string, unknown> = { target_candle_ts: targetTs, source_candle_ts: sourceTs };
+        const out: Record<string, unknown> = {
+          target_candle_ts: targetTs,
+          source_candle_ts: sourceTs,
+          ms_into_target_candle: Math.max(0, now - targetMs),
+        };
+
 
         try {
           const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
