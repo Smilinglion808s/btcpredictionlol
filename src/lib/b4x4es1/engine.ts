@@ -436,10 +436,13 @@ export function decideEs1(input: Es1Input, history: readonly Es1HistoryEntry[]):
   }
 
   // ---- 7. causal confidence ranks ----
-  const rankWindow = history.slice(-CONFIDENCE_RANK_WINDOW);
+  // Frozen semantics: only RAW ES1 rows (sourceIndex != null, i.e. at or after
+  // the raw epoch) enter the window; take the previous max 384 such rows, drop
+  // non-finite values inside that bounded window, and allow partial history.
+  const rankWindow = indexed.slice(-CONFIDENCE_RANK_WINDOW);
   const priceHistory = rankWindow
     .map((h) => h.priceConfidence)
-    .filter((v) => v != null && Number.isFinite(v)) as number[];
+    .filter((v): v is number => v != null && Number.isFinite(v));
   const a2History = rankWindow
     .map((h) => h.a2Confidence)
     .filter((v): v is number => v != null && Number.isFinite(v));
