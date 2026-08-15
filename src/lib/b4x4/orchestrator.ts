@@ -399,8 +399,8 @@ export async function runB4x4ForA2Combined(
  * Held OFF pending activation; engine, persistence, resolution, dashboard and
  * CSV logging are unaffected. Does not touch TD1/TD2 webhooks.
  */
-// Held OFF for the b4x4-v1-runtime-integrity-r1 repair rollout.
-export const B4X4_WEBHOOKS_ENABLED = true;
+// Held OFF: b4x4-es1-aligned-r1 is the sole outbound directional webhook.
+export const B4X4_WEBHOOKS_ENABLED = false;
 
 /** Emit the B4x4 directional webhook exactly once for a live published row. */
 export async function maybeSendB4x4Webhook(
