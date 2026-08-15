@@ -516,6 +516,9 @@ export async function maybeSendEs1Webhook(
       model_version: ES1_MODEL_VERSION,
       variant: ES1_VARIANT,
       target_candle_ts: row.target_candle_ts,
+      target_candle_close_ts: new Date(targetMs + 15 * 60 * 1000).toISOString(),
+      target_is_upcoming: true,
+
       prediction: row.final_prediction,
       direction: row.final_prediction,
       route: row.hybrid_route,
