@@ -111,7 +111,7 @@ describe("ES1 features", () => {
     const seg = series(50);
     seg[49] = candle(new Date(seg[49].candleTs).getTime(), 100, 100, 100, 100);
     expect(computeFeatures(seg, 49).valid).toBe(false);
-    const flat = Array.from({ length: 20 }, (_, i) =>
+    const flat = Array.from({ length: 50 }, (_, i) =>
       candle(Date.UTC(2026, 6, 1) + i * TF_MS, 100, 101, 99, 100),
     );
     expect(computeFeatures(flat, 49).reason).toBe("zero_path");
