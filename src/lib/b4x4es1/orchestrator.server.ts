@@ -491,7 +491,9 @@ export async function maybeSendEs1Webhook(
     if (row.final_prediction !== "GREEN" && row.final_prediction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
-    if (targetMs < new Date(ES1_WEBHOOK_ACTIVATION_TS).getTime()) return false;
+    const activationTs = await effectiveEs1ActivationTs(supabase);
+    if (targetMs < new Date(activationTs).getTime()) return false;
+
 
     const { data: claimed } = await supabase
       .from("b4x4_es1_predictions")
