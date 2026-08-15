@@ -17,9 +17,9 @@ const MAX_WAIT_FOR_BOUNDARY_MS = 120_000;
  * always one candle behind — it published for the candle that had already
  * started 15 minutes earlier.
  *
- * This endpoint fires ON the boundary (pg_cron at :00,:15,:30,:45). It waits
- * for the just-closed source candle to land, then predicts the candle that is
- * opening right now.
+ * This endpoint is invoked one minute before the boundary so its server worker
+ * is already warm. It waits for the boundary and the just-closed source candle,
+ * then predicts the candle that is opening right now.
  *
  * Auth: requires the project's publishable key in the `apikey` header.
  */
@@ -79,23 +79,28 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
           //
-          // Fast path: the source candle is often already ingested by the
-          // shared candle pipeline, so try scoring first and only pay the
-          // exchange-fetch latency when it is genuinely missing.
+          // Fetch once just after the boundary before replaying. Scoring first
+          // used to trigger an internal fetch/replay and then repeat the same
+          // work here, adding several seconds under exchange rate limiting.
           let row = null as Awaited<ReturnType<typeof runEs1ForTarget>>;
-          for (let attempt = 0; attempt < 7 && !row; attempt++) {
-            if (attempt > 0) await new Promise((r) => setTimeout(r, attempt === 1 ? 1_500 : 4_000));
-            if (Date.now() < targetMs + 800) {
-              await new Promise((r) => setTimeout(r, targetMs + 800 - Date.now()));
+          for (let attempt = 0; attempt < 4 && !row; attempt++) {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 1_500));
+            // OKX can take about two seconds to mark the source candle final.
+            // Waiting here preserves the exact closed-candle input while
+            // avoiding a guaranteed unconfirmed response at +800ms.
+            if (Date.now() < targetMs + 2_100) {
+              await new Promise((r) => setTimeout(r, targetMs + 2_100 - Date.now()));
             }
-            if (attempt > 0) {
-              try {
-                await fetchAndUpsertCandles(supabase);
-              } catch {
-                /* retryable */
-              }
+            try {
+              await fetchAndUpsertCandles(supabase);
+            } catch {
+              /* retryable */
             }
-            row = await runEs1ForTarget(supabase, { targetCandleTs: targetTs, runMode: "LIVE" });
+            row = await runEs1ForTarget(supabase, {
+              targetCandleTs: targetTs,
+              runMode: "LIVE",
+              recoverMissingSource: false,
+            });
             out.attempts = attempt + 1;
           }
 
