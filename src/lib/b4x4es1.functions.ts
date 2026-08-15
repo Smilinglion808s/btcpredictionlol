@@ -127,7 +127,7 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
     const rows = await pageAll(
       "target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
         "decision_reason, result, result_score, resolved_at, b4_guard_attribution_class, " +
-        "b4_guard_incremental_value, webhook_eligible, webhook_sent_at",
+        "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status",
     );
     const live = rows.filter(
       (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
@@ -167,7 +167,7 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
       .order("target_candle_ts", { ascending: false })
       .limit(1)
       .maybeSingle();
-    return (data as unknown as Row | null) ?? null;
+    return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
   }),
 );
 
