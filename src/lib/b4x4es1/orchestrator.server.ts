@@ -248,7 +248,9 @@ export function decisionToRow(
       runMode === "LIVE" &&
       d.wouldTrade &&
       (ctx.operationalGapStatus ?? "NONE") === "NONE" &&
-      targetMs >= new Date(ES1_WEBHOOK_ACTIVATION_TS).getTime(),
+      targetMs >=
+        new Date(ctx.activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS).getTime(),
+
     resolver_version: ES1_RESOLVER_VERSION,
   };
 }
