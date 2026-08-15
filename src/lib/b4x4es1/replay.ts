@@ -38,6 +38,8 @@ export interface ReplayInput {
   featureRows: readonly FeatureRow[];
   a2: ReadonlyMap<string, A2Row>;
   ob: ReadonlyMap<string, ObSnapshot>;
+  /** Certified artifacts previously minted and persisted, keyed by boundary. */
+  mintedArtifacts?: ReadonlyMap<number, MintedFitArtifact>;
 }
 
 export interface ReplayRow {
