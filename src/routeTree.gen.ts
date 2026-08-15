@@ -23,6 +23,7 @@ import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/
 import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
+import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
 import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
@@ -104,6 +105,12 @@ const ApiPublicHooksModel7NightlyAuditRoute =
     path: '/api/public/hooks/model7-nightly-audit',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksEs1BoundaryRunRoute =
+  ApiPublicHooksEs1BoundaryRunRouteImport.update({
+    id: '/api/public/hooks/es1-boundary-run',
+    path: '/api/public/hooks/es1-boundary-run',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailyArchiveRoute =
   ApiPublicHooksDailyArchiveRouteImport.update({
     id: '/api/public/hooks/daily-archive',
@@ -139,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -158,6 +166,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -179,6 +188,7 @@ export interface FileRoutesById {
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
+  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
@@ -200,6 +210,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
@@ -219,6 +230,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
@@ -239,6 +251,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
+    | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
@@ -255,6 +268,7 @@ export interface RootRouteChildren {
   ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
+  ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
   ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
@@ -365,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksModel7NightlyAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/es1-boundary-run': {
+      id: '/api/public/hooks/es1-boundary-run'
+      path: '/api/public/hooks/es1-boundary-run'
+      fullPath: '/api/public/hooks/es1-boundary-run'
+      preLoaderRoute: typeof ApiPublicHooksEs1BoundaryRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-archive': {
       id: '/api/public/hooks/daily-archive'
       path: '/api/public/hooks/daily-archive'
@@ -422,6 +443,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksB4x4ObShadowCaptureRoute:
     ApiPublicHooksB4x4ObShadowCaptureRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
+  ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
   ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
