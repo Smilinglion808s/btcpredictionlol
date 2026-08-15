@@ -895,6 +895,14 @@ export async function resolveShadowRowsFor(
     }
   } catch { /* never block */ }
 
+  // B4x4-ES1 resolution (isolated active model). Never blocks the resolver.
+  try {
+    const { resolveEs1Backlog } = await import("@/lib/b4x4es1/orchestrator.server");
+    await resolveEs1Backlog(supabase, { limit: 96 });
+  } catch { /* never block */ }
+
+
+
   // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.
   try {
     const { maybeRetrainTd1 } = await import("./td1/retrain");
