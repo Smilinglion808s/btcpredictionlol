@@ -48,6 +48,8 @@ export interface Es1Fit {
   iterations: number;
   gradientNorm: number;
   C: number;
+  /** Provenance of the coefficients: frozen sklearn artifact or IRLS fallback. */
+  fitSource?: "sklearn-frozen" | "irls-fallback";
 }
 
 export interface TrainingRow {
