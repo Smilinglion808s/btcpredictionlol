@@ -440,19 +440,35 @@ export async function fetchAndUpsertCandles(supabase: SupabaseClient): Promise<{
   let normalized: NormalizedCandle[] = [];
   let primary: "okx" | "coinbase" | null = null;
 
-  const okx = await tryOkxCandles();
+  // Exchange rate limits (HTTP 429) are transient and were silently dropping a
+  // whole candle from the canonical stream: a failed post-boundary fetch left
+  // the just-closed candle unconfirmed, and every model that requires a
+  // confirmed source candle (B4x4-ES1) skipped that boundary entirely.
+  // Retry with backoff before falling through to Coinbase.
+  let okx = await tryOkxCandles();
+  for (let attempt = 1; attempt < 3 && okx.candles.length === 0; attempt++) {
+    attempts.push({ source: `okx:retry${attempt - 1}`, status: okx.status, error: okx.error, rows: 0 });
+    await new Promise((r) => setTimeout(r, 800 * attempt));
+    okx = await tryOkxCandles();
+  }
   attempts.push({ source: "okx", status: okx.status, error: okx.error, rows: okx.candles.length });
   if (okx.candles.length) {
     normalized = okx.candles;
     primary = "okx";
   } else {
-    const cb = await tryCoinbaseCandles();
+    let cb = await tryCoinbaseCandles();
+    for (let attempt = 1; attempt < 3 && cb.candles.length === 0; attempt++) {
+      attempts.push({ source: `coinbase:retry${attempt - 1}`, status: cb.status, error: cb.error, rows: 0 });
+      await new Promise((r) => setTimeout(r, 800 * attempt));
+      cb = await tryCoinbaseCandles();
+    }
     attempts.push({ source: "coinbase", status: cb.status, error: cb.error, rows: cb.candles.length });
     if (cb.candles.length) {
       normalized = cb.candles;
       primary = "coinbase";
     }
   }
+
 
   let upsertErrorMessage: string | null = null;
   if (normalized.length) {
