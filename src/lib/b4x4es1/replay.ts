@@ -49,12 +49,16 @@ export interface ReplayRow {
   featureRow: FeatureRow;
   a2: A2Row | null;
   fit: Es1Fit | null;
+  /** Provenance/certification of the fit used for this row. */
+  resolvedFit: ResolvedEs1Fit | null;
   decision: Es1Decision;
 }
 
 export interface ReplayResult {
   rows: ReplayRow[];
   fits: Es1Fit[];
+  /** Every resolved fit with provenance, in boundary order. */
+  resolvedFits: ResolvedEs1Fit[];
 }
 
 /**
@@ -88,7 +92,7 @@ export function replayEs1(input: ReplayInput): ReplayResult {
 
   eligible.forEach((fr, eligibleIndex) => {
     const boundary = fitBoundaryFor(eligibleIndex);
-    let resolved: ResolvedEs1Fit | null = null;
+    let resolvedFit: ResolvedEs1Fit | null = null;
     if (boundary != null) {
       if (!fitsByBoundary.has(boundary)) {
         const { start, end } = trainingWindowFor(boundary);
@@ -101,9 +105,9 @@ export function replayEs1(input: ReplayInput): ReplayResult {
           resolvedFits.push(trained);
         }
       }
-      resolved = fitsByBoundary.get(boundary) ?? null;
+      resolvedFit = fitsByBoundary.get(boundary) ?? null;
     }
-    const fit: Es1Fit | null = resolved?.fit ?? null;
+    const fit: Es1Fit | null = resolvedFit?.fit ?? null;
 
     const a2 = input.a2.get(fr.targetTs) ?? null;
     const priceProbability = fit ? predictProbabilityGreen(fit, fr.vector) : null;
@@ -122,6 +126,7 @@ export function replayEs1(input: ReplayInput): ReplayResult {
         timingInvalidReason: null,
         priceProbabilityGreen: priceProbability,
         priceFitId: fit?.fitId ?? null,
+        priceFitCertified: resolvedFit?.certified ?? true,
         a2ProbabilityGreen: a2?.probabilityGreen ?? null,
         a2RowId: a2?.rowId ?? null,
         a2PredictionId: a2?.predictionId ?? null,
@@ -157,8 +162,8 @@ export function replayEs1(input: ReplayInput): ReplayResult {
       });
     }
 
-    out.push({ targetTs: fr.targetTs, eligibleIndex, featureRow: fr, a2, fit, decision });
+    out.push({ targetTs: fr.targetTs, eligibleIndex, featureRow: fr, a2, fit, resolvedFit, decision });
   });
 
-  return { rows: out, fits };
+  return { rows: out, fits, resolvedFits };
 }
