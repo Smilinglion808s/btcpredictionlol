@@ -73,42 +73,46 @@ export async function loadCanonicalCandles(
   return [...byTs.values()].sort((a, b) => a.candleTs.localeCompare(b.candleTs));
 }
 
-/** A2_Combined prediction-time probabilities, keyed by target candle. */
+/**
+ * A2 prediction-time probabilities, keyed by target candle.
+ *
+ * ES1 consumes the exact A2 value B4x4 pinned for that target — the same
+ * shared-opportunity universe the frozen oracle was built from — so ES1 can
+ * never see an A2 row B4x4 itself did not act on.
+ */
 export async function loadA2Rows(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<Map<string, A2Row>> {
   const rows = await pageAll((from, to) => {
     let q = supabase
-      .from("model7_shadow")
+      .from("b4x4_predictions")
       .select(
-        "id, prediction_id, candle_ts, probability_green, timing_status, leakage_check_passed, model_fit_id, created_at",
+        "target_candle_ts, a2_probability_green, source_a2_row_id, a2_model_fit_id, a2_production_model_version, created_at",
       )
-      .eq("variant", ES1_A2_SOURCE_VARIANT)
-      .order("candle_ts", { ascending: true })
+      .not("a2_probability_green", "is", null)
+      .order("target_candle_ts", { ascending: true })
       .range(from, to);
-    if (opts.upTo) q = q.lte("candle_ts", opts.upTo);
+    if (opts.upTo) q = q.lte("target_candle_ts", opts.upTo);
     return q;
   });
 
   const byTs = new Map<string, A2Row>();
   const createdAt = new Map<string, string>();
   for (const r of rows) {
-    if (r.timing_status !== "ON_TIME") continue;
-    if (r.leakage_check_passed !== true) continue;
-    const p = r.probability_green == null ? NaN : Number(r.probability_green);
+    const p = r.a2_probability_green == null ? NaN : Number(r.a2_probability_green);
     if (!Number.isFinite(p) || p < 0 || p > 1) continue;
-    const ts = new Date(String(r.candle_ts)).toISOString();
+    const ts = new Date(String(r.target_candle_ts)).toISOString();
     const created = String(r.created_at ?? "");
-    if (byTs.has(ts) && created < (createdAt.get(ts) ?? "")) continue;
+    if (byTs.has(ts) && created >= (createdAt.get(ts) ?? "")) continue;
     createdAt.set(ts, created);
     byTs.set(ts, {
       targetTs: ts,
       probabilityGreen: p,
-      rowId: (r.id as string | null) ?? null,
-      predictionId: (r.prediction_id as string | null) ?? null,
-      modelFitId: (r.model_fit_id as string | null) ?? null,
-      productionModelVersion: null,
+      rowId: (r.source_a2_row_id as string | null) ?? null,
+      predictionId: null,
+      modelFitId: (r.a2_model_fit_id as string | null) ?? null,
+      productionModelVersion: (r.a2_production_model_version as string | null) ?? null,
     });
   }
   return byTs;
