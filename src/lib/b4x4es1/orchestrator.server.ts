@@ -395,7 +395,21 @@ export async function runEs1ForTarget(
       ({ rows, fits } = await buildEs1Replay(supabase, { force: true }));
       match = rows.find((r) => r.targetTs === targetTs);
     }
+    if (!match) {
+      // The source candle (target - 15m) is not in the canonical stream yet —
+      // almost always a rate-limited candle fetch. Re-ingest and replay once
+      // more so a transient exchange 429 can never drop an ES1 boundary.
+      try {
+        const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
+        await fetchAndUpsertCandles(supabase);
+        ({ rows, fits } = await buildEs1Replay(supabase, { force: true }));
+        match = rows.find((r) => r.targetTs === targetTs);
+      } catch {
+        /* fall through */
+      }
+    }
     if (!match) return null;
+
     await persistFits(supabase, fits).catch(() => 0);
 
     // Commit (or read) the activation boundary from the persisted record. The
