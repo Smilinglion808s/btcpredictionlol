@@ -83,8 +83,6 @@ function StatsPage() {
   const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
-  const b4x4Fn = useServerFn(getB4x4Stats);
-  const b4x4Q = useQuery({ queryKey: ["b4x4-stats"], queryFn: () => b4x4Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
 
 
   const es1Fn = useServerFn(getEs1Stats);
