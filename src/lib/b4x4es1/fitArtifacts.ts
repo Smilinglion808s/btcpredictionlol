@@ -163,10 +163,23 @@ export function resolveEs1FitDetailed(
 ): ResolvedEs1Fit | null {
   if (rows.length === 0) return null;
   const fingerprint = trainingWindowFingerprint(rows);
-  const shadowRaw = trainEs1Fit(rows, boundary, "irls");
-  const shadow = shadowRaw
-    ? { ...shadowRaw, fitSource: "irls-shadow" as const, priceFitCertified: false, windowFingerprint: fingerprint }
-    : null;
+  // The IRLS shadow is diagnostics-only and expensive. It is computed lazily so
+  // a boundary that resolves to a certified artifact never pays for it.
+  let shadowCache: Es1Fit | null | undefined;
+  const shadowFit = (): Es1Fit | null => {
+    if (shadowCache !== undefined) return shadowCache;
+    const raw = trainEs1Fit(rows, boundary, "irls");
+    shadowCache = raw
+      ? {
+          ...raw,
+          fitSource: "irls-shadow" as const,
+          priceFitCertified: false,
+          windowFingerprint: fingerprint,
+        }
+      : null;
+    return shadowCache;
+  };
+
 
   // 1. bundled sklearn artifact (JSON is authoritative)
   const frozen = ARTIFACTS.get(boundary);
