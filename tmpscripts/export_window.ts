@@ -35,7 +35,7 @@ const out: any = { boundaries: [] };
 for (const b of Array.from({length: 15}, (_, k) => 768 + 96 * k)) {
   const { start, end } = trainingWindowFor(b);
   const rows = pool.slice(start, end);
-  if (rows.length !== 1536) {
+  if (rows.length !== Math.min(b, 1536)) {
     console.log("boundary", b, "rows", rows.length, "-> SKIP");
     continue;
   }
