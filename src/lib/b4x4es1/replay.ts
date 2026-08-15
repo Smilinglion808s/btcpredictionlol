@@ -88,16 +88,22 @@ export function replayEs1(input: ReplayInput): ReplayResult {
 
   eligible.forEach((fr, eligibleIndex) => {
     const boundary = fitBoundaryFor(eligibleIndex);
-    let fit: Es1Fit | null = null;
+    let resolved: ResolvedEs1Fit | null = null;
     if (boundary != null) {
       if (!fitsByBoundary.has(boundary)) {
         const { start, end } = trainingWindowFor(boundary);
-        const trained = resolveEs1Fit(trainingPool.slice(start, end), boundary);
+        const trained = resolveEs1FitDetailed(trainingPool.slice(start, end), boundary, {
+          mintedArtifacts: input.mintedArtifacts,
+        });
         fitsByBoundary.set(boundary, trained);
-        if (trained) fits.push(trained);
+        if (trained) {
+          fits.push(trained.fit);
+          resolvedFits.push(trained);
+        }
       }
-      fit = fitsByBoundary.get(boundary) ?? null;
+      resolved = fitsByBoundary.get(boundary) ?? null;
     }
+    const fit: Es1Fit | null = resolved?.fit ?? null;
 
     const a2 = input.a2.get(fr.targetTs) ?? null;
     const priceProbability = fit ? predictProbabilityGreen(fit, fr.vector) : null;
