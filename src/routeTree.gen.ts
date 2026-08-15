@@ -25,6 +25,7 @@ import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/ap
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
+import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -115,6 +116,12 @@ const ApiPublicHooksB4x4ObShadowCaptureRoute =
     path: '/api/public/hooks/b4x4-ob-shadow-capture',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksB4x4Es1WarmupRoute =
+  ApiPublicHooksB4x4Es1WarmupRouteImport.update({
+    id: '/api/public/hooks/b4x4-es1-warmup',
+    path: '/api/public/hooks/b4x4-es1-warmup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksB4x4BackfillRoute =
   ApiPublicHooksB4x4BackfillRouteImport.update({
     id: '/api/public/hooks/b4x4-backfill',
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
+  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -147,6 +155,7 @@ export interface FileRoutesByTo {
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
+  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -167,6 +176,7 @@ export interface FileRoutesById {
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
+  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/api/public/hooks/b4x4-backfill'
+    | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/'
     | '/api/public/hooks/b4x4-backfill'
+    | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
@@ -224,6 +236,7 @@ export interface FileRouteTypes {
     | '/_authenticated/stats'
     | '/_authenticated/'
     | '/api/public/hooks/b4x4-backfill'
+    | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/model7-nightly-audit'
@@ -239,6 +252,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
+  ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -365,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/b4x4-es1-warmup': {
+      id: '/api/public/hooks/b4x4-es1-warmup'
+      path: '/api/public/hooks/b4x4-es1-warmup'
+      fullPath: '/api/public/hooks/b4x4-es1-warmup'
+      preLoaderRoute: typeof ApiPublicHooksB4x4Es1WarmupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/b4x4-backfill': {
       id: '/api/public/hooks/b4x4-backfill'
       path: '/api/public/hooks/b4x4-backfill'
@@ -397,6 +418,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,
+  ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
   ApiPublicHooksB4x4ObShadowCaptureRoute:
     ApiPublicHooksB4x4ObShadowCaptureRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
