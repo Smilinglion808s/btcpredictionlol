@@ -12,13 +12,15 @@ Replace the current two-value `fitSource` (`sklearn-frozen` / `irls-fallback`) w
 
 Nothing minted in the worker is ever labelled sklearn.
 
-## 2. Immutable JSON artifacts win
+## 2. Immutable JSON artifacts win, and artifact identity
 
-Artifact resolution order becomes strict:
+Artifacts are keyed by the immutable composite `(model_version, feature_schema_hash, fit_boundary)`. The artifact hash is taken over a canonical deterministic payload — spec, scaler name, center, scale, coefficients, intercept, window fingerprint, row count, boundary — excluding timestamps, generator strings and any other nondeterministic metadata.
 
-- Boundaries present in `frozen-fits.json` (768–2016): JSON is authoritative. A DB row for the same boundary is only allowed if its window fingerprint AND artifact hash match JSON exactly; any difference is a fail-closed abstain, not a silent preference.
-- Boundaries absent from JSON: DB artifact may be used, and only if its recomputed window fingerprint matches the live training window.
-- Duplicate/conflicting DB rows for one boundary: fail closed.
+Resolution order is strict:
+
+- Boundaries present in `frozen-fits.json` (768–2016, plus 2112 once generated): JSON is authoritative. A DB row for the same key is only allowed if its window fingerprint AND canonical artifact hash match JSON exactly; any difference is a fail-closed abstain, not a silent preference.
+- Boundaries absent from JSON: a DB artifact may be used, and only if its recomputed window fingerprint matches the live training window.
+- Duplicate or conflicting DB rows for one key: fail closed.
 
 ## 3. Two-part certification
 
