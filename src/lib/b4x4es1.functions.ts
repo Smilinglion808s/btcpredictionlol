@@ -35,6 +35,12 @@ function aggregate(rows: Row[]) {
     model_version: ES1_MODEL_VERSION,
     variant: ES1_VARIANT,
     total_opportunities: rows.length,
+    /** rows that actually published a direction */
+    published: 0,
+    /** published rows with any resolved outcome (wins + losses + pushes) */
+    resolved: 0,
+    /** published rows with a directional (evaluable) outcome (wins + losses) */
+    evaluable: 0,
     trades: 0,
     wins: 0,
     losses: 0,
