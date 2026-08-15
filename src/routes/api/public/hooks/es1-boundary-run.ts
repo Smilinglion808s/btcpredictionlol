@@ -69,6 +69,11 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         }
 
         try {
+          const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
+          const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
+            "@/lib/b4x4es1/orchestrator.server"
+          );
+
 
 
           // Wait for the source candle to be closed and ingested. Bounded so
