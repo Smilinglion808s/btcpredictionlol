@@ -411,11 +411,38 @@ export async function runEs1ForTarget(
     if (!match) return null;
     await persistFits(supabase, fits).catch(() => 0);
 
+    // Commit (or read) the activation boundary from the persisted record. The
+    // boundary is committed the first time the grid is genuinely ready, so a
+    // late deployment activates on the next clean boundary, never mid-candle.
+    let activationTargetTs = ctx.activationTargetTs ?? null;
+    if (!activationTargetTs) {
+      const d = match.decision;
+      activationTargetTs = d.b4Ready
+        ? await ensureEs1Activation(supabase, {
+            source_index_absolute: d.sourceIndexAbsolute ?? null,
+            b4_ready: d.b4Ready,
+            b4_cell: d.b4Cell ?? null,
+            b4_p_correct: d.b4PCorrect ?? null,
+            price_fit_id: d.priceFitId ?? null,
+            readiness_checked_at: new Date().toISOString(),
+          }).catch(() => null)
+        : await effectiveEs1ActivationTs(supabase).catch(() => null);
+    }
+
     const row = {
-      ...decisionToRow({ ...ctx, targetCandleTs: targetTs, runMode: ctx.runMode ?? "LIVE" }, match),
+      ...decisionToRow(
+        {
+          ...ctx,
+          targetCandleTs: targetTs,
+          runMode: ctx.runMode ?? "LIVE",
+          activationTargetTs: activationTargetTs ?? ES1_WEBHOOK_ACTIVATION_FLOOR_TS,
+        },
+        match,
+      ),
       run_started_at: runStartedAt,
       run_finished_at: new Date().toISOString(),
     };
+
     const { data, error } = await supabase
       .from("b4x4_es1_predictions")
       .upsert(row as never, {
