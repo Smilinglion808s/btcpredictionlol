@@ -29,7 +29,7 @@ import { replayEs1, type ReplayRow } from "./replay";
 import { type MintedFitArtifact } from "./fitArtifacts";
 import { CERTIFIED_FITTER_CODE_HASH } from "./certifiedFit";
 import { loadEs1Inputs } from "./data.server";
-import type { Es1Fit } from "./priceHead";
+import { predictProbabilityGreen, type Es1Fit } from "./priceHead";
 
 type DbRow = Record<string, unknown>;
 
