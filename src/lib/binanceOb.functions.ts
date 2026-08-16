@@ -13,6 +13,23 @@ import {
 import { cachedStats } from "./statsCache.server";
 
 type Row = Record<string, unknown>;
+/** Serializable projection returned over the server-fn boundary. */
+type JsonRow = Record<string, string | number | boolean | null>;
+
+function toJsonRows(rows: Row[]): JsonRow[] {
+  return rows.map((r) => {
+    const out: JsonRow = {};
+    for (const [k, v] of Object.entries(r)) {
+      out[k] =
+        v == null
+          ? null
+          : typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+            ? v
+            : JSON.stringify(v);
+    }
+    return out;
+  });
+}
 const PAGE = 1000;
 
 async function admin() {
@@ -21,7 +38,16 @@ async function admin() {
 }
 
 async function pageAll(table: string, select: string, order: string): Promise<Row[]> {
-  const sb = await admin();
+  const sb = (await admin()) as unknown as {
+    from: (t: string) => {
+      select: (s: string) => {
+        order: (
+          c: string,
+          o: { ascending: boolean },
+        ) => { range: (a: number, b: number) => Promise<{ data: Row[] | null }> };
+      };
+    };
+  };
   const out: Row[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data } = await sb
@@ -155,7 +181,7 @@ export const getBinanceObHealth = createServerFn({ method: "GET" }).handler(asyn
     .limit(24);
   return {
     collectors,
-    recent_boundaries: (data ?? []) as unknown as Row[],
+    recent_boundaries: toJsonRows((data ?? []) as unknown as Row[]),
     generated_at: new Date().toISOString(),
   };
 });
