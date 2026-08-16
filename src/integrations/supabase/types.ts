@@ -4952,42 +4952,6 @@ export type Database = {
           td2_recovery_source_feature_cutoff_ts: string | null
           td2_recovery_threshold: number | null
           td2_recovery_value_class: string | null
-          td3_activation_ts: string | null
-          td3_confidence_condition: boolean | null
-          td3_current_directional_confidence: number | null
-          td3_current_directional_confidence_threshold: number | null
-          td3_feature_cutoff_ts: string | null
-          td3_final_decision: string | null
-          td3_latest_source_candle_ts: string | null
-          td3_leakage_check_passed: boolean | null
-          td3_opposing_drift_4: number | null
-          td3_opposing_drift_4_threshold: number | null
-          td3_opposing_drift_condition: boolean | null
-          td3_policy_version: string | null
-          td3_pre_veto_decision: string | null
-          td3_pre_veto_skip_reason: string | null
-          td3_pre_veto_would_trade: boolean | null
-          td3_raw_score: number | null
-          td3_result: string | null
-          td3_run_length_condition: boolean | null
-          td3_run_mode: string | null
-          td3_same_direction_run_length: number | null
-          td3_same_direction_run_length_threshold: number | null
-          td3_skip_reason: string | null
-          td3_source_td1_artifact_sha256: string | null
-          td3_source_td1_fit_id: string | null
-          td3_source_td1_policy_version: string | null
-          td3_source_td1_row_id: string | null
-          td3_timing_status: string | null
-          td3_toxic_drift_condition: boolean | null
-          td3_toxic_drift_evaluable: boolean | null
-          td3_toxic_drift_reason: string | null
-          td3_toxic_drift_veto_fired: boolean | null
-          td3_toxic_drift_veto_value: number | null
-          td3_underlying_td1_decision: string | null
-          td3_underlying_td1_result: string | null
-          td3_underlying_td1_score: number | null
-          td3_would_trade: boolean | null
           timing_status: string | null
           updated_at: string
           variant: string
@@ -5101,42 +5065,6 @@ export type Database = {
           td2_recovery_source_feature_cutoff_ts?: string | null
           td2_recovery_threshold?: number | null
           td2_recovery_value_class?: string | null
-          td3_activation_ts?: string | null
-          td3_confidence_condition?: boolean | null
-          td3_current_directional_confidence?: number | null
-          td3_current_directional_confidence_threshold?: number | null
-          td3_feature_cutoff_ts?: string | null
-          td3_final_decision?: string | null
-          td3_latest_source_candle_ts?: string | null
-          td3_leakage_check_passed?: boolean | null
-          td3_opposing_drift_4?: number | null
-          td3_opposing_drift_4_threshold?: number | null
-          td3_opposing_drift_condition?: boolean | null
-          td3_policy_version?: string | null
-          td3_pre_veto_decision?: string | null
-          td3_pre_veto_skip_reason?: string | null
-          td3_pre_veto_would_trade?: boolean | null
-          td3_raw_score?: number | null
-          td3_result?: string | null
-          td3_run_length_condition?: boolean | null
-          td3_run_mode?: string | null
-          td3_same_direction_run_length?: number | null
-          td3_same_direction_run_length_threshold?: number | null
-          td3_skip_reason?: string | null
-          td3_source_td1_artifact_sha256?: string | null
-          td3_source_td1_fit_id?: string | null
-          td3_source_td1_policy_version?: string | null
-          td3_source_td1_row_id?: string | null
-          td3_timing_status?: string | null
-          td3_toxic_drift_condition?: boolean | null
-          td3_toxic_drift_evaluable?: boolean | null
-          td3_toxic_drift_reason?: string | null
-          td3_toxic_drift_veto_fired?: boolean | null
-          td3_toxic_drift_veto_value?: number | null
-          td3_underlying_td1_decision?: string | null
-          td3_underlying_td1_result?: string | null
-          td3_underlying_td1_score?: number | null
-          td3_would_trade?: boolean | null
           timing_status?: string | null
           updated_at?: string
           variant?: string
@@ -5250,42 +5178,6 @@ export type Database = {
           td2_recovery_source_feature_cutoff_ts?: string | null
           td2_recovery_threshold?: number | null
           td2_recovery_value_class?: string | null
-          td3_activation_ts?: string | null
-          td3_confidence_condition?: boolean | null
-          td3_current_directional_confidence?: number | null
-          td3_current_directional_confidence_threshold?: number | null
-          td3_feature_cutoff_ts?: string | null
-          td3_final_decision?: string | null
-          td3_latest_source_candle_ts?: string | null
-          td3_leakage_check_passed?: boolean | null
-          td3_opposing_drift_4?: number | null
-          td3_opposing_drift_4_threshold?: number | null
-          td3_opposing_drift_condition?: boolean | null
-          td3_policy_version?: string | null
-          td3_pre_veto_decision?: string | null
-          td3_pre_veto_skip_reason?: string | null
-          td3_pre_veto_would_trade?: boolean | null
-          td3_raw_score?: number | null
-          td3_result?: string | null
-          td3_run_length_condition?: boolean | null
-          td3_run_mode?: string | null
-          td3_same_direction_run_length?: number | null
-          td3_same_direction_run_length_threshold?: number | null
-          td3_skip_reason?: string | null
-          td3_source_td1_artifact_sha256?: string | null
-          td3_source_td1_fit_id?: string | null
-          td3_source_td1_policy_version?: string | null
-          td3_source_td1_row_id?: string | null
-          td3_timing_status?: string | null
-          td3_toxic_drift_condition?: boolean | null
-          td3_toxic_drift_evaluable?: boolean | null
-          td3_toxic_drift_reason?: string | null
-          td3_toxic_drift_veto_fired?: boolean | null
-          td3_toxic_drift_veto_value?: number | null
-          td3_underlying_td1_decision?: string | null
-          td3_underlying_td1_result?: string | null
-          td3_underlying_td1_score?: number | null
-          td3_would_trade?: boolean | null
           timing_status?: string | null
           updated_at?: string
           variant?: string
