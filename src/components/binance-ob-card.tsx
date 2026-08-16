@@ -54,7 +54,7 @@ export function BinanceObCard({ stats, health }: { stats: Any; health: Any | nul
         <div className="text-[11px] font-mono text-muted-foreground">
           last boundary {String(lastSpot.target_ts).slice(11, 16)}Z ·{" "}
           {String(lastSpot.capture_status)} · {lastSpot.ready ? "ready" : String(lastSpot.ready_reason)}{" "}
-          · history {lastSpot.history_count_96 ?? 0}/96
+          · history {lastSpot.history_valid_count ?? 0}/96
         </div>
       )}
 

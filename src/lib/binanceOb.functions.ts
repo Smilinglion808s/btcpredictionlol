@@ -174,7 +174,7 @@ export const getBinanceObHealth = createServerFn({ method: "GET" }).handler(asyn
   const { data } = await sb
     .from("b4x4_es1_binance_ob_boundary_features")
     .select(
-      "target_ts, market_kind, capture_status, ready, ready_reason, history_ready, history_count_96, observation_count_60s, final_imbalance_10bps, abs_imbalance_percentile_96",
+      "target_ts, market_kind, capture_status, ready, ready_reason, history_ready, history_valid_count, observation_count_60s, final_imbalance_10bps, abs_imbalance_percentile_96",
     )
     .eq("feature_version", BINANCE_OB_VERSION)
     .order("target_ts", { ascending: false })
