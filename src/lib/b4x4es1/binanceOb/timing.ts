@@ -91,7 +91,9 @@ export function evaluateObservationTiming(row: TimingCandidate): TimingVerdict {
   const sampleMs = ms(row.sample_ts);
   if (sampleMs == null) return fail("SAMPLE_TS_INVALID", cutoffMs);
   if (sampleMs > cutoffMs) return fail("SAMPLE_AFTER_CUTOFF", cutoffMs);
-  if (sampleMs < windowStartMs) return fail("SAMPLE_BEFORE_WINDOW_START", cutoffMs);
+  if (sampleMs < windowStartMs - WINDOW_START_LEAD_TOLERANCE_MS) {
+    return fail("SAMPLE_BEFORE_WINDOW_START", cutoffMs);
+  }
 
   if (row.feature_cutoff_ts != null) {
     const declared = ms(row.feature_cutoff_ts);
