@@ -213,6 +213,15 @@ export async function linkBinanceObToPrediction(
         binance_ob_history_valid_count: (spot?.history_valid_count as number | null) ?? null,
         binance_ob_ready_reason: (spot?.ready_reason as string | null) ?? null,
         binance_ob_history_ready: spot?.history_ready === true,
+        // Warmup is an explicit state, never a blank cell.
+        binance_ob_shadow_reason:
+          spot == null
+            ? "NO_BOUNDARY_FEATURE"
+            : spot.history_ready === true
+              ? spot.ready === true
+                ? "SHADOW_EVALUATED"
+                : ((spot.ready_reason as string | null) ?? "NOT_READY")
+              : "HISTORY_NOT_READY",
         binance_ob_final_imbalance_10bps: (spot?.final_imbalance_10bps as number | null) ?? null,
         binance_ob_abs_percentile_96: (spot?.abs_imbalance_percentile_96 as number | null) ?? null,
         binance_ob_sign_persistence_15s: (spot?.sign_persistence_15s as number | null) ?? null,
