@@ -490,6 +490,22 @@ describe("integrity audit repairs", () => {
     expect(c.readyReason).toBe("RESYNC_DISCONTINUITY");
   });
 
+  it("fails closed when resync continuity is unknown", () => {
+    const stream = fullStream().map(
+      (o) => ({ ...o, resync_generation: null }) as unknown as ObservationRow,
+    );
+    const c = computeBoundaryFeatures({
+      targetTs: TARGET,
+      observations: stream,
+      history: history(),
+      captureStatus: "FRESH",
+    });
+    expect(c.fields.resync_continuous).toBe(null);
+    expect(c.fields.resync_generation_min).toBe(null);
+    expect(c.ready).toBe(false);
+    expect(c.readyReason).toBe("RESYNC_CONTINUITY_UNKNOWN");
+  });
+
   it("keeps a single-generation window ready and reports the generation range", () => {
     const c = computeBoundaryFeatures({
       targetTs: TARGET,
