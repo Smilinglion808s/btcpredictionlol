@@ -284,6 +284,9 @@ export function computeBoundaryFeatures(params: {
     sequence_ok: final?.sequence_ok ?? false,
     book_complete_10bps: final?.book_complete_10bps ?? false,
     resync_generation: final?.resync_generation ?? 0,
+    // NOT NULL in the features table; carry the collector's stream identity
+    // from the final (or any available) observation for this boundary.
+    source_ws_url_id: final?.source_ws_url_id ?? obs[0]?.source_ws_url_id ?? "unknown",
 
     final_best_bid: final?.best_bid ?? null,
     final_best_ask: final?.best_ask ?? null,
