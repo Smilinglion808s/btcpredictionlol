@@ -1,44 +1,32 @@
-# Fix Binance collector region block (Railway)
+# Binance OB collector: heartbeat verification and three-boundary capture
 
-The collector is alive and heartbeating every 5s, but both markets report HTTP 451 with `region_blocked = true`, which means the service's outbound IP is still in a US region. Binance Global refuses those hosts. Nothing in this project's code needs to change — the fix is entirely on the Railway service.
+## Current state (verified just now)
 
-## Prompt to paste into the Railway assistant
+Both markets are healthy after the region switch:
 
-```text
-My service `binance-ob-collector` (root directory `services/binance-ob-collector`,
-deployed from GitHub repo Smilinglion808s/btcpredictionlol) is currently running in a
-US region. Its outbound requests to Binance Global (wss://stream.binance.com and
-https://api.binance.com) are being rejected with HTTP 451, which Binance returns for
-US-based IPs.
+| Market | Status | region_blocked | error | reconnects | book synced | seq ok | heartbeat age |
+|---|---|---|---|---|---|---|---|
+| SPOT | READY | false | none | 0 | yes | yes | ~4s |
+| USD_M_PERP | READY | false | none | 0 | yes | yes | ~4s |
 
-Please do the following:
+New deployment id `9900c060daad-1`. The 451 region block is gone.
 
-1. Tell me the exact region this service is currently deployed in, and confirm the
-   region of its outbound/egress traffic (not just the build region).
-2. Move the service to europe-west4 (Amsterdam). If my plan does not allow changing
-   the region of an existing service, tell me that explicitly and instead recreate the
-   service in europe-west4 from the same GitHub repo, keeping:
-   - Root Directory: services/binance-ob-collector
-   - Builder: Dockerfile (the Dockerfile in that directory)
-   - Restart Policy: Always
-   - All existing environment variables (BINANCE_OB_INGEST_SECRET,
-     BINANCE_OB_INGEST_URL, NODE_ENV=production)
-3. Trigger a full redeploy (not a restart) so the new region takes effect.
-4. After it is up, show me the last 50 log lines and confirm you see
-   "[collector] started" plus successful WebSocket connections for both SPOT and
-   USD_M_PERP, with no 451 errors.
-5. Confirm the final region and the service's outbound IP geolocation.
-```
+Two things still need to clear before the capture run can be called a pass:
 
-## After Railway reports success
+- Observations so far: 58 rows, all `USD_M_PERP`, sampled 08:14:03–08:14:57 (the pre-boundary window for the 08:15 boundary). Zero `SPOT` rows have ever landed.
+- `b4x4_es1_binance_ob_boundary_features` is empty (0 rows).
 
-Ping me and I will:
-1. Re-read collector health for both markets and confirm `region_blocked = false`, `collector_status = READY`, and `sequence_ok = true`.
-2. Confirm order-book observation rows are landing at ~1s cadence.
-3. Run the three-consecutive-boundary production capture checklist and write the verification report.
+Most likely explanation: the SPOT local book finished syncing after that window had already started, so only the perp collector produced samples for the 08:15 boundary. Both books report initialized now, so the 08:30 boundary should carry both markets. This is a hypothesis, not a confirmed fact — step 1 below is to confirm or refute it before proceeding.
 
-Binance stays SHADOW_ONLY throughout — no change to ES1 decisions or webhooks.
+## Plan
 
-## Fallback if europe-west4 still returns 451
+1. **Boundary 1 (08:30) — confirm dual-market capture.** After the boundary, check that observations exist for both SPOT and USD_M_PERP, that sample offsets are contiguous integer seconds with no gaps, that every `sample_ts` and `received_at` is at or before T-2s (no target-candle leakage), and that a boundary_features row was produced. If SPOT is still absent, stop the checklist and diagnose the ingest path (validation rejects vs. collector never sampling) instead of continuing.
+2. **Boundary 2 (08:45) — repeat the same checks** plus sequence integrity (`sequence_gap_count`, `resync_count`, `snapshot_sync_count` stable) and confirm the six frozen policies evaluate against real features.
+3. **Boundary 3 (09:00) — repeat**, then confirm three consecutive clean boundaries with no reconnects, no region blocks, and no leakage.
+4. **Write `docs/binance-ob/PRODUCTION_CAPTURE_VERIFICATION.md`** with per-boundary evidence tables, row counts, offset coverage, latency stats, sequence counters, and a final PASS/FAIL.
 
-Retry in `asia-southeast1` (Singapore). If both fail, the remaining option is routing the collector's Binance traffic through a non-US egress proxy, which I would spec separately.
+Binance stays SHADOW_ONLY for the whole run. No ES1 decision logic, webhook routing, or model config is touched; this is verification plus one documentation file.
+
+## Technical detail
+
+Checks are read-only SQL against `b4x4_es1_binance_ob_collector_health`, `b4x4_es1_binance_ob_observations`, `b4x4_es1_binance_ob_boundary_features`, and `b4x4_es1_binance_ob_policy_shadows`. The only write is the markdown verification report. Each boundary is 15 minutes apart, so the full run needs roughly 45 minutes of wall clock and will span several messages — I check after each boundary and report.
