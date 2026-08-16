@@ -12,6 +12,11 @@ import {
 } from "@/lib/predictions.functions";
 import { exportV6Csv } from "@/lib/v6.functions";
 import { exportEs1Csv } from "@/lib/b4x4es1.functions";
+import {
+  exportBinanceObFeaturesCsv,
+  exportBinanceObObservationsCsv,
+  exportBinanceObPolicyCsv,
+} from "@/lib/binanceOb.functions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
@@ -457,6 +462,10 @@ function CsvDataPage() {
   const exportTd3 = useServerFn(exportTd3Shadow);
   const exportV6 = useServerFn(exportV6Csv);
   const exportEs1 = useServerFn(exportEs1Csv);
+  const exportObFeatures = useServerFn(exportBinanceObFeaturesCsv);
+  const exportObPolicies = useServerFn(exportBinanceObPolicyCsv);
+  const exportObObservationsFn = useServerFn(exportBinanceObObservationsCsv);
+  const exportObObservations = () => exportObObservationsFn({ data: { targets: 96 } });
   const [buildingUniversal, setBuildingUniversal] = useState(false);
 
   useEffect(() => {
