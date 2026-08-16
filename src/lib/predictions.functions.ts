@@ -3,14 +3,6 @@ import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.serve
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
-import {
-  TD3_POLICY_VERSION,
-  TD3_VARIANT,
-  evaluateTd3,
-  scoreTd3Decision,
-  td3PredictionColumns,
-  td3VetoValue,
-} from "./model7/td1/td3";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -154,11 +146,10 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     return out;
   }
 
-  const [live, arch, td1Rows, td3Rows, aas96Rows, a96Rows, b4x4Rows, b4x4PolicyShadowRows] = await Promise.all([
+  const [live, arch, td1Rows, aas96Rows, a96Rows, b4x4Rows, b4x4PolicyShadowRows] = await Promise.all([
     pageAll<Record<string, unknown>>("predictions", "candle_ts", 10000),
     pageAll<Record<string, unknown>>("predictions_archive", "candle_ts", 40000),
     pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000, "A2_Combined_TD1_RC"),
-    pageAll<Record<string, unknown>>("model7_td1_rc_shadow", "candle_ts", 20000, "A2_Combined_TD3_ToxicDrift"),
     pageAll<Record<string, unknown>>("model7_aas96_shadow", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("a96_predictions", "target_candle_ts", 20000),
     pageAll<Record<string, unknown>>("b4x4_predictions", "target_candle_ts", 20000),
@@ -211,7 +202,6 @@ export const exportUniversalV2 = createServerFn({ method: "GET" }).handler(async
     predictions,
     candles: candles as never,
     td1Rows,
-    td3Rows,
     aas96Rows,
     a96Rows,
     b4x4Rows,
@@ -966,79 +956,6 @@ export const getTd2RcShadowStats = createServerFn({ method: "GET" }).handler(asy
   cachedStats("td2-rc-stats", () => td1RcStatsFor(TD2_VARIANT, 2)),
 );
 
-/** Basic live-forward stats for TD3 (TD1 clone + Toxic Opposing Drift Veto). */
-export const getTd3ShadowStats = createServerFn({ method: "GET" }).handler(async () => cachedStats("td3-stats", async () => {
-  const sb = await admin();
-  const rows: any[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("model7_td1_rc_shadow")
-      .select("external_final_decision, would_trade, result, candle_ts, td3_run_mode, td3_toxic_drift_veto_fired, td3_toxic_drift_veto_value")
-      .eq("variant", TD3_VARIANT)
-      .neq("td3_run_mode", "BACKFILL")
-      .order("candle_ts", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const batch = data ?? [];
-    rows.push(...batch);
-    if (batch.length < PAGE) break;
-    if (from > 100000) break;
-  }
-  const traded = rows.filter((r) => r.would_trade === true);
-  const wins = traded.filter((r) => r.result === "WIN").length;
-  const losses = traded.filter((r) => r.result === "LOSS").length;
-  const pushes = traded.filter((r) => r.result === "PUSH").length;
-  const pending = traded.filter((r) => !r.result).length;
-  const vetoes = rows.filter((r) => r.td3_toxic_drift_veto_fired === true).length;
-  const avoided_losses = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) > 0).length;
-  const sacrificed_wins = rows.filter((r) => Number(r.td3_toxic_drift_veto_value) < 0).length;
-
-  // Last 3 calendar days (reporting timezone): win rate + net wins per day.
-  const REPORT_TZ = "America/Denver";
-  const dayKey = (iso: string) =>
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: REPORT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
-    }).format(new Date(iso));
-  const buckets: Record<string, { wins: number; losses: number; date: string }> = {};
-  for (const r of traded) {
-    if (!r.candle_ts) continue;
-    if (r.result !== "WIN" && r.result !== "LOSS") continue;
-    const d = dayKey(String(r.candle_ts));
-    buckets[d] ??= { wins: 0, losses: 0, date: d };
-    if (r.result === "WIN") buckets[d].wins += 1;
-    else buckets[d].losses += 1;
-  }
-  const daily_3d = Object.values(buckets)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 3)
-    .map((d) => ({
-      date: d.date,
-      win_rate: d.wins + d.losses === 0 ? 0 : Math.round((d.wins / (d.wins + d.losses)) * 10000) / 100,
-      net: d.wins - d.losses,
-      wins: d.wins,
-      losses: d.losses,
-      trades: d.wins + d.losses,
-    }));
-
-  return {
-    total: traded.length,
-    wins,
-    losses,
-    pushes,
-    pending,
-    net: wins - losses,
-    win_rate: wins + losses === 0 ? 0 : Math.round((wins / (wins + losses)) * 10000) / 100,
-    vetoes,
-    avoided_losses,
-    sacrificed_wins,
-    daily_3d,
-  };
-}));
-
-export const getTd3ShadowPending = createServerFn({ method: "GET" }).handler(async () =>
-  cachedStats("td3-pending", () => td1RcPendingFor(TD3_VARIANT), PENDING_TTL_MS),
-);
 
 
 
@@ -1355,124 +1272,6 @@ export const exportTd1RcShadow = createServerFn({ method: "GET" }).handler(async
 export const exportTd2RcShadow = createServerFn({ method: "GET" }).handler(async () =>
   buildTd1RcExport(TD2_VARIANT),
 );
-
-/** Dedicated TD3 (TD1 clone + Toxic Opposing Drift Veto) export. */
-export const exportTd3Shadow = createServerFn({ method: "GET" }).handler(async () =>
-  buildTd1RcExport(TD3_VARIANT),
-);
-
-/**
- * Counterfactual TD3 backfill over historical TD1 rows. Uses only the
- * prediction-time feature snapshot already stored on the TD1 row; never reads
- * future candles. Inserted rows are marked td3_run_mode = BACKFILL and are
- * excluded from live-forward TD3 statistics.
- */
-export const backfillTd3 = createServerFn({ method: "POST" }).handler(async () => {
-  const sb = await admin();
-  const PAGE = 1000;
-
-  const fetchAll = async (variant: string) => {
-    const out: Record<string, unknown>[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data } = await sb
-        .from("model7_td1_rc_shadow")
-        .select("*")
-        .eq("variant", variant)
-        .order("candle_ts", { ascending: true })
-        .range(from, from + PAGE - 1);
-      const batch = (data ?? []) as Record<string, unknown>[];
-      out.push(...batch);
-      if (batch.length < PAGE) break;
-    }
-    return out;
-  };
-
-  const td1Rows = await fetchAll(TD1_VARIANT);
-  const existing = await fetchAll(TD3_VARIANT);
-  const have = new Set(existing.map((r) => String(r.prediction_id)));
-
-  const inserts: Record<string, unknown>[] = [];
-  let td1Wins = 0, td1Losses = 0, td3Wins = 0, td3Losses = 0, vetoed = 0, avoidedLosses = 0, sacrificedWins = 0;
-
-  for (const r of td1Rows) {
-    const features = (r.feature_values_json as Record<string, unknown> | null) ?? null;
-    const preVetoDecision = (r.external_final_decision as "YES" | "NO" | "SKIP" | null) ?? null;
-    const evaluation = evaluateTd3({
-      preVetoDecision,
-      preVetoWouldTrade: r.would_trade === true,
-      preVetoSkipReason: (r.skip_reason as string | null) ?? null,
-      currentDirectionalConfidence: features?.current_directional_confidence as number | undefined,
-      opposingDrift4: features?.opposing_drift_4 as number | undefined,
-      sameDirectionRunLength: features?.same_direction_run_length as number | undefined,
-    });
-    const actual = (r.actual_direction as "GREEN" | "RED" | null) ?? null;
-    const td3Final = scoreTd3Decision(evaluation.finalDecision, actual);
-    const underlying = scoreTd3Decision(preVetoDecision, actual);
-
-    if (underlying.result === "WIN") td1Wins++;
-    if (underlying.result === "LOSS") td1Losses++;
-    if (td3Final.result === "WIN") td3Wins++;
-    if (td3Final.result === "LOSS") td3Losses++;
-    if (evaluation.vetoFired) {
-      vetoed++;
-      if (underlying.result === "LOSS") avoidedLosses++;
-      if (underlying.result === "WIN") sacrificedWins++;
-    }
-
-    if (have.has(String(r.prediction_id))) continue;
-
-    const { id: _id, created_at: _c, updated_at: _u, ...clone } = r as Record<string, unknown>;
-    inserts.push({
-      ...clone,
-      variant: TD3_VARIANT,
-      prospective_test_id: TD3_POLICY_VERSION,
-      external_final_decision: evaluation.finalDecision,
-      would_trade: evaluation.wouldTrade,
-      skip_reason: evaluation.skipReason,
-      ...td3PredictionColumns({
-        evaluation,
-        runMode: "BACKFILL",
-        preVetoDecision,
-        preVetoWouldTrade: r.would_trade === true,
-        preVetoSkipReason: (r.skip_reason as string | null) ?? null,
-        sourceTd1RowId: (r.id as string | null) ?? null,
-        sourceTd1PolicyVersion: (r.td1_policy_version as string | null) ?? null,
-        sourceTd1FitId: (r.td1_fit_id as string | null) ?? null,
-        sourceTd1ArtifactSha256: (r.td1_artifact_sha256 as string | null) ?? null,
-        featureCutoffTs: (r.td1_feature_cutoff_ts as string | null) ?? null,
-        latestSourceCandleTs: (r.td1_latest_source_candle_ts as string | null) ?? null,
-        timingStatus: (r.timing_status as string | null) ?? null,
-        leakageCheckPassed: (r.leakage_check_passed as boolean | null) ?? null,
-      }),
-      result: td3Final.result,
-      td3_result: td3Final.result,
-      td3_raw_score: td3Final.score,
-      td3_underlying_td1_decision: preVetoDecision,
-      td3_underlying_td1_result: underlying.result,
-      td3_underlying_td1_score: underlying.score,
-      td3_toxic_drift_veto_value: td3VetoValue(evaluation.vetoFired, underlying.result),
-    });
-  }
-
-  for (let i = 0; i < inserts.length; i += 500) {
-    await sb.from("model7_td1_rc_shadow").insert(inserts.slice(i, i + 500) as never);
-  }
-
-  return {
-    td1_rows: td1Rows.length,
-    inserted: inserts.length,
-    already_present: existing.length,
-    replay: {
-      td1: { wins: td1Wins, losses: td1Losses, net: td1Wins - td1Losses, directional: td1Wins + td1Losses },
-      td3: { wins: td3Wins, losses: td3Losses, net: td3Wins - td3Losses, directional: td3Wins + td3Losses },
-      veto: { fired: vetoed, avoided_losses: avoidedLosses, sacrificed_wins: sacrificedWins, net_value: avoidedLosses - sacrificedWins },
-    },
-  };
-});
-
-
-
-
 
 const overrideSchema = z.object({
   id: z.string().uuid(),
