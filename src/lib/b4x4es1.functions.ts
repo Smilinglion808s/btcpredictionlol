@@ -1,7 +1,7 @@
 // B4x4-ES1 server functions: dashboard stats, pending row, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats } from "./statsCache.server";
+import { cachedStats, PENDING_TTL_MS } from "./statsCache.server";
 import { ES1_MODEL_VERSION, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
 
 type Row = Record<string, unknown>;
@@ -184,7 +184,9 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
       .limit(1)
       .maybeSingle();
     return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
-  }),
+    // Near-live TTL: the pending decision must surface within seconds of the
+    // boundary run, not on the 150s stats cadence.
+  }, Math.min(PENDING_TTL_MS, 5_000)),
 );
 
 function csvEscape(v: unknown): string {

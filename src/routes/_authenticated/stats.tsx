@@ -88,7 +88,9 @@ function StatsPage() {
   const es1Fn = useServerFn(getEs1Stats);
   const es1Q = useQuery({ queryKey: ["b4x4-es1-stats"], queryFn: () => es1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const es1PendingFn = useServerFn(getEs1Pending);
-  const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
+  // ES1 is the sole live webhook model: poll it near-live so the tile flips
+  // within a few seconds of the boundary run writing its decision.
+  const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
   const exportEs1Fn = useServerFn(exportEs1Csv);
   const [exportingEs1, setExportingEs1] = useState(false);
 
