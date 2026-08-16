@@ -388,6 +388,7 @@ export function computeBoundaryFeatures(params: {
   )
     readyReason = "TARGET_AGE_OUT_OF_RANGE";
   else if (obs.length < MIN_READY_OBSERVATIONS) readyReason = "INSUFFICIENT_OBSERVATIONS";
+  else if (!generationContinuous) readyReason = "RESYNC_DISCONTINUITY";
   else if (finalImb10 == null || !Number.isFinite(finalImb10)) readyReason = "IMBALANCE_NOT_FINITE";
 
   const ready = readyReason === "READY";
