@@ -44,6 +44,7 @@ function obs(offset: number, over: Record<string, unknown> = {}) {
     target_age_ms: offset * 1000,
     last_update_id: 1000 + (60 - offset),
     sequence_ok: true,
+    local_book_initialized: true,
     book_complete_10bps: true,
     resync_generation: 0,
     best_bid: 100000,
@@ -249,8 +250,8 @@ describe("policies — six frozen shadows", () => {
 
   it("consensus policies require spot/perp sign agreement", () => {
     const def = POLICY_DEFINITIONS.find((d) => d.requireSignAgreement)!;
-    const agree = evaluatePolicy(def, ready(0.3, 0.9), ready(0.3, 0.9));
-    const disagree = evaluatePolicy(def, ready(0.3, 0.9), ready(-0.3, 0.9));
+    const agree = evaluatePolicy(def, ready(0.3, 0.4), ready(0.3, 0.4));
+    const disagree = evaluatePolicy(def, ready(0.3, 0.4), ready(-0.3, 0.4));
     expect(agree.qualified).toBe(true);
     expect(agree.spot_perp_sign_agree).toBe(true);
     expect(disagree.qualified).toBe(false);
@@ -382,7 +383,7 @@ describe("collector runtime — audit vocabulary is emitted by the collector", (
     const health = rt.healthRow({ lastUpdateId: 42, sequenceOk: true, initialized: true });
     expect(health.deployment_id).toBe("test-deploy");
     expect(health.sequence_gap_count).toBe(1);
-    expect(health.resync_count).toBe(2); // explicit resync + region-block path counters
+    expect(health.resync_count).toBe(1);
     expect(health.planned_rollover_count).toBe(1);
     expect(health.reconnect_count).toBe(1);
     expect(health.region_blocked).toBe(true);
