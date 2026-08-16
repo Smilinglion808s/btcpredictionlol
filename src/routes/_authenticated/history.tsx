@@ -614,6 +614,36 @@ function CsvDataPage() {
           >
             <Download className="size-4" /> B4x4-ES1 CSV
           </Button>
+          {(
+            [
+              ["Binance OB Features", exportObFeatures, "Binance_OB_Features"],
+              ["Binance OB Policies", exportObPolicies, "Binance_OB_Policies"],
+              ["Binance OB Observations", exportObObservations, "Binance_OB_Observations"],
+            ] as const
+          ).map(([label, fn, base]) => (
+            <Button
+              key={base}
+              size="lg"
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                const res = await (fn as () => Promise<{ csv: string; rows: number }>)().catch(
+                  () => null,
+                );
+                if (!res || !res.csv || res.rows === 0) return;
+                const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${base}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download className="size-4" /> {label} CSV
+            </Button>
+          ))}
+
         </div>
       </div>
 
