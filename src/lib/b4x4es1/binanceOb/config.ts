@@ -8,10 +8,11 @@ import { createHash } from "crypto";
 export const BINANCE_OB_VERSION = "binance-ob-r1" as const;
 export const BINANCE_OB_COLLECTOR_VERSION = "binance-ob-collector-r1" as const;
 export const BINANCE_OB_POLICY_VERSION = "binance-ob-policy-r1" as const;
-export const BINANCE_OB_FEATURE_SCHEMA = "binance-ob-1s-60s-depth-1-2-5-10bps-r1" as const;
+export const BINANCE_OB_FEATURE_SCHEMA = "binance-ob-1s-60s-depth-1-2-5-10bps-r1-repair1" as const;
 export const BINANCE_OB_DEFAULT_MODE = "SHADOW_ONLY" as const;
 export const BINANCE_OB_PRIMARY_MARKET = "SPOT" as const;
-export const BINANCE_OB_IMPLEMENTATION_REVISION = "binance-ob-r1" as const;
+export const BINANCE_OB_IMPLEMENTATION_REVISION = "binance-ob-r1-repair1" as const;
+export const BINANCE_OB_PREVIOUS_IMPLEMENTATION_REVISION = "binance-ob-r1" as const;
 
 export const BINANCE_OB_VENUE = "BINANCE_GLOBAL" as const;
 export const BINANCE_OB_SYMBOL = "BTCUSDT" as const;
@@ -191,6 +192,7 @@ export function binanceObConfigHash(): string {
     history: HISTORY_WINDOW,
     sources: BINANCE_SOURCES,
     policies: POLICY_DEFINITIONS,
+    revision: BINANCE_OB_IMPLEMENTATION_REVISION,
   });
   return configHashCache;
 }
@@ -199,6 +201,7 @@ let schemaHashCache: string | null = null;
 export function binanceObFeatureSchemaHash(): string {
   schemaHashCache ??= sha({
     schema: BINANCE_OB_FEATURE_SCHEMA,
+    revision: BINANCE_OB_IMPLEMENTATION_REVISION,
     bands: DEPTH_BANDS_BPS,
     windows: [5, 15, 60],
     history: HISTORY_WINDOW,
