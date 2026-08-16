@@ -184,7 +184,9 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
       .limit(1)
       .maybeSingle();
     return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
-  }),
+    // Near-live TTL: the pending decision must surface within seconds of the
+    // boundary run, not on the 150s stats cadence.
+  }, Math.min(PENDING_TTL_MS, 5_000)),
 );
 
 function csvEscape(v: unknown): string {
