@@ -17,6 +17,7 @@ import {
   HEARTBEAT_STALE_MS,
   HISTORY_WINDOW,
   binanceObConfigHash,
+  binanceObFeatureSchemaHash,
   floorTarget,
   isExactBoundary,
   valuesHash,
@@ -86,6 +87,8 @@ export async function finalizeBoundaryMarket(
     feature_cutoff_ts: new Date(new Date(targetTs).getTime() - FEATURE_CUTOFF_OFFSET_MS).toISOString(),
     capture_status: captureStatus,
     feature_version: BINANCE_OB_VERSION,
+    feature_schema_hash: binanceObFeatureSchemaHash(),
+    feature_values_hash: valuesHash(fields),
     collector_version: BINANCE_OB_COLLECTOR_VERSION,
     implementation_revision: BINANCE_OB_IMPLEMENTATION_REVISION,
     config_hash: binanceObConfigHash(),
@@ -134,7 +137,9 @@ export async function finalizeBinanceObTarget(
   const spotInputs = toPolicyInputs(spot);
   const perpInputs = toPolicyInputs(perp);
   const evaluations = evaluateAllPolicies(spotInputs, perpInputs);
-  const runMode = await readActivationMode(sb);
+  // run_mode is constrained to LIVE/BACKFILL/CATCHUP; it describes how the row
+  // was generated, not the activation status (which is SHADOW_ONLY).
+  const runMode = "LIVE";
 
   const rows = evaluations.map((e) => ({
     ...e,
