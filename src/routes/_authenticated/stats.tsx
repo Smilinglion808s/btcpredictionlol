@@ -21,6 +21,8 @@ import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
+import { BinanceObCard } from "@/components/binance-ob-card";
+import { getBinanceObStats, getBinanceObHealth } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
@@ -92,6 +94,18 @@ function StatsPage() {
   // within a few seconds of the boundary run writing its decision.
   const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
   const exportEs1Fn = useServerFn(exportEs1Csv);
+  const binanceObFn = useServerFn(getBinanceObStats);
+  const binanceObHealthFn = useServerFn(getBinanceObHealth);
+  const binanceObQ = useQuery({
+    queryKey: ["binance-ob-stats"],
+    queryFn: () => binanceObFn(),
+    refetchInterval: 60_000,
+  });
+  const binanceObHealthQ = useQuery({
+    queryKey: ["binance-ob-health"],
+    queryFn: () => binanceObHealthFn(),
+    refetchInterval: 30_000,
+  });
   const [exportingEs1, setExportingEs1] = useState(false);
 
   async function downloadEs1Csv() {
@@ -338,6 +352,11 @@ function StatsPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <BinanceObCard
+          stats={(binanceObQ.data as any) ?? {}}
+          health={(binanceObHealthQ.data as any) ?? null}
+        />
+
         <B4x4Es1Card
           stats={(es1Q.data as any) ?? {}}
           pending={(es1PendingQ.data as any) ?? null}
