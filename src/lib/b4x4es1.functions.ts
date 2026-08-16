@@ -199,7 +199,14 @@ function csvEscape(v: unknown): string {
 export const exportEs1Csv = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await pageAll("*");
   if (rows.length === 0) return { csv: "", rows: 0 };
-  const base = Object.keys(rows[0]);
+  const { ES1_COMPACT_BINANCE_COLUMNS } = await import("./b4x4es1/binanceOb/exports");
+  // Compact binance_ob_* block always present, always last, in a frozen order.
+  const base = [
+    ...Object.keys(rows[0]).filter(
+      (c) => !(ES1_COMPACT_BINANCE_COLUMNS as readonly string[]).includes(c),
+    ),
+    ...ES1_COMPACT_BINANCE_COLUMNS,
+  ];
   const derived = [
     "is_published",
     "is_resolved",
