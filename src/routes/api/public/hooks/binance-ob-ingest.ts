@@ -50,9 +50,16 @@ function verify(rawBody: string, timestamp: string | null, signature: string | n
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+const methodNotAllowed = async () =>
+  new Response("Method Not Allowed", { status: 405, headers: { allow: "POST" } });
+
 export const Route = createFileRoute("/api/public/hooks/binance-ob-ingest")({
   server: {
     handlers: {
+      GET: methodNotAllowed,
+      PUT: methodNotAllowed,
+      PATCH: methodNotAllowed,
+      DELETE: methodNotAllowed,
       POST: async ({ request }) => {
         const raw = await request.text();
         if (
