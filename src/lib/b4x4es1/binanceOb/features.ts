@@ -266,7 +266,9 @@ export function computeBoundaryFeatures(params: {
   const generations = obs
     .map((o) => o.resync_generation)
     .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const generationContinuous = new Set(generations).size <= 1;
+  // Fail closed: continuity must be *known*, not merely uncontradicted.
+  const continuityKnown = generations.length > 0;
+  const generationContinuous = continuityKnown ? new Set(generations).size <= 1 : null;
 
   const finalImb10 = final?.imbalance_10bps ?? null;
   const finalAbs = finalImb10 == null ? null : Math.abs(finalImb10);
@@ -388,6 +390,7 @@ export function computeBoundaryFeatures(params: {
   )
     readyReason = "TARGET_AGE_OUT_OF_RANGE";
   else if (obs.length < MIN_READY_OBSERVATIONS) readyReason = "INSUFFICIENT_OBSERVATIONS";
+  else if (generationContinuous == null) readyReason = "RESYNC_CONTINUITY_UNKNOWN";
   else if (!generationContinuous) readyReason = "RESYNC_DISCONTINUITY";
   else if (finalImb10 == null || !Number.isFinite(finalImb10)) readyReason = "IMBALANCE_NOT_FINITE";
 
