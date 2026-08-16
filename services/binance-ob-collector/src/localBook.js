@@ -47,6 +47,10 @@ export class LocalOrderBook {
     this.lastUpdateId = snapshot.lastUpdateId;
     this.initialized = true;
     this.sequenceOk = true;
+    // Until one live event has been accepted, continuity is judged with
+    // Binance's *first event* rule, not the running pu / U+1 rule.
+    this.awaitingFirstLive = true;
+
 
     // Drain buffered diffs recorded while the snapshot was in flight.
     const buffered = this.buffer;
