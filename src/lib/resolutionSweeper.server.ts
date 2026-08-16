@@ -1,6 +1,6 @@
 // Straggler resolution sweeper.
 //
-// Downstream model rows (V6, B4x4, TD1/TD2/TD3) are normally resolved as a side
+// Downstream model rows (V6, B4x4, TD1/TD2) are normally resolved as a side
 // effect of the base prediction resolving. Any cycle where the base row never
 // resolved — or resolved as a DOJI/PUSH, which short-circuits the shadow
 // resolver — leaves permanently unresolved rows that silently drop out of the
@@ -112,7 +112,7 @@ export async function sweepUnresolvedRows(
     errors.push(`b4x4: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // ---- TD1 / TD2 / TD3 ----
+  // ---- TD1 / TD2 ----
   // Gradeable rows (A2 gave a direction) go through the normal resolver.
   // Rows where A2 itself was ineligible can never be graded; close them out
   // against the confirmed candle as PUSH so they stop re-appearing forever.
