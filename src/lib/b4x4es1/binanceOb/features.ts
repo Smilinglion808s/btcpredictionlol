@@ -13,6 +13,7 @@ import {
   OBS_END_OFFSET_S,
   type CaptureStatus,
 } from "./config";
+import { evaluateObservationTiming, featureCutoffMs } from "./timing";
 import type { BandMetrics, BookMetrics, ObservationRow, PriceLevel } from "./types";
 
 const EMPTY_BAND: BandMetrics = {
@@ -236,7 +237,11 @@ export function computeBoundaryFeatures(params: {
 }): BoundaryComputation {
   const { targetTs, observations, history } = params;
   const targetMs = new Date(targetTs).getTime();
-  const obs = [...observations].sort((a, b) => b.sample_offset_seconds - a.sample_offset_seconds);
+  const cutoffMs = featureCutoffMs(targetMs);
+  // Defence in depth: any row that fails the T-2s contract is dropped here too,
+  // even though ingest and the database both reject it first.
+  const eligible = observations.filter((o) => evaluateObservationTiming(o).eligible);
+  const obs = [...eligible].sort((a, b) => b.sample_offset_seconds - a.sample_offset_seconds);
   const final = obs.find((o) => o.sample_offset_seconds === OBS_END_OFFSET_S) ?? null;
 
   const imb60 = windowValues(obs, 60, (o) => o.imbalance_10bps);
@@ -270,6 +275,8 @@ export function computeBoundaryFeatures(params: {
     observation_count_60s: Math.min(obs.length, EXPECTED_OBSERVATIONS),
     expected_observation_count_60s: EXPECTED_OBSERVATIONS,
     history_count_96: Math.min(priorAbs.length, HISTORY_WINDOW),
+    history_valid_count: priorAbs.length,
+    excluded_observation_count: observations.length - eligible.length,
 
     final_exchange_event_ts: final?.exchange_event_ts ?? null,
     final_received_at: final?.received_at ?? null,
@@ -349,7 +356,7 @@ export function computeBoundaryFeatures(params: {
   else if (final.best_bid == null || final.best_ask == null || final.best_bid >= final.best_ask)
     readyReason = "CROSSED_OR_MISSING_TOP";
   else if (finalEventMs == null || finalEventMs >= targetMs) readyReason = "EVENT_TS_NOT_PRE_TARGET";
-  else if (finalRecvMs == null || finalRecvMs >= targetMs) readyReason = "RECEIVE_TS_NOT_PRE_TARGET";
+  else if (finalRecvMs == null || finalRecvMs > cutoffMs) readyReason = "RECEIVE_TS_AFTER_CUTOFF";
   else if (
     final.target_age_ms == null ||
     final.target_age_ms < MIN_TARGET_AGE_MS ||
