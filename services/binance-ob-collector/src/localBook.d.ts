@@ -19,17 +19,18 @@ export declare class LocalOrderBook {
 
   reset(): void;
   applySnapshot(snapshot: {
-    bids: [string, string][];
-    asks: [string, string][];
+    bids: readonly (readonly string[])[];
+    asks: readonly (readonly string[])[];
     lastUpdateId: number;
   }): boolean;
   bufferEvent(ev: unknown): void;
   applyEvent(ev: {
+    E?: number;
     U: number;
     u: number;
     pu?: number;
-    b: [string, string][];
-    a: [string, string][];
+    b: readonly (readonly string[])[];
+    a: readonly (readonly string[])[];
   }): boolean;
   levels(): { bids: [number, number][]; asks: [number, number][] };
   drainFlow(): {
