@@ -569,7 +569,6 @@ export type Database = {
           final_total_depth_usd_10bps: number | null
           final_update_id: number | null
           finalized_at: string
-          history_count_96: number
           history_ready: boolean
           history_ready_reason: string | null
           history_valid_count: number | null
@@ -652,7 +651,6 @@ export type Database = {
           final_total_depth_usd_10bps?: number | null
           final_update_id?: number | null
           finalized_at?: string
-          history_count_96?: number
           history_ready?: boolean
           history_ready_reason?: string | null
           history_valid_count?: number | null
@@ -735,7 +733,6 @@ export type Database = {
           final_total_depth_usd_10bps?: number | null
           final_update_id?: number | null
           finalized_at?: string
-          history_count_96?: number
           history_ready?: boolean
           history_ready_reason?: string | null
           history_valid_count?: number | null
@@ -789,17 +786,25 @@ export type Database = {
           config_hash: string
           connection_started_at: string | null
           consecutive_error_count: number
+          deployment_id: string | null
+          heartbeat_interval_ms: number
           last_error_code: string | null
           last_error_message: string | null
+          last_event: string | null
+          last_event_at: string | null
           last_exchange_event_ts: string | null
           last_heartbeat_at: string
           last_received_at: string | null
           last_update_id: number | null
           local_book_initialized: boolean
           market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          planned_rollover_count: number
           reconnect_count: number
+          region_blocked: boolean
           resync_count: number
+          sequence_gap_count: number
           sequence_ok: boolean
+          snapshot_sync_count: number
           symbol: string
           updated_at: string
           venue: string
@@ -811,17 +816,25 @@ export type Database = {
           config_hash: string
           connection_started_at?: string | null
           consecutive_error_count?: number
+          deployment_id?: string | null
+          heartbeat_interval_ms?: number
           last_error_code?: string | null
           last_error_message?: string | null
+          last_event?: string | null
+          last_event_at?: string | null
           last_exchange_event_ts?: string | null
           last_heartbeat_at: string
           last_received_at?: string | null
           last_update_id?: number | null
           local_book_initialized?: boolean
           market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          planned_rollover_count?: number
           reconnect_count?: number
+          region_blocked?: boolean
           resync_count?: number
+          sequence_gap_count?: number
           sequence_ok?: boolean
+          snapshot_sync_count?: number
           symbol?: string
           updated_at?: string
           venue?: string
@@ -833,17 +846,25 @@ export type Database = {
           config_hash?: string
           connection_started_at?: string | null
           consecutive_error_count?: number
+          deployment_id?: string | null
+          heartbeat_interval_ms?: number
           last_error_code?: string | null
           last_error_message?: string | null
+          last_event?: string | null
+          last_event_at?: string | null
           last_exchange_event_ts?: string | null
           last_heartbeat_at?: string
           last_received_at?: string | null
           last_update_id?: number | null
           local_book_initialized?: boolean
           market_kind?: Database["public"]["Enums"]["binance_ob_market_kind"]
+          planned_rollover_count?: number
           reconnect_count?: number
+          region_blocked?: boolean
           resync_count?: number
+          sequence_gap_count?: number
           sequence_ok?: boolean
+          snapshot_sync_count?: number
           symbol?: string
           updated_at?: string
           venue?: string
@@ -1306,17 +1327,27 @@ export type Database = {
           b4_same_side_rank: number | null
           b4_training_end_index: number | null
           b4_training_start_index: number | null
+          binance_ob_abs_percentile_96: number | null
+          binance_ob_capture_status: string | null
           binance_ob_config_hash: string | null
           binance_ob_feature_schema_hash: string | null
+          binance_ob_final_imbalance_10bps: number | null
+          binance_ob_history_ready: boolean | null
+          binance_ob_history_valid_count: number | null
+          binance_ob_influenced_decision: boolean
           binance_ob_mode: Database["public"]["Enums"]["binance_ob_mode"] | null
           binance_ob_perp_feature_id: string | null
           binance_ob_perp_ready: boolean | null
+          binance_ob_ready: boolean | null
+          binance_ob_ready_reason: string | null
+          binance_ob_run_mode: string | null
           binance_ob_selected_shadow_policy:
             | Database["public"]["Enums"]["binance_ob_policy_name"]
             | null
           binance_ob_shadow_direction: string | null
           binance_ob_shadow_reason: string | null
           binance_ob_shadow_would_trade: boolean | null
+          binance_ob_sign_persistence_15s: number | null
           binance_ob_spot_feature_id: string | null
           binance_ob_spot_ready: boolean | null
           binance_ob_version: string | null
@@ -1454,19 +1485,29 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          binance_ob_abs_percentile_96?: number | null
+          binance_ob_capture_status?: string | null
           binance_ob_config_hash?: string | null
           binance_ob_feature_schema_hash?: string | null
+          binance_ob_final_imbalance_10bps?: number | null
+          binance_ob_history_ready?: boolean | null
+          binance_ob_history_valid_count?: number | null
+          binance_ob_influenced_decision?: boolean
           binance_ob_mode?:
             | Database["public"]["Enums"]["binance_ob_mode"]
             | null
           binance_ob_perp_feature_id?: string | null
           binance_ob_perp_ready?: boolean | null
+          binance_ob_ready?: boolean | null
+          binance_ob_ready_reason?: string | null
+          binance_ob_run_mode?: string | null
           binance_ob_selected_shadow_policy?:
             | Database["public"]["Enums"]["binance_ob_policy_name"]
             | null
           binance_ob_shadow_direction?: string | null
           binance_ob_shadow_reason?: string | null
           binance_ob_shadow_would_trade?: boolean | null
+          binance_ob_sign_persistence_15s?: number | null
           binance_ob_spot_feature_id?: string | null
           binance_ob_spot_ready?: boolean | null
           binance_ob_version?: string | null
@@ -1604,19 +1645,29 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          binance_ob_abs_percentile_96?: number | null
+          binance_ob_capture_status?: string | null
           binance_ob_config_hash?: string | null
           binance_ob_feature_schema_hash?: string | null
+          binance_ob_final_imbalance_10bps?: number | null
+          binance_ob_history_ready?: boolean | null
+          binance_ob_history_valid_count?: number | null
+          binance_ob_influenced_decision?: boolean
           binance_ob_mode?:
             | Database["public"]["Enums"]["binance_ob_mode"]
             | null
           binance_ob_perp_feature_id?: string | null
           binance_ob_perp_ready?: boolean | null
+          binance_ob_ready?: boolean | null
+          binance_ob_ready_reason?: string | null
+          binance_ob_run_mode?: string | null
           binance_ob_selected_shadow_policy?:
             | Database["public"]["Enums"]["binance_ob_policy_name"]
             | null
           binance_ob_shadow_direction?: string | null
           binance_ob_shadow_reason?: string | null
           binance_ob_shadow_would_trade?: boolean | null
+          binance_ob_sign_persistence_15s?: number | null
           binance_ob_spot_feature_id?: string | null
           binance_ob_spot_ready?: boolean | null
           binance_ob_version?: string | null
