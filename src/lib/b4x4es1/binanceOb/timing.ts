@@ -14,6 +14,15 @@ import { OBS_END_OFFSET_S, OBS_START_OFFSET_S, TF_MS } from "./config";
 
 export const CUTOFF_OFFSET_MS = OBS_END_OFFSET_S * 1000;
 export const WINDOW_START_OFFSET_MS = OBS_START_OFFSET_S * 1000;
+/**
+ * The collector fires each sample a few milliseconds early so that sample_ts
+ * and received_at stay at or before the T-2s cutoff. That lead placed the
+ * T-60s sample marginally before the window start and silently dropped it,
+ * which is why every boundary held 58 rows instead of 59. Data earlier than
+ * the window start can never be leakage, so a bounded lead is accepted here.
+ * The T-2s cutoff itself is unchanged and remains strict.
+ */
+export const WINDOW_START_LEAD_TOLERANCE_MS = 250;
 
 export type TimingReason =
   | "OK"
