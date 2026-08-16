@@ -25,6 +25,8 @@ import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/ap
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
+import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
+import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
 import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
@@ -117,6 +119,18 @@ const ApiPublicHooksDailyArchiveRoute =
     path: '/api/public/hooks/daily-archive',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksBinanceObIngestRoute =
+  ApiPublicHooksBinanceObIngestRouteImport.update({
+    id: '/api/public/hooks/binance-ob-ingest',
+    path: '/api/public/hooks/binance-ob-ingest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksBinanceObFinalizeRoute =
+  ApiPublicHooksBinanceObFinalizeRouteImport.update({
+    id: '/api/public/hooks/binance-ob-finalize',
+    path: '/api/public/hooks/binance-ob-finalize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksB4x4ObShadowCaptureRoute =
   ApiPublicHooksB4x4ObShadowCaptureRouteImport.update({
     id: '/api/public/hooks/b4x4-ob-shadow-capture',
@@ -145,6 +159,8 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
+  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
+  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -165,6 +181,8 @@ export interface FileRoutesByTo {
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
+  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
+  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -187,6 +205,8 @@ export interface FileRoutesById {
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
+  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
+  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -209,6 +229,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
+    | '/api/public/hooks/binance-ob-finalize'
+    | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -229,6 +251,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
+    | '/api/public/hooks/binance-ob-finalize'
+    | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -250,6 +274,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
+    | '/api/public/hooks/binance-ob-finalize'
+    | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -267,6 +293,8 @@ export interface RootRouteChildren {
   ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
   ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
+  ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
+  ApiPublicHooksBinanceObIngestRoute: typeof ApiPublicHooksBinanceObIngestRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -393,6 +421,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/binance-ob-ingest': {
+      id: '/api/public/hooks/binance-ob-ingest'
+      path: '/api/public/hooks/binance-ob-ingest'
+      fullPath: '/api/public/hooks/binance-ob-ingest'
+      preLoaderRoute: typeof ApiPublicHooksBinanceObIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/binance-ob-finalize': {
+      id: '/api/public/hooks/binance-ob-finalize'
+      path: '/api/public/hooks/binance-ob-finalize'
+      fullPath: '/api/public/hooks/binance-ob-finalize'
+      preLoaderRoute: typeof ApiPublicHooksBinanceObFinalizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/b4x4-ob-shadow-capture': {
       id: '/api/public/hooks/b4x4-ob-shadow-capture'
       path: '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -442,6 +484,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
   ApiPublicHooksB4x4ObShadowCaptureRoute:
     ApiPublicHooksB4x4ObShadowCaptureRoute,
+  ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
+  ApiPublicHooksBinanceObIngestRoute: ApiPublicHooksBinanceObIngestRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
