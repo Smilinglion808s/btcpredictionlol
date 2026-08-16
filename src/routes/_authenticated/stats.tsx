@@ -100,11 +100,6 @@ function StatsPage() {
     queryFn: () => binanceObFn(),
     refetchInterval: 60_000,
   });
-  const binanceObHealthQ = useQuery({
-    queryKey: ["binance-ob-health"],
-    queryFn: () => binanceObHealthFn(),
-    refetchInterval: 30_000,
-  });
   const [exportingEs1, setExportingEs1] = useState(false);
 
   async function downloadEs1Csv() {
@@ -351,10 +346,7 @@ function StatsPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <BinanceObCard
-          stats={(binanceObQ.data as any) ?? {}}
-          health={(binanceObHealthQ.data as any) ?? null}
-        />
+        <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
 
         <B4x4Es1Card
           stats={(es1Q.data as any) ?? {}}
