@@ -459,3 +459,68 @@ describe("combined CSV export", () => {
     expect(csv.trim().split("\n")).toHaveLength(1);
   });
 });
+
+describe("integrity audit repairs", () => {
+  it("accepts the T-60s sample despite the collector's small sampling lead", () => {
+    const early = obs(60, {
+      sample_ts: new Date(TARGET_MS - 60_150).toISOString(),
+      received_at: new Date(TARGET_MS - 60_150).toISOString(),
+      exchange_event_ts: new Date(TARGET_MS - 60_200).toISOString(),
+    });
+    expect(evaluateObservationTiming(early).eligible).toBe(true);
+    const tooEarly = obs(60, {
+      sample_ts: new Date(TARGET_MS - 61_000).toISOString(),
+      received_at: new Date(TARGET_MS - 61_000).toISOString(),
+    });
+    expect(evaluateObservationTiming(tooEarly).reason).toBe("SAMPLE_BEFORE_WINDOW_START");
+  });
+
+  it("marks a boundary non-ready when the window spans two resync generations", () => {
+    const stream = fullStream().map((o, i) =>
+      i < 5 ? ({ ...o, resync_generation: 6 } as ObservationRow) : o,
+    );
+    const c = computeBoundaryFeatures({
+      targetTs: TARGET,
+      observations: stream,
+      history: history(),
+      captureStatus: "FRESH",
+    });
+    expect(c.fields.resync_continuous).toBe(false);
+    expect(c.ready).toBe(false);
+    expect(c.readyReason).toBe("RESYNC_DISCONTINUITY");
+  });
+
+  it("keeps a single-generation window ready and reports the generation range", () => {
+    const c = computeBoundaryFeatures({
+      targetTs: TARGET,
+      observations: fullStream(),
+      history: history(),
+      captureStatus: "FRESH",
+    });
+    expect(c.fields.resync_continuous).toBe(true);
+    expect(c.fields.resync_generation_min).toBe(c.fields.resync_generation_max);
+    expect(c.ready).toBe(true);
+  });
+
+  it("does not treat the first live event after a snapshot as a sequence gap", async () => {
+    const { LocalOrderBook } = await import(
+      "../../../../../services/binance-ob-collector/src/localBook.js"
+    );
+    for (const kind of ["SPOT", "USD_M_PERP"] as const) {
+      const book = new LocalOrderBook(kind);
+      // Empty buffer: the snapshot is the only seed, as happens after a resync.
+      expect(book.applySnapshot({ lastUpdateId: 500, bids: [["1", "1"]], asks: [["2", "1"]] })).toBe(
+        true,
+      );
+      const first = { E: 1, U: 498, u: 505, pu: 480, b: [["1", "2"]], a: [] };
+      expect(book.applyEvent(first)).toBe(true);
+      expect(book.sequenceOk).toBe(true);
+      // Once live, the running continuity rule is enforced again.
+      const broken =
+        kind === "SPOT"
+          ? { E: 2, U: 900, u: 910, b: [], a: [] }
+          : { E: 2, U: 506, u: 510, pu: 900, b: [], a: [] };
+      expect(book.applyEvent(broken)).toBe(false);
+    }
+  });
+});
