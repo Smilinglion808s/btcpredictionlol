@@ -109,6 +109,19 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             out.final_prediction = row.final_prediction;
             out.would_trade = row.would_trade;
             out.webhook_sent = await maybeSendEs1Webhook(supabase, row);
+
+            // Shadow-only Binance order-book linkage. Runs strictly AFTER the
+            // webhook so it can never delay or alter an ES1 decision.
+            try {
+              const { linkBinanceObToPrediction } = await import(
+                "@/lib/b4x4es1/binanceOb/orchestrator.server"
+              );
+              await linkBinanceObToPrediction(supabase, row.id as string, targetTs);
+              out.binance_ob_linked = true;
+            } catch {
+              out.binance_ob_linked = false;
+            }
+
           } else {
             out.error = "source candle unavailable";
           }
