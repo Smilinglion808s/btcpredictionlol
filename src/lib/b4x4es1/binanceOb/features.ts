@@ -260,6 +260,14 @@ export function computeBoundaryFeatures(params: {
     return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
   };
 
+  // Continuity: every observation feeding the 60s window must come from one
+  // uninterrupted local-book generation. A mid-window resync means the depth
+  // series is stitched across two different books and is not comparable.
+  const generations = obs
+    .map((o) => o.resync_generation)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const generationContinuous = new Set(generations).size <= 1;
+
   const finalImb10 = final?.imbalance_10bps ?? null;
   const finalAbs = finalImb10 == null ? null : Math.abs(finalImb10);
 
