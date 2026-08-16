@@ -260,6 +260,14 @@ export function computeBoundaryFeatures(params: {
     return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
   };
 
+  // Continuity: every observation feeding the 60s window must come from one
+  // uninterrupted local-book generation. A mid-window resync means the depth
+  // series is stitched across two different books and is not comparable.
+  const generations = obs
+    .map((o) => o.resync_generation)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const generationContinuous = new Set(generations).size <= 1;
+
   const finalImb10 = final?.imbalance_10bps ?? null;
   const finalAbs = finalImb10 == null ? null : Math.abs(finalImb10);
 
@@ -284,6 +292,9 @@ export function computeBoundaryFeatures(params: {
     sequence_ok: final?.sequence_ok ?? false,
     book_complete_10bps: final?.book_complete_10bps ?? false,
     resync_generation: final?.resync_generation ?? 0,
+    resync_generation_min: generations.length ? Math.min(...generations) : null,
+    resync_generation_max: generations.length ? Math.max(...generations) : null,
+    resync_continuous: generationContinuous,
     // NOT NULL in the features table; carry the collector's stream identity
     // from the final (or any available) observation for this boundary.
     source_ws_url_id: final?.source_ws_url_id ?? obs[0]?.source_ws_url_id ?? "unknown",
@@ -293,9 +304,20 @@ export function computeBoundaryFeatures(params: {
     final_mid_price: final?.mid_price ?? null,
     final_spread_bps: final?.spread_bps ?? null,
     final_microprice_displacement_bps: final?.microprice_displacement_bps ?? null,
+    final_bid_depth_btc_1bps: final?.bid_depth_btc_1bps ?? null,
+    final_ask_depth_btc_1bps: final?.ask_depth_btc_1bps ?? null,
+    final_total_depth_btc_1bps: final?.total_depth_btc_1bps ?? null,
+    final_bid_depth_btc_2bps: final?.bid_depth_btc_2bps ?? null,
+    final_ask_depth_btc_2bps: final?.ask_depth_btc_2bps ?? null,
+    final_total_depth_btc_2bps: final?.total_depth_btc_2bps ?? null,
+    final_bid_depth_btc_5bps: final?.bid_depth_btc_5bps ?? null,
+    final_ask_depth_btc_5bps: final?.ask_depth_btc_5bps ?? null,
+    final_total_depth_btc_5bps: final?.total_depth_btc_5bps ?? null,
     final_bid_depth_btc_10bps: final?.bid_depth_btc_10bps ?? null,
     final_ask_depth_btc_10bps: final?.ask_depth_btc_10bps ?? null,
     final_total_depth_btc_10bps: final?.total_depth_btc_10bps ?? null,
+    final_bid_depth_usd_10bps: final?.bid_depth_usd_10bps ?? null,
+    final_ask_depth_usd_10bps: final?.ask_depth_usd_10bps ?? null,
     final_total_depth_usd_10bps: final?.total_depth_usd_10bps ?? null,
     final_imbalance_1bps: final?.imbalance_1bps ?? null,
     final_imbalance_2bps: final?.imbalance_2bps ?? null,
@@ -366,6 +388,7 @@ export function computeBoundaryFeatures(params: {
   )
     readyReason = "TARGET_AGE_OUT_OF_RANGE";
   else if (obs.length < MIN_READY_OBSERVATIONS) readyReason = "INSUFFICIENT_OBSERVATIONS";
+  else if (!generationContinuous) readyReason = "RESYNC_DISCONTINUITY";
   else if (finalImb10 == null || !Number.isFinite(finalImb10)) readyReason = "IMBALANCE_NOT_FINITE";
 
   const ready = readyReason === "READY";
