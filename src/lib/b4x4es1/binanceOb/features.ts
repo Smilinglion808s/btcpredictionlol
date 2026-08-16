@@ -276,7 +276,6 @@ export function computeBoundaryFeatures(params: {
     expected_observation_count_60s: EXPECTED_OBSERVATIONS,
     history_count_96: Math.min(priorAbs.length, HISTORY_WINDOW),
     history_valid_count: priorAbs.length,
-    excluded_observation_count: observations.length - eligible.length,
 
     final_exchange_event_ts: final?.exchange_event_ts ?? null,
     final_received_at: final?.received_at ?? null,
