@@ -8,8 +8,6 @@ import {
   listPredictions,
   listModelVersions,
   getTd1RcShadowStats,
-  getTd3ShadowStats,
-  getTd3ShadowPending,
   getTd1RcShadowPending,
   exportTd1RcShadow,
   getTd1RcTrainingProgress,
@@ -61,10 +59,6 @@ function StatsPage() {
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const td3Fn = useServerFn(getTd3ShadowStats);
-  const td3Q = useQuery({ queryKey: ["td3-shadow-stats"], queryFn: () => td3Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const td3PendingFn = useServerFn(getTd3ShadowPending);
-  const td3PendingQ = useQuery({ queryKey: ["td3-shadow-pending"], queryFn: () => td3PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
 
   const td1PendingFn = useServerFn(getTd1RcShadowPending);
   const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
@@ -239,8 +233,6 @@ function StatsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
-        qc.invalidateQueries({ queryKey: ["td3-shadow-stats"] });
-        qc.invalidateQueries({ queryKey: ["td3-shadow-pending"] });
       })
 
       .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
@@ -369,8 +361,6 @@ function StatsPage() {
           resetting={resettingTd1}
           dailyCount={7}
         />
-
-        <TD3Card stats={(td3Q.data as any) ?? {}} pending={(td3PendingQ.data as any) ?? null} />
 
         <V6Card
           stats={v6Stats}
@@ -568,7 +558,7 @@ function Daily3d({ days, accent = "bear", count = 3 }: { days: Array<Record<stri
   const chipMap = {
     cyan: "td1-chip",
     bear: "td1-chip",
-    emerald: "td3-chip",
+    emerald: "td1-chip",
   };
   const line = lineMap[accent];
   const chip = chipMap[accent];
@@ -622,148 +612,6 @@ function TD1Section({ title, children }: { title: string; children: React.ReactN
       </div>
       <div className="grid grid-cols-2 gap-2">{children}</div>
     </div>
-  );
-}
-
-function TD3Stat({ label, value, tone }: { label: string; value: string | number; tone?: "bull" | "bear" }) {
-  const toneClass = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-foreground";
-  return (
-    <div className="td3-chip px-3 py-2">
-      <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className={`font-mono text-sm font-semibold mt-0.5 tabular-nums ${toneClass}`}>{value}</div>
-    </div>
-  );
-}
-
-function TD3Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-5">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{title}</span>
-        <span className="h-px flex-1 bg-gradient-to-r from-emerald/40 to-transparent" />
-      </div>
-      <div className="grid grid-cols-2 gap-2">{children}</div>
-    </div>
-  );
-}
-
-/** TD3 tile — TD1 clone + Toxic Opposing Drift Veto, green hero card. */
-function TD3Card({ stats, pending }: { stats: Record<string, any>; pending: Record<string, any> | null }) {
-  const winRate = Number(stats.win_rate ?? 0);
-  const wins = Number(stats.wins ?? 0);
-  const losses = Number(stats.losses ?? 0);
-  const pushes = Number(stats.pushes ?? 0);
-  const pendingCount = Number(stats.pending ?? 0);
-  const net = wins - losses;
-  const breakeven = 50;
-  const aboveBreakeven = winRate >= breakeven;
-
-  const upper = String(pending?.external_final_decision ?? "—").toUpperCase();
-  const predTone =
-    upper === "YES" || upper === "GREEN"
-      ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
-      : upper === "NO" || upper === "RED"
-        ? "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]"
-        : "border-emerald/40 text-emerald bg-emerald/10";
-
-  const gaugeR = 34;
-  const circumference = 2 * Math.PI * gaugeR;
-  const pct = Math.max(0, Math.min(100, winRate));
-  const skipReason = pending?.skip_reason ?? null;
-
-  return (
-    <Card className="td3-shell rounded-2xl p-6">
-      <span className="td3-orbit-ring" aria-hidden />
-      <span className="v6-sheen" aria-hidden />
-
-      <div className="relative flex items-start justify-between gap-3 mb-6">
-        <div className="min-w-0">
-          <div className="text-[9px] uppercase tracking-[0.28em] text-emerald/80 mb-1">Shadow layer</div>
-          <h3 className="td3-title text-4xl font-bold font-heading tracking-tight leading-none">TD3</h3>
-          <div className="text-[10px] text-muted-foreground mt-1">Toxic Opposing Drift Veto</div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald/40 bg-emerald/10 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald">
-            <span className="size-1.5 rounded-full bg-emerald td3-live-dot" />
-            Live
-          </div>
-        </div>
-      </div>
-
-      <div className="relative flex items-center gap-5 mb-5">
-        <div className="relative size-[86px] shrink-0">
-          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
-            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
-            <circle
-              cx="40" cy="40" r={gaugeR}
-              fill="none"
-              stroke={aboveBreakeven ? "var(--bull)" : "var(--emerald)"}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - pct / 100)}
-              className="transition-all duration-700"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-mono text-lg font-bold tabular-nums leading-none">{winRate}%</span>
-            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">win rate</span>
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · shadow</div>
-          <div className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${net > 0 ? "text-bull" : net < 0 ? "text-bear" : "text-foreground"}`}>
-            {net > 0 ? "+" : ""}{net}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
-            break-even {breakeven.toFixed(2)}%
-            <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
-              {aboveBreakeven ? "▲ above" : "▼ below"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative grid grid-cols-4 gap-2">
-        <TD3Stat label="Wins" value={wins} tone="bull" />
-        <TD3Stat label="Losses" value={losses} tone="bear" />
-        <TD3Stat label="Pushes" value={pushes} />
-        <TD3Stat label="Pending" value={pendingCount} />
-      </div>
-
-      <div className="relative">
-        <Daily3d days={(stats.daily_3d ?? []) as Array<Record<string, any>>} accent="emerald" />
-      </div>
-
-      <div className="relative">
-        <TD3Section title="Veto attribution">
-          <TD3Stat label="Vetoes" value={Number(stats.vetoes ?? 0)} />
-          <TD3Stat label="Avoided losses" value={Number(stats.avoided_losses ?? 0)} tone="bull" />
-          <TD3Stat label="Sacrificed wins" value={Number(stats.sacrificed_wins ?? 0)} tone="bear" />
-          <TD3Stat label="Veto value" value={`${net > 0 ? "+" : ""}${net}`} tone={net >= 0 ? "bull" : "bear"} />
-        </TD3Section>
-      </div>
-
-      <div className="relative mt-6 pt-4 border-t border-emerald/20">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Current prediction</div>
-            {pending?.candle_ts && (
-              <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
-                {new Date(pending.candle_ts).toLocaleString()}
-              </div>
-            )}
-          </div>
-          <span className={`px-4 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-[0.16em] font-mono ${predTone}`}>
-            {upper}
-          </span>
-        </div>
-        {skipReason && (
-          <div className="text-[10px] text-muted-foreground mt-2 text-right font-mono break-words">{skipReason}</div>
-        )}
-      </div>
-    </Card>
   );
 }
 
