@@ -11,6 +11,7 @@ import WebSocket from "ws";
 import { createHmac } from "node:crypto";
 import { LocalOrderBook } from "./localBook.js";
 import { computeBookMetrics } from "./metrics.js";
+import { CollectorRuntime, HEARTBEAT_INTERVAL_MS as RUNTIME_HEARTBEAT_MS } from "./runtimeEvents.js";
 
 const INGEST_URL = requireEnv("BINANCE_OB_INGEST_URL");
 const INGEST_SECRET = requireEnv("BINANCE_OB_INGEST_SECRET");
@@ -26,7 +27,13 @@ const SYMBOL = "BTCUSDT";
 const TF_MS = 15 * 60 * 1000;
 const OBS_START_OFFSET_S = 60;
 const OBS_END_OFFSET_S = 2;
-const HEARTBEAT_INTERVAL_MS = 5000;
+const HEARTBEAT_INTERVAL_MS = RUNTIME_HEARTBEAT_MS;
+/** Sample slightly early so sample_ts and received_at are <= T-2s exactly. */
+const SAMPLE_LEAD_MS = 150;
+/** Spot listen keys/connections are rolled before 24h; never at a boundary. */
+const CONNECTION_ROLLOVER_MS = (23 * 60 + 50) * 60 * 1000;
+const DEPLOYMENT_ID =
+  process.env.BINANCE_OB_DEPLOYMENT_ID ?? `${process.env.HOSTNAME ?? "host"}-${process.pid}`;
 const SNAPSHOT_REFRESH_MS = 30 * 60 * 1000;
 
 const SOURCES = {
@@ -65,6 +72,15 @@ class MarketCollector {
     this.book = new LocalOrderBook(source.marketKind);
     this.ws = null;
     this.useAlternate = false;
+    this.runtime = new CollectorRuntime({
+      marketKind: source.marketKind,
+      deploymentId: DEPLOYMENT_ID,
+      collectorVersion: COLLECTOR_VERSION,
+      buildIdentifier: BUILD_IDENTIFIER,
+      sink: (event, payload) => queueEvent(event, payload),
+    });
+    this.plannedRollover = false;
+    this.rolloverTimer = null;
     this.status = "STARTING";
     this.lastEventTs = null;
     this.lastReceivedAt = null;
@@ -84,7 +100,18 @@ class MarketCollector {
       ? this.source.wsAlternateUrl
       : this.source.wsUrl;
     log(`[${this.source.marketKind}] connecting ${url}`);
+    this.runtime.connecting(url, { planned: this.plannedRollover });
     this.connectionStartedAt = new Date().toISOString();
+    if (this.rolloverTimer) clearTimeout(this.rolloverTimer);
+    this.rolloverTimer = setTimeout(() => {
+      this.plannedRollover = true;
+      this.runtime.plannedRollover(CONNECTION_ROLLOVER_MS);
+      try {
+        this.ws?.close();
+      } catch {
+        /* already closing */
+      }
+    }, CONNECTION_ROLLOVER_MS);
     const ws = new WebSocket(url);
     this.ws = ws;
 
@@ -108,16 +135,23 @@ class MarketCollector {
       const ok = this.book.applyEvent(ev);
       if (!ok) {
         this.status = "SEQUENCE_GAP";
+        this.runtime.sequenceGap({ last_update_id: this.book.lastUpdateId });
+        this.runtime.resyncing("SEQUENCE_GAP");
         this.resyncCount += 1;
         this.book.reset();
         void this.loadSnapshot();
         return;
       }
-      if (this.book.initialized && this.book.sequenceOk) this.status = "HEALTHY";
+      if (this.book.initialized && this.book.sequenceOk) {
+        if (this.status !== "HEALTHY") this.runtime.ready();
+        this.status = "HEALTHY";
+      }
     });
 
     ws.on("close", () => {
       this.status = "RECONNECTING";
+      if (this.plannedRollover) this.plannedRollover = false;
+      else this.runtime.unplannedDisconnect(this.lastErrorMessage ?? "WS_CLOSE");
       this.reconnectCount += 1;
       this.useAlternate = !this.useAlternate;
       setTimeout(() => this.connect(), Math.min(30_000, 1000 * (this.consecutiveErrors + 1)));
@@ -130,6 +164,7 @@ class MarketCollector {
       if (/451|403/.test(this.lastErrorMessage)) {
         this.regionBlocked = true;
         this.status = "REGION_BLOCKED";
+        this.runtime.regionBlock(this.lastErrorCode, this.lastErrorMessage);
       }
       log(`[${this.source.marketKind}] ws error`, this.lastErrorMessage);
       try {
@@ -148,6 +183,7 @@ class MarketCollector {
         this.status = "REGION_BLOCKED";
         this.lastErrorCode = String(res.status);
         this.lastErrorMessage = "Binance Global unreachable from this host";
+        this.runtime.regionBlock(res.status, this.lastErrorMessage);
         return;
       }
       if (!res.ok) throw new Error(`snapshot ${res.status}`);
@@ -155,11 +191,17 @@ class MarketCollector {
       const ok = this.book.applySnapshot(snap);
       this.lastSnapshotAt = Date.now();
       this.status = ok ? "HEALTHY" : "RESYNCING";
+      if (ok) {
+        this.runtime.snapshotSynchronized(this.book.lastUpdateId);
+        this.runtime.ready();
+      }
       if (!ok) {
+        this.runtime.resyncing("SNAPSHOT_APPLY_FAILED");
         this.resyncCount += 1;
         setTimeout(() => this.loadSnapshot(), 1000);
       }
     } catch (err) {
+      this.runtime.resyncing(`SNAPSHOT_ERROR:${String(err).slice(0, 120)}`);
       this.consecutiveErrors += 1;
       this.lastErrorCode = "SNAPSHOT_ERROR";
       this.lastErrorMessage = String(err).slice(0, 400);
@@ -268,28 +310,35 @@ class MarketCollector {
   }
 
   healthRow() {
-    return {
-      market_kind: this.source.marketKind,
+    return this.runtime.healthRow(this.book, {
       venue: VENUE,
       symbol: SYMBOL,
-      collector_status: this.status,
-      connection_started_at: this.connectionStartedAt,
-      last_heartbeat_at: new Date().toISOString(),
       last_exchange_event_ts: this.lastEventTs,
       last_received_at: this.lastReceivedAt,
-      last_update_id: this.book.lastUpdateId,
-      sequence_ok: this.book.sequenceOk,
-      local_book_initialized: this.book.initialized,
-      resync_count: this.resyncCount,
-      reconnect_count: this.reconnectCount,
-      consecutive_error_count: this.consecutiveErrors,
-      last_error_code: this.lastErrorCode,
-      last_error_message: this.lastErrorMessage,
-      collector_version: COLLECTOR_VERSION,
-      build_identifier: BUILD_IDENTIFIER,
       config_hash: CONFIG_HASH,
-    };
+    });
   }
+}
+
+let pendingEvents = [];
+function queueEvent(event, payload) {
+  pendingEvents.push({ event, payload });
+  if (pendingEvents.length >= 20) void flushEvents();
+}
+
+async function flushEvents() {
+  if (pendingEvents.length === 0) return;
+  const events = pendingEvents;
+  pendingEvents = [];
+  const ok = await post({
+    collector_version: COLLECTOR_VERSION,
+    build_identifier: BUILD_IDENTIFIER,
+    observations: [],
+    health: null,
+    events,
+  }).catch(() => false);
+  // Never drop audit history silently on a transient ingest failure.
+  if (!ok) pendingEvents = events.concat(pendingEvents).slice(-200);
 }
 
 async function post(body) {
@@ -314,7 +363,10 @@ async function post(body) {
 
 async function main() {
   const collectors = Object.values(SOURCES).map((s) => new MarketCollector(s));
-  for (const c of collectors) c.connect();
+  for (const c of collectors) {
+    c.runtime.startup();
+    c.connect();
+  }
 
   // Periodic snapshot refresh keeps long-lived books from drifting.
   setInterval(() => {
@@ -326,12 +378,18 @@ async function main() {
   // Heartbeat.
   setInterval(() => {
     for (const c of collectors) {
+      const events = pendingEvents.filter((e) => e.payload?.market_kind === c.source.marketKind);
+      pendingEvents = pendingEvents.filter((e) => !events.includes(e));
       void post({
         collector_version: COLLECTOR_VERSION,
         build_identifier: BUILD_IDENTIFIER,
         observations: [],
         health: c.healthRow(),
-      }).catch(() => {});
+        events,
+      }).catch((e) => {
+        pendingEvents = events.concat(pendingEvents).slice(-200);
+        c.runtime.ingestFailure(e);
+      });
     }
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -339,7 +397,9 @@ async function main() {
   let buffered = [];
   const tick = () => {
     const now = Date.now();
-    const nextBoundary = Math.ceil(now / TF_MS) * TF_MS;
+    const nextBoundary = Math.ceil((now + SAMPLE_LEAD_MS) / TF_MS) * TF_MS;
+    // Firing SAMPLE_LEAD_MS early keeps sample_ts and received_at strictly at or
+    // before T-2s; timestamps are reported as observed and never clamped.
     const offset = Math.round((nextBoundary - now) / 1000);
     if (offset <= OBS_START_OFFSET_S && offset >= OBS_END_OFFSET_S) {
       for (const c of collectors) buffered.push(c.sample(nextBoundary, offset));
@@ -347,13 +407,26 @@ async function main() {
     // Flush right after the final sample so the app has the row before T.
     if (offset === OBS_END_OFFSET_S && buffered.length > 0) {
       const batch = buffered;
+      const targetTs = batch[0]?.target_ts ?? null;
       buffered = [];
       void post({
         collector_version: COLLECTOR_VERSION,
         build_identifier: BUILD_IDENTIFIER,
         observations: batch,
         health: null,
-      }).catch((e) => log("[ingest] error", String(e)));
+      })
+        .then((ok) => {
+          for (const c of collectors) {
+            if (ok) c.runtime.boundaryFinalized(targetTs, batch.length);
+            else c.runtime.boundaryFailed(targetTs, "INGEST_REJECTED");
+          }
+          void flushEvents();
+        })
+        .catch((e) => {
+          for (const c of collectors) c.runtime.boundaryFailed(targetTs, e);
+          log("[ingest] error", String(e));
+          void flushEvents();
+        });
     }
     // Mid-window partial flush keeps batches small and bounds loss on crash.
     if (buffered.length >= 60) {
@@ -366,10 +439,10 @@ async function main() {
         health: null,
       }).catch(() => {});
     }
-    const drift = Date.now() % 1000;
+    const drift = (Date.now() + SAMPLE_LEAD_MS) % 1000;
     setTimeout(tick, 1000 - drift);
   };
-  setTimeout(tick, 1000 - (Date.now() % 1000));
+  setTimeout(tick, 1000 - ((Date.now() + SAMPLE_LEAD_MS) % 1000));
 
   log("[collector] started", { ingest: INGEST_URL, version: COLLECTOR_VERSION });
 }

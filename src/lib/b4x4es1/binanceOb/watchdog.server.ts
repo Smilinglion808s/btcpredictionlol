@@ -71,7 +71,6 @@ function failureRow(
     history_ready: false,
     history_ready_reason: "HISTORY_NOT_EVALUATED_WATCHDOG_FAILURE",
     history_valid_count: 0,
-    history_count_96: 0,
     observation_count_60s: observationCount,
     expected_observation_count_60s: EXPECTED_OBSERVATIONS,
     sequence_ok: false,

@@ -274,7 +274,7 @@ export function computeBoundaryFeatures(params: {
   const fields: Record<string, unknown> = {
     observation_count_60s: Math.min(obs.length, EXPECTED_OBSERVATIONS),
     expected_observation_count_60s: EXPECTED_OBSERVATIONS,
-    history_count_96: Math.min(priorAbs.length, HISTORY_WINDOW),
+    // Canonical (and only) history counter for this subsystem.
     history_valid_count: priorAbs.length,
 
     final_exchange_event_ts: final?.exchange_event_ts ?? null,

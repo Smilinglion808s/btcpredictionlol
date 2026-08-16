@@ -16,6 +16,7 @@ import {
   exportBinanceObFeaturesCsv,
   exportBinanceObObservationsCsv,
   exportBinanceObPolicyCsv,
+  exportBinanceObCombinedCsv,
 } from "@/lib/binanceOb.functions";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -464,6 +465,7 @@ function CsvDataPage() {
   const exportEs1 = useServerFn(exportEs1Csv);
   const exportObFeatures = useServerFn(exportBinanceObFeaturesCsv);
   const exportObPolicies = useServerFn(exportBinanceObPolicyCsv);
+  const exportObCombined = useServerFn(exportBinanceObCombinedCsv);
   const exportObObservationsFn = useServerFn(exportBinanceObObservationsCsv);
   const exportObObservations = () => exportObObservationsFn({ data: { targets: 96 } });
   const [buildingUniversal, setBuildingUniversal] = useState(false);
@@ -625,6 +627,7 @@ function CsvDataPage() {
           </Button>
           {(
             [
+              ["B4x4-ES1-Binance-OB", exportObCombined, "B4x4-ES1-Binance-OB"],
               ["Binance OB Features", exportObFeatures, "Binance_OB_Features"],
               ["Binance OB Policies", exportObPolicies, "Binance_OB_Policies"],
               ["Binance OB Observations", exportObObservations, "Binance_OB_Observations"],

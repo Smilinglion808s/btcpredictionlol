@@ -1,9 +1,11 @@
 // B4x4-ES1 Binance Order-Book R1 — signed ingest endpoint.
 //
 // The collector runs on an always-on external host (Cloudflare Workers cannot
-// hold a persistent WebSocket), and pushes derived one-second observations plus
-// heartbeats here. Shadow only: nothing written here can influence an ES1
-// decision or emit a webhook.
+// hold a persistent WebSocket), and pushes derived one-second observations,
+// heartbeats and runtime events here. Shadow only: nothing written here can
+// influence an ES1 decision or emit a webhook.
+//
+// Every observation is validated through timing.ts before persistence.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -25,6 +27,16 @@ const bodySchema = z.object({
   build_identifier: z.string().max(200).nullable().optional(),
   observations: z.array(observationSchema).max(MAX_OBSERVATIONS).default([]),
   health: z.record(z.unknown()).nullable().optional(),
+  events: z
+    .array(
+      z.object({
+        event: z.string().min(1).max(80),
+        payload: z.record(z.unknown()).optional(),
+      }),
+    )
+    .max(50)
+    .nullable()
+    .optional(),
 });
 
 function verify(rawBody: string, timestamp: string | null, signature: string | null): boolean {
@@ -70,29 +82,27 @@ export const Route = createFileRoute("/api/public/hooks/binance-ob-ingest")({
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
 
-        const { upsertObservations, upsertCollectorHealth } = await import(
+        const { processIngest } = await import("@/lib/b4x4es1/binanceOb/ingest");
+        const { makeSupabaseIngestDeps } = await import(
           "@/lib/b4x4es1/binanceOb/store.server"
         );
 
-        const out: Record<string, unknown> = { received: parsed.observations.length };
         try {
-          if (parsed.observations.length > 0) {
-            out.stored = await upsertObservations(sb, parsed.observations as never);
-          }
-          if (parsed.health) {
-            await upsertCollectorHealth(sb, parsed.health as Record<string, unknown>);
-            out.health = true;
-          }
+          const out = await processIngest(
+            parsed as never,
+            makeSupabaseIngestDeps(sb),
+          );
+          return new Response(JSON.stringify({ ok: true, ...out }), {
+            headers: { "content-type": "application/json" },
+          });
         } catch (e) {
+          const { auditBinanceOb } = await import("@/lib/b4x4es1/binanceOb/store.server");
+          await auditBinanceOb(sb, "ingest-failure", { error: String(e) }, false);
           return new Response(
             JSON.stringify({ error: "persist_failed", detail: String(e) }),
             { status: 500, headers: { "content-type": "application/json" } },
           );
         }
-
-        return new Response(JSON.stringify({ ok: true, ...out }), {
-          headers: { "content-type": "application/json" },
-        });
       },
     },
   },

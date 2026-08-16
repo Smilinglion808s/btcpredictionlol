@@ -15,11 +15,14 @@ export const BINANCE_OB_AUDIT_EVENTS = [
   "planned-rollover",
   "unplanned-reconnect",
   "region-block",
+  "connecting",
   "finalize-success",
   "finalize-failure",
   "heartbeat-stale",
   "database-failure",
   "ingest-failure",
+  "boundary-batch-sent",
+  "boundary-batch-failed",
   "ingest-rejected-timing",
   "watchdog-missing-boundary",
   "watchdog-run",
@@ -52,6 +55,9 @@ export const COLLECTOR_REPORTABLE_EVENTS: readonly BinanceObAuditEvent[] = [
   "region-block",
   "heartbeat-stale",
   "ingest-failure",
+  "boundary-batch-sent",
+  "boundary-batch-failed",
+  "connecting",
 ] as const;
 
 const COLLECTOR_SET = new Set<string>(COLLECTOR_REPORTABLE_EVENTS);

@@ -13,6 +13,7 @@ import {
   type MarketKind,
 } from "./config";
 import type { BoundaryHistory } from "./features";
+import { observationKey, type IngestDeps, type IngestObservation } from "./ingest";
 import type { ObservationRow } from "./types";
 
 export const OBSERVATIONS_TABLE = "b4x4_es1_binance_ob_observations";
@@ -34,6 +35,33 @@ export async function upsertObservations(
   });
   if (error) throw new Error(`binance_ob_observation_upsert:${error.message}`);
   return rows.length;
+}
+
+/** Keys already stored, so an ingest replay reports duplicates instead of writing. */
+export async function existingObservationKeys(
+  sb: SupabaseClient,
+  rows: readonly IngestObservation[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (rows.length === 0) return out;
+  const targets = Array.from(new Set(rows.map((r) => new Date(r.target_ts).toISOString())));
+  const { data, error } = await sb
+    .from(OBSERVATIONS_TABLE)
+    .select("target_ts, market_kind, sample_offset_seconds, collector_version")
+    .in("target_ts", targets);
+  if (error) throw new Error(`binance_ob_observation_keys:${error.message}`);
+  for (const r of (data ?? []) as Row[]) out.add(observationKey(r as never));
+  return out;
+}
+
+/** Supabase-backed IO for `processIngest`. */
+export function makeSupabaseIngestDeps(sb: SupabaseClient): IngestDeps {
+  return {
+    existingKeys: (rows) => existingObservationKeys(sb, rows),
+    insertObservations: (rows) => upsertObservations(sb, rows as unknown as ObservationRow[]),
+    upsertHealth: (row) => upsertCollectorHealth(sb, row),
+    audit: (event, payload, success = true) => auditBinanceOb(sb, event, payload, success),
+  };
 }
 
 export async function loadObservations(
