@@ -481,6 +481,687 @@ export type Database = {
         }
         Relationships: []
       }
+      b4x4_es1_binance_ob_activation: {
+        Row: {
+          activated_by: string | null
+          activation_target_ts: string | null
+          approval_note: string | null
+          approved_at: string | null
+          config_hash: string | null
+          created_at: string
+          mode: Database["public"]["Enums"]["binance_ob_mode"]
+          policy_version: string | null
+          selected_policy:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          singleton_key: string
+          updated_at: string
+        }
+        Insert: {
+          activated_by?: string | null
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash?: string | null
+          created_at?: string
+          mode?: Database["public"]["Enums"]["binance_ob_mode"]
+          policy_version?: string | null
+          selected_policy?:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          singleton_key?: string
+          updated_at?: string
+        }
+        Update: {
+          activated_by?: string | null
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash?: string | null
+          created_at?: string
+          mode?: Database["public"]["Enums"]["binance_ob_mode"]
+          policy_version?: string | null
+          selected_policy?:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          singleton_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      b4x4_es1_binance_ob_boundary_features: {
+        Row: {
+          abs_imbalance_percentile_96: number | null
+          ask_replenishment_btc_15s: number | null
+          ask_replenishment_btc_5s: number | null
+          ask_replenishment_btc_60s: number | null
+          bid_replenishment_btc_15s: number | null
+          bid_replenishment_btc_5s: number | null
+          bid_replenishment_btc_60s: number | null
+          book_complete_10bps: boolean
+          build_identifier: string | null
+          capture_status: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version: string
+          config_hash: string
+          created_at: string
+          expected_observation_count_60s: number
+          feature_cutoff_ts: string
+          feature_schema_hash: string
+          feature_values_hash: string
+          feature_version: string
+          final_abs_imbalance_10bps: number | null
+          final_ask_depth_btc_10bps: number | null
+          final_best_ask: number | null
+          final_best_bid: number | null
+          final_bid_depth_btc_10bps: number | null
+          final_exchange_event_ts: string | null
+          final_imbalance_10bps: number | null
+          final_imbalance_1bps: number | null
+          final_imbalance_2bps: number | null
+          final_imbalance_5bps: number | null
+          final_microprice_displacement_bps: number | null
+          final_mid_price: number | null
+          final_received_at: string | null
+          final_spread_bps: number | null
+          final_target_age_ms: number | null
+          final_total_depth_btc_10bps: number | null
+          final_total_depth_usd_10bps: number | null
+          final_update_id: number | null
+          finalized_at: string
+          history_count_96: number
+          history_ready: boolean
+          history_ready_reason: string | null
+          id: string
+          implementation_revision: string
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          mean_imbalance_10bps_15s: number | null
+          mean_imbalance_10bps_5s: number | null
+          mean_imbalance_10bps_60s: number | null
+          median_imbalance_10bps_15s: number | null
+          median_imbalance_10bps_5s: number | null
+          median_imbalance_10bps_60s: number | null
+          normalized_ofi_15s: number | null
+          normalized_ofi_5s: number | null
+          normalized_ofi_60s: number | null
+          observation_count_60s: number
+          range_imbalance_10bps_15s: number | null
+          range_imbalance_10bps_5s: number | null
+          range_imbalance_10bps_60s: number | null
+          ready: boolean
+          ready_reason: string | null
+          receive_latency_p50_ms: number | null
+          receive_latency_p95_ms: number | null
+          resync_generation: number
+          sequence_ok: boolean
+          sign_change_count_60s: number | null
+          sign_persistence_15s: number | null
+          sign_persistence_5s: number | null
+          sign_persistence_60s: number | null
+          slope_imbalance_10bps_15s: number | null
+          slope_imbalance_10bps_5s: number | null
+          slope_imbalance_10bps_60s: number | null
+          source_ws_url_id: string
+          spread_percentile_96: number | null
+          stddev_imbalance_10bps_15s: number | null
+          stddev_imbalance_10bps_5s: number | null
+          stddev_imbalance_10bps_60s: number | null
+          symbol: string
+          target_ts: string
+          total_depth_percentile_96: number | null
+          venue: string
+        }
+        Insert: {
+          abs_imbalance_percentile_96?: number | null
+          ask_replenishment_btc_15s?: number | null
+          ask_replenishment_btc_5s?: number | null
+          ask_replenishment_btc_60s?: number | null
+          bid_replenishment_btc_15s?: number | null
+          bid_replenishment_btc_5s?: number | null
+          bid_replenishment_btc_60s?: number | null
+          book_complete_10bps?: boolean
+          build_identifier?: string | null
+          capture_status: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version: string
+          config_hash: string
+          created_at?: string
+          expected_observation_count_60s?: number
+          feature_cutoff_ts: string
+          feature_schema_hash: string
+          feature_values_hash: string
+          feature_version?: string
+          final_abs_imbalance_10bps?: number | null
+          final_ask_depth_btc_10bps?: number | null
+          final_best_ask?: number | null
+          final_best_bid?: number | null
+          final_bid_depth_btc_10bps?: number | null
+          final_exchange_event_ts?: string | null
+          final_imbalance_10bps?: number | null
+          final_imbalance_1bps?: number | null
+          final_imbalance_2bps?: number | null
+          final_imbalance_5bps?: number | null
+          final_microprice_displacement_bps?: number | null
+          final_mid_price?: number | null
+          final_received_at?: string | null
+          final_spread_bps?: number | null
+          final_target_age_ms?: number | null
+          final_total_depth_btc_10bps?: number | null
+          final_total_depth_usd_10bps?: number | null
+          final_update_id?: number | null
+          finalized_at?: string
+          history_count_96?: number
+          history_ready?: boolean
+          history_ready_reason?: string | null
+          id?: string
+          implementation_revision?: string
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          mean_imbalance_10bps_15s?: number | null
+          mean_imbalance_10bps_5s?: number | null
+          mean_imbalance_10bps_60s?: number | null
+          median_imbalance_10bps_15s?: number | null
+          median_imbalance_10bps_5s?: number | null
+          median_imbalance_10bps_60s?: number | null
+          normalized_ofi_15s?: number | null
+          normalized_ofi_5s?: number | null
+          normalized_ofi_60s?: number | null
+          observation_count_60s?: number
+          range_imbalance_10bps_15s?: number | null
+          range_imbalance_10bps_5s?: number | null
+          range_imbalance_10bps_60s?: number | null
+          ready?: boolean
+          ready_reason?: string | null
+          receive_latency_p50_ms?: number | null
+          receive_latency_p95_ms?: number | null
+          resync_generation?: number
+          sequence_ok?: boolean
+          sign_change_count_60s?: number | null
+          sign_persistence_15s?: number | null
+          sign_persistence_5s?: number | null
+          sign_persistence_60s?: number | null
+          slope_imbalance_10bps_15s?: number | null
+          slope_imbalance_10bps_5s?: number | null
+          slope_imbalance_10bps_60s?: number | null
+          source_ws_url_id: string
+          spread_percentile_96?: number | null
+          stddev_imbalance_10bps_15s?: number | null
+          stddev_imbalance_10bps_5s?: number | null
+          stddev_imbalance_10bps_60s?: number | null
+          symbol?: string
+          target_ts: string
+          total_depth_percentile_96?: number | null
+          venue?: string
+        }
+        Update: {
+          abs_imbalance_percentile_96?: number | null
+          ask_replenishment_btc_15s?: number | null
+          ask_replenishment_btc_5s?: number | null
+          ask_replenishment_btc_60s?: number | null
+          bid_replenishment_btc_15s?: number | null
+          bid_replenishment_btc_5s?: number | null
+          bid_replenishment_btc_60s?: number | null
+          book_complete_10bps?: boolean
+          build_identifier?: string | null
+          capture_status?: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version?: string
+          config_hash?: string
+          created_at?: string
+          expected_observation_count_60s?: number
+          feature_cutoff_ts?: string
+          feature_schema_hash?: string
+          feature_values_hash?: string
+          feature_version?: string
+          final_abs_imbalance_10bps?: number | null
+          final_ask_depth_btc_10bps?: number | null
+          final_best_ask?: number | null
+          final_best_bid?: number | null
+          final_bid_depth_btc_10bps?: number | null
+          final_exchange_event_ts?: string | null
+          final_imbalance_10bps?: number | null
+          final_imbalance_1bps?: number | null
+          final_imbalance_2bps?: number | null
+          final_imbalance_5bps?: number | null
+          final_microprice_displacement_bps?: number | null
+          final_mid_price?: number | null
+          final_received_at?: string | null
+          final_spread_bps?: number | null
+          final_target_age_ms?: number | null
+          final_total_depth_btc_10bps?: number | null
+          final_total_depth_usd_10bps?: number | null
+          final_update_id?: number | null
+          finalized_at?: string
+          history_count_96?: number
+          history_ready?: boolean
+          history_ready_reason?: string | null
+          id?: string
+          implementation_revision?: string
+          market_kind?: Database["public"]["Enums"]["binance_ob_market_kind"]
+          mean_imbalance_10bps_15s?: number | null
+          mean_imbalance_10bps_5s?: number | null
+          mean_imbalance_10bps_60s?: number | null
+          median_imbalance_10bps_15s?: number | null
+          median_imbalance_10bps_5s?: number | null
+          median_imbalance_10bps_60s?: number | null
+          normalized_ofi_15s?: number | null
+          normalized_ofi_5s?: number | null
+          normalized_ofi_60s?: number | null
+          observation_count_60s?: number
+          range_imbalance_10bps_15s?: number | null
+          range_imbalance_10bps_5s?: number | null
+          range_imbalance_10bps_60s?: number | null
+          ready?: boolean
+          ready_reason?: string | null
+          receive_latency_p50_ms?: number | null
+          receive_latency_p95_ms?: number | null
+          resync_generation?: number
+          sequence_ok?: boolean
+          sign_change_count_60s?: number | null
+          sign_persistence_15s?: number | null
+          sign_persistence_5s?: number | null
+          sign_persistence_60s?: number | null
+          slope_imbalance_10bps_15s?: number | null
+          slope_imbalance_10bps_5s?: number | null
+          slope_imbalance_10bps_60s?: number | null
+          source_ws_url_id?: string
+          spread_percentile_96?: number | null
+          stddev_imbalance_10bps_15s?: number | null
+          stddev_imbalance_10bps_5s?: number | null
+          stddev_imbalance_10bps_60s?: number | null
+          symbol?: string
+          target_ts?: string
+          total_depth_percentile_96?: number | null
+          venue?: string
+        }
+        Relationships: []
+      }
+      b4x4_es1_binance_ob_collector_health: {
+        Row: {
+          build_identifier: string | null
+          collector_status: string
+          collector_version: string
+          config_hash: string
+          connection_started_at: string | null
+          consecutive_error_count: number
+          last_error_code: string | null
+          last_error_message: string | null
+          last_exchange_event_ts: string | null
+          last_heartbeat_at: string
+          last_received_at: string | null
+          last_update_id: number | null
+          local_book_initialized: boolean
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          reconnect_count: number
+          resync_count: number
+          sequence_ok: boolean
+          symbol: string
+          updated_at: string
+          venue: string
+        }
+        Insert: {
+          build_identifier?: string | null
+          collector_status: string
+          collector_version: string
+          config_hash: string
+          connection_started_at?: string | null
+          consecutive_error_count?: number
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_exchange_event_ts?: string | null
+          last_heartbeat_at: string
+          last_received_at?: string | null
+          last_update_id?: number | null
+          local_book_initialized?: boolean
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          reconnect_count?: number
+          resync_count?: number
+          sequence_ok?: boolean
+          symbol?: string
+          updated_at?: string
+          venue?: string
+        }
+        Update: {
+          build_identifier?: string | null
+          collector_status?: string
+          collector_version?: string
+          config_hash?: string
+          connection_started_at?: string | null
+          consecutive_error_count?: number
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_exchange_event_ts?: string | null
+          last_heartbeat_at?: string
+          last_received_at?: string | null
+          last_update_id?: number | null
+          local_book_initialized?: boolean
+          market_kind?: Database["public"]["Enums"]["binance_ob_market_kind"]
+          reconnect_count?: number
+          resync_count?: number
+          sequence_ok?: boolean
+          symbol?: string
+          updated_at?: string
+          venue?: string
+        }
+        Relationships: []
+      }
+      b4x4_es1_binance_ob_observations: {
+        Row: {
+          abs_imbalance_10bps: number | null
+          ask_added_btc_1s: number | null
+          ask_depth_btc_10bps: number | null
+          ask_depth_btc_1bps: number | null
+          ask_depth_btc_2bps: number | null
+          ask_depth_btc_5bps: number | null
+          ask_depth_usd_10bps: number | null
+          ask_removed_btc_1s: number | null
+          best_ask: number | null
+          best_ask_qty_btc: number | null
+          best_bid: number | null
+          best_bid_qty_btc: number | null
+          bid_added_btc_1s: number | null
+          bid_depth_btc_10bps: number | null
+          bid_depth_btc_1bps: number | null
+          bid_depth_btc_2bps: number | null
+          bid_depth_btc_5bps: number | null
+          bid_depth_usd_10bps: number | null
+          bid_removed_btc_1s: number | null
+          book_complete_10bps: boolean
+          build_identifier: string | null
+          capture_reason: string | null
+          capture_status: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version: string
+          config_hash: string
+          created_at: string
+          exchange_event_ts: string | null
+          exchange_to_receive_ms: number | null
+          feature_cutoff_ts: string
+          feature_schema_hash: string
+          first_update_id: number | null
+          id: string
+          imbalance_10bps: number | null
+          imbalance_1bps: number | null
+          imbalance_2bps: number | null
+          imbalance_5bps: number | null
+          implementation_revision: string
+          last_update_id: number | null
+          local_book_initialized: boolean
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          microprice: number | null
+          microprice_displacement_bps: number | null
+          mid_price: number | null
+          normalized_ofi_1s: number | null
+          previous_update_id: number | null
+          received_at: string | null
+          resync_generation: number
+          sample_offset_seconds: number
+          sample_ts: string
+          sequence_ok: boolean
+          source_ws_url_id: string
+          spread_bps: number | null
+          symbol: string
+          target_age_ms: number | null
+          target_ts: string
+          total_depth_btc_10bps: number | null
+          total_depth_btc_1bps: number | null
+          total_depth_btc_2bps: number | null
+          total_depth_btc_5bps: number | null
+          total_depth_usd_10bps: number | null
+          update_count_1s: number
+          venue: string
+        }
+        Insert: {
+          abs_imbalance_10bps?: number | null
+          ask_added_btc_1s?: number | null
+          ask_depth_btc_10bps?: number | null
+          ask_depth_btc_1bps?: number | null
+          ask_depth_btc_2bps?: number | null
+          ask_depth_btc_5bps?: number | null
+          ask_depth_usd_10bps?: number | null
+          ask_removed_btc_1s?: number | null
+          best_ask?: number | null
+          best_ask_qty_btc?: number | null
+          best_bid?: number | null
+          best_bid_qty_btc?: number | null
+          bid_added_btc_1s?: number | null
+          bid_depth_btc_10bps?: number | null
+          bid_depth_btc_1bps?: number | null
+          bid_depth_btc_2bps?: number | null
+          bid_depth_btc_5bps?: number | null
+          bid_depth_usd_10bps?: number | null
+          bid_removed_btc_1s?: number | null
+          book_complete_10bps?: boolean
+          build_identifier?: string | null
+          capture_reason?: string | null
+          capture_status: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version: string
+          config_hash: string
+          created_at?: string
+          exchange_event_ts?: string | null
+          exchange_to_receive_ms?: number | null
+          feature_cutoff_ts: string
+          feature_schema_hash: string
+          first_update_id?: number | null
+          id?: string
+          imbalance_10bps?: number | null
+          imbalance_1bps?: number | null
+          imbalance_2bps?: number | null
+          imbalance_5bps?: number | null
+          implementation_revision?: string
+          last_update_id?: number | null
+          local_book_initialized?: boolean
+          market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
+          microprice?: number | null
+          microprice_displacement_bps?: number | null
+          mid_price?: number | null
+          normalized_ofi_1s?: number | null
+          previous_update_id?: number | null
+          received_at?: string | null
+          resync_generation?: number
+          sample_offset_seconds: number
+          sample_ts: string
+          sequence_ok?: boolean
+          source_ws_url_id: string
+          spread_bps?: number | null
+          symbol?: string
+          target_age_ms?: number | null
+          target_ts: string
+          total_depth_btc_10bps?: number | null
+          total_depth_btc_1bps?: number | null
+          total_depth_btc_2bps?: number | null
+          total_depth_btc_5bps?: number | null
+          total_depth_usd_10bps?: number | null
+          update_count_1s?: number
+          venue?: string
+        }
+        Update: {
+          abs_imbalance_10bps?: number | null
+          ask_added_btc_1s?: number | null
+          ask_depth_btc_10bps?: number | null
+          ask_depth_btc_1bps?: number | null
+          ask_depth_btc_2bps?: number | null
+          ask_depth_btc_5bps?: number | null
+          ask_depth_usd_10bps?: number | null
+          ask_removed_btc_1s?: number | null
+          best_ask?: number | null
+          best_ask_qty_btc?: number | null
+          best_bid?: number | null
+          best_bid_qty_btc?: number | null
+          bid_added_btc_1s?: number | null
+          bid_depth_btc_10bps?: number | null
+          bid_depth_btc_1bps?: number | null
+          bid_depth_btc_2bps?: number | null
+          bid_depth_btc_5bps?: number | null
+          bid_depth_usd_10bps?: number | null
+          bid_removed_btc_1s?: number | null
+          book_complete_10bps?: boolean
+          build_identifier?: string | null
+          capture_reason?: string | null
+          capture_status?: Database["public"]["Enums"]["binance_ob_capture_status"]
+          collector_version?: string
+          config_hash?: string
+          created_at?: string
+          exchange_event_ts?: string | null
+          exchange_to_receive_ms?: number | null
+          feature_cutoff_ts?: string
+          feature_schema_hash?: string
+          first_update_id?: number | null
+          id?: string
+          imbalance_10bps?: number | null
+          imbalance_1bps?: number | null
+          imbalance_2bps?: number | null
+          imbalance_5bps?: number | null
+          implementation_revision?: string
+          last_update_id?: number | null
+          local_book_initialized?: boolean
+          market_kind?: Database["public"]["Enums"]["binance_ob_market_kind"]
+          microprice?: number | null
+          microprice_displacement_bps?: number | null
+          mid_price?: number | null
+          normalized_ofi_1s?: number | null
+          previous_update_id?: number | null
+          received_at?: string | null
+          resync_generation?: number
+          sample_offset_seconds?: number
+          sample_ts?: string
+          sequence_ok?: boolean
+          source_ws_url_id?: string
+          spread_bps?: number | null
+          symbol?: string
+          target_age_ms?: number | null
+          target_ts?: string
+          total_depth_btc_10bps?: number | null
+          total_depth_btc_1bps?: number | null
+          total_depth_btc_2bps?: number | null
+          total_depth_btc_5bps?: number | null
+          total_depth_usd_10bps?: number | null
+          update_count_1s?: number
+          venue?: string
+        }
+        Relationships: []
+      }
+      b4x4_es1_binance_ob_policy_shadows: {
+        Row: {
+          actual_direction: string | null
+          candidate_direction: string | null
+          config_hash: string
+          created_at: string
+          decision_reason: string
+          id: string
+          implementation_revision: string
+          input_values_hash: string
+          last_resolution_attempt_at: string | null
+          last_resolution_error: string | null
+          perp_abs_percentile_96: number | null
+          perp_feature_id: string | null
+          perp_final_imbalance_10bps: number | null
+          perp_sign_persistence_15s: number | null
+          policy_name: Database["public"]["Enums"]["binance_ob_policy_name"]
+          policy_version: string
+          prediction_id: string | null
+          qualification_reason: string
+          qualified: boolean
+          resolution_attempt_count: number
+          resolved_at: string | null
+          resolver_version: string | null
+          result: string | null
+          result_score: number | null
+          run_mode: string
+          spot_abs_percentile_96: number | null
+          spot_feature_id: string | null
+          spot_final_imbalance_10bps: number | null
+          spot_perp_sign_agree: boolean | null
+          spot_sign_persistence_15s: number | null
+          target_ts: string
+          updated_at: string
+          webhook_eligible: boolean
+          would_trade: boolean
+        }
+        Insert: {
+          actual_direction?: string | null
+          candidate_direction?: string | null
+          config_hash: string
+          created_at?: string
+          decision_reason: string
+          id?: string
+          implementation_revision?: string
+          input_values_hash: string
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          perp_abs_percentile_96?: number | null
+          perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_sign_persistence_15s?: number | null
+          policy_name: Database["public"]["Enums"]["binance_ob_policy_name"]
+          policy_version?: string
+          prediction_id?: string | null
+          qualification_reason: string
+          qualified?: boolean
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          resolver_version?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode: string
+          spot_abs_percentile_96?: number | null
+          spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_perp_sign_agree?: boolean | null
+          spot_sign_persistence_15s?: number | null
+          target_ts: string
+          updated_at?: string
+          webhook_eligible?: boolean
+          would_trade?: boolean
+        }
+        Update: {
+          actual_direction?: string | null
+          candidate_direction?: string | null
+          config_hash?: string
+          created_at?: string
+          decision_reason?: string
+          id?: string
+          implementation_revision?: string
+          input_values_hash?: string
+          last_resolution_attempt_at?: string | null
+          last_resolution_error?: string | null
+          perp_abs_percentile_96?: number | null
+          perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_sign_persistence_15s?: number | null
+          policy_name?: Database["public"]["Enums"]["binance_ob_policy_name"]
+          policy_version?: string
+          prediction_id?: string | null
+          qualification_reason?: string
+          qualified?: boolean
+          resolution_attempt_count?: number
+          resolved_at?: string | null
+          resolver_version?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          spot_abs_percentile_96?: number | null
+          spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_perp_sign_agree?: boolean | null
+          spot_sign_persistence_15s?: number | null
+          target_ts?: string
+          updated_at?: string
+          webhook_eligible?: boolean
+          would_trade?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "b4x4_es1_binance_ob_policy_shadows_perp_feature_id_fkey"
+            columns: ["perp_feature_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_es1_binance_ob_boundary_features"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "b4x4_es1_binance_ob_policy_shadows_spot_feature_id_fkey"
+            columns: ["spot_feature_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_es1_binance_ob_boundary_features"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       b4x4_es1_fits: {
         Row: {
           artifact_sha256: string
@@ -616,6 +1297,20 @@ export type Database = {
           b4_same_side_rank: number | null
           b4_training_end_index: number | null
           b4_training_start_index: number | null
+          binance_ob_config_hash: string | null
+          binance_ob_feature_schema_hash: string | null
+          binance_ob_mode: Database["public"]["Enums"]["binance_ob_mode"] | null
+          binance_ob_perp_feature_id: string | null
+          binance_ob_perp_ready: boolean | null
+          binance_ob_selected_shadow_policy:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          binance_ob_shadow_direction: string | null
+          binance_ob_shadow_reason: string | null
+          binance_ob_shadow_would_trade: boolean | null
+          binance_ob_spot_feature_id: string | null
+          binance_ob_spot_ready: boolean | null
+          binance_ob_version: string | null
           build_commit_sha: string | null
           build_identifier: string | null
           canonical_candle_source: string | null
@@ -750,6 +1445,22 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          binance_ob_config_hash?: string | null
+          binance_ob_feature_schema_hash?: string | null
+          binance_ob_mode?:
+            | Database["public"]["Enums"]["binance_ob_mode"]
+            | null
+          binance_ob_perp_feature_id?: string | null
+          binance_ob_perp_ready?: boolean | null
+          binance_ob_selected_shadow_policy?:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          binance_ob_shadow_direction?: string | null
+          binance_ob_shadow_reason?: string | null
+          binance_ob_shadow_would_trade?: boolean | null
+          binance_ob_spot_feature_id?: string | null
+          binance_ob_spot_ready?: boolean | null
+          binance_ob_version?: string | null
           build_commit_sha?: string | null
           build_identifier?: string | null
           canonical_candle_source?: string | null
@@ -884,6 +1595,22 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          binance_ob_config_hash?: string | null
+          binance_ob_feature_schema_hash?: string | null
+          binance_ob_mode?:
+            | Database["public"]["Enums"]["binance_ob_mode"]
+            | null
+          binance_ob_perp_feature_id?: string | null
+          binance_ob_perp_ready?: boolean | null
+          binance_ob_selected_shadow_policy?:
+            | Database["public"]["Enums"]["binance_ob_policy_name"]
+            | null
+          binance_ob_shadow_direction?: string | null
+          binance_ob_shadow_reason?: string | null
+          binance_ob_shadow_would_trade?: boolean | null
+          binance_ob_spot_feature_id?: string | null
+          binance_ob_spot_ready?: boolean | null
+          binance_ob_version?: string | null
           build_commit_sha?: string | null
           build_identifier?: string | null
           canonical_candle_source?: string | null
@@ -974,7 +1701,22 @@ export type Database = {
           without_b4_guard_would_trade?: boolean | null
           would_trade?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "b4x4_es1_predictions_binance_ob_perp_fk"
+            columns: ["binance_ob_perp_feature_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_es1_binance_ob_boundary_features"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "b4x4_es1_predictions_binance_ob_spot_fk"
+            columns: ["binance_ob_spot_feature_id"]
+            isOneToOne: false
+            referencedRelation: "b4x4_es1_binance_ob_boundary_features"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       b4x4_ob_capture_auth: {
         Row: {
@@ -7443,7 +8185,26 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      binance_ob_capture_status:
+        | "FRESH"
+        | "STALE"
+        | "NO_DATA"
+        | "SEQUENCE_GAP"
+        | "RESYNCING"
+        | "INCOMPLETE_BOOK"
+        | "CROSSED_BOOK"
+        | "REST_FALLBACK"
+        | "REGION_BLOCKED"
+        | "COLLECTOR_ERROR"
+      binance_ob_market_kind: "SPOT" | "USD_M_PERP"
+      binance_ob_mode: "SHADOW_ONLY" | "ACTIVE"
+      binance_ob_policy_name:
+        | "SPOT_FOLLOW_CURRENT_BAND"
+        | "SPOT_FADE_CURRENT_BAND"
+        | "SPOT_FOLLOW_PERSISTENT"
+        | "SPOT_FADE_PERSISTENT"
+        | "SPOT_PERP_CONSENSUS_FOLLOW"
+        | "SPOT_PERP_CONSENSUS_FADE"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -7570,6 +8331,29 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      binance_ob_capture_status: [
+        "FRESH",
+        "STALE",
+        "NO_DATA",
+        "SEQUENCE_GAP",
+        "RESYNCING",
+        "INCOMPLETE_BOOK",
+        "CROSSED_BOOK",
+        "REST_FALLBACK",
+        "REGION_BLOCKED",
+        "COLLECTOR_ERROR",
+      ],
+      binance_ob_market_kind: ["SPOT", "USD_M_PERP"],
+      binance_ob_mode: ["SHADOW_ONLY", "ACTIVE"],
+      binance_ob_policy_name: [
+        "SPOT_FOLLOW_CURRENT_BAND",
+        "SPOT_FADE_CURRENT_BAND",
+        "SPOT_FOLLOW_PERSISTENT",
+        "SPOT_FADE_PERSISTENT",
+        "SPOT_PERP_CONSENSUS_FOLLOW",
+        "SPOT_PERP_CONSENSUS_FADE",
+      ],
+    },
   },
 } as const
