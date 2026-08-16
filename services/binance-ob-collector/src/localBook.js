@@ -35,6 +35,7 @@ export class LocalOrderBook {
     this.sequenceOk = false;
     this.lastUpdateId = null;
     this.buffer = [];
+    this.awaitingFirstLive = false;
     this.resyncGeneration += 1;
   }
 
