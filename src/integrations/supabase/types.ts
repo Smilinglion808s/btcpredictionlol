@@ -552,9 +552,17 @@ export type Database = {
           feature_version: string
           final_abs_imbalance_10bps: number | null
           final_ask_depth_btc_10bps: number | null
+          final_ask_depth_btc_1bps: number | null
+          final_ask_depth_btc_2bps: number | null
+          final_ask_depth_btc_5bps: number | null
+          final_ask_depth_usd_10bps: number | null
           final_best_ask: number | null
           final_best_bid: number | null
           final_bid_depth_btc_10bps: number | null
+          final_bid_depth_btc_1bps: number | null
+          final_bid_depth_btc_2bps: number | null
+          final_bid_depth_btc_5bps: number | null
+          final_bid_depth_usd_10bps: number | null
           final_exchange_event_ts: string | null
           final_imbalance_10bps: number | null
           final_imbalance_1bps: number | null
@@ -566,6 +574,9 @@ export type Database = {
           final_spread_bps: number | null
           final_target_age_ms: number | null
           final_total_depth_btc_10bps: number | null
+          final_total_depth_btc_1bps: number | null
+          final_total_depth_btc_2bps: number | null
+          final_total_depth_btc_5bps: number | null
           final_total_depth_usd_10bps: number | null
           final_update_id: number | null
           finalized_at: string
@@ -592,7 +603,10 @@ export type Database = {
           ready_reason: string | null
           receive_latency_p50_ms: number | null
           receive_latency_p95_ms: number | null
+          resync_continuous: boolean | null
           resync_generation: number
+          resync_generation_max: number | null
+          resync_generation_min: number | null
           sequence_ok: boolean
           sign_change_count_60s: number | null
           sign_persistence_15s: number | null
@@ -634,9 +648,17 @@ export type Database = {
           feature_version?: string
           final_abs_imbalance_10bps?: number | null
           final_ask_depth_btc_10bps?: number | null
+          final_ask_depth_btc_1bps?: number | null
+          final_ask_depth_btc_2bps?: number | null
+          final_ask_depth_btc_5bps?: number | null
+          final_ask_depth_usd_10bps?: number | null
           final_best_ask?: number | null
           final_best_bid?: number | null
           final_bid_depth_btc_10bps?: number | null
+          final_bid_depth_btc_1bps?: number | null
+          final_bid_depth_btc_2bps?: number | null
+          final_bid_depth_btc_5bps?: number | null
+          final_bid_depth_usd_10bps?: number | null
           final_exchange_event_ts?: string | null
           final_imbalance_10bps?: number | null
           final_imbalance_1bps?: number | null
@@ -648,6 +670,9 @@ export type Database = {
           final_spread_bps?: number | null
           final_target_age_ms?: number | null
           final_total_depth_btc_10bps?: number | null
+          final_total_depth_btc_1bps?: number | null
+          final_total_depth_btc_2bps?: number | null
+          final_total_depth_btc_5bps?: number | null
           final_total_depth_usd_10bps?: number | null
           final_update_id?: number | null
           finalized_at?: string
@@ -674,7 +699,10 @@ export type Database = {
           ready_reason?: string | null
           receive_latency_p50_ms?: number | null
           receive_latency_p95_ms?: number | null
+          resync_continuous?: boolean | null
           resync_generation?: number
+          resync_generation_max?: number | null
+          resync_generation_min?: number | null
           sequence_ok?: boolean
           sign_change_count_60s?: number | null
           sign_persistence_15s?: number | null
@@ -716,9 +744,17 @@ export type Database = {
           feature_version?: string
           final_abs_imbalance_10bps?: number | null
           final_ask_depth_btc_10bps?: number | null
+          final_ask_depth_btc_1bps?: number | null
+          final_ask_depth_btc_2bps?: number | null
+          final_ask_depth_btc_5bps?: number | null
+          final_ask_depth_usd_10bps?: number | null
           final_best_ask?: number | null
           final_best_bid?: number | null
           final_bid_depth_btc_10bps?: number | null
+          final_bid_depth_btc_1bps?: number | null
+          final_bid_depth_btc_2bps?: number | null
+          final_bid_depth_btc_5bps?: number | null
+          final_bid_depth_usd_10bps?: number | null
           final_exchange_event_ts?: string | null
           final_imbalance_10bps?: number | null
           final_imbalance_1bps?: number | null
@@ -730,6 +766,9 @@ export type Database = {
           final_spread_bps?: number | null
           final_target_age_ms?: number | null
           final_total_depth_btc_10bps?: number | null
+          final_total_depth_btc_1bps?: number | null
+          final_total_depth_btc_2bps?: number | null
+          final_total_depth_btc_5bps?: number | null
           final_total_depth_usd_10bps?: number | null
           final_update_id?: number | null
           finalized_at?: string
@@ -756,7 +795,10 @@ export type Database = {
           ready_reason?: string | null
           receive_latency_p50_ms?: number | null
           receive_latency_p95_ms?: number | null
+          resync_continuous?: boolean | null
           resync_generation?: number
+          resync_generation_max?: number | null
+          resync_generation_min?: number | null
           sequence_ok?: boolean
           sign_change_count_60s?: number | null
           sign_persistence_15s?: number | null
