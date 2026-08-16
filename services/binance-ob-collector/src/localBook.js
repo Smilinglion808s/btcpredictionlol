@@ -96,7 +96,25 @@ export class LocalOrderBook {
 
   #apply(ev, fromBuffer) {
     if (!fromBuffer && this.lastUpdateId != null) {
-      if (this.marketKind === "SPOT") {
+      if (this.awaitingFirstLive) {
+        // First live event after a snapshot: Binance's entry rule applies. The
+        // running pu / U+1 rule cannot hold here because no live event has been
+        // applied on top of the snapshot yet — enforcing it caused spurious
+        // sequence gaps and resync storms.
+        if (this.marketKind === "SPOT") {
+          if (ev.u <= this.lastUpdateId) return true; // fully stale, ignore
+          if (!(ev.U <= this.lastUpdateId + 1 && this.lastUpdateId + 1 <= ev.u)) {
+            this.sequenceOk = false;
+            return false;
+          }
+        } else {
+          if (ev.u < this.lastUpdateId) return true;
+          if (!(ev.U <= this.lastUpdateId && this.lastUpdateId <= ev.u)) {
+            this.sequenceOk = false;
+            return false;
+          }
+        }
+      } else if (this.marketKind === "SPOT") {
         if (ev.u <= this.lastUpdateId) return true; // stale, ignore
         if (ev.U !== this.lastUpdateId + 1) {
           this.sequenceOk = false;
@@ -116,6 +134,7 @@ export class LocalOrderBook {
     this.firstUpdateId = ev.U;
     this.lastUpdateId = ev.u;
     this.updateCount += 1;
+    this.awaitingFirstLive = false;
     return true;
   }
 
