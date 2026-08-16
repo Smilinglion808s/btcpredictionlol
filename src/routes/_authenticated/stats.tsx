@@ -22,7 +22,7 @@ import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { BinanceObCard } from "@/components/binance-ob-card";
-import { getBinanceObStats, getBinanceObHealth } from "@/lib/binanceOb.functions";
+import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
 import { getActiveSettings } from "@/lib/settings.functions";
@@ -94,8 +94,7 @@ function StatsPage() {
   // within a few seconds of the boundary run writing its decision.
   const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
   const exportEs1Fn = useServerFn(exportEs1Csv);
-  const binanceObFn = useServerFn(getBinanceObStats);
-  const binanceObHealthFn = useServerFn(getBinanceObHealth);
+  const binanceObFn = useServerFn(getBinanceObDashboard);
   const binanceObQ = useQuery({
     queryKey: ["binance-ob-stats"],
     queryFn: () => binanceObFn(),

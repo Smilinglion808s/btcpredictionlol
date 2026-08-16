@@ -146,12 +146,12 @@ export function BinanceObCard({ dashboard }: { dashboard: Any | null }) {
 
       {/* Comparisons */}
       <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-muted-foreground">
-        {[
+        {([
           ["Follow", d.follow_vs_fade?.follow],
           ["Fade", d.follow_vs_fade?.fade],
           ["Spot only", d.spot_vs_spot_perp?.spot],
           ["Spot+Perp", d.spot_vs_spot_perp?.spot_perp],
-        ].map(([label, s]: Any) => (
+        ] as Array<[string, Any]>).map(([label, s]) => (
           <div key={label} className="b4-chip px-2 py-1">
             <div className="uppercase tracking-[0.14em]">{label}</div>
             <div>

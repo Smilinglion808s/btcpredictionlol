@@ -21,7 +21,7 @@ import {
 import type { ObservationRow } from "../types";
 import { evaluateAllPolicies, evaluatePolicy, mapDirection, scorePolicy } from "../policies";
 import { classifyMissingBoundary } from "../watchdog.server";
-import { observationKey, processIngest, type IngestDeps } from "../ingest";
+import { observationKey, processIngest, type IngestDeps, type IngestObservation } from "../ingest";
 import { buildCombinedRows, combinedColumns, rowsToCsv } from "../exports";
 import { CollectorRuntime, COLLECTOR_EVENTS } from "../../../../../services/binance-ob-collector/src/runtimeEvents.js";
 import { isCollectorReportableEvent } from "../audit";
@@ -65,7 +65,7 @@ function obs(offset: number, over: Record<string, unknown> = {}) {
     ask_added_btc_1s: 0.5,
     collector_version: "binance-ob-collector-r1",
     ...over,
-  } as unknown as ObservationRow;
+  } as unknown as ObservationRow & IngestObservation;
 }
 
 const fullStream = () =>
