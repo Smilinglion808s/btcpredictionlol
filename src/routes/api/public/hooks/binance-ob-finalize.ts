@@ -31,9 +31,16 @@ export const Route = createFileRoute("/api/public/hooks/binance-ob-finalize")({
             "@/lib/b4x4es1/binanceOb/resolver.server"
           );
 
+          const { runBinanceObWatchdog } = await import(
+            "@/lib/b4x4es1/binanceOb/watchdog.server"
+          );
+
           const current = new Date(floorTarget(Date.now())).toISOString();
           out.finalized = await finalizeBinanceObTarget(sb, current);
           out.backfilled = await backfillBinanceObTargets(sb, 32);
+          // Watchdog runs after finalization so a genuinely missing boundary —
+          // and only a missing one — is recorded as an explicit failure row.
+          out.watchdog = await runBinanceObWatchdog(sb, 8);
           out.resolved = await resolveBinanceObShadows(sb);
           out.health = await binanceObHealth(sb);
         } catch (e) {
