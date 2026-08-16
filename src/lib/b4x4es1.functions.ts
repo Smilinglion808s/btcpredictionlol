@@ -1,7 +1,7 @@
 // B4x4-ES1 server functions: dashboard stats, pending row, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats } from "./statsCache.server";
+import { cachedStats, PENDING_TTL_MS } from "./statsCache.server";
 import { ES1_MODEL_VERSION, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
 
 type Row = Record<string, unknown>;
