@@ -19,6 +19,7 @@ export class LocalOrderBook {
     this.firstUpdateId = null;
     this.previousUpdateId = null;
     this.resyncGeneration = 0;
+    this.awaitingFirstLive = false;
     this.updateCount = 0;
     this.buffer = [];
     // Rolling per-second flow accounting.
