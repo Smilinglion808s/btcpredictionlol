@@ -18,6 +18,7 @@ import {
   signChangeCount,
   signPersistence,
 } from "../features";
+import type { ObservationRow } from "../types";
 import { evaluateAllPolicies, evaluatePolicy, mapDirection, scorePolicy } from "../policies";
 import { classifyMissingBoundary } from "../watchdog.server";
 import { observationKey, processIngest, type IngestDeps } from "../ingest";
@@ -63,7 +64,7 @@ function obs(offset: number, over: Record<string, unknown> = {}) {
     ask_added_btc_1s: 0.5,
     collector_version: "binance-ob-collector-r1",
     ...over,
-  };
+  } as unknown as ObservationRow;
 }
 
 const fullStream = () =>
@@ -342,10 +343,10 @@ describe("ingest — validation, de-duplication, idempotency", () => {
 
 describe("watchdog — missing boundaries become explicit failures", () => {
   it("classifies zero observations as NO_DATA and partial as INCOMPLETE", () => {
-    expect(classifyMissingBoundary(0).status).toBe("NO_DATA");
+    expect(classifyMissingBoundary(0).captureStatus).toBe("NO_DATA");
     const partial = classifyMissingBoundary(MIN_READY_OBSERVATIONS - 1);
-    expect(partial.status).not.toBe("FRESH");
-    expect(partial.reason).toBeTruthy();
+    expect(partial.captureStatus).not.toBe("FRESH");
+    expect(partial.failureReason).toBeTruthy();
   });
 });
 
