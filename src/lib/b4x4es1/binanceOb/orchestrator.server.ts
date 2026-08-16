@@ -134,6 +134,7 @@ export async function finalizeBinanceObTarget(
   const spotInputs = toPolicyInputs(spot);
   const perpInputs = toPolicyInputs(perp);
   const evaluations = evaluateAllPolicies(spotInputs, perpInputs);
+  const runMode = await readActivationMode(sb);
 
   const rows = evaluations.map((e) => ({
     ...e,
@@ -147,7 +148,8 @@ export async function finalizeBinanceObTarget(
       policy: e.policy_name,
       version: BINANCE_OB_POLICY_VERSION,
     }),
-    run_mode: (await readActivationMode(sb)) satisfies string,
+    run_mode: runMode,
+
     webhook_eligible: false,
     implementation_revision: BINANCE_OB_IMPLEMENTATION_REVISION,
     config_hash: binanceObConfigHash(),
