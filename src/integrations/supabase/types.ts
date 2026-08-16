@@ -545,6 +545,7 @@ export type Database = {
           config_hash: string
           created_at: string
           expected_observation_count_60s: number
+          failure_reason: string | null
           feature_cutoff_ts: string
           feature_schema_hash: string
           feature_values_hash: string
@@ -571,6 +572,7 @@ export type Database = {
           history_count_96: number
           history_ready: boolean
           history_ready_reason: string | null
+          history_valid_count: number | null
           id: string
           implementation_revision: string
           market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
@@ -609,6 +611,7 @@ export type Database = {
           target_ts: string
           total_depth_percentile_96: number | null
           venue: string
+          watchdog_created: boolean
         }
         Insert: {
           abs_imbalance_percentile_96?: number | null
@@ -625,6 +628,7 @@ export type Database = {
           config_hash: string
           created_at?: string
           expected_observation_count_60s?: number
+          failure_reason?: string | null
           feature_cutoff_ts: string
           feature_schema_hash: string
           feature_values_hash: string
@@ -651,6 +655,7 @@ export type Database = {
           history_count_96?: number
           history_ready?: boolean
           history_ready_reason?: string | null
+          history_valid_count?: number | null
           id?: string
           implementation_revision?: string
           market_kind: Database["public"]["Enums"]["binance_ob_market_kind"]
@@ -689,6 +694,7 @@ export type Database = {
           target_ts: string
           total_depth_percentile_96?: number | null
           venue?: string
+          watchdog_created?: boolean
         }
         Update: {
           abs_imbalance_percentile_96?: number | null
@@ -705,6 +711,7 @@ export type Database = {
           config_hash?: string
           created_at?: string
           expected_observation_count_60s?: number
+          failure_reason?: string | null
           feature_cutoff_ts?: string
           feature_schema_hash?: string
           feature_values_hash?: string
@@ -731,6 +738,7 @@ export type Database = {
           history_count_96?: number
           history_ready?: boolean
           history_ready_reason?: string | null
+          history_valid_count?: number | null
           id?: string
           implementation_revision?: string
           market_kind?: Database["public"]["Enums"]["binance_ob_market_kind"]
@@ -769,6 +777,7 @@ export type Database = {
           target_ts?: string
           total_depth_percentile_96?: number | null
           venue?: string
+          watchdog_created?: boolean
         }
         Relationships: []
       }
