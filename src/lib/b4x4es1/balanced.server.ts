@@ -35,8 +35,13 @@ const ACTIVATION_ID = "b4x4-es1";
 /** Balanced publication switch. Rows are always recorded either way. */
 export const BALANCED_PUBLICATION_ENABLED = true;
 
-function nextCleanBoundaryTs(fromMs: number): string {
-  return new Date(Math.floor(fromMs / TF_MS) * TF_MS + TF_MS).toISOString();
+/**
+ * A qualifying boundary ARMS activation for the FOLLOWING boundary (T + 15m).
+ * It never activates itself: the arming row stays
+ * ABSTAIN_BALANCED_ACTIVATION_NOT_REACHED.
+ */
+function nextCleanBoundaryTs(targetTs: string): string {
+  return new Date(Math.floor(new Date(targetTs).getTime() / TF_MS) * TF_MS + TF_MS).toISOString();
 }
 
 /**
@@ -48,6 +53,7 @@ export async function ensureBalancedActivation(
   sb: SupabaseClient,
   eligible: boolean,
   snapshot: Record<string, unknown>,
+  targetTs: string,
 ): Promise<string | null> {
   const { data } = await sb
     .from("b4x4_es1_activation")
@@ -58,7 +64,7 @@ export async function ensureBalancedActivation(
   if (existing) return new Date(existing).toISOString();
   if (!eligible) return null;
 
-  const activationTs = nextCleanBoundaryTs(Date.now());
+  const activationTs = nextCleanBoundaryTs(targetTs);
   await sb
     .from("b4x4_es1_activation")
     .update({
@@ -139,7 +145,7 @@ export async function runBalancedForPrediction(
     perp_ready: perp.gateReason == null,
     es1_parity_certified: es1.parityCertified,
     checked_at: new Date().toISOString(),
-  }).catch(() => null);
+  }, targetTs).catch(() => null);
 
   const decision = applyActivationGate({ ...raw, activationBoundaryTs: activationTs }, targetTs, activationTs);
 
