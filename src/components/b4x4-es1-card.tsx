@@ -50,8 +50,10 @@ export function B4x4Es1Card({
     stats.last7 ?? [];
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
 
-  const traded = pending?.would_trade === true;
-  const upper = String(pending?.final_prediction ?? pending?.hybrid_direction ?? "—").toUpperCase();
+  // The ACTIVE decision is the balanced 4-vote policy; the legacy chain is only
+  // a counterfactual, so never surface its abstention as the headline.
+  const traded = pending?.balanced_would_trade === true;
+  const upper = String(pending?.balanced_final_prediction ?? "—").toUpperCase();
   const candleMs = pending?.target_candle_ts
     ? new Date(String(pending.target_candle_ts)).getTime()
     : NaN;
