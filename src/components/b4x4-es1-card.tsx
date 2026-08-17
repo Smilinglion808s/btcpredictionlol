@@ -82,14 +82,16 @@ export function B4x4Es1Card({
           <div className="text-[9px] uppercase tracking-[0.28em] text-amber/80 mb-1">
             Active model · B4x4-ES1
           </div>
-          <h3 className="b4-title text-4xl font-bold font-heading tracking-tight leading-none">ES1</h3>
+          <h3 className="b4-title text-4xl font-bold font-heading tracking-tight leading-none">
+            ES1 Balanced
+          </h3>
           <div className="text-[10px] text-muted-foreground mt-1 font-mono">
-            11-step directional engine · price-head + OB fade + A2 agreement
+            4-vote 3-of-4 · ES1 price-head + Binance SPOT depth/OFI60 + PERP fade
           </div>
           <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
-            {String(stats.variant ?? "es1")}
-            {stats.model_version ? ` · ${String(stats.model_version)}` : ""}
+            es1-binance-3of4-balanced · b4x4-es1-balanced-binance-r1
           </div>
+
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Button
