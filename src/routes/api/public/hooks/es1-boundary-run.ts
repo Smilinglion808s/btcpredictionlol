@@ -106,23 +106,33 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
 
           if (row) {
             out.row_id = row.id;
-            out.final_prediction = row.final_prediction;
-            out.would_trade = row.would_trade;
-            out.webhook_sent = await maybeSendEs1Webhook(supabase, row);
+            out.legacy_final_prediction = row.final_prediction;
+            out.legacy_would_trade = row.would_trade;
 
-            // Shadow-only Binance order-book linkage. Runs strictly AFTER the
-            // webhook so it can never delay or alter an ES1 decision.
+            // ACTIVE MODEL: B4x4-ES1 Balanced Binance 3-of-4 R1.
+            // Exact-target Binance features are finalized and gated here,
+            // strictly BEFORE the active decision and before any webhook.
+            let balancedRow: Record<string, unknown> = row as Record<string, unknown>;
             try {
-              const { linkBinanceObToPrediction } = await import(
-                "@/lib/b4x4es1/binanceOb/orchestrator.server"
-              );
-              await linkBinanceObToPrediction(supabase, row.id as string, targetTs);
+              const { runBalancedForPrediction } = await import("@/lib/b4x4es1/balanced.server");
+              const balanced = await runBalancedForPrediction(supabase, row, targetTs);
+              if (balanced) {
+                balancedRow = { ...balancedRow, ...balanced.patch };
+                out.balanced_final_prediction = balanced.decision.finalPrediction;
+                out.balanced_would_trade = balanced.decision.wouldTrade;
+                out.balanced_decision_reason = balanced.decision.decisionReason;
+                out.balanced_vote_pattern = balanced.decision.votePattern;
+                out.balanced_agreement_tier = balanced.decision.agreementTier;
+              }
               out.binance_ob_linked = true;
-            } catch {
+            } catch (e) {
               out.binance_ob_linked = false;
+              out.balanced_error = e instanceof Error ? e.message : String(e);
             }
 
+            out.webhook_sent = await maybeSendEs1Webhook(supabase, balancedRow);
           } else {
+
             out.error = "source candle unavailable";
           }
         } catch (e) {

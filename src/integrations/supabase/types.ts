@@ -459,6 +459,10 @@ export type Database = {
           activation_readiness_snapshot: Json
           activation_set_at: string
           activation_target_ts: string
+          balanced_activation_set_at: string | null
+          balanced_activation_snapshot: Json | null
+          balanced_activation_target_ts: string | null
+          balanced_policy_version: string | null
           forward_test_sequence_number: number
           id: string
           model_version: string
@@ -467,6 +471,10 @@ export type Database = {
           activation_readiness_snapshot?: Json
           activation_set_at?: string
           activation_target_ts: string
+          balanced_activation_set_at?: string | null
+          balanced_activation_snapshot?: Json | null
+          balanced_activation_target_ts?: string | null
+          balanced_policy_version?: string | null
           forward_test_sequence_number?: number
           id: string
           model_version: string
@@ -475,9 +483,103 @@ export type Database = {
           activation_readiness_snapshot?: Json
           activation_set_at?: string
           activation_target_ts?: string
+          balanced_activation_set_at?: string | null
+          balanced_activation_snapshot?: Json | null
+          balanced_activation_target_ts?: string | null
+          balanced_policy_version?: string | null
           forward_test_sequence_number?: number
           id?: string
           model_version?: string
+        }
+        Relationships: []
+      }
+      b4x4_es1_balanced_shadows: {
+        Row: {
+          actual_direction: string | null
+          agreement_tier: string | null
+          candidate_direction: string | null
+          config_hash: string | null
+          created_at: string
+          es1_vote: number | null
+          id: string
+          implementation_revision: string | null
+          input_values_hash: string | null
+          is_active_policy: boolean
+          perp_fade_vote: number | null
+          perp_feature_id: string | null
+          policy_name: string
+          policy_version: string
+          prediction_id: string | null
+          qualification_reason: string | null
+          qualified: boolean
+          resolved_at: string | null
+          result: string | null
+          result_score: number | null
+          run_mode: string
+          spot_depth_vote: number | null
+          spot_feature_id: string | null
+          spot_ofi60_vote: number | null
+          target_ts: string
+          vote_pattern: string | null
+          would_trade: boolean
+        }
+        Insert: {
+          actual_direction?: string | null
+          agreement_tier?: string | null
+          candidate_direction?: string | null
+          config_hash?: string | null
+          created_at?: string
+          es1_vote?: number | null
+          id?: string
+          implementation_revision?: string | null
+          input_values_hash?: string | null
+          is_active_policy?: boolean
+          perp_fade_vote?: number | null
+          perp_feature_id?: string | null
+          policy_name: string
+          policy_version: string
+          prediction_id?: string | null
+          qualification_reason?: string | null
+          qualified?: boolean
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          spot_depth_vote?: number | null
+          spot_feature_id?: string | null
+          spot_ofi60_vote?: number | null
+          target_ts: string
+          vote_pattern?: string | null
+          would_trade?: boolean
+        }
+        Update: {
+          actual_direction?: string | null
+          agreement_tier?: string | null
+          candidate_direction?: string | null
+          config_hash?: string | null
+          created_at?: string
+          es1_vote?: number | null
+          id?: string
+          implementation_revision?: string | null
+          input_values_hash?: string | null
+          is_active_policy?: boolean
+          perp_fade_vote?: number | null
+          perp_feature_id?: string | null
+          policy_name?: string
+          policy_version?: string
+          prediction_id?: string | null
+          qualification_reason?: string | null
+          qualified?: boolean
+          resolved_at?: string | null
+          result?: string | null
+          result_score?: number | null
+          run_mode?: string
+          spot_depth_vote?: number | null
+          spot_feature_id?: string | null
+          spot_ofi60_vote?: number | null
+          target_ts?: string
+          vote_pattern?: string | null
+          would_trade?: boolean
         }
         Relationships: []
       }
@@ -1369,6 +1471,63 @@ export type Database = {
           b4_same_side_rank: number | null
           b4_training_end_index: number | null
           b4_training_start_index: number | null
+          balanced_activation_target_ts: string | null
+          balanced_active: boolean | null
+          balanced_agreement_tier: string | null
+          balanced_binance_loaded_at: string | null
+          balanced_config_hash: string | null
+          balanced_decision_at: string | null
+          balanced_decision_reason: string | null
+          balanced_es1_confidence: number | null
+          balanced_es1_parity_certified: boolean | null
+          balanced_es1_price_direction: string | null
+          balanced_es1_probability_green: number | null
+          balanced_es1_vote: number | null
+          balanced_feature_schema: string | null
+          balanced_final_prediction: string | null
+          balanced_green_vote_count: number | null
+          balanced_implementation_revision: string | null
+          balanced_incremental_value: number | null
+          balanced_legacy_decision_reason: string | null
+          balanced_legacy_direction: string | null
+          balanced_legacy_result: string | null
+          balanced_legacy_score: number | null
+          balanced_legacy_would_trade: boolean | null
+          balanced_model_version: string | null
+          balanced_perp_capture_status: string | null
+          balanced_perp_fade_vote: number | null
+          balanced_perp_feature_id: string | null
+          balanced_perp_final_imbalance_10bps: number | null
+          balanced_perp_gate_reason: string | null
+          balanced_perp_ready: boolean | null
+          balanced_perp_ready_reason: string | null
+          balanced_perp_resync_continuous: boolean | null
+          balanced_perp_values_hash: string | null
+          balanced_policy_version: string | null
+          balanced_price_fit_id: string | null
+          balanced_price_fit_source: string | null
+          balanced_prospective_test_id: string | null
+          balanced_red_vote_count: number | null
+          balanced_resolved_at: string | null
+          balanced_result: string | null
+          balanced_result_score: number | null
+          balanced_spot_capture_status: string | null
+          balanced_spot_depth_vote: number | null
+          balanced_spot_feature_id: string | null
+          balanced_spot_final_imbalance_10bps: number | null
+          balanced_spot_gate_reason: string | null
+          balanced_spot_normalized_ofi_60s: number | null
+          balanced_spot_ofi60_vote: number | null
+          balanced_spot_ready: boolean | null
+          balanced_spot_ready_reason: string | null
+          balanced_spot_resync_continuous: boolean | null
+          balanced_spot_values_hash: string | null
+          balanced_vote_margin: number | null
+          balanced_vote_pattern: string | null
+          balanced_vote_sum: number | null
+          balanced_webhook_eligible: boolean | null
+          balanced_webhook_sent_at: string | null
+          balanced_would_trade: boolean | null
           binance_ob_abs_percentile_96: number | null
           binance_ob_capture_status: string | null
           binance_ob_config_hash: string | null
@@ -1527,6 +1686,63 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          balanced_activation_target_ts?: string | null
+          balanced_active?: boolean | null
+          balanced_agreement_tier?: string | null
+          balanced_binance_loaded_at?: string | null
+          balanced_config_hash?: string | null
+          balanced_decision_at?: string | null
+          balanced_decision_reason?: string | null
+          balanced_es1_confidence?: number | null
+          balanced_es1_parity_certified?: boolean | null
+          balanced_es1_price_direction?: string | null
+          balanced_es1_probability_green?: number | null
+          balanced_es1_vote?: number | null
+          balanced_feature_schema?: string | null
+          balanced_final_prediction?: string | null
+          balanced_green_vote_count?: number | null
+          balanced_implementation_revision?: string | null
+          balanced_incremental_value?: number | null
+          balanced_legacy_decision_reason?: string | null
+          balanced_legacy_direction?: string | null
+          balanced_legacy_result?: string | null
+          balanced_legacy_score?: number | null
+          balanced_legacy_would_trade?: boolean | null
+          balanced_model_version?: string | null
+          balanced_perp_capture_status?: string | null
+          balanced_perp_fade_vote?: number | null
+          balanced_perp_feature_id?: string | null
+          balanced_perp_final_imbalance_10bps?: number | null
+          balanced_perp_gate_reason?: string | null
+          balanced_perp_ready?: boolean | null
+          balanced_perp_ready_reason?: string | null
+          balanced_perp_resync_continuous?: boolean | null
+          balanced_perp_values_hash?: string | null
+          balanced_policy_version?: string | null
+          balanced_price_fit_id?: string | null
+          balanced_price_fit_source?: string | null
+          balanced_prospective_test_id?: string | null
+          balanced_red_vote_count?: number | null
+          balanced_resolved_at?: string | null
+          balanced_result?: string | null
+          balanced_result_score?: number | null
+          balanced_spot_capture_status?: string | null
+          balanced_spot_depth_vote?: number | null
+          balanced_spot_feature_id?: string | null
+          balanced_spot_final_imbalance_10bps?: number | null
+          balanced_spot_gate_reason?: string | null
+          balanced_spot_normalized_ofi_60s?: number | null
+          balanced_spot_ofi60_vote?: number | null
+          balanced_spot_ready?: boolean | null
+          balanced_spot_ready_reason?: string | null
+          balanced_spot_resync_continuous?: boolean | null
+          balanced_spot_values_hash?: string | null
+          balanced_vote_margin?: number | null
+          balanced_vote_pattern?: string | null
+          balanced_vote_sum?: number | null
+          balanced_webhook_eligible?: boolean | null
+          balanced_webhook_sent_at?: string | null
+          balanced_would_trade?: boolean | null
           binance_ob_abs_percentile_96?: number | null
           binance_ob_capture_status?: string | null
           binance_ob_config_hash?: string | null
@@ -1687,6 +1903,63 @@ export type Database = {
           b4_same_side_rank?: number | null
           b4_training_end_index?: number | null
           b4_training_start_index?: number | null
+          balanced_activation_target_ts?: string | null
+          balanced_active?: boolean | null
+          balanced_agreement_tier?: string | null
+          balanced_binance_loaded_at?: string | null
+          balanced_config_hash?: string | null
+          balanced_decision_at?: string | null
+          balanced_decision_reason?: string | null
+          balanced_es1_confidence?: number | null
+          balanced_es1_parity_certified?: boolean | null
+          balanced_es1_price_direction?: string | null
+          balanced_es1_probability_green?: number | null
+          balanced_es1_vote?: number | null
+          balanced_feature_schema?: string | null
+          balanced_final_prediction?: string | null
+          balanced_green_vote_count?: number | null
+          balanced_implementation_revision?: string | null
+          balanced_incremental_value?: number | null
+          balanced_legacy_decision_reason?: string | null
+          balanced_legacy_direction?: string | null
+          balanced_legacy_result?: string | null
+          balanced_legacy_score?: number | null
+          balanced_legacy_would_trade?: boolean | null
+          balanced_model_version?: string | null
+          balanced_perp_capture_status?: string | null
+          balanced_perp_fade_vote?: number | null
+          balanced_perp_feature_id?: string | null
+          balanced_perp_final_imbalance_10bps?: number | null
+          balanced_perp_gate_reason?: string | null
+          balanced_perp_ready?: boolean | null
+          balanced_perp_ready_reason?: string | null
+          balanced_perp_resync_continuous?: boolean | null
+          balanced_perp_values_hash?: string | null
+          balanced_policy_version?: string | null
+          balanced_price_fit_id?: string | null
+          balanced_price_fit_source?: string | null
+          balanced_prospective_test_id?: string | null
+          balanced_red_vote_count?: number | null
+          balanced_resolved_at?: string | null
+          balanced_result?: string | null
+          balanced_result_score?: number | null
+          balanced_spot_capture_status?: string | null
+          balanced_spot_depth_vote?: number | null
+          balanced_spot_feature_id?: string | null
+          balanced_spot_final_imbalance_10bps?: number | null
+          balanced_spot_gate_reason?: string | null
+          balanced_spot_normalized_ofi_60s?: number | null
+          balanced_spot_ofi60_vote?: number | null
+          balanced_spot_ready?: boolean | null
+          balanced_spot_ready_reason?: string | null
+          balanced_spot_resync_continuous?: boolean | null
+          balanced_spot_values_hash?: string | null
+          balanced_vote_margin?: number | null
+          balanced_vote_pattern?: string | null
+          balanced_vote_sum?: number | null
+          balanced_webhook_eligible?: boolean | null
+          balanced_webhook_sent_at?: string | null
+          balanced_would_trade?: boolean | null
           binance_ob_abs_percentile_96?: number | null
           binance_ob_capture_status?: string | null
           binance_ob_config_hash?: string | null

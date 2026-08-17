@@ -139,7 +139,10 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
     const rows = await pageAll(
       "target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
         "decision_reason, result, result_score, resolved_at, b4_guard_attribution_class, " +
-        "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status",
+        "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status, " +
+        "balanced_would_trade, balanced_final_prediction, balanced_decision_reason, " +
+        "balanced_result, balanced_result_score, balanced_resolved_at, balanced_active, " +
+        "balanced_agreement_tier, balanced_incremental_value",
     );
     const live = rows.filter(
       (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
@@ -147,8 +150,30 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
     const warm = rows.filter((r) => r.run_mode === "BACKFILL");
     const active = aggregate(live);
     const warmup = aggregate(warm);
+    // Active model view: the balanced 4-vote decision, scored on its own terms.
+    const balancedRows: Row[] = live.map((r) => ({
+      ...r,
+      would_trade: r.balanced_would_trade,
+      final_prediction: r.balanced_final_prediction,
+      decision_reason: r.balanced_decision_reason,
+      result: r.balanced_result,
+      result_score: r.balanced_result_score,
+      resolved_at: r.balanced_resolved_at,
+    }));
+
+    const balanced = aggregate(balancedRows);
+    const unanimous = balancedRows.filter(
+      (r) => r.balanced_agreement_tier === "UNANIMOUS_4_OF_4" && r.would_trade === true,
+    );
     return {
       ...active,
+      balanced: {
+        ...balanced,
+        activated: live.some((r) => r.balanced_active === true),
+        unanimous_trades: unanimous.length,
+        unanimous_net: unanimous.reduce((s, r) => s + Number(r.result_score ?? 0), 0),
+        incremental_net: live.reduce((s, r) => s + Number(r.balanced_incremental_value ?? 0), 0),
+      },
       warmup: {
         total_opportunities: warmup.total_opportunities,
         trades: warmup.trades,
@@ -166,6 +191,7 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
   }),
 );
 
+
 /** Most recent ES1 row — its decision for the pending candle. */
 export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () =>
   cachedStats("b4x4-es1-pending", async () => {
@@ -177,7 +203,14 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
           "hybrid_direction, hybrid_evidence, price_direction, price_probability_green, " +
           "a2_direction, a2_agrees, combined_confidence_rank, b4_cell, b4_p_correct, b4_ready, " +
           "b4_guard_veto_fired, ob_route_qualified, ob_depth_imbalance_10bps, result, " +
-          "result_score, resolved_at, webhook_sent_at",
+          "result_score, resolved_at, webhook_sent_at, " +
+          "balanced_final_prediction, balanced_would_trade, balanced_decision_reason, " +
+          "balanced_vote_pattern, balanced_agreement_tier, balanced_green_vote_count, " +
+          "balanced_red_vote_count, balanced_es1_vote, balanced_spot_depth_vote, " +
+          "balanced_spot_ofi60_vote, balanced_perp_fade_vote, balanced_spot_ready, " +
+          "balanced_perp_ready, balanced_spot_gate_reason, balanced_perp_gate_reason, " +
+          "balanced_active, balanced_result, balanced_webhook_sent_at",
+
       )
       .eq("model_version", ES1_MODEL_VERSION)
       .order("target_candle_ts", { ascending: false })
