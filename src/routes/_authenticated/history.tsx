@@ -479,6 +479,8 @@ function CsvDataPage() {
   const exportObObservationsFn = useServerFn(exportBinanceObObservationsCsv);
   const exportObObservations = () => exportObObservationsFn({ data: { targets: 96 } });
   const [buildingUniversal, setBuildingUniversal] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
 
   useEffect(() => {
     const ch = supabase
