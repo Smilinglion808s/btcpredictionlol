@@ -213,16 +213,31 @@ export function B4x4Es1Card({
         </div>
       </Section>
 
-      <Section title="Guard attribution">
+      <Section title="Vote attribution">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Guard avoided" value={String(stats.guard_avoided_losses ?? 0)} tone="text-bull" />
-          <Stat label="Guard sacrificed" value={String(stats.guard_sacrificed_wins ?? 0)} tone="text-bear" />
-          <Stat label="Abstain (disagree)" value={String(stats.abstain_disagree ?? 0)} />
-          <Stat label="Abstain (guard)" value={String(stats.abstain_guard ?? 0)} />
-          <Stat label="Abstain (confidence)" value={String(stats.abstain_confidence ?? 0)} />
-          <Stat label="Abstain (not ready)" value={String(stats.abstain_not_ready ?? 0)} />
+          <Stat label="Unanimous 4-0" value={String(b.unanimous_trades ?? 0)} />
+          <Stat
+            label="Unanimous net"
+            value={signed(Number(b.unanimous_net ?? 0))}
+            tone={
+              Number(b.unanimous_net ?? 0) > 0
+                ? "text-bull"
+                : Number(b.unanimous_net ?? 0) < 0
+                  ? "text-bear"
+                  : ""
+            }
+          />
+          <Stat
+            label="Majority 3-1"
+            value={String(Math.max(0, Number(b.trades ?? 0) - Number(b.unanimous_trades ?? 0)))}
+          />
+          <Stat
+            label="Abstained"
+            value={String(Math.max(0, Number(b.total_opportunities ?? 0) - Number(b.trades ?? 0)))}
+          />
         </div>
       </Section>
+
 
       <Section title="Last 7 local days">
         <div className="grid grid-cols-7 gap-1">
