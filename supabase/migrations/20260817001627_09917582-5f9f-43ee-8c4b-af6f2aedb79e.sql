@@ -1,0 +1,2 @@
+ALTER TABLE public.b4x4_es1_binance_ob_observations DROP CONSTRAINT binance_ob_sample_window;
+ALTER TABLE public.b4x4_es1_binance_ob_observations ADD CONSTRAINT binance_ob_sample_window CHECK (sample_ts <= feature_cutoff_ts AND sample_ts >= (target_ts - interval '60.25 seconds'));
