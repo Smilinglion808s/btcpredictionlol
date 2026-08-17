@@ -203,7 +203,14 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
           "hybrid_direction, hybrid_evidence, price_direction, price_probability_green, " +
           "a2_direction, a2_agrees, combined_confidence_rank, b4_cell, b4_p_correct, b4_ready, " +
           "b4_guard_veto_fired, ob_route_qualified, ob_depth_imbalance_10bps, result, " +
-          "result_score, resolved_at, webhook_sent_at",
+          "result_score, resolved_at, webhook_sent_at, " +
+          "balanced_final_prediction, balanced_would_trade, balanced_decision_reason, " +
+          "balanced_vote_pattern, balanced_agreement_tier, balanced_green_vote_count, " +
+          "balanced_red_vote_count, balanced_es1_vote, balanced_spot_depth_vote, " +
+          "balanced_spot_ofi60_vote, balanced_perp_fade_vote, balanced_spot_ready, " +
+          "balanced_perp_ready, balanced_spot_gate_reason, balanced_perp_gate_reason, " +
+          "balanced_active, balanced_result, balanced_webhook_sent_at",
+
       )
       .eq("model_version", ES1_MODEL_VERSION)
       .order("target_candle_ts", { ascending: false })
