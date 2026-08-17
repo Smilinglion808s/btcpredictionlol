@@ -158,8 +158,8 @@ export function B4x4Es1Card({
       </div>
 
       <div className="relative grid grid-cols-4 gap-2 mb-4">
-        <Stat label="Published" value={String(stats.published ?? stats.trades ?? 0)} />
-        <Stat label="Resolved" value={String(stats.resolved ?? 0)} />
+        <Stat label="Published" value={String(b.published ?? b.trades ?? 0)} />
+        <Stat label="Resolved" value={String(b.resolved ?? 0)} />
         <Stat label="Pushes" value={String(pushes)} />
         <Stat label="Pending" value={String(pendingCount)} />
       </div>
@@ -167,24 +167,18 @@ export function B4x4Es1Card({
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
         <Stat label="Wins" value={String(wins)} tone="text-bull" />
         <Stat label="Losses" value={String(losses)} tone="text-bear" />
-        <Stat label="Evaluable" value={String(stats.evaluable ?? wins + losses)} />
+        <Stat label="Evaluable" value={String(b.evaluable ?? wins + losses)} />
         <Stat label="Coverage" value={`${coverage.toFixed(1)}%`} />
-        <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
-        <Stat label="Price route" value={String(stats.price_route_trades ?? 0)} />
-        <Stat label="OB route" value={String(stats.ob_route_trades ?? 0)} />
-        <Stat label="Today" value={`${signed(Number(stats.today_net ?? 0))} · ${stats.today_trades ?? 0}t`} />
+        <Stat label="Max DD" value={String(b.max_drawdown ?? 0)} />
+        <Stat label="Opportunities" value={String(b.total_opportunities ?? 0)} />
+        <Stat label="Today" value={`${signed(Number(b.today_net ?? 0))} · ${b.today_trades ?? 0}t`} />
         <Stat
-          label="Guard net"
-          value={signed(Number(stats.guard_incremental_net ?? 0))}
-          tone={
-            Number(stats.guard_incremental_net ?? 0) > 0
-              ? "text-bull"
-              : Number(stats.guard_incremental_net ?? 0) < 0
-                ? "text-bear"
-                : ""
-          }
+          label="Activation"
+          value={b.activated === true ? "LIVE" : "ARMING"}
+          tone={b.activated === true ? "text-bull" : "text-amber"}
         />
       </div>
+
 
       <Section title="Current candle">
         <div className="flex items-center gap-2 flex-wrap">
