@@ -151,7 +151,7 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
     const active = aggregate(live);
     const warmup = aggregate(warm);
     // Active model view: the balanced 4-vote decision, scored on its own terms.
-    const balancedRows = live.map((r) => ({
+    const balancedRows: Row[] = live.map((r) => ({
       ...r,
       would_trade: r.balanced_would_trade,
       final_prediction: r.balanced_final_prediction,
@@ -160,6 +160,7 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
       result_score: r.balanced_result_score,
       resolved_at: r.balanced_resolved_at,
     }));
+
     const balanced = aggregate(balancedRows);
     const unanimous = balancedRows.filter(
       (r) => r.balanced_agreement_tier === "UNANIMOUS_4_OF_4" && r.would_trade === true,
