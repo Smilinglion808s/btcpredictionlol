@@ -39,16 +39,20 @@ export function B4x4Es1Card({
   onExport: () => void;
   exporting: boolean;
 }) {
-  const wins = Number(stats.wins ?? 0);
-  const losses = Number(stats.losses ?? 0);
-  const pushes = Number(stats.pushes ?? 0);
-  const net = Number(stats.net ?? 0);
-  const wr = Number(stats.win_rate ?? 0);
-  const coverage = Number(stats.coverage ?? 0);
-  const pendingCount = Number(stats.pending ?? 0);
+  // The active model is the balanced 4-vote policy: every headline number must
+  // come from the balanced_* scoped aggregate, never the legacy chain.
+  const b: Any = (stats.balanced as Any | undefined) ?? {};
+  const wins = Number(b.wins ?? 0);
+  const losses = Number(b.losses ?? 0);
+  const pushes = Number(b.pushes ?? 0);
+  const net = Number(b.net ?? 0);
+  const wr = Number(b.win_rate ?? 0);
+  const coverage = Number(b.coverage ?? 0);
+  const pendingCount = Number(b.pending ?? 0);
   const last7: Array<{ date: string; net: number; wins: number; losses: number; trades: number }> =
-    stats.last7 ?? [];
+    b.last7 ?? [];
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
+
 
   // The ACTIVE decision is the balanced 4-vote policy; the legacy chain is only
   // a counterfactual, so never surface its abstention as the headline.
@@ -154,8 +158,8 @@ export function B4x4Es1Card({
       </div>
 
       <div className="relative grid grid-cols-4 gap-2 mb-4">
-        <Stat label="Published" value={String(stats.published ?? stats.trades ?? 0)} />
-        <Stat label="Resolved" value={String(stats.resolved ?? 0)} />
+        <Stat label="Published" value={String(b.published ?? b.trades ?? 0)} />
+        <Stat label="Resolved" value={String(b.resolved ?? 0)} />
         <Stat label="Pushes" value={String(pushes)} />
         <Stat label="Pending" value={String(pendingCount)} />
       </div>
@@ -163,24 +167,18 @@ export function B4x4Es1Card({
       <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
         <Stat label="Wins" value={String(wins)} tone="text-bull" />
         <Stat label="Losses" value={String(losses)} tone="text-bear" />
-        <Stat label="Evaluable" value={String(stats.evaluable ?? wins + losses)} />
+        <Stat label="Evaluable" value={String(b.evaluable ?? wins + losses)} />
         <Stat label="Coverage" value={`${coverage.toFixed(1)}%`} />
-        <Stat label="Max DD" value={String(stats.max_drawdown ?? 0)} />
-        <Stat label="Price route" value={String(stats.price_route_trades ?? 0)} />
-        <Stat label="OB route" value={String(stats.ob_route_trades ?? 0)} />
-        <Stat label="Today" value={`${signed(Number(stats.today_net ?? 0))} · ${stats.today_trades ?? 0}t`} />
+        <Stat label="Max DD" value={String(b.max_drawdown ?? 0)} />
+        <Stat label="Opportunities" value={String(b.total_opportunities ?? 0)} />
+        <Stat label="Today" value={`${signed(Number(b.today_net ?? 0))} · ${b.today_trades ?? 0}t`} />
         <Stat
-          label="Guard net"
-          value={signed(Number(stats.guard_incremental_net ?? 0))}
-          tone={
-            Number(stats.guard_incremental_net ?? 0) > 0
-              ? "text-bull"
-              : Number(stats.guard_incremental_net ?? 0) < 0
-                ? "text-bear"
-                : ""
-          }
+          label="Activation"
+          value={b.activated === true ? "LIVE" : "ARMING"}
+          tone={b.activated === true ? "text-bull" : "text-amber"}
         />
       </div>
+
 
       <Section title="Current candle">
         <div className="flex items-center gap-2 flex-wrap">
@@ -215,16 +213,31 @@ export function B4x4Es1Card({
         </div>
       </Section>
 
-      <Section title="Guard attribution">
+      <Section title="Vote attribution">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Guard avoided" value={String(stats.guard_avoided_losses ?? 0)} tone="text-bull" />
-          <Stat label="Guard sacrificed" value={String(stats.guard_sacrificed_wins ?? 0)} tone="text-bear" />
-          <Stat label="Abstain (disagree)" value={String(stats.abstain_disagree ?? 0)} />
-          <Stat label="Abstain (guard)" value={String(stats.abstain_guard ?? 0)} />
-          <Stat label="Abstain (confidence)" value={String(stats.abstain_confidence ?? 0)} />
-          <Stat label="Abstain (not ready)" value={String(stats.abstain_not_ready ?? 0)} />
+          <Stat label="Unanimous 4-0" value={String(b.unanimous_trades ?? 0)} />
+          <Stat
+            label="Unanimous net"
+            value={signed(Number(b.unanimous_net ?? 0))}
+            tone={
+              Number(b.unanimous_net ?? 0) > 0
+                ? "text-bull"
+                : Number(b.unanimous_net ?? 0) < 0
+                  ? "text-bear"
+                  : ""
+            }
+          />
+          <Stat
+            label="Majority 3-1"
+            value={String(Math.max(0, Number(b.trades ?? 0) - Number(b.unanimous_trades ?? 0)))}
+          />
+          <Stat
+            label="Abstained"
+            value={String(Math.max(0, Number(b.total_opportunities ?? 0) - Number(b.trades ?? 0)))}
+          />
         </div>
       </Section>
+
 
       <Section title="Last 7 local days">
         <div className="grid grid-cols-7 gap-1">
