@@ -551,100 +551,148 @@ function CsvDataPage() {
   };
 
 
-  return (
-    <div className="px-4 sm:px-6 py-5 space-y-4 max-w-[1400px] mx-auto">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">CSV Training Data</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Universal CSV merges every tracked field across the core engine, TD1-RC, and the shadow stack — one row per candle. Model 6, TD1-RC, and V6 per-model exports are available below.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="lg" className="gap-2" onClick={downloadUniversal} disabled={buildingUniversal || listQ.isLoading}>
-            <Download className="size-4" />
-            {buildingUniversal ? "Building…" : "Download Universal CSV"}
-          </Button>
-          <Button
-            size="lg"
-            variant="secondary"
-            className="gap-2"
-            onClick={async () => {
-              const rows = (await exportTd1().catch(() => [])) as any[];
-              downloadJsonRowsAsCsv(rows, "btc15m_td1_rc");
-            }}
-          >
-            <Download className="size-4" /> TD1-RC CSV
-          </Button>
-          <Button
-            size="lg"
-            variant="secondary"
-            className="gap-2"
-            onClick={async () => {
-              const res = await exportV6().catch(() => null);
-              if (!res || !res.csv || res.rows === 0) return;
-              const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `V6_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            <Download className="size-4" /> V6 CSV
-          </Button>
-          <Button
-            size="lg"
-            variant="secondary"
-            className="gap-2"
-            onClick={async () => {
-              const res = await exportEs1().catch(() => null);
-              if (!res || !res.csv || res.rows === 0) return;
-              const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `B4x4_ES1_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            <Download className="size-4" /> B4x4-ES1 CSV
-          </Button>
-          {(
-            [
-              ["B4x4-ES1-Binance-OB", exportObCombined, "B4x4-ES1-Binance-OB"],
-              ["Binance OB Features", exportObFeatures, "Binance_OB_Features"],
-              ["Binance OB Policies", exportObPolicies, "Binance_OB_Policies"],
-              ["Binance OB Observations", exportObObservations, "Binance_OB_Observations"],
-            ] as const
-          ).map(([label, fn, base]) => (
-            <Button
-              key={base}
-              size="lg"
-              variant="outline"
-              className="gap-2"
-              onClick={async () => {
-                const res = await (fn as () => Promise<{ csv: string; rows: number }>)().catch(
-                  () => null,
-                );
-                if (!res || !res.csv || res.rows === 0) return;
-                const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${base}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-            >
-              <Download className="size-4" /> {label} CSV
-            </Button>
-          ))}
+  const csvFetchers: Record<string, () => Promise<{ csv: string; rows: number } | null>> = {
+    v6: () => exportV6().catch(() => null),
+    es1: () => exportEs1().catch(() => null),
+    "ob-combined": () => exportObCombined().catch(() => null),
+    "ob-features": () => exportObFeatures().catch(() => null),
+    "ob-policies": () => exportObPolicies().catch(() => null),
+    "ob-observations": () => exportObObservations().catch(() => null),
+  };
 
-        </div>
+  const runExport = async (id: string, base: string) => {
+    const fn = csvFetchers[id];
+    if (!fn) return;
+    setBusy(id);
+    try {
+      const res = await fn();
+      if (!res || !res.csv || res.rows === 0) {
+        toast.error(`${base}: no rows available yet.`);
+        return;
+      }
+      downloadCsvText(res.csv, base);
+      toast.success(`${base}: ${res.rows.toLocaleString()} rows exported.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const ExportButton = ({
+    id,
+    label,
+    hint,
+    base,
+    variant = "outline",
+    onClick,
+  }: {
+    id: string;
+    label: string;
+    hint: string;
+    base?: string;
+    variant?: "default" | "secondary" | "outline";
+    onClick?: () => Promise<void> | void;
+  }) => (
+    <Button
+      variant={variant}
+      className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+      disabled={busy === id}
+      onClick={onClick ? () => void onClick() : () => void runExport(id, base ?? label)}
+    >
+      <span className="flex w-full items-center gap-2 text-sm font-medium">
+        <Download className="size-4 shrink-0" />
+        {busy === id ? "Preparing…" : label}
+      </span>
+      <span className="text-[11px] font-normal leading-snug opacity-70">{hint}</span>
+    </Button>
+  );
+
+  return (
+    <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1400px] mx-auto">
+      <div>
+        <h1 className="text-xl font-semibold">CSV Training Data</h1>
+        <p className="text-xs text-muted-foreground mt-1 max-w-3xl">
+          Every export is generated live from the database. The Universal CSV merges all tracked
+          fields across the core engine, TD1-RC and the shadow stack — one row per candle.
+        </p>
       </div>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">Model exports</h2>
+            <span className="text-[11px] text-muted-foreground">one row per candle</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <ExportButton
+              id="universal"
+              variant="default"
+              label={buildingUniversal ? "Building…" : "Universal CSV"}
+              hint="All models merged + schema manifest"
+              onClick={downloadUniversal}
+            />
+            <ExportButton
+              id="td1"
+              variant="secondary"
+              label="TD1-RC"
+              hint="Risk-controlled publication layer"
+              onClick={async () => {
+                setBusy("td1");
+                try {
+                  const rows = (await exportTd1().catch(() => [])) as any[];
+                  downloadJsonRowsAsCsv(rows, "btc15m_td1_rc");
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            />
+            <ExportButton id="v6" variant="secondary" label="V6" hint="Frozen V6 router history" base="V6" />
+            <ExportButton
+              id="es1"
+              variant="secondary"
+              label="B4x4-ES1"
+              hint="Balanced Binance 3-of-4 decisions"
+              base="B4x4_ES1"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">Binance order-book data</h2>
+            <span className="text-[11px] text-muted-foreground">SPOT + PERP, 1s sampling</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <ExportButton
+              id="ob-combined"
+              variant="default"
+              label="Order Book — Full Dataset"
+              hint="SPOT + PERP features, all policies & outcomes"
+              base="B4x4-ES1-Binance-OB"
+            />
+            <ExportButton
+              id="ob-features"
+              label="Boundary Features"
+              hint="One row per boundary per market"
+              base="Binance_OB_Features"
+            />
+            <ExportButton
+              id="ob-policies"
+              label="Policy Shadows"
+              hint="Six frozen shadow policies, scored"
+              base="Binance_OB_Policies"
+            />
+            <ExportButton
+              id="ob-observations"
+              label="Raw Observations"
+              hint="1-second samples, last 96 boundaries"
+              base="Binance_OB_Observations"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
 
 
       {groups.length === 0 && (
