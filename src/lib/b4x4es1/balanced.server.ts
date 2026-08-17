@@ -206,6 +206,15 @@ export async function runBalancedForPrediction(
 
   await sb.from("b4x4_es1_predictions").update(patch as never).eq("id", predictionId);
 
+  // Keep the existing binance_ob_* audit columns populated (idempotent).
+  try {
+    const { linkBinanceObToPrediction } = await import("./binanceOb/orchestrator.server");
+    await linkBinanceObToPrediction(sb, predictionId, targetTs);
+  } catch {
+    /* audit only — never blocks the active decision */
+  }
+
+
   // 3. one shadow row per comparison policy, including abstentions.
   const shadows = evaluateBalancedShadowPolicies(decision, {
     direction: (row.final_prediction as Direction | null) ?? null,
