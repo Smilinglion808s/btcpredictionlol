@@ -68,6 +68,26 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
           });
         }
 
+        // Idempotency backstop: a second cron fires ON the boundary so a
+        // crashed/502'd pre-boundary worker can never silently drop a candle.
+        // If the primary pass already produced the row, do nothing — never
+        // re-run the balanced chain or re-send a webhook for the same target.
+        {
+          const { data: existing } = await supabase
+            .from("b4x4_es1_predictions")
+            .select("id")
+            .eq("target_candle_ts", targetTs)
+            .maybeSingle();
+          if (existing) {
+            out.skipped = "prediction already exists for this target";
+            out.row_id = (existing as { id: string }).id;
+            out.elapsed_ms = Date.now() - started;
+            return new Response(JSON.stringify(out), {
+              headers: { "content-type": "application/json" },
+            });
+          }
+        }
+
         try {
           const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
           const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
