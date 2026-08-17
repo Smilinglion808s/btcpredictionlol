@@ -50,8 +50,10 @@ export function B4x4Es1Card({
     stats.last7 ?? [];
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
 
-  const traded = pending?.would_trade === true;
-  const upper = String(pending?.final_prediction ?? pending?.hybrid_direction ?? "—").toUpperCase();
+  // The ACTIVE decision is the balanced 4-vote policy; the legacy chain is only
+  // a counterfactual, so never surface its abstention as the headline.
+  const traded = pending?.balanced_would_trade === true;
+  const upper = String(pending?.balanced_final_prediction ?? "—").toUpperCase();
   const candleMs = pending?.target_candle_ts
     ? new Date(String(pending.target_candle_ts)).getTime()
     : NaN;
@@ -189,29 +191,27 @@ export function B4x4Es1Card({
             <span className="text-[10px] font-mono text-amber tabular-nums">{candleLabel}</span>
           ) : null}
           <span className="text-[10px] font-mono text-muted-foreground">
-            {String(pending?.decision_reason ?? "—")}
+            {String(pending?.balanced_decision_reason ?? "—")}
           </span>
+          {pending?.balanced_webhook_sent_at ? (
+            <span className="text-[10px] font-mono text-bull">webhook sent</span>
+          ) : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono opacity-80">
-          <span>route {String(pending?.hybrid_route ?? "—")}</span>
+          <span>tier {String(pending?.balanced_agreement_tier ?? "—")}</span>
           <span>
-            A2{" "}
-            {pending?.a2_agrees === true
-              ? "agree"
-              : pending?.a2_agrees === false
-                ? "disagree"
-                : "—"}
+            votes {String(pending?.balanced_green_vote_count ?? "—")}G /{" "}
+            {String(pending?.balanced_red_vote_count ?? "—")}R
           </span>
+          <span>{String(pending?.balanced_vote_pattern ?? "—")}</span>
           <span>
-            rank{" "}
-            {pending?.combined_confidence_rank != null
-              ? Number(pending.combined_confidence_rank).toFixed(2)
-              : "—"}
+            books SPOT {pending?.balanced_spot_ready === true ? "ok" : String(pending?.balanced_spot_gate_reason ?? "—")}
+            {" · "}
+            PERP {pending?.balanced_perp_ready === true ? "ok" : String(pending?.balanced_perp_gate_reason ?? "—")}
           </span>
-          <span>cell {String(pending?.b4_cell ?? "—")}</span>
-          <span>
-            p {pending?.b4_p_correct != null ? Number(pending.b4_p_correct).toFixed(3) : "—"}
-          </span>
+        </div>
+        <div className="mt-1 text-[9px] font-mono text-muted-foreground/70">
+          legacy counterfactual · {String(pending?.decision_reason ?? "—")}
         </div>
       </Section>
 
