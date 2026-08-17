@@ -39,16 +39,20 @@ export function B4x4Es1Card({
   onExport: () => void;
   exporting: boolean;
 }) {
-  const wins = Number(stats.wins ?? 0);
-  const losses = Number(stats.losses ?? 0);
-  const pushes = Number(stats.pushes ?? 0);
-  const net = Number(stats.net ?? 0);
-  const wr = Number(stats.win_rate ?? 0);
-  const coverage = Number(stats.coverage ?? 0);
-  const pendingCount = Number(stats.pending ?? 0);
+  // The active model is the balanced 4-vote policy: every headline number must
+  // come from the balanced_* scoped aggregate, never the legacy chain.
+  const b: Any = (stats.balanced as Any | undefined) ?? {};
+  const wins = Number(b.wins ?? 0);
+  const losses = Number(b.losses ?? 0);
+  const pushes = Number(b.pushes ?? 0);
+  const net = Number(b.net ?? 0);
+  const wr = Number(b.win_rate ?? 0);
+  const coverage = Number(b.coverage ?? 0);
+  const pendingCount = Number(b.pending ?? 0);
   const last7: Array<{ date: string; net: number; wins: number; losses: number; trades: number }> =
-    stats.last7 ?? [];
+    b.last7 ?? [];
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
+
 
   // The ACTIVE decision is the balanced 4-vote policy; the legacy chain is only
   // a counterfactual, so never surface its abstention as the headline.
