@@ -20,6 +20,18 @@ import {
 
 import { supabase } from "@/integrations/supabase/client";
 import { Download } from "lucide-react";
+import { toast } from "sonner";
+
+function downloadCsvText(csv: string, base: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${base}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 
 export const Route = createFileRoute("/_authenticated/history")({
   head: () => ({ meta: [{ title: "CSV Data — BTC 15m" }] }),
