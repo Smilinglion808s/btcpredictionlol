@@ -675,8 +675,10 @@ export async function resolveEs1Row(
     const { data } = await supabase
       .from("b4x4_es1_predictions")
       .select(
-        "id, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
-          "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction",
+        "id, target_candle_ts, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
+          "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction, " +
+          "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
+          "balanced_legacy_would_trade, balanced_resolved_at",
       )
       .eq("model_version", ES1_MODEL_VERSION)
       .eq("target_candle_ts", targetTs)
@@ -684,7 +686,19 @@ export async function resolveEs1Row(
     const row = data as unknown as DbRow | null;
     if (!row) return;
     rowId = String(row.id);
+
+    // Score the active balanced model and every comparison policy first; this
+    // is idempotent and independent of the legacy row resolution below.
+    if (!row.balanced_resolved_at) {
+      try {
+        const { resolveBalancedRow } = await import("./balanced.server");
+        await resolveBalancedRow(supabase, row, actualDirection);
+      } catch {
+        /* never block legacy resolution */
+      }
+    }
     if (row.resolved_at) return;
+
 
     const final = scoreAgainst((row.final_prediction as Direction | null) ?? null, actualDirection);
     const raw = scoreAgainst((row.hybrid_direction as Direction | null) ?? null, actualDirection);
