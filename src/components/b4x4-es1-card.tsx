@@ -54,10 +54,10 @@ export function B4x4Es1Card({
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
 
 
-  // The ACTIVE decision is the dual-venue adaptive policy; the balanced and
-  // legacy chains are counterfactuals only.
-  const traded = pending?.dual_adaptive_would_trade === true;
-  const upper = String(pending?.dual_adaptive_candidate_direction ?? "—").toUpperCase();
+  // The ACTIVE decision is the Balanced Precision Stack; the dual-adaptive,
+  // balanced and legacy chains are counterfactuals only.
+  const traded = pending?.precision_would_trade === true;
+  const upper = String(pending?.precision_candidate_direction ?? "—").toUpperCase();
   const candleMs = pending?.target_candle_ts
     ? new Date(String(pending.target_candle_ts)).getTime()
     : NaN;
