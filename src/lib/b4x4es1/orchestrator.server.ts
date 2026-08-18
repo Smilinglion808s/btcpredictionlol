@@ -550,10 +550,10 @@ export async function runEs1ForTarget(
 /**
  * Emit the active B4x4-ES1 directional webhook exactly once for a live row.
  *
- * The active model is B4x4-ES1 Binance Dual-Venue Adaptive R1: the published
- * direction always comes from the dual-venue adaptive decision. The legacy ES1
- * chain and the Balanced 3-of-4 chain are retained as scored counterfactuals
- * only and can never publish.
+ * The active model is B4x4-ES1 Balanced Precision Stack R1: the published
+ * direction always comes from the precision combined leg. The legacy ES1
+ * chain, the Balanced 3-of-4 chain and the Dual-Venue Adaptive chain are all
+ * retained as scored counterfactuals only and can never publish.
  */
 export async function maybeSendEs1Webhook(
   supabase: SupabaseClient,
@@ -563,18 +563,18 @@ export async function maybeSendEs1Webhook(
     if (!ES1_WEBHOOKS_ENABLED || !ES1_PUBLICATION_ENABLED) return false;
     if (!row) return false;
     if (row.run_mode !== "LIVE") return false;
-    if (row.dual_adaptive_would_trade !== true) return false;
-    if (row.dual_adaptive_webhook_eligible !== true) return false;
+    if (row.precision_would_trade !== true) return false;
+    if (row.precision_webhook_eligible !== true) return false;
     if (row.webhook_sent_at) return false;
-    const direction = row.dual_adaptive_candidate_direction;
+    const direction = row.precision_candidate_direction;
     if (direction !== "GREEN" && direction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
     // Never publish for a candle that is already meaningfully underway or
     // closed — the webhook must always describe the upcoming candle.
     if (Date.now() - targetMs > 90_000) return false;
-    const activationTs = row.dual_adaptive_activation_target_ts
-      ? new Date(String(row.dual_adaptive_activation_target_ts)).toISOString()
+    const activationTs = row.precision_activation_target_ts
+      ? new Date(String(row.precision_activation_target_ts)).toISOString()
       : null;
     if (!activationTs || targetMs < new Date(activationTs).getTime()) return false;
 
@@ -582,7 +582,7 @@ export async function maybeSendEs1Webhook(
       .from("b4x4_es1_predictions")
       .update({
         webhook_sent_at: new Date().toISOString(),
-        dual_adaptive_webhook_sent_at: new Date().toISOString(),
+        precision_webhook_sent_at: new Date().toISOString(),
       } as never)
       .eq("id", row.id as string)
       .is("webhook_sent_at", null)
@@ -591,10 +591,10 @@ export async function maybeSendEs1Webhook(
     if (!claimed) return false;
 
     const {
-      MODEL_VERSION: DUAL_MODEL_VERSION,
-      POLICY_VERSION: DUAL_POLICY_VERSION,
-      VARIANT: DUAL_VARIANT,
-    } = await import("./dualAdaptive");
+      PRECISION_MODEL_VERSION: DUAL_MODEL_VERSION,
+      PRECISION_POLICY_VERSION: DUAL_POLICY_VERSION,
+      PRECISION_VARIANT: DUAL_VARIANT,
+    } = await import("./precisionStack.server");
     const { deliverWebhook, formatMountainTime } = await import("../webhooks.server");
     const startsAt = new Date(targetMs).toISOString();
     const endsAt = new Date(targetMs + 15 * 60 * 1000).toISOString();
@@ -635,13 +635,19 @@ export async function maybeSendEs1Webhook(
       prediction_id: row.id ?? null,
       es1_row_id: row.id ?? null,
 
-      // Dual-venue adaptive decision audit
-      spot_mode: row.dual_adaptive_spot_mode ?? null,
-      spot_direction: row.dual_adaptive_spot_direction ?? null,
-      perp_mode: row.dual_adaptive_perp_mode ?? null,
-      perp_direction: row.dual_adaptive_perp_direction ?? null,
-      venue_agreement: row.dual_adaptive_venue_agreement ?? null,
-      decision_reason: row.dual_adaptive_decision_reason ?? null,
+      // Precision Stack decision audit
+      spot_mode: row.precision_spot_mode ?? null,
+      spot_direction: row.precision_spot_direction ?? null,
+      perp_mode: row.precision_perp_mode ?? null,
+      perp_direction: row.precision_perp_direction ?? null,
+      venue_agreement: row.precision_venue_agreement ?? null,
+      decision_reason: row.precision_decision_reason ?? null,
+      precision_sleeve: row.precision_sleeve ?? null,
+      precision_route: row.precision_balanced_route ?? null,
+      precision_balanced_direction: row.precision_balanced_direction ?? null,
+      precision_trend_age: row.precision_prior_trend_age_candles ?? null,
+      precision_upper_wick_percentile_96: row.precision_upper_wick_percentile_96 ?? null,
+      dual_adaptive_decision_reason: row.dual_adaptive_decision_reason ?? null,
       legacy_decision_reason: row.decision_reason ?? null,
 
       route: row.hybrid_route,
@@ -685,10 +691,13 @@ export async function resolveEs1Row(
           "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction, " +
           "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
           "balanced_legacy_would_trade, balanced_resolved_at, " +
-          // Required by the ACTIVE dual-venue resolver: without these the
-          // resolver sees undefined and scores every published trade ABSTAIN.
+          // Required by the resolvers: without these they see undefined and
+          // score every published trade ABSTAIN.
           "dual_adaptive_candidate_direction, dual_adaptive_would_trade, " +
-          "dual_adaptive_resolved_at, dual_adaptive_resolution_attempt_count",
+          "dual_adaptive_resolved_at, dual_adaptive_resolution_attempt_count, " +
+          "precision_would_trade, precision_candidate_direction, " +
+          "precision_balanced_would_trade, precision_balanced_direction, " +
+          "precision_resolved_at, precision_resolution_attempt_count",
       )
       .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
@@ -707,11 +716,20 @@ export async function resolveEs1Row(
         /* never block legacy resolution */
       }
     }
-    // ACTIVE MODEL resolution: Binance Dual-Venue Adaptive R1.
+    // Retained counterfactual: Binance Dual-Venue Adaptive R1.
     if (!row.dual_adaptive_resolved_at) {
       try {
         const { resolveDualAdaptiveRow } = await import("./dualAdaptive.server");
         await resolveDualAdaptiveRow(supabase, row, actualDirection);
+      } catch {
+        /* never block legacy resolution */
+      }
+    }
+    // ACTIVE MODEL resolution: Balanced Precision Stack R1.
+    if (!row.precision_resolved_at) {
+      try {
+        const { resolvePrecisionRow } = await import("./precisionStack.server");
+        await resolvePrecisionRow(supabase, row, actualDirection);
       } catch {
         /* never block legacy resolution */
       }

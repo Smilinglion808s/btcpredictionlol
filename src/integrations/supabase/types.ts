@@ -475,6 +475,15 @@ export type Database = {
           forward_test_sequence_number: number
           id: string
           model_version: string
+          precision_activation_snapshot: Json | null
+          precision_activation_target_ts: string | null
+          precision_approval_note: string | null
+          precision_approved_at: string | null
+          precision_config_hash: string | null
+          precision_created_at: string | null
+          precision_mode: string | null
+          precision_policy_id: string | null
+          precision_policy_version: string | null
         }
         Insert: {
           activation_readiness_snapshot?: Json
@@ -496,6 +505,15 @@ export type Database = {
           forward_test_sequence_number?: number
           id: string
           model_version: string
+          precision_activation_snapshot?: Json | null
+          precision_activation_target_ts?: string | null
+          precision_approval_note?: string | null
+          precision_approved_at?: string | null
+          precision_config_hash?: string | null
+          precision_created_at?: string | null
+          precision_mode?: string | null
+          precision_policy_id?: string | null
+          precision_policy_version?: string | null
         }
         Update: {
           activation_readiness_snapshot?: Json
@@ -517,6 +535,15 @@ export type Database = {
           forward_test_sequence_number?: number
           id?: string
           model_version?: string
+          precision_activation_snapshot?: Json | null
+          precision_activation_target_ts?: string | null
+          precision_approval_note?: string | null
+          precision_approved_at?: string | null
+          precision_config_hash?: string | null
+          precision_created_at?: string | null
+          precision_mode?: string | null
+          precision_policy_id?: string | null
+          precision_policy_version?: string | null
         }
         Relationships: []
       }
@@ -1700,6 +1727,60 @@ export type Database = {
           operational_gap_reason: string | null
           operational_gap_status: string | null
           parity_certified: boolean | null
+          precision_activated: boolean | null
+          precision_activation_id: string | null
+          precision_activation_target_ts: string | null
+          precision_activity_guard_passed: boolean | null
+          precision_balanced_direction: string | null
+          precision_balanced_result: string | null
+          precision_balanced_result_score: number | null
+          precision_balanced_route: string | null
+          precision_balanced_would_trade: boolean | null
+          precision_build_ms: number | null
+          precision_candidate_direction: string | null
+          precision_config_hash: string | null
+          precision_decision_reason: string | null
+          precision_implementation_revision: string | null
+          precision_input_hash: string | null
+          precision_opportunity_index: number | null
+          precision_perp_direction: string | null
+          precision_perp_final_imbalance_10bps: number | null
+          precision_perp_mean_imbalance_10bps_60s: number | null
+          precision_perp_mode: string | null
+          precision_perp_ready: boolean | null
+          precision_perp_sign_change_count_60s: number | null
+          precision_policy_id: string | null
+          precision_policy_version: string | null
+          precision_primary_direction: string | null
+          precision_primary_would_trade: boolean | null
+          precision_prior_trend_age_candles: number | null
+          precision_ready: boolean | null
+          precision_ready_reason: string | null
+          precision_rescue_direction: string | null
+          precision_rescue_would_trade: boolean | null
+          precision_resolution_attempt_count: number | null
+          precision_resolved_at: string | null
+          precision_resolver_version: string | null
+          precision_result: string | null
+          precision_result_score: number | null
+          precision_sleeve: string | null
+          precision_spot_direction: string | null
+          precision_spot_final_imbalance_10bps: number | null
+          precision_spot_mean_imbalance_10bps_60s: number | null
+          precision_spot_mode: string | null
+          precision_spot_normalized_ofi_5s: number | null
+          precision_spot_ready: boolean | null
+          precision_technical_confidence: number | null
+          precision_technical_direction: string | null
+          precision_technical_error: string | null
+          precision_technical_model_available: boolean | null
+          precision_technical_p_green: number | null
+          precision_technical_train_rows: number | null
+          precision_upper_wick_percentile_96: number | null
+          precision_venue_agreement: boolean | null
+          precision_webhook_eligible: boolean | null
+          precision_webhook_sent_at: string | null
+          precision_would_trade: boolean | null
           price_confidence: number | null
           price_confidence_rank: number | null
           price_direction: string | null
@@ -1965,6 +2046,60 @@ export type Database = {
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
           parity_certified?: boolean | null
+          precision_activated?: boolean | null
+          precision_activation_id?: string | null
+          precision_activation_target_ts?: string | null
+          precision_activity_guard_passed?: boolean | null
+          precision_balanced_direction?: string | null
+          precision_balanced_result?: string | null
+          precision_balanced_result_score?: number | null
+          precision_balanced_route?: string | null
+          precision_balanced_would_trade?: boolean | null
+          precision_build_ms?: number | null
+          precision_candidate_direction?: string | null
+          precision_config_hash?: string | null
+          precision_decision_reason?: string | null
+          precision_implementation_revision?: string | null
+          precision_input_hash?: string | null
+          precision_opportunity_index?: number | null
+          precision_perp_direction?: string | null
+          precision_perp_final_imbalance_10bps?: number | null
+          precision_perp_mean_imbalance_10bps_60s?: number | null
+          precision_perp_mode?: string | null
+          precision_perp_ready?: boolean | null
+          precision_perp_sign_change_count_60s?: number | null
+          precision_policy_id?: string | null
+          precision_policy_version?: string | null
+          precision_primary_direction?: string | null
+          precision_primary_would_trade?: boolean | null
+          precision_prior_trend_age_candles?: number | null
+          precision_ready?: boolean | null
+          precision_ready_reason?: string | null
+          precision_rescue_direction?: string | null
+          precision_rescue_would_trade?: boolean | null
+          precision_resolution_attempt_count?: number | null
+          precision_resolved_at?: string | null
+          precision_resolver_version?: string | null
+          precision_result?: string | null
+          precision_result_score?: number | null
+          precision_sleeve?: string | null
+          precision_spot_direction?: string | null
+          precision_spot_final_imbalance_10bps?: number | null
+          precision_spot_mean_imbalance_10bps_60s?: number | null
+          precision_spot_mode?: string | null
+          precision_spot_normalized_ofi_5s?: number | null
+          precision_spot_ready?: boolean | null
+          precision_technical_confidence?: number | null
+          precision_technical_direction?: string | null
+          precision_technical_error?: string | null
+          precision_technical_model_available?: boolean | null
+          precision_technical_p_green?: number | null
+          precision_technical_train_rows?: number | null
+          precision_upper_wick_percentile_96?: number | null
+          precision_venue_agreement?: boolean | null
+          precision_webhook_eligible?: boolean | null
+          precision_webhook_sent_at?: string | null
+          precision_would_trade?: boolean | null
           price_confidence?: number | null
           price_confidence_rank?: number | null
           price_direction?: string | null
@@ -2230,6 +2365,60 @@ export type Database = {
           operational_gap_reason?: string | null
           operational_gap_status?: string | null
           parity_certified?: boolean | null
+          precision_activated?: boolean | null
+          precision_activation_id?: string | null
+          precision_activation_target_ts?: string | null
+          precision_activity_guard_passed?: boolean | null
+          precision_balanced_direction?: string | null
+          precision_balanced_result?: string | null
+          precision_balanced_result_score?: number | null
+          precision_balanced_route?: string | null
+          precision_balanced_would_trade?: boolean | null
+          precision_build_ms?: number | null
+          precision_candidate_direction?: string | null
+          precision_config_hash?: string | null
+          precision_decision_reason?: string | null
+          precision_implementation_revision?: string | null
+          precision_input_hash?: string | null
+          precision_opportunity_index?: number | null
+          precision_perp_direction?: string | null
+          precision_perp_final_imbalance_10bps?: number | null
+          precision_perp_mean_imbalance_10bps_60s?: number | null
+          precision_perp_mode?: string | null
+          precision_perp_ready?: boolean | null
+          precision_perp_sign_change_count_60s?: number | null
+          precision_policy_id?: string | null
+          precision_policy_version?: string | null
+          precision_primary_direction?: string | null
+          precision_primary_would_trade?: boolean | null
+          precision_prior_trend_age_candles?: number | null
+          precision_ready?: boolean | null
+          precision_ready_reason?: string | null
+          precision_rescue_direction?: string | null
+          precision_rescue_would_trade?: boolean | null
+          precision_resolution_attempt_count?: number | null
+          precision_resolved_at?: string | null
+          precision_resolver_version?: string | null
+          precision_result?: string | null
+          precision_result_score?: number | null
+          precision_sleeve?: string | null
+          precision_spot_direction?: string | null
+          precision_spot_final_imbalance_10bps?: number | null
+          precision_spot_mean_imbalance_10bps_60s?: number | null
+          precision_spot_mode?: string | null
+          precision_spot_normalized_ofi_5s?: number | null
+          precision_spot_ready?: boolean | null
+          precision_technical_confidence?: number | null
+          precision_technical_direction?: string | null
+          precision_technical_error?: string | null
+          precision_technical_model_available?: boolean | null
+          precision_technical_p_green?: number | null
+          precision_technical_train_rows?: number | null
+          precision_upper_wick_percentile_96?: number | null
+          precision_venue_agreement?: boolean | null
+          precision_webhook_eligible?: boolean | null
+          precision_webhook_sent_at?: string | null
+          precision_would_trade?: boolean | null
           price_confidence?: number | null
           price_confidence_rank?: number | null
           price_direction?: string | null

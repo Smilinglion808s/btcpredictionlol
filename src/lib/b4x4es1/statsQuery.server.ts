@@ -159,7 +159,12 @@ export const ES1_STATS_SELECT =
   "dual_adaptive_would_trade, dual_adaptive_candidate_direction, " +
   "dual_adaptive_decision_reason, dual_adaptive_result, dual_adaptive_result_score, " +
   "dual_adaptive_resolved_at, dual_adaptive_influenced_decision, " +
-  "dual_adaptive_spot_mode, dual_adaptive_perp_mode";
+  "dual_adaptive_spot_mode, dual_adaptive_perp_mode, " +
+  "precision_activated, precision_would_trade, precision_candidate_direction, " +
+  "precision_decision_reason, precision_result, precision_result_score, " +
+  "precision_resolved_at, precision_sleeve, precision_balanced_route, " +
+  "precision_balanced_would_trade, precision_balanced_direction, " +
+  "precision_balanced_result, precision_balanced_result_score";
 
 export const ES1_PENDING_SELECT =
   "target_candle_ts, run_mode, final_prediction, would_trade, decision_reason, hybrid_route, " +
@@ -179,7 +184,15 @@ export const ES1_PENDING_SELECT =
   "dual_adaptive_perp_mode, dual_adaptive_perp_direction, dual_adaptive_spot_ready, " +
   "dual_adaptive_perp_ready, dual_adaptive_spot_ready_reason, " +
   "dual_adaptive_perp_ready_reason, dual_adaptive_influenced_decision, " +
-  "dual_adaptive_result, dual_adaptive_webhook_sent_at";
+  "dual_adaptive_result, dual_adaptive_webhook_sent_at, " +
+  "precision_activated, precision_would_trade, precision_candidate_direction, " +
+  "precision_decision_reason, precision_sleeve, precision_balanced_route, " +
+  "precision_balanced_would_trade, precision_balanced_direction, " +
+  "precision_spot_mode, precision_spot_direction, precision_perp_mode, " +
+  "precision_perp_direction, precision_venue_agreement, precision_activity_guard_passed, " +
+  "precision_spot_ready, precision_perp_ready, precision_technical_direction, " +
+  "precision_technical_confidence, precision_prior_trend_age_candles, " +
+  "precision_upper_wick_percentile_96, precision_result, precision_webhook_sent_at";
 
 /** Full ES1 stats payload (active, balanced counterfactual, dual-adaptive, warmup). */
 export async function buildEs1Stats() {
@@ -203,8 +216,8 @@ export async function buildEs1Stats() {
   }));
   const balanced = aggregate(balancedRows);
 
-  // ACTIVE MODEL: Binance Dual-Venue Adaptive R1, scored on its own terms
-  // and only over boundaries at/after its activation.
+  // Retained counterfactual: Binance Dual-Venue Adaptive R1, scored on its own
+  // terms and only over boundaries at/after its activation.
   const dualRows: Row[] = live
     .filter((r) => r.dual_adaptive_influenced_decision === true)
     .map((r) => ({
@@ -220,6 +233,31 @@ export async function buildEs1Stats() {
   const traded = dualRows.filter((r) => r.would_trade === true);
   const fadeTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FADE").length;
   const followTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FOLLOW").length;
+
+  // ACTIVE MODEL: Balanced Precision Stack R1, scored on its own terms and
+  // only over boundaries at/after its activation.
+  const precisionRows: Row[] = live
+    .filter((r) => r.precision_activated === true)
+    .map((r) => ({
+      ...r,
+      would_trade: r.precision_would_trade,
+      final_prediction: r.precision_candidate_direction,
+      decision_reason: r.precision_decision_reason,
+      result: r.precision_result,
+      result_score: r.precision_result_score,
+      resolved_at: r.precision_resolved_at,
+    }));
+  const precision = aggregate(precisionRows);
+  const precisionTraded = precisionRows.filter((r) => r.would_trade === true);
+  const precisionBalanced = aggregate(
+    precisionRows.map((r) => ({
+      ...r,
+      would_trade: r.precision_balanced_would_trade,
+      final_prediction: r.precision_balanced_direction,
+      result: r.precision_balanced_result,
+      result_score: r.precision_balanced_result_score,
+    })),
+  );
   return {
     ...active,
     balanced,
@@ -228,6 +266,19 @@ export async function buildEs1Stats() {
       activated: dualRows.length > 0,
       fade_trades: fadeTrades,
       follow_trades: followTrades,
+    },
+    precision: {
+      ...precision,
+      activated: precisionRows.length > 0,
+      primary_trades: precisionTraded.filter((r) => r.precision_sleeve === "PRIMARY").length,
+      rescue_trades: precisionTraded.filter((r) => r.precision_sleeve === "RESCUE").length,
+      core_route_trades: precisionTraded.filter((r) => r.precision_balanced_route === "OB_CORE").length,
+      fill_route_trades: precisionTraded.filter(
+        (r) => r.precision_balanced_route === "TECHNICAL_FILL",
+      ).length,
+      balanced_base_net: precisionBalanced.net,
+      balanced_base_trades: precisionBalanced.trades,
+      balanced_base_win_rate: precisionBalanced.win_rate,
     },
     warmup: {
       total_opportunities: warmup.total_opportunities,
