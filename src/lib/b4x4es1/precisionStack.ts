@@ -73,8 +73,8 @@ export function evaluateActivityGuard(
   perpSignChangeCount60s: number | null,
   spotNormalizedOfi5s: number | null,
 ): boolean {
-  if (!agreedDirection) return false;
   if ((perpSignChangeCount60s ?? 0) >= 2) return true;
+  if (!agreedDirection) return false;
   return signDirection(spotNormalizedOfi5s) === agreedDirection;
 }
 
@@ -84,9 +84,11 @@ export function decideBalancedRouter(inp: PrecisionStackInputs): BalancedLeg {
   const perp = inp.perpAdaptiveDirection;
   const dualAgree = spot !== null && perp !== null && spot === perp;
   const agreed = dualAgree ? spot : null;
-  const activityGuardPassed = dualAgree
-    ? evaluateActivityGuard(agreed, inp.perpSignChangeCount60s, inp.spotNormalizedOfi5s)
-    : false;
+  const activityGuardPassed = evaluateActivityGuard(
+    agreed,
+    inp.perpSignChangeCount60s,
+    inp.spotNormalizedOfi5s,
+  );
 
   const core = dualAgree && activityGuardPassed;
   const fill =

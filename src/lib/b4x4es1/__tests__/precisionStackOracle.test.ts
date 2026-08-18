@@ -84,7 +84,7 @@ describe("B4x4-ES1 Balanced Precision Stack R1 — oracle parity (224 rows)", ()
     rows.forEach((r, i) => {
       const d = decisions[i];
       const checks: [string, unknown, unknown][] = [
-        ["activity_guard", d.balanced.dualAgree && d.balanced.activityGuardPassed, r.activity_guard_passed],
+        ["activity_guard", d.balanced.activityGuardPassed, r.activity_guard_passed],
         ["balanced_core", d.balanced.core, r.balanced_core],
         ["balanced_fill", d.balanced.fill, r.balanced_fill],
         ["balanced_would_trade", d.balanced.wouldTrade, r.balanced_would_trade],
