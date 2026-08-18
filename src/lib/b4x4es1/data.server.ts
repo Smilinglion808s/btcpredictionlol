@@ -41,7 +41,7 @@ export async function loadCanonicalCandles(
   // Historical confirmed candles never change, so only the tail is re-read.
   const raw = await incrementalRows<DbRow>(
     "es1:candles",
-    (cursor) =>
+    (cursor: string | null) =>
       pageAll((from, to) => {
         let q = supabase
           .from("candles")
@@ -56,10 +56,10 @@ export async function loadCanonicalCandles(
         if (cursor) q = q.gt("candle_ts", cursor);
         return q;
       }),
-    { tsKey: "candle_ts", keyFn: (r) => new Date(String(r.candle_ts)).toISOString() },
+    { tsKey: "candle_ts", keyFn: (r: DbRow) => new Date(String(r.candle_ts)).toISOString() },
   );
   const rows = opts.upTo
-    ? raw.filter((r) => new Date(String(r.candle_ts)).toISOString() <= opts.upTo!)
+    ? raw.filter((r: DbRow) => new Date(String(r.candle_ts)).toISOString() <= opts.upTo!)
     : raw;
 
 
