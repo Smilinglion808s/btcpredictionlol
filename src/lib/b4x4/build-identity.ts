@@ -50,6 +50,7 @@ export function b4x4BuildIdentity(): B4x4BuildIdentity {
   const environment =
     env["LOVABLE_DEPLOY_ENV"] ??
     env["DEPLOY_ENVIRONMENT"] ??
+    environmentFromHost(_requestHost) ??
     (env["NODE_ENV"] === "production" ? "production" : "preview");
   return {
     build_identifier: `${B4X4_BUILD_STAMP}:${id}`,
