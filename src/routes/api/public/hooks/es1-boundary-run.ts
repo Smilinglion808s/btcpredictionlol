@@ -129,20 +129,18 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             out.legacy_final_prediction = row.final_prediction;
             out.legacy_would_trade = row.would_trade;
 
-            // ACTIVE MODEL: B4x4-ES1 Balanced Binance 3-of-4 R1.
-            // Exact-target Binance features are finalized and gated here,
-            // strictly BEFORE the active decision and before any webhook.
-            let balancedRow: Record<string, unknown> = row as Record<string, unknown>;
+            // Retained counterfactual: Balanced Binance 3-of-4 R1. This also
+            // finalizes the exact-target Binance boundary features, strictly
+            // BEFORE the active decision and before any webhook.
+            let activeRow: Record<string, unknown> = row as Record<string, unknown>;
             try {
               const { runBalancedForPrediction } = await import("@/lib/b4x4es1/balanced.server");
               const balanced = await runBalancedForPrediction(supabase, row, targetTs);
               if (balanced) {
-                balancedRow = { ...balancedRow, ...balanced.patch };
+                activeRow = { ...activeRow, ...balanced.patch };
                 out.balanced_final_prediction = balanced.decision.finalPrediction;
                 out.balanced_would_trade = balanced.decision.wouldTrade;
                 out.balanced_decision_reason = balanced.decision.decisionReason;
-                out.balanced_vote_pattern = balanced.decision.votePattern;
-                out.balanced_agreement_tier = balanced.decision.agreementTier;
               }
               out.binance_ob_linked = true;
             } catch (e) {
@@ -150,7 +148,27 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
               out.balanced_error = e instanceof Error ? e.message : String(e);
             }
 
-            out.webhook_sent = await maybeSendEs1Webhook(supabase, balancedRow);
+            // ACTIVE MODEL: B4x4-ES1 Binance Dual-Venue Adaptive R1.
+            try {
+              const { runDualAdaptiveForPrediction } = await import(
+                "@/lib/b4x4es1/dualAdaptive.server"
+              );
+              const dual = await runDualAdaptiveForPrediction(supabase, activeRow, targetTs);
+              if (dual) {
+                activeRow = { ...activeRow, ...dual.patch };
+                out.dual_adaptive_direction = dual.decision.candidateDirection;
+                out.dual_adaptive_would_trade = dual.decision.wouldTrade;
+                out.dual_adaptive_decision_reason = dual.decision.decisionReason;
+                out.dual_adaptive_activated = dual.decision.activated;
+                out.dual_adaptive_spot_mode = dual.decision.spot.mode;
+                out.dual_adaptive_perp_mode = dual.decision.perp.mode;
+              }
+            } catch (e) {
+              // Fail closed: no dual-adaptive row means no publication.
+              out.dual_adaptive_error = e instanceof Error ? e.message : String(e);
+            }
+
+            out.webhook_sent = await maybeSendEs1Webhook(supabase, activeRow);
           } else {
 
             out.error = "source candle unavailable";

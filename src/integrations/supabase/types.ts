@@ -463,6 +463,15 @@ export type Database = {
           balanced_activation_snapshot: Json | null
           balanced_activation_target_ts: string | null
           balanced_policy_version: string | null
+          dual_adaptive_activation_snapshot: Json | null
+          dual_adaptive_activation_target_ts: string | null
+          dual_adaptive_approval_note: string | null
+          dual_adaptive_approved_at: string | null
+          dual_adaptive_config_hash: string | null
+          dual_adaptive_created_at: string | null
+          dual_adaptive_mode: string | null
+          dual_adaptive_model_version: string | null
+          dual_adaptive_policy_version: string | null
           forward_test_sequence_number: number
           id: string
           model_version: string
@@ -475,6 +484,15 @@ export type Database = {
           balanced_activation_snapshot?: Json | null
           balanced_activation_target_ts?: string | null
           balanced_policy_version?: string | null
+          dual_adaptive_activation_snapshot?: Json | null
+          dual_adaptive_activation_target_ts?: string | null
+          dual_adaptive_approval_note?: string | null
+          dual_adaptive_approved_at?: string | null
+          dual_adaptive_config_hash?: string | null
+          dual_adaptive_created_at?: string | null
+          dual_adaptive_mode?: string | null
+          dual_adaptive_model_version?: string | null
+          dual_adaptive_policy_version?: string | null
           forward_test_sequence_number?: number
           id: string
           model_version: string
@@ -487,6 +505,15 @@ export type Database = {
           balanced_activation_snapshot?: Json | null
           balanced_activation_target_ts?: string | null
           balanced_policy_version?: string | null
+          dual_adaptive_activation_snapshot?: Json | null
+          dual_adaptive_activation_target_ts?: string | null
+          dual_adaptive_approval_note?: string | null
+          dual_adaptive_approved_at?: string | null
+          dual_adaptive_config_hash?: string | null
+          dual_adaptive_created_at?: string | null
+          dual_adaptive_mode?: string | null
+          dual_adaptive_model_version?: string | null
+          dual_adaptive_policy_version?: string | null
           forward_test_sequence_number?: number
           id?: string
           model_version?: string
@@ -503,13 +530,17 @@ export type Database = {
           es1_vote: number | null
           id: string
           implementation_revision: string | null
+          incremental_value: number | null
           input_values_hash: string | null
           is_active_policy: boolean
           perp_fade_vote: number | null
           perp_feature_id: string | null
+          perp_final_imbalance_10bps: number | null
+          perp_mean_imbalance_10bps_60s: number | null
           policy_name: string
           policy_version: string
           prediction_id: string | null
+          primary_result_score: number | null
           qualification_reason: string | null
           qualified: boolean
           resolved_at: string | null
@@ -518,9 +549,13 @@ export type Database = {
           run_mode: string
           spot_depth_vote: number | null
           spot_feature_id: string | null
+          spot_final_imbalance_10bps: number | null
+          spot_mean_imbalance_10bps_60s: number | null
           spot_ofi60_vote: number | null
           target_ts: string
           vote_pattern: string | null
+          webhook_eligible: boolean
+          webhook_sent: boolean
           would_trade: boolean
         }
         Insert: {
@@ -532,13 +567,17 @@ export type Database = {
           es1_vote?: number | null
           id?: string
           implementation_revision?: string | null
+          incremental_value?: number | null
           input_values_hash?: string | null
           is_active_policy?: boolean
           perp_fade_vote?: number | null
           perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_mean_imbalance_10bps_60s?: number | null
           policy_name: string
           policy_version: string
           prediction_id?: string | null
+          primary_result_score?: number | null
           qualification_reason?: string | null
           qualified?: boolean
           resolved_at?: string | null
@@ -547,9 +586,13 @@ export type Database = {
           run_mode?: string
           spot_depth_vote?: number | null
           spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_mean_imbalance_10bps_60s?: number | null
           spot_ofi60_vote?: number | null
           target_ts: string
           vote_pattern?: string | null
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
           would_trade?: boolean
         }
         Update: {
@@ -561,13 +604,17 @@ export type Database = {
           es1_vote?: number | null
           id?: string
           implementation_revision?: string | null
+          incremental_value?: number | null
           input_values_hash?: string | null
           is_active_policy?: boolean
           perp_fade_vote?: number | null
           perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_mean_imbalance_10bps_60s?: number | null
           policy_name?: string
           policy_version?: string
           prediction_id?: string | null
+          primary_result_score?: number | null
           qualification_reason?: string | null
           qualified?: boolean
           resolved_at?: string | null
@@ -576,9 +623,13 @@ export type Database = {
           run_mode?: string
           spot_depth_vote?: number | null
           spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_mean_imbalance_10bps_60s?: number | null
           spot_ofi60_vote?: number | null
           target_ts?: string
           vote_pattern?: string | null
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
           would_trade?: boolean
         }
         Relationships: []
@@ -1568,6 +1619,53 @@ export type Database = {
           decision_state_checksum: string | null
           deploy_environment: string | null
           directional_version: string | null
+          dual_adaptive_activation_id: string | null
+          dual_adaptive_activation_target_ts: string | null
+          dual_adaptive_candidate_direction: string | null
+          dual_adaptive_config_hash: string | null
+          dual_adaptive_decision_reason: string | null
+          dual_adaptive_detailed_reason: string | null
+          dual_adaptive_feature_schema: string | null
+          dual_adaptive_implementation_revision: string | null
+          dual_adaptive_influenced_decision: boolean | null
+          dual_adaptive_input_hash: string | null
+          dual_adaptive_model_version: string | null
+          dual_adaptive_perp_capture_status: string | null
+          dual_adaptive_perp_direction: string | null
+          dual_adaptive_perp_feature_id: string | null
+          dual_adaptive_perp_final_imbalance_10bps: number | null
+          dual_adaptive_perp_final_sign: number | null
+          dual_adaptive_perp_history_ready: boolean | null
+          dual_adaptive_perp_mean_imbalance_10bps_60s: number | null
+          dual_adaptive_perp_mean60_sign: number | null
+          dual_adaptive_perp_mode: string | null
+          dual_adaptive_perp_mode_reason: string | null
+          dual_adaptive_perp_ready: boolean | null
+          dual_adaptive_perp_ready_reason: string | null
+          dual_adaptive_policy_version: string | null
+          dual_adaptive_ready: boolean | null
+          dual_adaptive_ready_reason: string | null
+          dual_adaptive_resolution_attempt_count: number
+          dual_adaptive_resolved_at: string | null
+          dual_adaptive_resolver_version: string | null
+          dual_adaptive_result: string | null
+          dual_adaptive_result_score: number | null
+          dual_adaptive_spot_capture_status: string | null
+          dual_adaptive_spot_direction: string | null
+          dual_adaptive_spot_feature_id: string | null
+          dual_adaptive_spot_final_imbalance_10bps: number | null
+          dual_adaptive_spot_final_sign: number | null
+          dual_adaptive_spot_history_ready: boolean | null
+          dual_adaptive_spot_mean_imbalance_10bps_60s: number | null
+          dual_adaptive_spot_mean60_sign: number | null
+          dual_adaptive_spot_mode: string | null
+          dual_adaptive_spot_mode_reason: string | null
+          dual_adaptive_spot_ready: boolean | null
+          dual_adaptive_spot_ready_reason: string | null
+          dual_adaptive_venue_agreement: boolean | null
+          dual_adaptive_webhook_eligible: boolean | null
+          dual_adaptive_webhook_sent_at: string | null
+          dual_adaptive_would_trade: boolean | null
           feature_cutoff_ts: string | null
           feature_invalid_reason: string | null
           feature_schema_hash: string | null
@@ -1583,6 +1681,7 @@ export type Database = {
           last_resolution_attempt_at: string | null
           last_resolution_error: string | null
           latest_source_candle_ts: string | null
+          legacy_es1_model_version: string | null
           local_date: string | null
           model_name: string
           model_version: string
@@ -1785,6 +1884,53 @@ export type Database = {
           decision_state_checksum?: string | null
           deploy_environment?: string | null
           directional_version?: string | null
+          dual_adaptive_activation_id?: string | null
+          dual_adaptive_activation_target_ts?: string | null
+          dual_adaptive_candidate_direction?: string | null
+          dual_adaptive_config_hash?: string | null
+          dual_adaptive_decision_reason?: string | null
+          dual_adaptive_detailed_reason?: string | null
+          dual_adaptive_feature_schema?: string | null
+          dual_adaptive_implementation_revision?: string | null
+          dual_adaptive_influenced_decision?: boolean | null
+          dual_adaptive_input_hash?: string | null
+          dual_adaptive_model_version?: string | null
+          dual_adaptive_perp_capture_status?: string | null
+          dual_adaptive_perp_direction?: string | null
+          dual_adaptive_perp_feature_id?: string | null
+          dual_adaptive_perp_final_imbalance_10bps?: number | null
+          dual_adaptive_perp_final_sign?: number | null
+          dual_adaptive_perp_history_ready?: boolean | null
+          dual_adaptive_perp_mean_imbalance_10bps_60s?: number | null
+          dual_adaptive_perp_mean60_sign?: number | null
+          dual_adaptive_perp_mode?: string | null
+          dual_adaptive_perp_mode_reason?: string | null
+          dual_adaptive_perp_ready?: boolean | null
+          dual_adaptive_perp_ready_reason?: string | null
+          dual_adaptive_policy_version?: string | null
+          dual_adaptive_ready?: boolean | null
+          dual_adaptive_ready_reason?: string | null
+          dual_adaptive_resolution_attempt_count?: number
+          dual_adaptive_resolved_at?: string | null
+          dual_adaptive_resolver_version?: string | null
+          dual_adaptive_result?: string | null
+          dual_adaptive_result_score?: number | null
+          dual_adaptive_spot_capture_status?: string | null
+          dual_adaptive_spot_direction?: string | null
+          dual_adaptive_spot_feature_id?: string | null
+          dual_adaptive_spot_final_imbalance_10bps?: number | null
+          dual_adaptive_spot_final_sign?: number | null
+          dual_adaptive_spot_history_ready?: boolean | null
+          dual_adaptive_spot_mean_imbalance_10bps_60s?: number | null
+          dual_adaptive_spot_mean60_sign?: number | null
+          dual_adaptive_spot_mode?: string | null
+          dual_adaptive_spot_mode_reason?: string | null
+          dual_adaptive_spot_ready?: boolean | null
+          dual_adaptive_spot_ready_reason?: string | null
+          dual_adaptive_venue_agreement?: boolean | null
+          dual_adaptive_webhook_eligible?: boolean | null
+          dual_adaptive_webhook_sent_at?: string | null
+          dual_adaptive_would_trade?: boolean | null
           feature_cutoff_ts?: string | null
           feature_invalid_reason?: string | null
           feature_schema_hash?: string | null
@@ -1800,6 +1946,7 @@ export type Database = {
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           latest_source_candle_ts?: string | null
+          legacy_es1_model_version?: string | null
           local_date?: string | null
           model_name: string
           model_version: string
@@ -2002,6 +2149,53 @@ export type Database = {
           decision_state_checksum?: string | null
           deploy_environment?: string | null
           directional_version?: string | null
+          dual_adaptive_activation_id?: string | null
+          dual_adaptive_activation_target_ts?: string | null
+          dual_adaptive_candidate_direction?: string | null
+          dual_adaptive_config_hash?: string | null
+          dual_adaptive_decision_reason?: string | null
+          dual_adaptive_detailed_reason?: string | null
+          dual_adaptive_feature_schema?: string | null
+          dual_adaptive_implementation_revision?: string | null
+          dual_adaptive_influenced_decision?: boolean | null
+          dual_adaptive_input_hash?: string | null
+          dual_adaptive_model_version?: string | null
+          dual_adaptive_perp_capture_status?: string | null
+          dual_adaptive_perp_direction?: string | null
+          dual_adaptive_perp_feature_id?: string | null
+          dual_adaptive_perp_final_imbalance_10bps?: number | null
+          dual_adaptive_perp_final_sign?: number | null
+          dual_adaptive_perp_history_ready?: boolean | null
+          dual_adaptive_perp_mean_imbalance_10bps_60s?: number | null
+          dual_adaptive_perp_mean60_sign?: number | null
+          dual_adaptive_perp_mode?: string | null
+          dual_adaptive_perp_mode_reason?: string | null
+          dual_adaptive_perp_ready?: boolean | null
+          dual_adaptive_perp_ready_reason?: string | null
+          dual_adaptive_policy_version?: string | null
+          dual_adaptive_ready?: boolean | null
+          dual_adaptive_ready_reason?: string | null
+          dual_adaptive_resolution_attempt_count?: number
+          dual_adaptive_resolved_at?: string | null
+          dual_adaptive_resolver_version?: string | null
+          dual_adaptive_result?: string | null
+          dual_adaptive_result_score?: number | null
+          dual_adaptive_spot_capture_status?: string | null
+          dual_adaptive_spot_direction?: string | null
+          dual_adaptive_spot_feature_id?: string | null
+          dual_adaptive_spot_final_imbalance_10bps?: number | null
+          dual_adaptive_spot_final_sign?: number | null
+          dual_adaptive_spot_history_ready?: boolean | null
+          dual_adaptive_spot_mean_imbalance_10bps_60s?: number | null
+          dual_adaptive_spot_mean60_sign?: number | null
+          dual_adaptive_spot_mode?: string | null
+          dual_adaptive_spot_mode_reason?: string | null
+          dual_adaptive_spot_ready?: boolean | null
+          dual_adaptive_spot_ready_reason?: string | null
+          dual_adaptive_venue_agreement?: boolean | null
+          dual_adaptive_webhook_eligible?: boolean | null
+          dual_adaptive_webhook_sent_at?: string | null
+          dual_adaptive_would_trade?: boolean | null
           feature_cutoff_ts?: string | null
           feature_invalid_reason?: string | null
           feature_schema_hash?: string | null
@@ -2017,6 +2211,7 @@ export type Database = {
           last_resolution_attempt_at?: string | null
           last_resolution_error?: string | null
           latest_source_candle_ts?: string | null
+          legacy_es1_model_version?: string | null
           local_date?: string | null
           model_name?: string
           model_version?: string

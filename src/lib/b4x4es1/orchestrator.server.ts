@@ -13,6 +13,7 @@ import {
   ES1_IMPLEMENTATION_REVISION,
   ES1_MODEL_NAME,
   ES1_MODEL_VERSION,
+  ES1_ROW_MODEL_VERSIONS,
   ES1_PROSPECTIVE_TEST_ID,
   ES1_PUBLICATION_ENABLED,
   ES1_VARIANT,
@@ -383,7 +384,7 @@ export async function ensureEs1Warm(
   const { data: existing, error } = await supabase
     .from("b4x4_es1_predictions")
     .select("target_candle_ts")
-    .eq("model_version", ES1_MODEL_VERSION);
+    .in("model_version", ES1_ROW_MODEL_VERSIONS);
   if (error) throw new Error(`es1_warm_existing:${error.message}`);
   const have = new Set(
     ((existing ?? []) as DbRow[]).map((r) => new Date(String(r.target_candle_ts)).toISOString()),
@@ -449,7 +450,7 @@ export async function runEs1ForTarget(
     const { data: prior } = await supabase
       .from("b4x4_es1_predictions")
       .select("*")
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     if (prior) return prior as unknown as DbRow;
@@ -524,7 +525,7 @@ export async function runEs1ForTarget(
     const { data: existing } = await supabase
       .from("b4x4_es1_predictions")
       .select("*")
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     return (existing as unknown as DbRow | null) ?? null;
@@ -549,9 +550,10 @@ export async function runEs1ForTarget(
 /**
  * Emit the active B4x4-ES1 directional webhook exactly once for a live row.
  *
- * The active model is B4x4-ES1 Balanced Binance 3-of-4 R1: the published
- * direction always comes from the balanced 4-vote decision, never from the
- * legacy ES1 chain (which is retained only as a scored counterfactual).
+ * The active model is B4x4-ES1 Binance Dual-Venue Adaptive R1: the published
+ * direction always comes from the dual-venue adaptive decision. The legacy ES1
+ * chain and the Balanced 3-of-4 chain are retained as scored counterfactuals
+ * only and can never publish.
  */
 export async function maybeSendEs1Webhook(
   supabase: SupabaseClient,
@@ -561,18 +563,18 @@ export async function maybeSendEs1Webhook(
     if (!ES1_WEBHOOKS_ENABLED || !ES1_PUBLICATION_ENABLED) return false;
     if (!row) return false;
     if (row.run_mode !== "LIVE") return false;
-    if (row.balanced_would_trade !== true) return false;
-    if (row.balanced_webhook_eligible !== true) return false;
+    if (row.dual_adaptive_would_trade !== true) return false;
+    if (row.dual_adaptive_webhook_eligible !== true) return false;
     if (row.webhook_sent_at) return false;
-    const direction = row.balanced_final_prediction;
+    const direction = row.dual_adaptive_candidate_direction;
     if (direction !== "GREEN" && direction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
     // Never publish for a candle that is already meaningfully underway or
     // closed — the webhook must always describe the upcoming candle.
     if (Date.now() - targetMs > 90_000) return false;
-    const activationTs = row.balanced_activation_target_ts
-      ? new Date(String(row.balanced_activation_target_ts)).toISOString()
+    const activationTs = row.dual_adaptive_activation_target_ts
+      ? new Date(String(row.dual_adaptive_activation_target_ts)).toISOString()
       : null;
     if (!activationTs || targetMs < new Date(activationTs).getTime()) return false;
 
@@ -580,7 +582,7 @@ export async function maybeSendEs1Webhook(
       .from("b4x4_es1_predictions")
       .update({
         webhook_sent_at: new Date().toISOString(),
-        balanced_webhook_sent_at: new Date().toISOString(),
+        dual_adaptive_webhook_sent_at: new Date().toISOString(),
       } as never)
       .eq("id", row.id as string)
       .is("webhook_sent_at", null)
@@ -588,8 +590,11 @@ export async function maybeSendEs1Webhook(
       .maybeSingle();
     if (!claimed) return false;
 
-    const { BALANCED_DECISION_POLICY_VERSION, BALANCED_MODEL_VERSION, BALANCED_VARIANT } =
-      await import("./balanced");
+    const {
+      MODEL_VERSION: DUAL_MODEL_VERSION,
+      POLICY_VERSION: DUAL_POLICY_VERSION,
+      VARIANT: DUAL_VARIANT,
+    } = await import("./dualAdaptive");
     const { deliverWebhook, formatMountainTime } = await import("../webhooks.server");
     const startsAt = new Date(targetMs).toISOString();
     const endsAt = new Date(targetMs + 15 * 60 * 1000).toISOString();
@@ -599,9 +604,9 @@ export async function maybeSendEs1Webhook(
     await deliverWebhook(supabase, "prediction.created", {
       model: ES1_MODEL_NAME,
       model_name: ES1_MODEL_NAME,
-      model_version: BALANCED_MODEL_VERSION,
-      decision_policy_version: BALANCED_DECISION_POLICY_VERSION,
-      variant: BALANCED_VARIANT,
+      model_version: DUAL_MODEL_VERSION,
+      decision_policy_version: DUAL_POLICY_VERSION,
+      variant: DUAL_VARIANT,
       legacy_model_version: ES1_MODEL_VERSION,
 
       // TD1-RC compatible core contract
@@ -626,16 +631,17 @@ export async function maybeSendEs1Webhook(
       target_is_upcoming: true,
 
       dedupe_key: `BTC-USDT-15m-${startsAt}-es1`,
-      idempotency_key: `${row.id}:${BALANCED_MODEL_VERSION}`,
+      idempotency_key: `${row.id}:${DUAL_MODEL_VERSION}`,
       prediction_id: row.id ?? null,
       es1_row_id: row.id ?? null,
 
-      // Balanced decision audit
-      vote_pattern: row.balanced_vote_pattern ?? null,
-      agreement_tier: row.balanced_agreement_tier ?? null,
-      green_vote_count: row.balanced_green_vote_count ?? null,
-      red_vote_count: row.balanced_red_vote_count ?? null,
-      decision_reason: row.balanced_decision_reason ?? null,
+      // Dual-venue adaptive decision audit
+      spot_mode: row.dual_adaptive_spot_mode ?? null,
+      spot_direction: row.dual_adaptive_spot_direction ?? null,
+      perp_mode: row.dual_adaptive_perp_mode ?? null,
+      perp_direction: row.dual_adaptive_perp_direction ?? null,
+      venue_agreement: row.dual_adaptive_venue_agreement ?? null,
+      decision_reason: row.dual_adaptive_decision_reason ?? null,
       legacy_decision_reason: row.decision_reason ?? null,
 
       route: row.hybrid_route,
@@ -680,19 +686,28 @@ export async function resolveEs1Row(
           "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
           "balanced_legacy_would_trade, balanced_resolved_at",
       )
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
     if (!row) return;
     rowId = String(row.id);
 
-    // Score the active balanced model and every comparison policy first; this
-    // is idempotent and independent of the legacy row resolution below.
+    // Score the retained balanced counterfactual and every comparison policy
+    // first; this is idempotent and independent of the resolutions below.
     if (!row.balanced_resolved_at) {
       try {
         const { resolveBalancedRow } = await import("./balanced.server");
         await resolveBalancedRow(supabase, row, actualDirection);
+      } catch {
+        /* never block legacy resolution */
+      }
+    }
+    // ACTIVE MODEL resolution: Binance Dual-Venue Adaptive R1.
+    if (!row.dual_adaptive_resolved_at) {
+      try {
+        const { resolveDualAdaptiveRow } = await import("./dualAdaptive.server");
+        await resolveDualAdaptiveRow(supabase, row, actualDirection);
       } catch {
         /* never block legacy resolution */
       }
@@ -765,7 +780,7 @@ export async function resolveEs1Backlog(
   const { data } = await supabase
     .from("b4x4_es1_predictions")
     .select("target_candle_ts")
-    .eq("model_version", ES1_MODEL_VERSION)
+    .in("model_version", ES1_ROW_MODEL_VERSIONS)
     .is("resolved_at", null)
     .order("target_candle_ts", { ascending: true })
     .limit(opts.limit ?? 500);
