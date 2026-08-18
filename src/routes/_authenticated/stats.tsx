@@ -23,6 +23,7 @@ import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
+import { forceRefreshStats } from "@/lib/statsRefresh.functions";
 import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
