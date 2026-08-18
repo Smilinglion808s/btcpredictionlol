@@ -217,27 +217,18 @@ export function B4x4Es1Card({
         </div>
       </Section>
 
-      <Section title="Vote attribution">
+      <Section title="Orientation attribution">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Unanimous 4-0" value={String(b.unanimous_trades ?? 0)} />
-          <Stat
-            label="Unanimous net"
-            value={signed(Number(b.unanimous_net ?? 0))}
-            tone={
-              Number(b.unanimous_net ?? 0) > 0
-                ? "text-bull"
-                : Number(b.unanimous_net ?? 0) < 0
-                  ? "text-bear"
-                  : ""
-            }
-          />
-          <Stat
-            label="Majority 3-1"
-            value={String(Math.max(0, Number(b.trades ?? 0) - Number(b.unanimous_trades ?? 0)))}
-          />
+          <Stat label="Fade trades" value={String(b.fade_trades ?? 0)} />
+          <Stat label="Follow trades" value={String(b.follow_trades ?? 0)} />
           <Stat
             label="Abstained"
             value={String(Math.max(0, Number(b.total_opportunities ?? 0) - Number(b.trades ?? 0)))}
+          />
+          <Stat
+            label="Balanced net"
+            value={signed(Number((stats.balanced as Any | undefined)?.net ?? 0))}
+            tone="text-muted-foreground"
           />
         </div>
       </Section>
