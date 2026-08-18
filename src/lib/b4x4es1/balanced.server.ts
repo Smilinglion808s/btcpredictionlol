@@ -110,12 +110,18 @@ export async function runBalancedForPrediction(
   sb: SupabaseClient,
   row: DbRow,
   targetTs: string,
+  opts: { skipFinalize?: boolean } = {},
 ): Promise<BalancedRunResult | null> {
   const predictionId = String(row.id);
   const loadStartedAt = new Date().toISOString();
 
   // 1. exact-target Binance features FIRST (also emits the legacy OB shadows).
-  await finalizeBinanceObTarget(sb, targetTs, predictionId).catch(() => null);
+  //    The live boundary path finalizes them itself before the active decision
+  //    and passes skipFinalize so the identical work is not repeated.
+  if (!opts.skipFinalize) {
+    await finalizeBinanceObTarget(sb, targetTs, predictionId).catch(() => null);
+  }
+
   const [spotRow, perpRow] = await Promise.all([
     getBoundaryFeature(sb, targetTs, "SPOT").catch(() => null),
     getBoundaryFeature(sb, targetTs, "USD_M_PERP").catch(() => null),
