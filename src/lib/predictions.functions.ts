@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats, incrementalRows, invalidateStats } from "./statsCache.server";
 import { z } from "zod";
 import { runAiPredictionServer, resolvePredictionsServer } from "./prediction.server";
 import { fetchAndUpsertOkxCandles } from "./okx.server";
