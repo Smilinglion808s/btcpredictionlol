@@ -530,13 +530,17 @@ export type Database = {
           es1_vote: number | null
           id: string
           implementation_revision: string | null
+          incremental_value: number | null
           input_values_hash: string | null
           is_active_policy: boolean
           perp_fade_vote: number | null
           perp_feature_id: string | null
+          perp_final_imbalance_10bps: number | null
+          perp_mean_imbalance_10bps_60s: number | null
           policy_name: string
           policy_version: string
           prediction_id: string | null
+          primary_result_score: number | null
           qualification_reason: string | null
           qualified: boolean
           resolved_at: string | null
@@ -545,9 +549,13 @@ export type Database = {
           run_mode: string
           spot_depth_vote: number | null
           spot_feature_id: string | null
+          spot_final_imbalance_10bps: number | null
+          spot_mean_imbalance_10bps_60s: number | null
           spot_ofi60_vote: number | null
           target_ts: string
           vote_pattern: string | null
+          webhook_eligible: boolean
+          webhook_sent: boolean
           would_trade: boolean
         }
         Insert: {
@@ -559,13 +567,17 @@ export type Database = {
           es1_vote?: number | null
           id?: string
           implementation_revision?: string | null
+          incremental_value?: number | null
           input_values_hash?: string | null
           is_active_policy?: boolean
           perp_fade_vote?: number | null
           perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_mean_imbalance_10bps_60s?: number | null
           policy_name: string
           policy_version: string
           prediction_id?: string | null
+          primary_result_score?: number | null
           qualification_reason?: string | null
           qualified?: boolean
           resolved_at?: string | null
@@ -574,9 +586,13 @@ export type Database = {
           run_mode?: string
           spot_depth_vote?: number | null
           spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_mean_imbalance_10bps_60s?: number | null
           spot_ofi60_vote?: number | null
           target_ts: string
           vote_pattern?: string | null
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
           would_trade?: boolean
         }
         Update: {
@@ -588,13 +604,17 @@ export type Database = {
           es1_vote?: number | null
           id?: string
           implementation_revision?: string | null
+          incremental_value?: number | null
           input_values_hash?: string | null
           is_active_policy?: boolean
           perp_fade_vote?: number | null
           perp_feature_id?: string | null
+          perp_final_imbalance_10bps?: number | null
+          perp_mean_imbalance_10bps_60s?: number | null
           policy_name?: string
           policy_version?: string
           prediction_id?: string | null
+          primary_result_score?: number | null
           qualification_reason?: string | null
           qualified?: boolean
           resolved_at?: string | null
@@ -603,9 +623,13 @@ export type Database = {
           run_mode?: string
           spot_depth_vote?: number | null
           spot_feature_id?: string | null
+          spot_final_imbalance_10bps?: number | null
+          spot_mean_imbalance_10bps_60s?: number | null
           spot_ofi60_vote?: number | null
           target_ts?: string
           vote_pattern?: string | null
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
           would_trade?: boolean
         }
         Relationships: []
