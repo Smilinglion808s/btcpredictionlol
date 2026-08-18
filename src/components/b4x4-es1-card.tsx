@@ -39,9 +39,9 @@ export function B4x4Es1Card({
   onExport: () => void;
   exporting: boolean;
 }) {
-  // The active model is Binance Dual-Venue Adaptive R1: every headline number
+  // The active model is Balanced Precision Stack R1: every headline number
   // must come from its own scoped aggregate, never a counterfactual chain.
-  const b: Any = (stats.dual_adaptive as Any | undefined) ?? {};
+  const b: Any = (stats.precision as Any | undefined) ?? {};
   const wins = Number(b.wins ?? 0);
   const losses = Number(b.losses ?? 0);
   const pushes = Number(b.pushes ?? 0);
