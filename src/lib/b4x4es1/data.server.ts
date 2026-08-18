@@ -37,20 +37,30 @@ export async function loadCanonicalCandles(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<CanonicalCandle[]> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("candles")
-      .select("candle_ts, open, high, low, close, volume")
-      .eq("symbol", ES1_SYMBOL)
-      .eq("timeframe", ES1_TIMEFRAME)
-      .eq("fetch_source", ES1_EXCHANGE)
-      .eq("confirm", true)
-      .gte("candle_ts", ES1_TRAINING_SOURCE_EPOCH_TS)
-      .order("candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("candle_ts", opts.upTo);
-    return q;
-  });
+  // Historical confirmed candles never change, so only the tail is re-read.
+  const raw = await incrementalRows<DbRow>(
+    "es1:candles",
+    (cursor) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("candles")
+          .select("candle_ts, open, high, low, close, volume")
+          .eq("symbol", ES1_SYMBOL)
+          .eq("timeframe", ES1_TIMEFRAME)
+          .eq("fetch_source", ES1_EXCHANGE)
+          .eq("confirm", true)
+          .gte("candle_ts", ES1_TRAINING_SOURCE_EPOCH_TS)
+          .order("candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("candle_ts", cursor);
+        return q;
+      }),
+    { tsKey: "candle_ts", keyFn: (r) => new Date(String(r.candle_ts)).toISOString() },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r) => new Date(String(r.candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, CanonicalCandle>();
   for (const r of rows) {
