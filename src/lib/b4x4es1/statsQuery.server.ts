@@ -216,8 +216,8 @@ export async function buildEs1Stats() {
   }));
   const balanced = aggregate(balancedRows);
 
-  // ACTIVE MODEL: Binance Dual-Venue Adaptive R1, scored on its own terms
-  // and only over boundaries at/after its activation.
+  // Retained counterfactual: Binance Dual-Venue Adaptive R1, scored on its own
+  // terms and only over boundaries at/after its activation.
   const dualRows: Row[] = live
     .filter((r) => r.dual_adaptive_influenced_decision === true)
     .map((r) => ({
@@ -233,6 +233,31 @@ export async function buildEs1Stats() {
   const traded = dualRows.filter((r) => r.would_trade === true);
   const fadeTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FADE").length;
   const followTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FOLLOW").length;
+
+  // ACTIVE MODEL: Balanced Precision Stack R1, scored on its own terms and
+  // only over boundaries at/after its activation.
+  const precisionRows: Row[] = live
+    .filter((r) => r.precision_activated === true)
+    .map((r) => ({
+      ...r,
+      would_trade: r.precision_would_trade,
+      final_prediction: r.precision_candidate_direction,
+      decision_reason: r.precision_decision_reason,
+      result: r.precision_result,
+      result_score: r.precision_result_score,
+      resolved_at: r.precision_resolved_at,
+    }));
+  const precision = aggregate(precisionRows);
+  const precisionTraded = precisionRows.filter((r) => r.would_trade === true);
+  const precisionBalanced = aggregate(
+    precisionRows.map((r) => ({
+      ...r,
+      would_trade: r.precision_balanced_would_trade,
+      final_prediction: r.precision_balanced_direction,
+      result: r.precision_balanced_result,
+      result_score: r.precision_balanced_result_score,
+    })),
+  );
   return {
     ...active,
     balanced,
@@ -241,6 +266,19 @@ export async function buildEs1Stats() {
       activated: dualRows.length > 0,
       fade_trades: fadeTrades,
       follow_trades: followTrades,
+    },
+    precision: {
+      ...precision,
+      activated: precisionRows.length > 0,
+      primary_trades: precisionTraded.filter((r) => r.precision_sleeve === "PRIMARY").length,
+      rescue_trades: precisionTraded.filter((r) => r.precision_sleeve === "RESCUE").length,
+      core_route_trades: precisionTraded.filter((r) => r.precision_balanced_route === "OB_CORE").length,
+      fill_route_trades: precisionTraded.filter(
+        (r) => r.precision_balanced_route === "TECHNICAL_FILL",
+      ).length,
+      balanced_base_net: precisionBalanced.net,
+      balanced_base_trades: precisionBalanced.trades,
+      balanced_base_win_rate: precisionBalanced.win_rate,
     },
     warmup: {
       total_opportunities: warmup.total_opportunities,
