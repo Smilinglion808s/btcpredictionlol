@@ -262,20 +262,32 @@ export const listModelVersions = createServerFn({ method: "GET" }).handler(async
 export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(async () => cachedStats("m7-shadow-stats", async () => {
   const sb = await admin();
   const PAGE = 1000;
-  const rows: Array<any> = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("model7_shadow")
-      .select("variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
-      .eq("would_trade", true)
-      .order("candle_ts", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const batch = data ?? [];
-    rows.push(...batch);
-    if (batch.length < PAGE) break;
-    if (from > 100000) break; // safety
-  }
+  // Read-path only: historical rows are immutable, so only the recent tail is
+  // re-read on each refresh instead of rescanning the whole shadow table.
+  const rows = await incrementalRows<Record<string, any>>(
+    "m7-shadow-stats-rows",
+    async (cursor) => {
+      const acc: Array<Record<string, any>> = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = sb
+          .from("model7_shadow")
+          .select("id, variant, status, would_trade, decision, probability_green, candle_ts, resolved_at")
+          .eq("would_trade", true)
+          .order("candle_ts", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (cursor) q = q.gt("candle_ts", cursor);
+        const { data, error } = await q;
+        if (error) throw error;
+        const batch = (data ?? []) as Array<Record<string, any>>;
+        acc.push(...batch);
+        if (batch.length < PAGE) break;
+        if (from > 100000) break; // safety
+      }
+      return acc;
+    },
+    { tsKey: "candle_ts", keyFn: (r) => String(r.id ?? `${r.variant}|${r.candle_ts}`), desc: true },
+  );
+
 
   const typedRows = rows as Array<{
     variant: string;
