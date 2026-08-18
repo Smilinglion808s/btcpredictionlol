@@ -81,5 +81,91 @@ export function invalidateStats(key: string) {
 export function clearAllStats(): number {
   const n = store.size;
   store.clear();
+  rowStore.clear();
   return n;
 }
+
+/* ------------------------------------------------------------------ *
+ * Incremental row cache
+ *
+ * The stats aggregates used to re-read an entire history table (tens of
+ * thousands of wide rows) on every cache miss, which dominated the
+ * project's disk-IO budget. Rows older than the overlap window are
+ * immutable (they are fully resolved), so we keep them in memory and
+ * only re-read the recent tail plus anything newer.
+ *
+ * This is a read-path optimisation only: the merged row set is identical
+ * to what a full scan would return, so no model or aggregate output
+ * changes.
+ * ------------------------------------------------------------------ */
+
+type RowEntry = {
+  rows: Map<string, Record<string, unknown>>;
+  maxTs: string | null;
+  builtAt: number;
+};
+
+const rowStore = new Map<string, RowEntry>();
+
+/** How far back the tail re-read reaches (covers late resolutions). */
+const DEFAULT_OVERLAP_MS = 36 * 60 * 60_000;
+/** Periodic full rebuild so deletes/backfills can never go unnoticed. */
+const DEFAULT_FULL_REBUILD_MS = 30 * 60_000;
+
+export interface IncrementalRowsOptions<T> {
+  /** Column holding the row timestamp used for the incremental cursor. */
+  tsKey: string;
+  /** Stable row identity; defaults to the timestamp value. */
+  keyFn?: (row: T) => string;
+  /** Sort direction of the returned array. Defaults to ascending. */
+  desc?: boolean;
+  overlapMs?: number;
+  fullRebuildMs?: number;
+}
+
+export async function incrementalRows<T extends Record<string, unknown>>(
+  cacheKey: string,
+  /** Fetch rows with `tsKey` strictly greater than `sinceIso` (null = all). */
+  fetchRows: (sinceIso: string | null) => Promise<T[]>,
+  opts: IncrementalRowsOptions<T>,
+): Promise<T[]> {
+  const {
+    tsKey,
+    keyFn = (r: T) => String(r[tsKey] ?? ""),
+    desc = false,
+    overlapMs = DEFAULT_OVERLAP_MS,
+    fullRebuildMs = DEFAULT_FULL_REBUILD_MS,
+  } = opts;
+
+  const now = Date.now();
+  let entry = rowStore.get(cacheKey);
+  const stale = !entry || now - entry.builtAt > fullRebuildMs || entry.maxTs == null;
+
+  let since: string | null = null;
+  if (!stale && entry?.maxTs) {
+    const cursor = Date.parse(entry.maxTs) - overlapMs;
+    since = Number.isFinite(cursor) ? new Date(cursor).toISOString() : null;
+  }
+  if (stale) entry = undefined;
+
+  const fetched = await fetchRows(since);
+
+  const rows = entry ? entry.rows : new Map<string, Record<string, unknown>>();
+  let maxTs = entry?.maxTs ?? null;
+  for (const r of fetched) {
+    rows.set(keyFn(r), r);
+    const ts = String(r[tsKey] ?? "");
+    if (ts && (maxTs == null || ts > maxTs)) maxTs = ts;
+  }
+
+  rowStore.set(cacheKey, { rows, maxTs, builtAt: entry ? entry.builtAt : now });
+
+  const out = Array.from(rows.values()) as T[];
+  out.sort((a, b) => {
+    const x = String(a[tsKey] ?? "");
+    const y = String(b[tsKey] ?? "");
+    return desc ? (y > x ? 1 : y < x ? -1 : 0) : x > y ? 1 : x < y ? -1 : 0;
+  });
+  return out;
+}
+
