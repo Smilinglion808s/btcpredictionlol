@@ -39,9 +39,9 @@ export function B4x4Es1Card({
   onExport: () => void;
   exporting: boolean;
 }) {
-  // The active model is the balanced 4-vote policy: every headline number must
-  // come from the balanced_* scoped aggregate, never the legacy chain.
-  const b: Any = (stats.balanced as Any | undefined) ?? {};
+  // The active model is Binance Dual-Venue Adaptive R1: every headline number
+  // must come from its own scoped aggregate, never a counterfactual chain.
+  const b: Any = (stats.dual_adaptive as Any | undefined) ?? {};
   const wins = Number(b.wins ?? 0);
   const losses = Number(b.losses ?? 0);
   const pushes = Number(b.pushes ?? 0);
@@ -54,10 +54,10 @@ export function B4x4Es1Card({
   const warmup: Any | null = (stats.warmup as Any | undefined) ?? null;
 
 
-  // The ACTIVE decision is the balanced 4-vote policy; the legacy chain is only
-  // a counterfactual, so never surface its abstention as the headline.
-  const traded = pending?.balanced_would_trade === true;
-  const upper = String(pending?.balanced_final_prediction ?? "—").toUpperCase();
+  // The ACTIVE decision is the dual-venue adaptive policy; the balanced and
+  // legacy chains are counterfactuals only.
+  const traded = pending?.dual_adaptive_would_trade === true;
+  const upper = String(pending?.dual_adaptive_candidate_direction ?? "—").toUpperCase();
   const candleMs = pending?.target_candle_ts
     ? new Date(String(pending.target_candle_ts)).getTime()
     : NaN;
@@ -89,13 +89,13 @@ export function B4x4Es1Card({
             Active model · B4x4-ES1
           </div>
           <h3 className="b4-title text-4xl font-bold font-heading tracking-tight leading-none">
-            ES1 Balanced
+            ES1 Dual-Venue
           </h3>
           <div className="text-[10px] text-muted-foreground mt-1 font-mono">
-            4-vote 3-of-4 · ES1 price-head + Binance SPOT depth/OFI60 + PERP fade
+            Adaptive orientation · Binance SPOT + USD-M PERP final vs mean-60s
           </div>
           <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
-            es1-binance-3of4-balanced · b4x4-es1-balanced-binance-r1
+            es1-binance-dual-adaptive · b4x4-es1-binance-dual-adaptive-r1
           </div>
 
         </div>
@@ -189,27 +189,31 @@ export function B4x4Es1Card({
             <span className="text-[10px] font-mono text-amber tabular-nums">{candleLabel}</span>
           ) : null}
           <span className="text-[10px] font-mono text-muted-foreground">
-            {String(pending?.balanced_decision_reason ?? "—")}
+            {String(pending?.dual_adaptive_decision_reason ?? "—")}
           </span>
-          {pending?.balanced_webhook_sent_at ? (
+          {pending?.dual_adaptive_webhook_sent_at ? (
             <span className="text-[10px] font-mono text-bull">webhook sent</span>
           ) : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono opacity-80">
-          <span>tier {String(pending?.balanced_agreement_tier ?? "—")}</span>
           <span>
-            votes {String(pending?.balanced_green_vote_count ?? "—")}G /{" "}
-            {String(pending?.balanced_red_vote_count ?? "—")}R
+            spot {String(pending?.dual_adaptive_spot_mode ?? "—")} →{" "}
+            {String(pending?.dual_adaptive_spot_direction ?? "—")}
           </span>
-          <span>{String(pending?.balanced_vote_pattern ?? "—")}</span>
           <span>
-            books SPOT {pending?.balanced_spot_ready === true ? "ok" : String(pending?.balanced_spot_gate_reason ?? "—")}
+            perp {String(pending?.dual_adaptive_perp_mode ?? "—")} →{" "}
+            {String(pending?.dual_adaptive_perp_direction ?? "—")}
+          </span>
+          <span>agreement {String(pending?.dual_adaptive_venue_agreement ?? "—")}</span>
+          <span>
+            books SPOT {pending?.dual_adaptive_spot_ready === true ? "ok" : String(pending?.dual_adaptive_spot_ready_reason ?? "—")}
             {" · "}
-            PERP {pending?.balanced_perp_ready === true ? "ok" : String(pending?.balanced_perp_gate_reason ?? "—")}
+            PERP {pending?.dual_adaptive_perp_ready === true ? "ok" : String(pending?.dual_adaptive_perp_ready_reason ?? "—")}
           </span>
         </div>
         <div className="mt-1 text-[9px] font-mono text-muted-foreground/70">
-          legacy counterfactual · {String(pending?.decision_reason ?? "—")}
+          balanced counterfactual · {String(pending?.balanced_decision_reason ?? "—")} · legacy ·{" "}
+          {String(pending?.decision_reason ?? "—")}
         </div>
       </Section>
 
