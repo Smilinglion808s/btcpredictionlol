@@ -125,6 +125,10 @@ export interface MarketReadiness {
   resyncContinuous: boolean | null;
   finalImbalance10bps: number | null;
   normalizedOfi60s: number | null;
+  /** Mean 10-bps depth imbalance over the 60s pre-boundary window. */
+  meanImbalance10bps60s: number | null;
+  /** Observational only: the 96-row percentile warm-up never gates a decision. */
+  historyReady: boolean;
   /** null when every gate passed, otherwise the first failing gate. */
   gateReason: string | null;
   /** True when the only failure is sequence/resync continuity. */
@@ -189,6 +193,8 @@ export function marketReadinessFrom(
       typeof row?.resync_continuous === "boolean" ? (row.resync_continuous as boolean) : null,
     finalImbalance10bps: num(row?.final_imbalance_10bps),
     normalizedOfi60s: num(row?.normalized_ofi_60s),
+    meanImbalance10bps60s: num(row?.mean_imbalance_10bps_60s),
+    historyReady: row?.history_ready === true,
     gateReason: null,
     continuityFailure: false,
   };
