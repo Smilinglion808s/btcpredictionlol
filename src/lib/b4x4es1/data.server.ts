@@ -94,18 +94,31 @@ export async function loadA2Rows(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<Map<string, A2Row>> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("b4x4_predictions")
-      .select(
-        "target_candle_ts, a2_probability_green, source_a2_row_id, a2_model_fit_id, a2_production_model_version, created_at",
-      )
-      .not("a2_probability_green", "is", null)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("target_candle_ts", opts.upTo);
-    return q;
-  });
+  const raw = await incrementalRows<DbRow>(
+    "es1:a2-rows",
+    (cursor: string | null) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("b4x4_predictions")
+          .select(
+            "target_candle_ts, a2_probability_green, source_a2_row_id, a2_model_fit_id, a2_production_model_version, created_at",
+          )
+          .not("a2_probability_green", "is", null)
+          .order("target_candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("target_candle_ts", cursor);
+        return q;
+      }),
+    {
+      tsKey: "target_candle_ts",
+      keyFn: (r: DbRow) =>
+        `${new Date(String(r.target_candle_ts)).toISOString()}|${String(r.created_at ?? "")}`,
+    },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r: DbRow) => new Date(String(r.target_candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, A2Row>();
   const createdAt = new Map<string, string>();
