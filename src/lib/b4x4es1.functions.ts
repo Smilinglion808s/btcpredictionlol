@@ -150,7 +150,7 @@ function aggregate(rows: Row[]) {
 export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
   cachedStats("b4x4-es1-stats", async () => {
     const rows = await pageAll(
-      "target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
+      "id, model_version, target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
         "decision_reason, result, result_score, resolved_at, b4_guard_attribution_class, " +
         "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status, " +
         "balanced_would_trade, balanced_final_prediction, balanced_decision_reason, " +
@@ -160,7 +160,9 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
         "dual_adaptive_decision_reason, dual_adaptive_result, dual_adaptive_result_score, " +
         "dual_adaptive_resolved_at, dual_adaptive_influenced_decision, " +
         "dual_adaptive_spot_mode, dual_adaptive_perp_mode",
+      "stats",
     );
+
     const live = rows.filter(
       (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
     );
