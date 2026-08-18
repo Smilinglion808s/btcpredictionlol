@@ -76,3 +76,10 @@ export async function cachedStats<T>(
 export function invalidateStats(key: string) {
   store.delete(key);
 }
+
+/** Drop every cached aggregate (manual "force fresh data" from the stats page). */
+export function clearAllStats(): number {
+  const n = store.size;
+  store.clear();
+  return n;
+}
