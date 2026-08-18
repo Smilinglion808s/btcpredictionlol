@@ -1,7 +1,7 @@
 // V6 server functions: stats card data, pending prediction, and CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats, incrementalRows, invalidateStats } from "./statsCache.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
