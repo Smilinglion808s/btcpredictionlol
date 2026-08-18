@@ -139,7 +139,9 @@ export function evaluateMarketAdaptive(m: MarketReadiness | null): MarketAdaptiv
     captureStatus: m?.captureStatus ?? null,
     ready: m != null && m.gateReason == null,
     readyReason: m?.readyReason ?? null,
-    gateReason: m?.gateReason ?? "NO_MARKET_READINESS",
+    // A passing gate is `null`; only a completely absent readiness view is
+    // NO_MARKET_READINESS. `??` here would have failed every healthy market.
+    gateReason: m == null ? "NO_MARKET_READINESS" : m.gateReason,
     historyReady: m?.historyReady === true,
     finalImbalance10bps: m?.finalImbalance10bps ?? null,
     meanImbalance10bps60s: m?.meanImbalance10bps60s ?? null,
