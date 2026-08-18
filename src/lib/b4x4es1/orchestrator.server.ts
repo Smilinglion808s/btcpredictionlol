@@ -693,12 +693,21 @@ export async function resolveEs1Row(
     if (!row) return;
     rowId = String(row.id);
 
-    // Score the active balanced model and every comparison policy first; this
-    // is idempotent and independent of the legacy row resolution below.
+    // Score the retained balanced counterfactual and every comparison policy
+    // first; this is idempotent and independent of the resolutions below.
     if (!row.balanced_resolved_at) {
       try {
         const { resolveBalancedRow } = await import("./balanced.server");
         await resolveBalancedRow(supabase, row, actualDirection);
+      } catch {
+        /* never block legacy resolution */
+      }
+    }
+    // ACTIVE MODEL resolution: Binance Dual-Venue Adaptive R1.
+    if (!row.dual_adaptive_resolved_at) {
+      try {
+        const { resolveDualAdaptiveRow } = await import("./dualAdaptive.server");
+        await resolveDualAdaptiveRow(supabase, row, actualDirection);
       } catch {
         /* never block legacy resolution */
       }
