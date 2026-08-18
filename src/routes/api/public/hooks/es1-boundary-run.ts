@@ -178,26 +178,26 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             out.legacy_final_prediction = row.final_prediction;
             out.legacy_would_trade = row.would_trade;
 
-            // Retained counterfactual: Balanced Binance 3-of-4 R1. This also
-            // finalizes the exact-target Binance boundary features, strictly
-            // BEFORE the active decision and before any webhook.
             let activeRow: Record<string, unknown> = row as Record<string, unknown>;
+
+            // 1. Exact-target Binance boundary features — the only Binance work
+            //    the active decision depends on. Finalized strictly BEFORE the
+            //    active decision and before any webhook, exactly as before.
+            const tb = Date.now();
             try {
-              const { runBalancedForPrediction } = await import("@/lib/b4x4es1/balanced.server");
-              const balanced = await runBalancedForPrediction(supabase, row, targetTs);
-              if (balanced) {
-                activeRow = { ...activeRow, ...balanced.patch };
-                out.balanced_final_prediction = balanced.decision.finalPrediction;
-                out.balanced_would_trade = balanced.decision.wouldTrade;
-                out.balanced_decision_reason = balanced.decision.decisionReason;
-              }
+              const { finalizeBinanceObTarget } = await import(
+                "@/lib/b4x4es1/binanceOb/orchestrator.server"
+              );
+              await finalizeBinanceObTarget(supabase, targetTs, String(row.id));
               out.binance_ob_linked = true;
             } catch (e) {
               out.binance_ob_linked = false;
-              out.balanced_error = e instanceof Error ? e.message : String(e);
+              out.binance_finalize_error = e instanceof Error ? e.message : String(e);
             }
+            mark("binance_finalize_ms", tb);
 
-            // ACTIVE MODEL: B4x4-ES1 Binance Dual-Venue Adaptive R1.
+            // 2. ACTIVE MODEL: B4x4-ES1 Binance Dual-Venue Adaptive R1.
+            const td = Date.now();
             try {
               const { runDualAdaptiveForPrediction } = await import(
                 "@/lib/b4x4es1/dualAdaptive.server"
@@ -216,8 +216,33 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
               // Fail closed: no dual-adaptive row means no publication.
               out.dual_adaptive_error = e instanceof Error ? e.message : String(e);
             }
+            mark("dual_ms", td);
 
+            // 3. Publish immediately. Everything below this line is a scored
+            //    counterfactual that can never publish, so it must not sit in
+            //    front of the webhook.
+            const tw = Date.now();
             out.webhook_sent = await maybeSendEs1Webhook(supabase, activeRow);
+            mark("webhook_ms", tw);
+            out.publish_lag_ms = Date.now() - targetMs;
+
+            // 4. Retained counterfactual: Balanced Binance 3-of-4 R1. Same
+            //    inputs, same persistence — just no longer blocking publication.
+            const tbal = Date.now();
+            try {
+              const { runBalancedForPrediction } = await import("@/lib/b4x4es1/balanced.server");
+              const balanced = await runBalancedForPrediction(supabase, row, targetTs, {
+                skipFinalize: true,
+              });
+              if (balanced) {
+                out.balanced_final_prediction = balanced.decision.finalPrediction;
+                out.balanced_would_trade = balanced.decision.wouldTrade;
+                out.balanced_decision_reason = balanced.decision.decisionReason;
+              }
+            } catch (e) {
+              out.balanced_error = e instanceof Error ? e.message : String(e);
+            }
+            mark("balanced_ms", tbal);
           } else {
 
             out.error = "source candle unavailable";
@@ -225,6 +250,9 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         } catch (e) {
           out.error = e instanceof Error ? e.message : String(e);
         }
+
+        out.stages = stages;
+
 
         out.elapsed_ms = Date.now() - started;
         return new Response(JSON.stringify(out), {
