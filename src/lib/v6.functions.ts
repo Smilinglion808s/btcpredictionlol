@@ -21,23 +21,39 @@ async function v6VisualResetAt(): Promise<string | null> {
   return data?.reset_at ? new Date(String(data.reset_at)).toISOString() : null;
 }
 
-async function pageAllV6(select: string, sinceIso?: string | null): Promise<Array<Record<string, unknown>>> {
-  const sb = await admin();
-  const out: Array<Record<string, unknown>> = [];
-  for (let from = 0; ; from += PAGE) {
-    let q = sb
-      .from("v6_predictions")
-      .select(select)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (sinceIso) q = q.gt("prediction_created_at", sinceIso);
-    const { data } = await q;
-    if (!data || data.length === 0) break;
-    out.push(...(data as unknown as Array<Record<string, unknown>>));
-    if (data.length < PAGE) break;
-  }
-  return out;
+async function pageAllV6(
+  select: string,
+  sinceIso?: string | null,
+  cacheKey?: string,
+): Promise<Array<Record<string, unknown>>> {
+  const fetchRows = async (cursor: string | null) => {
+    const sb = await admin();
+    const out: Array<Record<string, unknown>> = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = sb
+        .from("v6_predictions")
+        .select(select)
+        .order("target_candle_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (sinceIso) q = q.gt("prediction_created_at", sinceIso);
+      if (cursor) q = q.gt("target_candle_ts", cursor);
+      const { data } = await q;
+      if (!data || data.length === 0) break;
+      out.push(...(data as unknown as Array<Record<string, unknown>>));
+      if (data.length < PAGE) break;
+    }
+    return out;
+  };
+
+  // Read-path only: reuse immutable historical rows instead of rescanning the
+  // whole table on every cache miss (large disk-IO reduction, same result set).
+  if (!cacheKey) return fetchRows(null);
+  return incrementalRows(`v6:${cacheKey}:${sinceIso ?? "all"}`, fetchRows, {
+    tsKey: "target_candle_ts",
+    keyFn: (r) => String(r.prediction_id ?? r.target_candle_ts ?? ""),
+  });
 }
+
 
 /** Visual-only reset of the V6 stats card counters. CSV/history stay intact. */
 export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(async () => {
