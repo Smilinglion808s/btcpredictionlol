@@ -294,6 +294,18 @@ function StatsPage() {
   const v6Pending = v6PendingQ.data as Record<string, any> | null;
   const v6Fmt = (n: unknown, digits = 2) => (n == null || n === "" ? "—" : Number(n).toFixed(digits));
 
+  const [refreshing, setRefreshing] = useState(false);
+  const forceRefreshFn = useServerFn(forceRefreshStats);
+  const handleForceRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await forceRefreshFn();
+      await qc.invalidateQueries();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
