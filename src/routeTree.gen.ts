@@ -11,25 +11,25 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
-import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
-import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
-import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
-import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
-import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
-import { Route as ApiPublicHooksTd1RcRetrainRouteImport } from './routes/api/public/hooks/td1-rc-retrain'
-import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
-import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
-import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
-import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
-import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
-import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
-import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
-import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
-import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
-import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
+import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
+import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
+import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
+import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
+import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
+import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
+import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
+import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
+import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
+import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
+import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
+import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
+import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
+import { Route as ApiPublicHooksTd1RcRetrainRouteImport } from './routes/api/public/hooks/td1-rc-retrain'
+import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
+import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
+import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -40,14 +40,9 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
-  id: '/stats',
-  path: '/stats',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedModelsRoute = AuthenticatedModelsRouteImport.update({
-  id: '/models',
-  path: '/models',
+const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
+  id: '/daily',
+  path: '/daily',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
@@ -55,86 +50,20 @@ const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
-  id: '/daily',
-  path: '/daily',
+const AuthenticatedModelsRoute = AuthenticatedModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
-  id: '/api/public/timing/btc-15m',
-  path: '/api/public/timing/btc-15m',
-  getParentRoute: () => rootRouteImport,
+const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicPredictionsUpcomingRoute =
-  ApiPublicPredictionsUpcomingRouteImport.update({
-    id: '/api/public/predictions/upcoming',
-    path: '/api/public/predictions/upcoming',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicPredictionsLatestRoute =
-  ApiPublicPredictionsLatestRouteImport.update({
-    id: '/api/public/predictions/latest',
-    path: '/api/public/predictions/latest',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksTd1RcRetrainRoute =
-  ApiPublicHooksTd1RcRetrainRouteImport.update({
-    id: '/api/public/hooks/td1-rc-retrain',
-    path: '/api/public/hooks/td1-rc-retrain',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksScheduled15mRunRoute =
-  ApiPublicHooksScheduled15mRunRouteImport.update({
-    id: '/api/public/hooks/scheduled-15m-run',
-    path: '/api/public/hooks/scheduled-15m-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksPrewarmB4_2Route =
-  ApiPublicHooksPrewarmB4_2RouteImport.update({
-    id: '/api/public/hooks/prewarm-b4_2',
-    path: '/api/public/hooks/prewarm-b4_2',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksModel8V3BootstrapRoute =
-  ApiPublicHooksModel8V3BootstrapRouteImport.update({
-    id: '/api/public/hooks/model8-v3-bootstrap',
-    path: '/api/public/hooks/model8-v3-bootstrap',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksModel7NightlyAuditRoute =
-  ApiPublicHooksModel7NightlyAuditRouteImport.update({
-    id: '/api/public/hooks/model7-nightly-audit',
-    path: '/api/public/hooks/model7-nightly-audit',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksEs1BoundaryRunRoute =
-  ApiPublicHooksEs1BoundaryRunRouteImport.update({
-    id: '/api/public/hooks/es1-boundary-run',
-    path: '/api/public/hooks/es1-boundary-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksDailyArchiveRoute =
-  ApiPublicHooksDailyArchiveRouteImport.update({
-    id: '/api/public/hooks/daily-archive',
-    path: '/api/public/hooks/daily-archive',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksBinanceObIngestRoute =
-  ApiPublicHooksBinanceObIngestRouteImport.update({
-    id: '/api/public/hooks/binance-ob-ingest',
-    path: '/api/public/hooks/binance-ob-ingest',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksBinanceObFinalizeRoute =
-  ApiPublicHooksBinanceObFinalizeRouteImport.update({
-    id: '/api/public/hooks/binance-ob-finalize',
-    path: '/api/public/hooks/binance-ob-finalize',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksB4x4ObShadowCaptureRoute =
-  ApiPublicHooksB4x4ObShadowCaptureRouteImport.update({
-    id: '/api/public/hooks/b4x4-ob-shadow-capture',
-    path: '/api/public/hooks/b4x4-ob-shadow-capture',
+const ApiPublicHooksB4x4BackfillRoute =
+  ApiPublicHooksB4x4BackfillRouteImport.update({
+    id: '/api/public/hooks/b4x4-backfill',
+    path: '/api/public/hooks/b4x4-backfill',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksB4x4Es1WarmupRoute =
@@ -143,12 +72,83 @@ const ApiPublicHooksB4x4Es1WarmupRoute =
     path: '/api/public/hooks/b4x4-es1-warmup',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicHooksB4x4BackfillRoute =
-  ApiPublicHooksB4x4BackfillRouteImport.update({
-    id: '/api/public/hooks/b4x4-backfill',
-    path: '/api/public/hooks/b4x4-backfill',
+const ApiPublicHooksB4x4ObShadowCaptureRoute =
+  ApiPublicHooksB4x4ObShadowCaptureRouteImport.update({
+    id: '/api/public/hooks/b4x4-ob-shadow-capture',
+    path: '/api/public/hooks/b4x4-ob-shadow-capture',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksBinanceObFinalizeRoute =
+  ApiPublicHooksBinanceObFinalizeRouteImport.update({
+    id: '/api/public/hooks/binance-ob-finalize',
+    path: '/api/public/hooks/binance-ob-finalize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksBinanceObIngestRoute =
+  ApiPublicHooksBinanceObIngestRouteImport.update({
+    id: '/api/public/hooks/binance-ob-ingest',
+    path: '/api/public/hooks/binance-ob-ingest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksDailyArchiveRoute =
+  ApiPublicHooksDailyArchiveRouteImport.update({
+    id: '/api/public/hooks/daily-archive',
+    path: '/api/public/hooks/daily-archive',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksEs1BoundaryRunRoute =
+  ApiPublicHooksEs1BoundaryRunRouteImport.update({
+    id: '/api/public/hooks/es1-boundary-run',
+    path: '/api/public/hooks/es1-boundary-run',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksModel7NightlyAuditRoute =
+  ApiPublicHooksModel7NightlyAuditRouteImport.update({
+    id: '/api/public/hooks/model7-nightly-audit',
+    path: '/api/public/hooks/model7-nightly-audit',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksModel8V3BootstrapRoute =
+  ApiPublicHooksModel8V3BootstrapRouteImport.update({
+    id: '/api/public/hooks/model8-v3-bootstrap',
+    path: '/api/public/hooks/model8-v3-bootstrap',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksPrewarmB4_2Route =
+  ApiPublicHooksPrewarmB4_2RouteImport.update({
+    id: '/api/public/hooks/prewarm-b4_2',
+    path: '/api/public/hooks/prewarm-b4_2',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksScheduled15mRunRoute =
+  ApiPublicHooksScheduled15mRunRouteImport.update({
+    id: '/api/public/hooks/scheduled-15m-run',
+    path: '/api/public/hooks/scheduled-15m-run',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksTd1RcRetrainRoute =
+  ApiPublicHooksTd1RcRetrainRouteImport.update({
+    id: '/api/public/hooks/td1-rc-retrain',
+    path: '/api/public/hooks/td1-rc-retrain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicPredictionsLatestRoute =
+  ApiPublicPredictionsLatestRouteImport.update({
+    id: '/api/public/predictions/latest',
+    path: '/api/public/predictions/latest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicPredictionsUpcomingRoute =
+  ApiPublicPredictionsUpcomingRouteImport.update({
+    id: '/api/public/predictions/upcoming',
+    path: '/api/public/predictions/upcoming',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
+  id: '/api/public/timing/btc-15m',
+  path: '/api/public/timing/btc-15m',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -323,18 +323,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/stats': {
-      id: '/_authenticated/stats'
-      path: '/stats'
-      fullPath: '/stats'
-      preLoaderRoute: typeof AuthenticatedStatsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/models': {
-      id: '/_authenticated/models'
-      path: '/models'
-      fullPath: '/models'
-      preLoaderRoute: typeof AuthenticatedModelsRouteImport
+    '/_authenticated/daily': {
+      id: '/_authenticated/daily'
+      path: '/daily'
+      fullPath: '/daily'
+      preLoaderRoute: typeof AuthenticatedDailyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/history': {
@@ -344,102 +337,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHistoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/daily': {
-      id: '/_authenticated/daily'
-      path: '/daily'
-      fullPath: '/daily'
-      preLoaderRoute: typeof AuthenticatedDailyRouteImport
+    '/_authenticated/models': {
+      id: '/_authenticated/models'
+      path: '/models'
+      fullPath: '/models'
+      preLoaderRoute: typeof AuthenticatedModelsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/timing/btc-15m': {
-      id: '/api/public/timing/btc-15m'
-      path: '/api/public/timing/btc-15m'
-      fullPath: '/api/public/timing/btc-15m'
-      preLoaderRoute: typeof ApiPublicTimingBtc15mRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/stats': {
+      id: '/_authenticated/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof AuthenticatedStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/predictions/upcoming': {
-      id: '/api/public/predictions/upcoming'
-      path: '/api/public/predictions/upcoming'
-      fullPath: '/api/public/predictions/upcoming'
-      preLoaderRoute: typeof ApiPublicPredictionsUpcomingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/predictions/latest': {
-      id: '/api/public/predictions/latest'
-      path: '/api/public/predictions/latest'
-      fullPath: '/api/public/predictions/latest'
-      preLoaderRoute: typeof ApiPublicPredictionsLatestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/td1-rc-retrain': {
-      id: '/api/public/hooks/td1-rc-retrain'
-      path: '/api/public/hooks/td1-rc-retrain'
-      fullPath: '/api/public/hooks/td1-rc-retrain'
-      preLoaderRoute: typeof ApiPublicHooksTd1RcRetrainRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/scheduled-15m-run': {
-      id: '/api/public/hooks/scheduled-15m-run'
-      path: '/api/public/hooks/scheduled-15m-run'
-      fullPath: '/api/public/hooks/scheduled-15m-run'
-      preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/prewarm-b4_2': {
-      id: '/api/public/hooks/prewarm-b4_2'
-      path: '/api/public/hooks/prewarm-b4_2'
-      fullPath: '/api/public/hooks/prewarm-b4_2'
-      preLoaderRoute: typeof ApiPublicHooksPrewarmB4_2RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/model8-v3-bootstrap': {
-      id: '/api/public/hooks/model8-v3-bootstrap'
-      path: '/api/public/hooks/model8-v3-bootstrap'
-      fullPath: '/api/public/hooks/model8-v3-bootstrap'
-      preLoaderRoute: typeof ApiPublicHooksModel8V3BootstrapRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/model7-nightly-audit': {
-      id: '/api/public/hooks/model7-nightly-audit'
-      path: '/api/public/hooks/model7-nightly-audit'
-      fullPath: '/api/public/hooks/model7-nightly-audit'
-      preLoaderRoute: typeof ApiPublicHooksModel7NightlyAuditRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/es1-boundary-run': {
-      id: '/api/public/hooks/es1-boundary-run'
-      path: '/api/public/hooks/es1-boundary-run'
-      fullPath: '/api/public/hooks/es1-boundary-run'
-      preLoaderRoute: typeof ApiPublicHooksEs1BoundaryRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/daily-archive': {
-      id: '/api/public/hooks/daily-archive'
-      path: '/api/public/hooks/daily-archive'
-      fullPath: '/api/public/hooks/daily-archive'
-      preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/binance-ob-ingest': {
-      id: '/api/public/hooks/binance-ob-ingest'
-      path: '/api/public/hooks/binance-ob-ingest'
-      fullPath: '/api/public/hooks/binance-ob-ingest'
-      preLoaderRoute: typeof ApiPublicHooksBinanceObIngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/binance-ob-finalize': {
-      id: '/api/public/hooks/binance-ob-finalize'
-      path: '/api/public/hooks/binance-ob-finalize'
-      fullPath: '/api/public/hooks/binance-ob-finalize'
-      preLoaderRoute: typeof ApiPublicHooksBinanceObFinalizeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/b4x4-ob-shadow-capture': {
-      id: '/api/public/hooks/b4x4-ob-shadow-capture'
-      path: '/api/public/hooks/b4x4-ob-shadow-capture'
-      fullPath: '/api/public/hooks/b4x4-ob-shadow-capture'
-      preLoaderRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRouteImport
+    '/api/public/hooks/b4x4-backfill': {
+      id: '/api/public/hooks/b4x4-backfill'
+      path: '/api/public/hooks/b4x4-backfill'
+      fullPath: '/api/public/hooks/b4x4-backfill'
+      preLoaderRoute: typeof ApiPublicHooksB4x4BackfillRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/b4x4-es1-warmup': {
@@ -449,11 +365,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksB4x4Es1WarmupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/b4x4-backfill': {
-      id: '/api/public/hooks/b4x4-backfill'
-      path: '/api/public/hooks/b4x4-backfill'
-      fullPath: '/api/public/hooks/b4x4-backfill'
-      preLoaderRoute: typeof ApiPublicHooksB4x4BackfillRouteImport
+    '/api/public/hooks/b4x4-ob-shadow-capture': {
+      id: '/api/public/hooks/b4x4-ob-shadow-capture'
+      path: '/api/public/hooks/b4x4-ob-shadow-capture'
+      fullPath: '/api/public/hooks/b4x4-ob-shadow-capture'
+      preLoaderRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/binance-ob-finalize': {
+      id: '/api/public/hooks/binance-ob-finalize'
+      path: '/api/public/hooks/binance-ob-finalize'
+      fullPath: '/api/public/hooks/binance-ob-finalize'
+      preLoaderRoute: typeof ApiPublicHooksBinanceObFinalizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/binance-ob-ingest': {
+      id: '/api/public/hooks/binance-ob-ingest'
+      path: '/api/public/hooks/binance-ob-ingest'
+      fullPath: '/api/public/hooks/binance-ob-ingest'
+      preLoaderRoute: typeof ApiPublicHooksBinanceObIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/daily-archive': {
+      id: '/api/public/hooks/daily-archive'
+      path: '/api/public/hooks/daily-archive'
+      fullPath: '/api/public/hooks/daily-archive'
+      preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/es1-boundary-run': {
+      id: '/api/public/hooks/es1-boundary-run'
+      path: '/api/public/hooks/es1-boundary-run'
+      fullPath: '/api/public/hooks/es1-boundary-run'
+      preLoaderRoute: typeof ApiPublicHooksEs1BoundaryRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/model7-nightly-audit': {
+      id: '/api/public/hooks/model7-nightly-audit'
+      path: '/api/public/hooks/model7-nightly-audit'
+      fullPath: '/api/public/hooks/model7-nightly-audit'
+      preLoaderRoute: typeof ApiPublicHooksModel7NightlyAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/model8-v3-bootstrap': {
+      id: '/api/public/hooks/model8-v3-bootstrap'
+      path: '/api/public/hooks/model8-v3-bootstrap'
+      fullPath: '/api/public/hooks/model8-v3-bootstrap'
+      preLoaderRoute: typeof ApiPublicHooksModel8V3BootstrapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/prewarm-b4_2': {
+      id: '/api/public/hooks/prewarm-b4_2'
+      path: '/api/public/hooks/prewarm-b4_2'
+      fullPath: '/api/public/hooks/prewarm-b4_2'
+      preLoaderRoute: typeof ApiPublicHooksPrewarmB4_2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/scheduled-15m-run': {
+      id: '/api/public/hooks/scheduled-15m-run'
+      path: '/api/public/hooks/scheduled-15m-run'
+      fullPath: '/api/public/hooks/scheduled-15m-run'
+      preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/td1-rc-retrain': {
+      id: '/api/public/hooks/td1-rc-retrain'
+      path: '/api/public/hooks/td1-rc-retrain'
+      fullPath: '/api/public/hooks/td1-rc-retrain'
+      preLoaderRoute: typeof ApiPublicHooksTd1RcRetrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/predictions/latest': {
+      id: '/api/public/predictions/latest'
+      path: '/api/public/predictions/latest'
+      fullPath: '/api/public/predictions/latest'
+      preLoaderRoute: typeof ApiPublicPredictionsLatestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/predictions/upcoming': {
+      id: '/api/public/predictions/upcoming'
+      path: '/api/public/predictions/upcoming'
+      fullPath: '/api/public/predictions/upcoming'
+      preLoaderRoute: typeof ApiPublicPredictionsUpcomingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/timing/btc-15m': {
+      id: '/api/public/timing/btc-15m'
+      path: '/api/public/timing/btc-15m'
+      fullPath: '/api/public/timing/btc-15m'
+      preLoaderRoute: typeof ApiPublicTimingBtc15mRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
