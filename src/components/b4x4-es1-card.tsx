@@ -189,45 +189,73 @@ export function B4x4Es1Card({
             <span className="text-[10px] font-mono text-amber tabular-nums">{candleLabel}</span>
           ) : null}
           <span className="text-[10px] font-mono text-muted-foreground">
-            {String(pending?.dual_adaptive_decision_reason ?? "—")}
+            {String(pending?.precision_decision_reason ?? "—")}
           </span>
-          {pending?.dual_adaptive_webhook_sent_at ? (
+          {pending?.precision_webhook_sent_at ? (
             <span className="text-[10px] font-mono text-bull">webhook sent</span>
           ) : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono opacity-80">
+          <span>sleeve {String(pending?.precision_sleeve ?? "—")}</span>
+          <span>route {String(pending?.precision_balanced_route ?? "—")}</span>
           <span>
-            spot {String(pending?.dual_adaptive_spot_mode ?? "—")} →{" "}
-            {String(pending?.dual_adaptive_spot_direction ?? "—")}
+            spot {String(pending?.precision_spot_mode ?? "—")} →{" "}
+            {String(pending?.precision_spot_direction ?? "—")}
           </span>
           <span>
-            perp {String(pending?.dual_adaptive_perp_mode ?? "—")} →{" "}
-            {String(pending?.dual_adaptive_perp_direction ?? "—")}
+            perp {String(pending?.precision_perp_mode ?? "—")} →{" "}
+            {String(pending?.precision_perp_direction ?? "—")}
           </span>
-          <span>agreement {String(pending?.dual_adaptive_venue_agreement ?? "—")}</span>
+          <span>agreement {String(pending?.precision_venue_agreement ?? "—")}</span>
           <span>
-            books SPOT {pending?.dual_adaptive_spot_ready === true ? "ok" : String(pending?.dual_adaptive_spot_ready_reason ?? "—")}
+            books SPOT {pending?.precision_spot_ready === true ? "ok" : "not ready"}
             {" · "}
-            PERP {pending?.dual_adaptive_perp_ready === true ? "ok" : String(pending?.dual_adaptive_perp_ready_reason ?? "—")}
+            PERP {pending?.precision_perp_ready === true ? "ok" : "not ready"}
           </span>
+          <span>
+            trend age {String(pending?.precision_prior_trend_age_candles ?? "—")} · wick pct{" "}
+            {pending?.precision_upper_wick_percentile_96 == null
+              ? "—"
+              : Number(pending.precision_upper_wick_percentile_96).toFixed(2)}
+          </span>
+          {pending?.precision_balanced_route === "TECHNICAL_FILL" ? (
+            <span>
+              fill {String(pending?.precision_technical_direction ?? "—")} @{" "}
+              {pending?.precision_technical_confidence == null
+                ? "—"
+                : Number(pending.precision_technical_confidence).toFixed(3)}
+            </span>
+          ) : null}
         </div>
         <div className="mt-1 text-[9px] font-mono text-muted-foreground/70">
-          balanced counterfactual · {String(pending?.balanced_decision_reason ?? "—")} · legacy ·{" "}
-          {String(pending?.decision_reason ?? "—")}
+          dual-adaptive counterfactual · {String(pending?.dual_adaptive_decision_reason ?? "—")} ·
+          balanced · {String(pending?.balanced_decision_reason ?? "—")}
         </div>
       </Section>
 
-      <Section title="Orientation attribution">
+      <Section title="Sleeve & route attribution">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Fade trades" value={String(b.fade_trades ?? 0)} />
-          <Stat label="Follow trades" value={String(b.follow_trades ?? 0)} />
+          <Stat label="Primary" value={String(b.primary_trades ?? 0)} />
+          <Stat label="Rescue" value={String(b.rescue_trades ?? 0)} />
+          <Stat label="OB core" value={String(b.core_route_trades ?? 0)} />
+          <Stat label="Tech fill" value={String(b.fill_route_trades ?? 0)} />
+          <Stat
+            label="Balanced base net"
+            value={signed(Number(b.balanced_base_net ?? 0))}
+            tone="text-muted-foreground"
+          />
+          <Stat
+            label="Base trades"
+            value={String(b.balanced_base_trades ?? 0)}
+            tone="text-muted-foreground"
+          />
           <Stat
             label="Abstained"
             value={String(Math.max(0, Number(b.total_opportunities ?? 0) - Number(b.trades ?? 0)))}
           />
           <Stat
-            label="Balanced net"
-            value={signed(Number((stats.balanced as Any | undefined)?.net ?? 0))}
+            label="Dual-adaptive net"
+            value={signed(Number((stats.dual_adaptive as Any | undefined)?.net ?? 0))}
             tone="text-muted-foreground"
           />
         </div>
