@@ -146,17 +146,29 @@ export async function loadObSnapshots(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<Map<string, ObSnapshot>> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("b4x4_shadow_market_data")
-      .select(
-        "target_candle_ts, snapshot_event_ts, snapshot_received_at, capture_status, book_complete, depth_imbalance_10bps",
-      )
-      .order("target_candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("target_candle_ts", opts.upTo);
-    return q;
-  });
+  const raw = await incrementalRows<DbRow>(
+    "es1:ob-snapshots",
+    (cursor: string | null) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("b4x4_shadow_market_data")
+          .select(
+            "target_candle_ts, snapshot_event_ts, snapshot_received_at, capture_status, book_complete, depth_imbalance_10bps",
+          )
+          .order("target_candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("target_candle_ts", cursor);
+        return q;
+      }),
+    {
+      tsKey: "target_candle_ts",
+      keyFn: (r: DbRow) => new Date(String(r.target_candle_ts)).toISOString(),
+    },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r: DbRow) => new Date(String(r.target_candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, ObSnapshot>();
   for (const r of rows) {
