@@ -12,22 +12,35 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function pageAll(select: string): Promise<Row[]> {
-  const sb = await admin();
-  const out: Row[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await sb
-      .from("b4x4_es1_predictions")
-      .select(select)
-      .in("model_version", ES1_ROW_MODEL_VERSIONS)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (!data || data.length === 0) break;
-    out.push(...(data as unknown as Row[]));
-    if (data.length < PAGE) break;
-  }
-  return out;
+async function pageAll(select: string, cacheKey?: string): Promise<Row[]> {
+  const fetchRows = async (cursor: string | null) => {
+    const sb = await admin();
+    const out: Row[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = sb
+        .from("b4x4_es1_predictions")
+        .select(select)
+        .in("model_version", ES1_ROW_MODEL_VERSIONS)
+        .order("target_candle_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (cursor) q = q.gt("target_candle_ts", cursor);
+      const { data } = await q;
+      if (!data || data.length === 0) break;
+      out.push(...(data as unknown as Row[]));
+      if (data.length < PAGE) break;
+    }
+    return out;
+  };
+
+  // Read-path only: immutable historical rows are reused from memory so the
+  // stats card no longer rescans the full table on every cache miss.
+  if (!cacheKey) return fetchRows(null);
+  return incrementalRows<Row>(`es1:${cacheKey}`, fetchRows, {
+    tsKey: "target_candle_ts",
+    keyFn: (r: Row) => String(r.id ?? `${r.target_candle_ts}|${r.model_version}`),
+  });
 }
+
 
 function aggregate(rows: Row[]) {
   const daily = new Map<string, { net: number; wins: number; losses: number; trades: number }>();
