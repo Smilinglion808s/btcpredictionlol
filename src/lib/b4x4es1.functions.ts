@@ -142,7 +142,11 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
         "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status, " +
         "balanced_would_trade, balanced_final_prediction, balanced_decision_reason, " +
         "balanced_result, balanced_result_score, balanced_resolved_at, balanced_active, " +
-        "balanced_agreement_tier, balanced_incremental_value",
+        "balanced_agreement_tier, balanced_incremental_value, " +
+        "dual_adaptive_would_trade, dual_adaptive_candidate_direction, " +
+        "dual_adaptive_decision_reason, dual_adaptive_result, dual_adaptive_result_score, " +
+        "dual_adaptive_resolved_at, dual_adaptive_influenced_decision, " +
+        "dual_adaptive_spot_mode, dual_adaptive_perp_mode",
     );
     const live = rows.filter(
       (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
@@ -150,7 +154,7 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
     const warm = rows.filter((r) => r.run_mode === "BACKFILL");
     const active = aggregate(live);
     const warmup = aggregate(warm);
-    // Active model view: the balanced 4-vote decision, scored on its own terms.
+    // Retained counterfactual: the balanced 4-vote decision.
     const balancedRows: Row[] = live.map((r) => ({
       ...r,
       would_trade: r.balanced_would_trade,
@@ -160,19 +164,33 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
       result_score: r.balanced_result_score,
       resolved_at: r.balanced_resolved_at,
     }));
-
     const balanced = aggregate(balancedRows);
-    const unanimous = balancedRows.filter(
-      (r) => r.balanced_agreement_tier === "UNANIMOUS_4_OF_4" && r.would_trade === true,
-    );
+
+    // ACTIVE MODEL: Binance Dual-Venue Adaptive R1, scored on its own terms
+    // and only over boundaries at/after its activation.
+    const dualRows: Row[] = live
+      .filter((r) => r.dual_adaptive_influenced_decision === true)
+      .map((r) => ({
+        ...r,
+        would_trade: r.dual_adaptive_would_trade,
+        final_prediction: r.dual_adaptive_candidate_direction,
+        decision_reason: r.dual_adaptive_decision_reason,
+        result: r.dual_adaptive_result,
+        result_score: r.dual_adaptive_result_score,
+        resolved_at: r.dual_adaptive_resolved_at,
+      }));
+    const dual = aggregate(dualRows);
+    const traded = dualRows.filter((r) => r.would_trade === true);
+    const fadeTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FADE").length;
+    const followTrades = traded.filter((r) => r.dual_adaptive_spot_mode === "FOLLOW").length;
     return {
       ...active,
-      balanced: {
-        ...balanced,
-        activated: live.some((r) => r.balanced_active === true),
-        unanimous_trades: unanimous.length,
-        unanimous_net: unanimous.reduce((s, r) => s + Number(r.result_score ?? 0), 0),
-        incremental_net: live.reduce((s, r) => s + Number(r.balanced_incremental_value ?? 0), 0),
+      balanced,
+      dual_adaptive: {
+        ...dual,
+        activated: dualRows.length > 0,
+        fade_trades: fadeTrades,
+        follow_trades: followTrades,
       },
       warmup: {
         total_opportunities: warmup.total_opportunities,
