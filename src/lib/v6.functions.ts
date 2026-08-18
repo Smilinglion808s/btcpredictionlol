@@ -48,10 +48,11 @@ async function pageAllV6(
   // Read-path only: reuse immutable historical rows instead of rescanning the
   // whole table on every cache miss (large disk-IO reduction, same result set).
   if (!cacheKey) return fetchRows(null);
-  return incrementalRows(`v6:${cacheKey}:${sinceIso ?? "all"}`, fetchRows, {
+  return incrementalRows<Record<string, unknown>>(`v6:${cacheKey}:${sinceIso ?? "all"}`, fetchRows, {
     tsKey: "target_candle_ts",
-    keyFn: (r) => String(r.prediction_id ?? r.target_candle_ts ?? ""),
+    keyFn: (r: Record<string, unknown>) => String(r.prediction_id ?? r.target_candle_ts ?? ""),
   });
+
 }
 
 
