@@ -748,22 +748,37 @@ async function td1RcStatsFor(variant: string, resetId: number, dayCount = 3) {
     .eq("id", resetId)
     .maybeSingle();
   const resetAt = resetRow?.reset_at ? new Date(String(resetRow.reset_at)).toISOString() : null;
-  const rows: any[] = [];
-  for (let from = 0; ; from += PAGE) {
-    let q = sb
-      .from("model7_td1_rc_shadow")
-      .select("external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_counterfactual_score, td1_compressed_risk_veto_value, td1_compressed_risk_incremental_change, td1_compressed_risk_attribution_version, td1_prev_policy_skip_reason, td1_prev_policy_would_trade, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score, td2_policy_version, td2_recovery_feature_value, td2_recovery_evaluable, td2_recovery_condition, td2_recovery_fired, td2_recovery_reason, td2_recovery_result, td2_recovery_score, td2_recovery_incremental_value, td2_recovery_value_class, td2_r1_counterfactual_decision, td2_r1_counterfactual_would_trade, td2_r1_counterfactual_result, td2_r1_counterfactual_score")
-      .eq("variant", variant)
-      .order("candle_ts", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (resetAt) q = q.gt("candle_ts", resetAt);
-    const { data, error } = await q;
-    if (error) throw error;
-    const batch = data ?? [];
-    rows.push(...batch);
-    if (batch.length < PAGE) break;
-    if (from > 100000) break;
-  }
+  // Read-path only: resolved history is immutable, so each refresh re-reads
+  // just the recent tail instead of the entire shadow table.
+  const rows = await incrementalRows<Record<string, any>>(
+    `td1-rc-stats-rows:${variant}:${resetAt ?? "all"}`,
+    async (cursor: string | null) => {
+      const acc: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = sb
+          .from("model7_td1_rc_shadow")
+          .select("id, external_final_decision, would_trade, result, resolved_at, candle_ts, td1_veto_fired, containment_veto_fired, skip_reason, a2_original_decision, a2_counterfactual_result, td1_policy_version, td1_compressed_risk_evaluable, td1_compressed_risk_condition, td1_compressed_risk_veto_fired, td1_compressed_risk_counterfactual_result, td1_compressed_risk_counterfactual_score, td1_compressed_risk_veto_value, td1_compressed_risk_incremental_change, td1_compressed_risk_attribution_version, td1_prev_policy_skip_reason, td1_prev_policy_would_trade, td1_legacy_global_veto_condition, td1_prev_policy_decision, td1_prev_policy_result, td1_prev_policy_score, td1_no_global_veto_decision, td1_no_global_veto_result, td1_no_global_veto_score, td2_policy_version, td2_recovery_feature_value, td2_recovery_evaluable, td2_recovery_condition, td2_recovery_fired, td2_recovery_reason, td2_recovery_result, td2_recovery_score, td2_recovery_incremental_value, td2_recovery_value_class, td2_r1_counterfactual_decision, td2_r1_counterfactual_would_trade, td2_r1_counterfactual_result, td2_r1_counterfactual_score")
+          .eq("variant", variant)
+          .order("candle_ts", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (resetAt) q = q.gt("candle_ts", resetAt);
+        if (cursor) q = q.gt("candle_ts", cursor);
+        const { data, error } = await q;
+        if (error) throw error;
+        const batch = (data ?? []) as any[];
+        acc.push(...batch);
+        if (batch.length < PAGE) break;
+        if (from > 100000) break;
+      }
+      return acc;
+    },
+    {
+      tsKey: "candle_ts",
+      keyFn: (r: Record<string, any>) => String(r.id ?? r.candle_ts),
+      desc: true,
+    },
+  );
+
   const traded = rows.filter((r) => r.would_trade === true);
   const wins = traded.filter((r) => r.result === "WIN").length;
   const losses = traded.filter((r) => r.result === "LOSS").length;
