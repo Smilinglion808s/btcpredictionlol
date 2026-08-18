@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { setB4x4RequestHost } from "@/lib/b4x4/build-identity";
 
 const TF_MS = 15 * 60 * 1000;
 /** How far into a candle we still consider ourselves "at" its boundary. */
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
     handlers: {
       POST: async ({ request }) => {
         const started = Date.now();
+        setB4x4RequestHost(request.headers.get("host"));
         const apikey = request.headers.get("apikey");
         const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!expected || apikey !== expected) {

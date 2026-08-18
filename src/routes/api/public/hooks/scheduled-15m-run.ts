@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { setB4x4RequestHost } from "@/lib/b4x4/build-identity";
 import { fetchAndUpsertCandles } from "@/lib/okx.server";
 import { resolvePredictionsServer, runAiPredictionServer } from "@/lib/prediction.server";
 import { waitForBtc15mPredictionWindow } from "@/lib/timing.server";
@@ -11,6 +12,7 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
     handlers: {
       POST: async ({ request }) => {
         const overallStart = Date.now();
+        setB4x4RequestHost(request.headers.get("host"));
         const apikey = request.headers.get("apikey");
         const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!expected || apikey !== expected) {
