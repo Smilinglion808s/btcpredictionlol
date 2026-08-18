@@ -18,19 +18,19 @@ function environmentFromHost(host: string | null): string | null {
   return "production";
 }
 
-/** Host of the in-flight request, when one is available on this runtime. */
-function currentRequestHost(): string | null {
-  try {
-    // Lazily required so non-request contexts (tests, scripts) never throw.
-    const mod = require("@tanstack/react-start/server") as {
-      getRequest?: () => Request | undefined;
-    };
-    const req = mod.getRequest?.();
-    if (!req) return null;
-    return req.headers.get("host") ?? new URL(req.url).host;
-  } catch {
-    return null;
-  }
+let _requestHost: string | null = null;
+
+/**
+ * Recorded by the scheduled hook routes at the start of each run. The edge
+ * runtime does not expose NODE_ENV, so the serving host is the only reliable
+ * production/preview discriminator.
+ */
+export function setB4x4RequestHost(host: string | null | undefined): void {
+  _requestHost = host && host.length > 0 ? host : null;
+}
+
+export function b4x4RequestHost(): string | null {
+  return _requestHost;
 }
 
 export interface B4x4BuildIdentity {
