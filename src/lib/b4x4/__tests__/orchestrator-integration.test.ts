@@ -1,3 +1,4 @@
+import { B4X4_BUILD_STAMP } from "../build-identity";
 // Orchestrator integration regression tests.
 //
 // Cover the wiring that pure engine tests cannot see: build identity stamping,
