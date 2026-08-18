@@ -9,6 +9,7 @@ import {
   ES1_TRAINING_SOURCE_EPOCH_TS,
 } from "./config";
 import type { CanonicalCandle } from "./features";
+import { incrementalRows } from "../statsCache.server";
 import type { ObSnapshot } from "./engine";
 import type { A2Row } from "./replay";
 
