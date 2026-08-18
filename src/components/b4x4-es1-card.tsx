@@ -89,13 +89,13 @@ export function B4x4Es1Card({
             Active model · B4x4-ES1
           </div>
           <h3 className="b4-title text-4xl font-bold font-heading tracking-tight leading-none">
-            ES1 Dual-Venue
+            ES1 Precision Stack
           </h3>
           <div className="text-[10px] text-muted-foreground mt-1 font-mono">
-            Adaptive orientation · Binance SPOT + USD-M PERP final vs mean-60s
+            Balanced router + primary / upper-wick rescue sleeves
           </div>
           <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
-            es1-binance-dual-adaptive · b4x4-es1-binance-dual-adaptive-r1
+            es1-balanced-precision-stack · b4x4-es1-balanced-precision-stack-r1
           </div>
 
         </div>
