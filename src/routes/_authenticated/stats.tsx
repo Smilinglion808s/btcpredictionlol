@@ -297,9 +297,20 @@ function StatsPage() {
 
   return (
     <div className="px-4 sm:px-6 py-5 space-y-6 max-w-[1600px] mx-auto">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 italic">
-        Actual candle outcomes are determined by the Kalshi KXBTC15M 15-minute prediction market (CF Benchmarks BRTI settlement).
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 italic">
+          Actual candle outcomes are determined by the Kalshi KXBTC15M 15-minute prediction market (CF Benchmarks BRTI settlement).
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs shrink-0"
+          onClick={handleForceRefresh}
+          disabled={refreshing}
+        >
+          {refreshing ? "Refreshing…" : "Force fresh data"}
+        </Button>
+      </div>
 
       <Card className="border-cyan/20 bg-cyan/5">
         <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
