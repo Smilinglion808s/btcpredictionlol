@@ -90,13 +90,55 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
           }
         }
 
+        // Per-stage latency instrumentation. Read-only diagnostics: it never
+        // changes what any model computes, only how we measure the pipeline.
+        const stages: Record<string, number> = {};
+        const mark = (name: string, from: number) => {
+          stages[name] = Date.now() - from;
+        };
+
         try {
           const { fetchAndUpsertCandles } = await import("@/lib/okx.server");
-          const { runEs1ForTarget, maybeSendEs1Webhook } = await import(
+          const { runEs1ForTarget, maybeSendEs1Webhook, buildEs1Replay } = await import(
             "@/lib/b4x4es1/orchestrator.server"
           );
+          // Warm the modules that run after the decision so their first import
+          // is not paid for inside the post-boundary critical path.
+          const warmModules = Promise.all([
+            import("@/lib/b4x4es1/balanced.server"),
+            import("@/lib/b4x4es1/dualAdaptive.server"),
+            import("@/lib/webhooks.server"),
+          ]);
 
-
+          // ---- Pre-boundary warm pass -------------------------------------
+          // This endpoint is invoked ~60s before the boundary. That idle time
+          // used to be wasted: every cold worker then paid for a full input
+          // load, artifact load and replay AFTER the boundary, which is what
+          // pushed publication ~20s into the candle.
+          //
+          // Warming with `upTo = source candle - 15m` primes the incremental
+          // row caches, the minted-fit artifacts and the JIT — using only
+          // candles that closed long ago. It is cached under its own key, so
+          // the post-boundary replay still recomputes the live target from
+          // fresh data. Model inputs and outputs are unchanged.
+          const warmLeadMs = targetMs - Date.now();
+          if (warmLeadMs > 8_000) {
+            const t = Date.now();
+            try {
+              await fetchAndUpsertCandles(supabase);
+              mark("warm_fetch_ms", t);
+              const tw = Date.now();
+              await buildEs1Replay(supabase, {
+                upTo: new Date(targetMs - 2 * TF_MS).toISOString(),
+              });
+              mark("warm_replay_ms", tw);
+              await warmModules;
+              out.warmed = true;
+            } catch (e) {
+              out.warm_error = e instanceof Error ? e.message : String(e);
+            }
+            mark("warm_total_ms", t);
+          }
 
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
@@ -113,18 +155,23 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             if (Date.now() < targetMs + 2_100) {
               await new Promise((r) => setTimeout(r, targetMs + 2_100 - Date.now()));
             }
+            const tf = Date.now();
             try {
               await fetchAndUpsertCandles(supabase);
             } catch {
               /* retryable */
             }
+            mark("fetch_ms", tf);
+            const tr = Date.now();
             row = await runEs1ForTarget(supabase, {
               targetCandleTs: targetTs,
               runMode: "LIVE",
               recoverMissingSource: false,
             });
+            mark("es1_ms", tr);
             out.attempts = attempt + 1;
           }
+
 
           if (row) {
             out.row_id = row.id;
