@@ -631,16 +631,17 @@ export async function maybeSendEs1Webhook(
       target_is_upcoming: true,
 
       dedupe_key: `BTC-USDT-15m-${startsAt}-es1`,
-      idempotency_key: `${row.id}:${BALANCED_MODEL_VERSION}`,
+      idempotency_key: `${row.id}:${DUAL_MODEL_VERSION}`,
       prediction_id: row.id ?? null,
       es1_row_id: row.id ?? null,
 
-      // Balanced decision audit
-      vote_pattern: row.balanced_vote_pattern ?? null,
-      agreement_tier: row.balanced_agreement_tier ?? null,
-      green_vote_count: row.balanced_green_vote_count ?? null,
-      red_vote_count: row.balanced_red_vote_count ?? null,
-      decision_reason: row.balanced_decision_reason ?? null,
+      // Dual-venue adaptive decision audit
+      spot_mode: row.dual_adaptive_spot_mode ?? null,
+      spot_direction: row.dual_adaptive_spot_direction ?? null,
+      perp_mode: row.dual_adaptive_perp_mode ?? null,
+      perp_direction: row.dual_adaptive_perp_direction ?? null,
+      venue_agreement: row.dual_adaptive_venue_agreement ?? null,
+      decision_reason: row.dual_adaptive_decision_reason ?? null,
       legacy_decision_reason: row.decision_reason ?? null,
 
       route: row.hybrid_route,
