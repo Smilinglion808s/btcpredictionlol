@@ -73,8 +73,7 @@ async function main() {
   candles.forEach((c, i) => techByTs.set(new Date(c.candle_ts).toISOString(), tech[i]));
   const candleByTs = new Map(candles.map((c) => [new Date(c.candle_ts).toISOString(), c]));
 
-  const obCols = "target_ts,market_kind,ready,final_imbalance_10bps,mean_imbalance_10bps_60s,sign_change_count_60s,normalized_ofi_5s,resync_continuous";
-  const ob = await pageAll<ObRow>("b4x4_es1_binance_ob_boundary_features", obCols, "target_ts");
+  const ob = JSON.parse(await Bun.file("/tmp/pr/ob.json").text()) as ObRow[];
   const spot = new Map<string, ObRow>();
   const perp = new Map<string, ObRow>();
   for (const r of ob) {
