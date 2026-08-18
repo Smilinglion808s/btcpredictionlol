@@ -684,7 +684,11 @@ export async function resolveEs1Row(
         "id, target_candle_ts, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
           "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction, " +
           "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
-          "balanced_legacy_would_trade, balanced_resolved_at",
+          "balanced_legacy_would_trade, balanced_resolved_at, " +
+          // Required by the ACTIVE dual-venue resolver: without these the
+          // resolver sees undefined and scores every published trade ABSTAIN.
+          "dual_adaptive_candidate_direction, dual_adaptive_would_trade, " +
+          "dual_adaptive_resolved_at, dual_adaptive_resolution_attempt_count",
       )
       .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
