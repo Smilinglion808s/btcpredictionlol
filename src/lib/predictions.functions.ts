@@ -266,7 +266,7 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
   // re-read on each refresh instead of rescanning the whole shadow table.
   const rows = await incrementalRows<Record<string, any>>(
     "m7-shadow-stats-rows",
-    async (cursor) => {
+    async (cursor: string | null) => {
       const acc: Array<Record<string, any>> = [];
       for (let from = 0; ; from += PAGE) {
         let q = sb
@@ -285,7 +285,12 @@ export const getModel7ShadowStats = createServerFn({ method: "GET" }).handler(as
       }
       return acc;
     },
-    { tsKey: "candle_ts", keyFn: (r) => String(r.id ?? `${r.variant}|${r.candle_ts}`), desc: true },
+    {
+      tsKey: "candle_ts",
+      keyFn: (r: Record<string, any>) => String(r.id ?? `${r.variant}|${r.candle_ts}`),
+      desc: true,
+    },
+
   );
 
 
