@@ -196,7 +196,7 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             }
             mark("binance_finalize_ms", tb);
 
-            // 2. ACTIVE MODEL: B4x4-ES1 Binance Dual-Venue Adaptive R1.
+            // 2. Retained counterfactual: Binance Dual-Venue Adaptive R1.
             const td = Date.now();
             try {
               const { runDualAdaptiveForPrediction } = await import(
@@ -213,12 +213,34 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
                 out.dual_adaptive_perp_mode = dual.decision.perp.mode;
               }
             } catch (e) {
-              // Fail closed: no dual-adaptive row means no publication.
               out.dual_adaptive_error = e instanceof Error ? e.message : String(e);
             }
             mark("dual_ms", td);
 
-            // 3. Publish immediately. Everything below this line is a scored
+            // 3. ACTIVE MODEL: B4x4-ES1 Balanced Precision Stack R1.
+            const tp = Date.now();
+            try {
+              const { runPrecisionForPrediction } = await import(
+                "@/lib/b4x4es1/precisionStack.server"
+              );
+              const precision = await runPrecisionForPrediction(supabase, activeRow, targetTs);
+              if (precision) {
+                activeRow = { ...activeRow, ...precision.patch };
+                out.precision_direction = precision.patch.precision_candidate_direction;
+                out.precision_would_trade = precision.patch.precision_would_trade;
+                out.precision_decision_reason = precision.patch.precision_decision_reason;
+                out.precision_sleeve = precision.patch.precision_sleeve;
+                out.precision_route = precision.patch.precision_balanced_route;
+                out.precision_activated = precision.activated;
+                out.precision_build_ms = precision.context.buildMs;
+              }
+            } catch (e) {
+              // Fail closed: no precision row means no publication.
+              out.precision_error = e instanceof Error ? e.message : String(e);
+            }
+            mark("precision_ms", tp);
+
+            // 4. Publish immediately. Everything below this line is a scored
             //    counterfactual that can never publish, so it must not sit in
             //    front of the webhook.
             const tw = Date.now();

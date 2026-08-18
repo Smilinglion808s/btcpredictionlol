@@ -159,7 +159,12 @@ export const ES1_STATS_SELECT =
   "dual_adaptive_would_trade, dual_adaptive_candidate_direction, " +
   "dual_adaptive_decision_reason, dual_adaptive_result, dual_adaptive_result_score, " +
   "dual_adaptive_resolved_at, dual_adaptive_influenced_decision, " +
-  "dual_adaptive_spot_mode, dual_adaptive_perp_mode";
+  "dual_adaptive_spot_mode, dual_adaptive_perp_mode, " +
+  "precision_activated, precision_would_trade, precision_candidate_direction, " +
+  "precision_decision_reason, precision_result, precision_result_score, " +
+  "precision_resolved_at, precision_sleeve, precision_balanced_route, " +
+  "precision_balanced_would_trade, precision_balanced_direction, " +
+  "precision_balanced_result, precision_balanced_result_score";
 
 export const ES1_PENDING_SELECT =
   "target_candle_ts, run_mode, final_prediction, would_trade, decision_reason, hybrid_route, " +
@@ -179,7 +184,15 @@ export const ES1_PENDING_SELECT =
   "dual_adaptive_perp_mode, dual_adaptive_perp_direction, dual_adaptive_spot_ready, " +
   "dual_adaptive_perp_ready, dual_adaptive_spot_ready_reason, " +
   "dual_adaptive_perp_ready_reason, dual_adaptive_influenced_decision, " +
-  "dual_adaptive_result, dual_adaptive_webhook_sent_at";
+  "dual_adaptive_result, dual_adaptive_webhook_sent_at, " +
+  "precision_activated, precision_would_trade, precision_candidate_direction, " +
+  "precision_decision_reason, precision_sleeve, precision_balanced_route, " +
+  "precision_balanced_would_trade, precision_balanced_direction, " +
+  "precision_spot_mode, precision_spot_direction, precision_perp_mode, " +
+  "precision_perp_direction, precision_venue_agreement, precision_activity_guard_passed, " +
+  "precision_spot_ready, precision_perp_ready, precision_technical_direction, " +
+  "precision_technical_confidence, precision_prior_trend_age_candles, " +
+  "precision_upper_wick_percentile_96, precision_result, precision_webhook_sent_at";
 
 /** Full ES1 stats payload (active, balanced counterfactual, dual-adaptive, warmup). */
 export async function buildEs1Stats() {

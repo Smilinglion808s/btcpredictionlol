@@ -9,13 +9,14 @@ export const ES1_VARIANT = "es1-r2-a2-agreement-rank20-b4-p045";
 
 /**
  * Every model_version value a B4x4-ES1 prediction row may carry. Rows created
- * before the Dual-Venue Adaptive R1 activation keep the legacy ES1 value; rows
- * at/after activation carry the dual-adaptive value. Read paths must accept
- * both so history stays continuous.
+ * before each activation keep the older value; rows at/after an activation
+ * carry that policy's value. Read paths must accept all of them so history
+ * stays continuous.
  */
 export const ES1_ROW_MODEL_VERSIONS = [
   "b4x4-es1-aligned-r1",
   "b4x4-es1-binance-dual-adaptive-r1",
+  "b4x4-es1-balanced-precision-stack-r1",
 ] as const;
 export const ES1_DIRECTIONAL_VERSION = "es1-r2-hybrid";
 export const ES1_B4_GUARD_VERSION = "es1-b4-pooled-p045-r1";
