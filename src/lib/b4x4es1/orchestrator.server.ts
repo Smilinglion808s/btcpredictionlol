@@ -550,9 +550,10 @@ export async function runEs1ForTarget(
 /**
  * Emit the active B4x4-ES1 directional webhook exactly once for a live row.
  *
- * The active model is B4x4-ES1 Balanced Binance 3-of-4 R1: the published
- * direction always comes from the balanced 4-vote decision, never from the
- * legacy ES1 chain (which is retained only as a scored counterfactual).
+ * The active model is B4x4-ES1 Binance Dual-Venue Adaptive R1: the published
+ * direction always comes from the dual-venue adaptive decision. The legacy ES1
+ * chain and the Balanced 3-of-4 chain are retained as scored counterfactuals
+ * only and can never publish.
  */
 export async function maybeSendEs1Webhook(
   supabase: SupabaseClient,
@@ -562,18 +563,18 @@ export async function maybeSendEs1Webhook(
     if (!ES1_WEBHOOKS_ENABLED || !ES1_PUBLICATION_ENABLED) return false;
     if (!row) return false;
     if (row.run_mode !== "LIVE") return false;
-    if (row.balanced_would_trade !== true) return false;
-    if (row.balanced_webhook_eligible !== true) return false;
+    if (row.dual_adaptive_would_trade !== true) return false;
+    if (row.dual_adaptive_webhook_eligible !== true) return false;
     if (row.webhook_sent_at) return false;
-    const direction = row.balanced_final_prediction;
+    const direction = row.dual_adaptive_candidate_direction;
     if (direction !== "GREEN" && direction !== "RED") return false;
     const targetMs = new Date(String(row.target_candle_ts)).getTime();
     if (!Number.isFinite(targetMs)) return false;
     // Never publish for a candle that is already meaningfully underway or
     // closed — the webhook must always describe the upcoming candle.
     if (Date.now() - targetMs > 90_000) return false;
-    const activationTs = row.balanced_activation_target_ts
-      ? new Date(String(row.balanced_activation_target_ts)).toISOString()
+    const activationTs = row.dual_adaptive_activation_target_ts
+      ? new Date(String(row.dual_adaptive_activation_target_ts)).toISOString()
       : null;
     if (!activationTs || targetMs < new Date(activationTs).getTime()) return false;
 
@@ -581,7 +582,7 @@ export async function maybeSendEs1Webhook(
       .from("b4x4_es1_predictions")
       .update({
         webhook_sent_at: new Date().toISOString(),
-        balanced_webhook_sent_at: new Date().toISOString(),
+        dual_adaptive_webhook_sent_at: new Date().toISOString(),
       } as never)
       .eq("id", row.id as string)
       .is("webhook_sent_at", null)
@@ -589,8 +590,11 @@ export async function maybeSendEs1Webhook(
       .maybeSingle();
     if (!claimed) return false;
 
-    const { BALANCED_DECISION_POLICY_VERSION, BALANCED_MODEL_VERSION, BALANCED_VARIANT } =
-      await import("./balanced");
+    const {
+      MODEL_VERSION: DUAL_MODEL_VERSION,
+      POLICY_VERSION: DUAL_POLICY_VERSION,
+      VARIANT: DUAL_VARIANT,
+    } = await import("./dualAdaptive");
     const { deliverWebhook, formatMountainTime } = await import("../webhooks.server");
     const startsAt = new Date(targetMs).toISOString();
     const endsAt = new Date(targetMs + 15 * 60 * 1000).toISOString();
@@ -600,9 +604,9 @@ export async function maybeSendEs1Webhook(
     await deliverWebhook(supabase, "prediction.created", {
       model: ES1_MODEL_NAME,
       model_name: ES1_MODEL_NAME,
-      model_version: BALANCED_MODEL_VERSION,
-      decision_policy_version: BALANCED_DECISION_POLICY_VERSION,
-      variant: BALANCED_VARIANT,
+      model_version: DUAL_MODEL_VERSION,
+      decision_policy_version: DUAL_POLICY_VERSION,
+      variant: DUAL_VARIANT,
       legacy_model_version: ES1_MODEL_VERSION,
 
       // TD1-RC compatible core contract
