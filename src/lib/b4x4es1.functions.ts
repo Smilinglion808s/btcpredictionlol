@@ -1,7 +1,7 @@
 // B4x4-ES1 server functions: dashboard stats, pending row, CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { cachedStats, PENDING_TTL_MS } from "./statsCache.server";
+import { cachedStats, incrementalRows, PENDING_TTL_MS } from "./statsCache.server";
 import { ES1_MODEL_VERSION, ES1_ROW_MODEL_VERSIONS, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
 
 type Row = Record<string, unknown>;
@@ -12,22 +12,35 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function pageAll(select: string): Promise<Row[]> {
-  const sb = await admin();
-  const out: Row[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await sb
-      .from("b4x4_es1_predictions")
-      .select(select)
-      .in("model_version", ES1_ROW_MODEL_VERSIONS)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (!data || data.length === 0) break;
-    out.push(...(data as unknown as Row[]));
-    if (data.length < PAGE) break;
-  }
-  return out;
+async function pageAll(select: string, cacheKey?: string): Promise<Row[]> {
+  const fetchRows = async (cursor: string | null) => {
+    const sb = await admin();
+    const out: Row[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = sb
+        .from("b4x4_es1_predictions")
+        .select(select)
+        .in("model_version", ES1_ROW_MODEL_VERSIONS)
+        .order("target_candle_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (cursor) q = q.gt("target_candle_ts", cursor);
+      const { data } = await q;
+      if (!data || data.length === 0) break;
+      out.push(...(data as unknown as Row[]));
+      if (data.length < PAGE) break;
+    }
+    return out;
+  };
+
+  // Read-path only: immutable historical rows are reused from memory so the
+  // stats card no longer rescans the full table on every cache miss.
+  if (!cacheKey) return fetchRows(null);
+  return incrementalRows<Row>(`es1:${cacheKey}`, fetchRows, {
+    tsKey: "target_candle_ts",
+    keyFn: (r: Row) => String(r.id ?? `${r.target_candle_ts}|${r.model_version}`),
+  });
 }
+
 
 function aggregate(rows: Row[]) {
   const daily = new Map<string, { net: number; wins: number; losses: number; trades: number }>();
@@ -137,7 +150,7 @@ function aggregate(rows: Row[]) {
 export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
   cachedStats("b4x4-es1-stats", async () => {
     const rows = await pageAll(
-      "target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
+      "id, model_version, target_candle_ts, run_mode, local_date, would_trade, final_prediction, hybrid_route, " +
         "decision_reason, result, result_score, resolved_at, b4_guard_attribution_class, " +
         "b4_guard_incremental_value, webhook_eligible, webhook_sent_at, operational_gap_status, " +
         "balanced_would_trade, balanced_final_prediction, balanced_decision_reason, " +
@@ -147,7 +160,9 @@ export const getEs1Stats = createServerFn({ method: "GET" }).handler(async () =>
         "dual_adaptive_decision_reason, dual_adaptive_result, dual_adaptive_result_score, " +
         "dual_adaptive_resolved_at, dual_adaptive_influenced_decision, " +
         "dual_adaptive_spot_mode, dual_adaptive_perp_mode",
+      "stats",
     );
+
     const live = rows.filter(
       (r) => r.run_mode === "LIVE" && String(r.operational_gap_status ?? "NONE") !== "CATCHUP",
     );

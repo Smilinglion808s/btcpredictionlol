@@ -1,7 +1,7 @@
 // V6 server functions: stats card data, pending prediction, and CSV export.
 
 import { createServerFn } from "@tanstack/react-start";
-import { PENDING_TTL_MS, cachedStats, invalidateStats } from "./statsCache.server";
+import { PENDING_TTL_MS, cachedStats, incrementalRows, invalidateStats } from "./statsCache.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -21,23 +21,40 @@ async function v6VisualResetAt(): Promise<string | null> {
   return data?.reset_at ? new Date(String(data.reset_at)).toISOString() : null;
 }
 
-async function pageAllV6(select: string, sinceIso?: string | null): Promise<Array<Record<string, unknown>>> {
-  const sb = await admin();
-  const out: Array<Record<string, unknown>> = [];
-  for (let from = 0; ; from += PAGE) {
-    let q = sb
-      .from("v6_predictions")
-      .select(select)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (sinceIso) q = q.gt("prediction_created_at", sinceIso);
-    const { data } = await q;
-    if (!data || data.length === 0) break;
-    out.push(...(data as unknown as Array<Record<string, unknown>>));
-    if (data.length < PAGE) break;
-  }
-  return out;
+async function pageAllV6(
+  select: string,
+  sinceIso?: string | null,
+  cacheKey?: string,
+): Promise<Array<Record<string, unknown>>> {
+  const fetchRows = async (cursor: string | null) => {
+    const sb = await admin();
+    const out: Array<Record<string, unknown>> = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = sb
+        .from("v6_predictions")
+        .select(select)
+        .order("target_candle_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (sinceIso) q = q.gt("prediction_created_at", sinceIso);
+      if (cursor) q = q.gt("target_candle_ts", cursor);
+      const { data } = await q;
+      if (!data || data.length === 0) break;
+      out.push(...(data as unknown as Array<Record<string, unknown>>));
+      if (data.length < PAGE) break;
+    }
+    return out;
+  };
+
+  // Read-path only: reuse immutable historical rows instead of rescanning the
+  // whole table on every cache miss (large disk-IO reduction, same result set).
+  if (!cacheKey) return fetchRows(null);
+  return incrementalRows<Record<string, unknown>>(`v6:${cacheKey}:${sinceIso ?? "all"}`, fetchRows, {
+    tsKey: "target_candle_ts",
+    keyFn: (r: Record<string, unknown>) => String(r.prediction_id ?? r.target_candle_ts ?? ""),
+  });
+
 }
+
 
 /** Visual-only reset of the V6 stats card counters. CSV/history stay intact. */
 export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(async () => {
@@ -55,9 +72,11 @@ export const resetV6VisualStats = createServerFn({ method: "POST" }).handler(asy
 export const getV6Stats = createServerFn({ method: "GET" }).handler(async () => cachedStats("v6-stats", async () => {
   const resetAt = await v6VisualResetAt();
   const rows = await pageAllV6(
-    "target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution, structure_confirmation_evaluable, structure_rejection_pass, structure_expansion_pass, structure_confirmation_pass, structure_confirmation_triggered, structure_confirmation_raw_contribution, structure_confirmation_adjusted_contribution, pre_structure_prediction",
+    "prediction_id, target_candle_ts, operational_status, final_prediction, base_v6_prediction, prediction_source, canonical_actual_direction, resolution_timestamp, final_raw_score, final_adjusted_score, saturation_veto_triggered, saturation_veto_raw_contribution, saturation_veto_adjusted_contribution, red_pickup_triggered, red_pickup_raw_contribution, red_pickup_adjusted_contribution, green_pickup_triggered, green_pickup_raw_contribution, green_pickup_adjusted_contribution, weak_broad_red_veto_triggered, weak_broad_red_veto_raw_contribution, weak_broad_red_veto_adjusted_contribution, pre_inverter_prediction, pre_inverter_raw_score, pre_inverter_adjusted_score, regime_inverter_triggered, regime_inverter_raw_contribution, regime_inverter_adjusted_contribution, weak_red_veto_candidate, weak_red_recovery_triggered, weak_red_recovery_reason, weak_red_rsi_recovery_triggered, weak_red_roc4_recovery_triggered, weak_red_recovery_raw_contribution, weak_red_recovery_adjusted_contribution, weak_red_underlying_adjusted_score, broad_conflict_veto_evaluable, broad_conflict_veto_triggered, broad_conflict_veto_raw_contribution, broad_conflict_veto_adjusted_contribution, broad_conflict_anchor_distance, broad_red_reliability_evaluable, broad_red_reliability_ready, broad_red_reliability_veto_active, broad_red_reliability_veto_triggered, broad_red_reliability_raw_contribution, broad_red_reliability_adjusted_contribution, broad_red_history_count, broad_red_last12_wins, broad_red_last12_losses, broad_red_last12_adjusted_net, broad_red_shadow_prediction, broad_red_shadow_adjusted_score, regime_inverter_would_trigger, regime_inverter_would_publish, regime_inverter_shadow_raw_score, regime_inverter_shadow_adjusted_score, regime_inverter_counterfactual_raw_contribution, regime_inverter_counterfactual_adjusted_contribution, structure_confirmation_evaluable, structure_rejection_pass, structure_expansion_pass, structure_confirmation_pass, structure_confirmation_triggered, structure_confirmation_raw_contribution, structure_confirmation_adjusted_contribution, pre_structure_prediction",
     resetAt,
+    "stats",
   );
+
 
 
   const c = {

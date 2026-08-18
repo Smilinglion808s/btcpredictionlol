@@ -9,6 +9,7 @@ import {
   ES1_TRAINING_SOURCE_EPOCH_TS,
 } from "./config";
 import type { CanonicalCandle } from "./features";
+import { incrementalRows } from "../statsCache.server";
 import type { ObSnapshot } from "./engine";
 import type { A2Row } from "./replay";
 
@@ -37,20 +38,30 @@ export async function loadCanonicalCandles(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<CanonicalCandle[]> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("candles")
-      .select("candle_ts, open, high, low, close, volume")
-      .eq("symbol", ES1_SYMBOL)
-      .eq("timeframe", ES1_TIMEFRAME)
-      .eq("fetch_source", ES1_EXCHANGE)
-      .eq("confirm", true)
-      .gte("candle_ts", ES1_TRAINING_SOURCE_EPOCH_TS)
-      .order("candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("candle_ts", opts.upTo);
-    return q;
-  });
+  // Historical confirmed candles never change, so only the tail is re-read.
+  const raw = await incrementalRows<DbRow>(
+    "es1:candles",
+    (cursor: string | null) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("candles")
+          .select("candle_ts, open, high, low, close, volume")
+          .eq("symbol", ES1_SYMBOL)
+          .eq("timeframe", ES1_TIMEFRAME)
+          .eq("fetch_source", ES1_EXCHANGE)
+          .eq("confirm", true)
+          .gte("candle_ts", ES1_TRAINING_SOURCE_EPOCH_TS)
+          .order("candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("candle_ts", cursor);
+        return q;
+      }),
+    { tsKey: "candle_ts", keyFn: (r: DbRow) => new Date(String(r.candle_ts)).toISOString() },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r: DbRow) => new Date(String(r.candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, CanonicalCandle>();
   for (const r of rows) {
@@ -83,18 +94,31 @@ export async function loadA2Rows(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<Map<string, A2Row>> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("b4x4_predictions")
-      .select(
-        "target_candle_ts, a2_probability_green, source_a2_row_id, a2_model_fit_id, a2_production_model_version, created_at",
-      )
-      .not("a2_probability_green", "is", null)
-      .order("target_candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("target_candle_ts", opts.upTo);
-    return q;
-  });
+  const raw = await incrementalRows<DbRow>(
+    "es1:a2-rows",
+    (cursor: string | null) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("b4x4_predictions")
+          .select(
+            "target_candle_ts, a2_probability_green, source_a2_row_id, a2_model_fit_id, a2_production_model_version, created_at",
+          )
+          .not("a2_probability_green", "is", null)
+          .order("target_candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("target_candle_ts", cursor);
+        return q;
+      }),
+    {
+      tsKey: "target_candle_ts",
+      keyFn: (r: DbRow) =>
+        `${new Date(String(r.target_candle_ts)).toISOString()}|${String(r.created_at ?? "")}`,
+    },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r: DbRow) => new Date(String(r.target_candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, A2Row>();
   const createdAt = new Map<string, string>();
@@ -122,17 +146,29 @@ export async function loadObSnapshots(
   supabase: SupabaseClient,
   opts: { upTo?: string } = {},
 ): Promise<Map<string, ObSnapshot>> {
-  const rows = await pageAll((from, to) => {
-    let q = supabase
-      .from("b4x4_shadow_market_data")
-      .select(
-        "target_candle_ts, snapshot_event_ts, snapshot_received_at, capture_status, book_complete, depth_imbalance_10bps",
-      )
-      .order("target_candle_ts", { ascending: true })
-      .range(from, to);
-    if (opts.upTo) q = q.lte("target_candle_ts", opts.upTo);
-    return q;
-  });
+  const raw = await incrementalRows<DbRow>(
+    "es1:ob-snapshots",
+    (cursor: string | null) =>
+      pageAll((from, to) => {
+        let q = supabase
+          .from("b4x4_shadow_market_data")
+          .select(
+            "target_candle_ts, snapshot_event_ts, snapshot_received_at, capture_status, book_complete, depth_imbalance_10bps",
+          )
+          .order("target_candle_ts", { ascending: true })
+          .range(from, to);
+        if (cursor) q = q.gt("target_candle_ts", cursor);
+        return q;
+      }),
+    {
+      tsKey: "target_candle_ts",
+      keyFn: (r: DbRow) => new Date(String(r.target_candle_ts)).toISOString(),
+    },
+  );
+  const rows = opts.upTo
+    ? raw.filter((r: DbRow) => new Date(String(r.target_candle_ts)).toISOString() <= opts.upTo!)
+    : raw;
+
 
   const byTs = new Map<string, ObSnapshot>();
   for (const r of rows) {
