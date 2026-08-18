@@ -2,7 +2,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { cachedStats, PENDING_TTL_MS } from "./statsCache.server";
-import { ES1_MODEL_VERSION, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
+import { ES1_MODEL_VERSION, ES1_ROW_MODEL_VERSIONS, ES1_VARIANT, es1LocalDate } from "./b4x4es1/config";
 
 type Row = Record<string, unknown>;
 const PAGE = 1000;
@@ -19,7 +19,7 @@ async function pageAll(select: string): Promise<Row[]> {
     const { data } = await sb
       .from("b4x4_es1_predictions")
       .select(select)
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .order("target_candle_ts", { ascending: true })
       .range(from, from + PAGE - 1);
     if (!data || data.length === 0) break;
@@ -212,7 +212,7 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
           "balanced_active, balanced_result, balanced_webhook_sent_at",
 
       )
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .order("target_candle_ts", { ascending: false })
       .limit(1)
       .maybeSingle();

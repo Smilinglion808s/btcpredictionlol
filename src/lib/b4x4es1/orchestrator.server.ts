@@ -13,6 +13,7 @@ import {
   ES1_IMPLEMENTATION_REVISION,
   ES1_MODEL_NAME,
   ES1_MODEL_VERSION,
+  ES1_ROW_MODEL_VERSIONS,
   ES1_PROSPECTIVE_TEST_ID,
   ES1_PUBLICATION_ENABLED,
   ES1_VARIANT,
@@ -383,7 +384,7 @@ export async function ensureEs1Warm(
   const { data: existing, error } = await supabase
     .from("b4x4_es1_predictions")
     .select("target_candle_ts")
-    .eq("model_version", ES1_MODEL_VERSION);
+    .in("model_version", ES1_ROW_MODEL_VERSIONS);
   if (error) throw new Error(`es1_warm_existing:${error.message}`);
   const have = new Set(
     ((existing ?? []) as DbRow[]).map((r) => new Date(String(r.target_candle_ts)).toISOString()),
@@ -449,7 +450,7 @@ export async function runEs1ForTarget(
     const { data: prior } = await supabase
       .from("b4x4_es1_predictions")
       .select("*")
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     if (prior) return prior as unknown as DbRow;
@@ -524,7 +525,7 @@ export async function runEs1ForTarget(
     const { data: existing } = await supabase
       .from("b4x4_es1_predictions")
       .select("*")
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     return (existing as unknown as DbRow | null) ?? null;
@@ -680,7 +681,7 @@ export async function resolveEs1Row(
           "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
           "balanced_legacy_would_trade, balanced_resolved_at",
       )
-      .eq("model_version", ES1_MODEL_VERSION)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
       .eq("target_candle_ts", targetTs)
       .maybeSingle();
     const row = data as unknown as DbRow | null;
@@ -765,7 +766,7 @@ export async function resolveEs1Backlog(
   const { data } = await supabase
     .from("b4x4_es1_predictions")
     .select("target_candle_ts")
-    .eq("model_version", ES1_MODEL_VERSION)
+    .in("model_version", ES1_ROW_MODEL_VERSIONS)
     .is("resolved_at", null)
     .order("target_candle_ts", { ascending: true })
     .limit(opts.limit ?? 500);
