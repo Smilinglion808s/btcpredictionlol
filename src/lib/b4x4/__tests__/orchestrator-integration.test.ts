@@ -1,3 +1,4 @@
+import { B4X4_BUILD_STAMP } from "../build-identity";
 // Orchestrator integration regression tests.
 //
 // Cover the wiring that pure engine tests cannot see: build identity stamping,
@@ -30,7 +31,7 @@ describe("B4x4 orchestrator integration", () => {
     );
     expect(row.implementation_revision).toBe(B4X4_IMPLEMENTATION_REVISION);
     expect(typeof row.build_identifier).toBe("string");
-    expect(String(row.build_identifier)).toContain("b4x4-v1-runtime-integrity-r1");
+    expect(String(row.build_identifier)).toContain(B4X4_BUILD_STAMP);
     expect(row.deploy_environment).toBeTruthy();
     expect(row.model_version).toBe(B4X4_MODEL_VERSION);
   });
