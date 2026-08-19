@@ -222,8 +222,6 @@ function StatsPage() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  const s = (statsQ.data ?? {}) as Record<string, unknown>;
-  const modelVersion = activeVersion ?? "—";
   const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
   const b2Hero = {
     total: Number(td1Stats.total ?? 0),
