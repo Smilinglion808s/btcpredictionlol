@@ -95,6 +95,7 @@ export function aggregate(rows: Row[]) {
     wins: 0,
     losses: 0,
     pushes: 0,
+    abstains: 0,
     pending: 0,
     net: 0,
     win_rate: 0,
@@ -132,7 +133,10 @@ export function aggregate(rows: Row[]) {
     if (r.b4_guard_attribution_class === "SACRIFICED_WIN") c.guard_sacrificed_wins++;
     c.guard_incremental_net += Number(r.b4_guard_incremental_value ?? 0);
 
-    if (r.would_trade !== true) continue;
+    if (r.would_trade !== true) {
+      if (r.would_trade === false) c.abstains++;
+      continue;
+    }
     c.trades++;
     c.published++;
     if (r.hybrid_route === "OB_DEPTH10_FADE") c.ob_route_trades++;
@@ -150,7 +154,7 @@ export function aggregate(rows: Row[]) {
     } else if (res === "LOSS") {
       c.losses++;
       c.evaluable++;
-    } else c.pushes++;
+    } else if (res === "PUSH") c.pushes++;
     c.net += score;
     running += score;
     peak = Math.max(peak, running);
