@@ -7,6 +7,14 @@ const TF_MS = 15 * 60 * 1000;
 const FRESH_WINDOW_MS = 60_000;
 /** Longest we are willing to sit and wait for a future boundary to arrive. */
 const MAX_WAIT_FOR_BOUNDARY_MS = 120_000;
+/**
+ * Above this lead the request only warms and returns. Sitting through a full
+ * pre-boundary minute made the request straddle the edge gateway's timeout, and
+ * a single slow warm turned the whole boundary into a 502 with no row written.
+ */
+const WARM_ONLY_LEAD_MS = 25_000;
+/** How late a `mode=recover` pass may still write the current candle's row. */
+const RECOVER_WINDOW_MS = 5 * 60_000;
 
 
 /**
@@ -41,6 +49,7 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
 
+        const mode = new URL(request.url).searchParams.get("mode") ?? "auto";
         const now = Date.now();
         // Target must always be an UPCOMING candle — the one that is opening
         // right now (cron fires on the boundary) or, if we fired early/late,
@@ -48,9 +57,14 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         // meaningfully underway.
         const floor = Math.floor(now / TF_MS) * TF_MS;
         const intoCandle = now - floor; // ms elapsed since the current candle opened
+        // `mode=recover` is the late safety net: when the boundary pass never
+        // ran (worker 502, cron startup timeout), we still want the row for the
+        // candle already underway. The webhook layer keeps its own 90s freshness
+        // guard, so a late recovery can never publish a stale trade signal.
+        const recovering = mode === "recover" && intoCandle <= RECOVER_WINDOW_MS;
         const targetMs =
-          intoCandle <= FRESH_WINDOW_MS
-            ? floor // fired on the boundary: predict the candle just opening
+          intoCandle <= FRESH_WINDOW_MS || recovering
+            ? floor // fired on the boundary (or recovering it): predict that candle
             : floor + TF_MS; // fired early or late: predict the next boundary
         const targetTs = new Date(targetMs).toISOString();
         const sourceTs = new Date(targetMs - TF_MS).toISOString();
@@ -139,6 +153,21 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             }
             mark("warm_total_ms", t);
           }
+
+          // Warm-only pass: return instead of sleeping through the rest of the
+          // pre-boundary minute. The boundary-minute cron owns the decision, so
+          // no single request has to span warm + wait + predict (which is what
+          // pushed this endpoint past the gateway timeout and produced a 502
+          // with no prediction row at all).
+          if (targetMs - Date.now() > WARM_ONLY_LEAD_MS) {
+            out.warm_only = true;
+            out.stages = stages;
+            out.elapsed_ms = Date.now() - started;
+            return new Response(JSON.stringify(out), {
+              headers: { "content-type": "application/json" },
+            });
+          }
+
 
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
