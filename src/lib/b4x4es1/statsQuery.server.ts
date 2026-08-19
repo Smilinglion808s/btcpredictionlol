@@ -20,18 +20,30 @@ export async function pageAll(select: string, cacheKey?: string): Promise<Row[]>
   const fetchRows = async (cursor: string | null) => {
     const sb = await admin();
     const out: Row[] = [];
-    for (let from = 0; ; from += PAGE) {
+    // Keyset pagination: offset ranges get progressively slower on the wide
+    // `select *` export and a single failed page used to silently truncate the
+    // dataset at the oldest 1000 rows.
+    let after = cursor;
+    let seen = 0;
+    for (;;) {
       let q = sb
         .from("b4x4_es1_predictions")
         .select(select)
         .in("model_version", ES1_ROW_MODEL_VERSIONS)
         .order("target_candle_ts", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (cursor) q = q.gt("target_candle_ts", cursor);
-      const { data } = await q;
+        .limit(PAGE);
+      if (after) q = q.gt("target_candle_ts", after);
+      const { data, error } = await q;
+      if (error) throw new Error(`ES1 export page failed after ${seen} rows: ${error.message}`);
       if (!data || data.length === 0) break;
-      out.push(...(data as unknown as Row[]));
-      if (data.length < PAGE) break;
+      const rows = data as unknown as Row[];
+      out.push(...rows);
+      seen += rows.length;
+      const last = rows[rows.length - 1]?.target_candle_ts;
+      if (rows.length < PAGE || !last) break;
+      const nextCursor = new Date(String(last)).toISOString();
+      if (nextCursor === after) break;
+      after = nextCursor;
     }
     return out;
   };
