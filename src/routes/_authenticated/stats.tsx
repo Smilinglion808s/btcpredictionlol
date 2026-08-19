@@ -253,14 +253,6 @@ function StatsPage() {
   };
 
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
-  const isLive = Boolean(settingsQ.data?.auto_run_enabled);
-
-  const versions = versionsQ.data ?? [];
-  const versionOptions = useMemo(() => {
-    const list = versions.map((v) => v.version);
-    if (activeVersion && !list.includes(activeVersion)) list.unshift(activeVersion);
-    return list;
-  }, [versions, activeVersion]);
 
   const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
   const v6Pending = v6PendingQ.data as Record<string, any> | null;
