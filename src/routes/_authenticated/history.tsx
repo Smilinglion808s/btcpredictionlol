@@ -465,6 +465,7 @@ function CsvDataPage() {
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportV6 = useServerFn(exportV6Csv);
   const exportEs1 = useServerFn(exportEs1Csv);
+  const exportEs1Last24h = useServerFn(exportEs1Last24hCsv);
   const exportObFeatures = useServerFn(exportBinanceObFeaturesCsv);
   const exportObPolicies = useServerFn(exportBinanceObPolicyCsv);
   const exportObCombined = useServerFn(exportBinanceObCombinedCsv);
