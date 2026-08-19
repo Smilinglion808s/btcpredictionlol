@@ -10,7 +10,7 @@ import {
   exportUniversalV2,
 } from "@/lib/predictions.functions";
 import { exportV6Csv } from "@/lib/v6.functions";
-import { exportEs1Csv } from "@/lib/b4x4es1.functions";
+import { exportEs1Csv, exportEs1Last24hCsv } from "@/lib/b4x4es1.functions";
 import {
   exportBinanceObFeaturesCsv,
   exportBinanceObObservationsCsv,
@@ -465,6 +465,7 @@ function CsvDataPage() {
   const exportTd1 = useServerFn(exportTd1RcShadow);
   const exportV6 = useServerFn(exportV6Csv);
   const exportEs1 = useServerFn(exportEs1Csv);
+  const exportEs1Last24h = useServerFn(exportEs1Last24hCsv);
   const exportObFeatures = useServerFn(exportBinanceObFeaturesCsv);
   const exportObPolicies = useServerFn(exportBinanceObPolicyCsv);
   const exportObCombined = useServerFn(exportBinanceObCombinedCsv);
@@ -560,6 +561,7 @@ function CsvDataPage() {
   const csvFetchers: Record<string, () => Promise<{ csv: string; rows: number } | null>> = {
     v6: () => exportV6().catch(() => null),
     es1: () => exportEs1().catch(() => null),
+    "es1-24h": () => exportEs1Last24h().catch(() => null),
     "ob-combined": () => exportObCombined().catch(() => null),
     "ob-features": () => exportObFeatures().catch(() => null),
     "ob-policies": () => exportObPolicies().catch(() => null),
@@ -659,6 +661,14 @@ function CsvDataPage() {
               hint="Balanced Binance 3-of-4 decisions"
               base="B4x4_ES1"
             />
+            <ExportButton
+              id="es1-24h"
+              variant="secondary"
+              label="B4x4-ES1 (last 24h)"
+              hint="LIVE, non-catchup rows only"
+              base="B4x4_ES1_last24h"
+            />
+
           </div>
         </CardContent>
       </Card>

@@ -6,6 +6,18 @@
 // split bundle and throws ReferenceError at request time.
 
 import { incrementalRows } from "../statsCache.server";
+import {
+  ES1_EXPORT_PAGE_SIZE,
+  boundaryCoverage,
+  countBy,
+  csvEscape,
+  fetchAllDescThenChronological,
+  isLiveNonCatchup,
+  precisionNonNullCounts,
+  sortChronological,
+  toCsv,
+  unionColumns,
+} from "./exportCsv";
 import { ES1_MODEL_VERSION, ES1_ROW_MODEL_VERSIONS, ES1_VARIANT, es1LocalDate } from "./config";
 
 export type Row = Record<string, unknown>;
@@ -331,22 +343,43 @@ export async function loadEs1Pending() {
   return (data as unknown as Record<string, string | number | boolean | null> | null) ?? null;
 }
 
-function csvEscape(v: unknown): string {
-  if (v == null) return "";
-  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+/**
+ * Newest-first, deterministic offset pagination over the full ES1 table.
+ * Returns rows chronologically (target_candle_ts ASC, id ASC).
+ * Reporting-only: no writes, no model/resolver/webhook calls.
+ */
+export async function fetchEs1RowsChronological(
+  opts: { select?: string; from?: string; to?: string; liveOnly?: boolean } = {},
+): Promise<Row[]> {
+  const select = opts.select ?? "*";
+  const sb = await admin();
+  const rows = await fetchAllDescThenChronological(async (offset, limit) => {
+    let q = sb
+      .from("b4x4_es1_predictions")
+      .select(select)
+      .in("model_version", ES1_ROW_MODEL_VERSIONS)
+      .order("target_candle_ts", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (opts.from) q = q.gte("target_candle_ts", opts.from);
+    if (opts.to) q = q.lte("target_candle_ts", opts.to);
+    if (opts.liveOnly) q = q.eq("run_mode", "LIVE");
+    const { data, error } = await q;
+    if (error) throw new Error(`ES1 export page at offset ${offset} failed: ${error.message}`);
+    return (data ?? []) as unknown as Row[];
+  }, ES1_EXPORT_PAGE_SIZE);
+  return sortChronological(rows);
 }
 
-/** Full ES1 CSV export — every tracked column plus explicit outcome flags. */
+/** Full ES1 CSV export — every current column plus explicit outcome flags. */
 export async function buildEs1Csv() {
-  const rows = await pageAll("*");
+  const rows = await fetchEs1RowsChronological();
   if (rows.length === 0) return { csv: "", rows: 0 };
   const { ES1_COMPACT_BINANCE_COLUMNS } = await import("./binanceOb/exports");
   // Compact binance_ob_* block always present, always last, in a frozen order.
+  const all = unionColumns(rows);
   const base = [
-    ...Object.keys(rows[0]).filter(
-      (c) => !(ES1_COMPACT_BINANCE_COLUMNS as readonly string[]).includes(c),
-    ),
+    ...all.filter((c) => !(ES1_COMPACT_BINANCE_COLUMNS as readonly string[]).includes(c)),
     ...ES1_COMPACT_BINANCE_COLUMNS,
   ];
   const derived = [
@@ -387,3 +420,49 @@ export async function buildEs1Csv() {
     .join("\n");
   return { csv: `${header}\n${body}\n`, rows: rows.length };
 }
+
+/**
+ * Latest-24-hours export: LIVE, non-CATCHUP rows from the newest LIVE target
+ * back 24 hours. Reports staleness and per-precision non-null counts.
+ */
+export async function buildEs1Last24hCsv() {
+  const sb = await admin();
+  const { data: newest } = await sb
+    .from("b4x4_es1_predictions")
+    .select("target_candle_ts")
+    .in("model_version", ES1_ROW_MODEL_VERSIONS)
+    .eq("run_mode", "LIVE")
+    .order("target_candle_ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const newestTs = (newest as { target_candle_ts?: string } | null)?.target_candle_ts;
+  if (!newestTs) {
+    return { csv: "", rows: 0, stale: true, newest_target: null, cutoff: null, precision_non_null_counts: {} };
+  }
+  const latest = new Date(newestTs).getTime();
+  const cutoff = new Date(latest - 24 * 60 * 60 * 1000).toISOString();
+  const all = await fetchEs1RowsChronological({
+    from: cutoff,
+    to: new Date(latest).toISOString(),
+    liveOnly: true,
+  });
+  const rows = all.filter(isLiveNonCatchup);
+  const columns = unionColumns(rows);
+  const staleMs = Date.now() - latest;
+  return {
+    csv: toCsv(rows, columns),
+    rows: rows.length,
+    newest_target: new Date(latest).toISOString(),
+    cutoff,
+    stale: staleMs > 30 * 60 * 1000,
+    stale_minutes: Math.round(staleMs / 60000),
+    coverage: boundaryCoverage(rows),
+    precision_non_null_counts: precisionNonNullCounts(rows),
+    sleeve_counts: countBy(rows, "precision_sleeve"),
+    direction_counts: countBy(rows, "precision_candidate_direction"),
+    result_counts: countBy(rows, "precision_result"),
+    webhook_eligible: rows.filter((r) => r.precision_webhook_eligible === true).length,
+    webhook_sent: rows.filter((r) => r.precision_webhook_sent_at != null).length,
+  };
+}
+
