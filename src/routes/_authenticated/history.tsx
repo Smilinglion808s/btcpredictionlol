@@ -10,7 +10,7 @@ import {
   exportUniversalV2,
 } from "@/lib/predictions.functions";
 import { exportV6Csv } from "@/lib/v6.functions";
-import { exportEs1Csv } from "@/lib/b4x4es1.functions";
+import { exportEs1Csv, exportEs1Last24hCsv } from "@/lib/b4x4es1.functions";
 import {
   exportBinanceObFeaturesCsv,
   exportBinanceObObservationsCsv,
