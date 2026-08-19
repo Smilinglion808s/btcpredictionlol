@@ -1,12 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  getPredictionStats,
   listPredictions,
-  listModelVersions,
   getTd1RcShadowStats,
   getTd1RcShadowPending,
   exportTd1RcShadow,
@@ -24,10 +22,8 @@ import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
 import { forceRefreshStats } from "@/lib/statsRefresh.functions";
-import { getActiveSettings } from "@/lib/settings.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
 import { supabase } from "@/integrations/supabase/client";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/stats")({
   head: () => ({
@@ -45,18 +41,11 @@ export const Route = createFileRoute("/_authenticated/stats")({
   component: StatsPage,
 });
 
-const ALL_VERSIONS = "__all__";
 const STATS_REFRESH_MS = 120_000;
 const PENDING_REFRESH_MS = 15_000;
 
 function StatsPage() {
   const qc = useQueryClient();
-  const statsFn = useServerFn(getPredictionStats);
-  const settingsFn = useServerFn(getActiveSettings);
-  const versionsFn = useServerFn(listModelVersions);
-
-  const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
-  const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
@@ -194,22 +183,6 @@ function StatsPage() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  const activeVersion = settingsQ.data?.model_version ?? null;
-  const [selected, setSelected] = useState<string>(ALL_VERSIONS);
-
-  useEffect(() => {
-    if (activeVersion && selected === ALL_VERSIONS) setSelected(activeVersion);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeVersion]);
-
-  const versionFilter = selected === ALL_VERSIONS ? null : selected;
-
-  const statsQ = useQuery({
-    queryKey: ["stats", versionFilter ?? "all"],
-    queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
-    refetchInterval: STATS_REFRESH_MS,
-    staleTime: 10_000,
-  });
   const b4x4RecentFn = useServerFn(listB4x4Recent);
   const listQ = useQuery({
     queryKey: ["b4x4-recent-stats"],
@@ -249,8 +222,6 @@ function StatsPage() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  const s = (statsQ.data ?? {}) as Record<string, unknown>;
-  const modelVersion = activeVersion ?? "—";
   const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
   const b2Hero = {
     total: Number(td1Stats.total ?? 0),
@@ -282,14 +253,6 @@ function StatsPage() {
   };
 
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
-  const isLive = Boolean(settingsQ.data?.auto_run_enabled);
-
-  const versions = versionsQ.data ?? [];
-  const versionOptions = useMemo(() => {
-    const list = versions.map((v) => v.version);
-    if (activeVersion && !list.includes(activeVersion)) list.unshift(activeVersion);
-    return list;
-  }, [versions, activeVersion]);
 
   const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
   const v6Pending = v6PendingQ.data as Record<string, any> | null;
@@ -324,42 +287,6 @@ function StatsPage() {
           {refreshing ? "Refreshing…" : "Force fresh data"}
         </Button>
       </div>
-
-      <Card className="border-cyan/20 bg-cyan/5">
-        <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-cyan/10 border border-cyan/30 flex items-center justify-center font-mono font-bold text-cyan-400">
-              TD1
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
-              <div className="text-base font-semibold flex items-center gap-2 font-heading">
-                TD1-RC (A2 Combined Layer) · BTCUSDT 15m
-                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-cyan/30 text-cyan-400 bg-cyan/10" : "border-border text-muted-foreground"}`}>
-                  <span className={`size-1.5 rounded-full ${isLive ? "bg-cyan-400 animate-pulse" : "bg-muted-foreground"}`} />
-                  {isLive ? "AUTO LIVE" : "MANUAL"}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {versionFilter ? `Model ${versionFilter}` : "All models"}
-              </div>
-            </div>
-          </div>
-          <div className="w-44">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="h-9 text-xs font-mono">
-                <SelectValue placeholder="Filter version" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VERSIONS}>All versions</SelectItem>
-                {versionOptions.map((v) => (
-                  <SelectItem key={v} value={v}>Model {v}{v === activeVersion ? " (active)" : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
