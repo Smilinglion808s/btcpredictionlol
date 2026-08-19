@@ -561,6 +561,7 @@ function CsvDataPage() {
   const csvFetchers: Record<string, () => Promise<{ csv: string; rows: number } | null>> = {
     v6: () => exportV6().catch(() => null),
     es1: () => exportEs1().catch(() => null),
+    "es1-24h": () => exportEs1Last24h().catch(() => null),
     "ob-combined": () => exportObCombined().catch(() => null),
     "ob-features": () => exportObFeatures().catch(() => null),
     "ob-policies": () => exportObPolicies().catch(() => null),
