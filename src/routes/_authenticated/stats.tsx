@@ -288,42 +288,6 @@ function StatsPage() {
         </Button>
       </div>
 
-      <Card className="border-cyan/20 bg-cyan/5">
-        <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-cyan/10 border border-cyan/30 flex items-center justify-center font-mono font-bold text-cyan-400">
-              TD1
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Model Status</div>
-              <div className="text-base font-semibold flex items-center gap-2 font-heading">
-                TD1-RC (A2 Combined Layer) · BTCUSDT 15m
-                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${isLive ? "border-cyan/30 text-cyan-400 bg-cyan/10" : "border-border text-muted-foreground"}`}>
-                  <span className={`size-1.5 rounded-full ${isLive ? "bg-cyan-400 animate-pulse" : "bg-muted-foreground"}`} />
-                  {isLive ? "AUTO LIVE" : "MANUAL"}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                autobet: TD1-RC (A2 Combined + TD1 veto/containment) · feature engine: Model {modelVersion} · breakdowns below: {versionFilter ? `Model ${versionFilter}` : "All models"}
-              </div>
-            </div>
-          </div>
-          <div className="w-44">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="h-9 text-xs font-mono">
-                <SelectValue placeholder="Filter version" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VERSIONS}>All versions</SelectItem>
-                {versionOptions.map((v) => (
-                  <SelectItem key={v} value={v}>Model {v}{v === activeVersion ? " (active)" : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
 
