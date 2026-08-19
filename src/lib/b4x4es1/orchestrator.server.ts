@@ -668,7 +668,24 @@ export async function maybeSendEs1Webhook(
   }
 }
 
-/** Idempotent resolution for one target candle. */
+const ES1_RESOLVE_SELECT =
+  "id, target_candle_ts, model_version, run_mode, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
+  "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction, " +
+  "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
+  "balanced_legacy_would_trade, balanced_resolved_at, " +
+  // Required by the resolvers: without these they see undefined and
+  // score every published trade ABSTAIN.
+  "dual_adaptive_candidate_direction, dual_adaptive_would_trade, " +
+  "dual_adaptive_resolved_at, dual_adaptive_resolution_attempt_count, " +
+  "precision_would_trade, precision_candidate_direction, " +
+  "precision_balanced_would_trade, precision_balanced_direction, " +
+  "precision_resolved_at, precision_resolution_attempt_count";
+
+/**
+ * Idempotent resolution for one target candle. A boundary can carry more than
+ * one ES1 row (the LIVE row plus a later BACKFILL/warmup row), so every
+ * matching row is resolved instead of assuming a single row.
+ */
 export async function resolveEs1Row(
   supabase: SupabaseClient,
   targetCandleTs: string,
@@ -682,29 +699,33 @@ export async function resolveEs1Row(
   },
 ): Promise<void> {
   const targetTs = new Date(targetCandleTs).toISOString();
+  const { data } = await supabase
+    .from("b4x4_es1_predictions")
+    .select(ES1_RESOLVE_SELECT)
+    .in("model_version", ES1_ROW_MODEL_VERSIONS)
+    .eq("target_candle_ts", targetTs);
+  const rows = ((data ?? []) as unknown as DbRow[]).filter(Boolean);
+  for (const row of rows) {
+    await resolveEs1RowRecord(supabase, row, actualDirection, ohlc);
+  }
+}
+
+async function resolveEs1RowRecord(
+  supabase: SupabaseClient,
+  row: DbRow,
+  actualDirection: ActualDirection,
+  ohlc?: {
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
+    close?: number | null;
+    volume?: number | null;
+  },
+): Promise<void> {
   let rowId: string | null = null;
   try {
-    const { data } = await supabase
-      .from("b4x4_es1_predictions")
-      .select(
-        "id, target_candle_ts, hybrid_direction, final_prediction, would_trade, resolved_at, resolution_attempt_count, " +
-          "b4_guard_veto_fired, without_b4_guard_would_trade, without_b4_guard_direction, " +
-          "balanced_final_prediction, balanced_would_trade, balanced_legacy_direction, " +
-          "balanced_legacy_would_trade, balanced_resolved_at, " +
-          // Required by the resolvers: without these they see undefined and
-          // score every published trade ABSTAIN.
-          "dual_adaptive_candidate_direction, dual_adaptive_would_trade, " +
-          "dual_adaptive_resolved_at, dual_adaptive_resolution_attempt_count, " +
-          "precision_would_trade, precision_candidate_direction, " +
-          "precision_balanced_would_trade, precision_balanced_direction, " +
-          "precision_resolved_at, precision_resolution_attempt_count",
-      )
-      .in("model_version", ES1_ROW_MODEL_VERSIONS)
-      .eq("target_candle_ts", targetTs)
-      .maybeSingle();
-    const row = data as unknown as DbRow | null;
-    if (!row) return;
     rowId = String(row.id);
+
 
     // Score the retained balanced counterfactual and every comparison policy
     // first; this is idempotent and independent of the resolutions below.
