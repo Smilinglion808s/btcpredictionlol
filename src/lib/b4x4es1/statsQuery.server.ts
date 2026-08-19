@@ -20,18 +20,40 @@ export async function pageAll(select: string, cacheKey?: string): Promise<Row[]>
   const fetchRows = async (cursor: string | null) => {
     const sb = await admin();
     const out: Row[] = [];
-    for (let from = 0; ; from += PAGE) {
+    // Keyset pagination: offset ranges get progressively slower on the wide
+    // `select *` export and a single failed page used to silently truncate the
+    // dataset at the oldest 1000 rows.
+    const key = (r: Row) => String(r.id ?? `${r.target_candle_ts}|${r.model_version}`);
+    const seen = new Set<string>();
+    let after = cursor;
+    let strictlyAfter = cursor != null;
+    for (;;) {
       let q = sb
         .from("b4x4_es1_predictions")
         .select(select)
         .in("model_version", ES1_ROW_MODEL_VERSIONS)
         .order("target_candle_ts", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (cursor) q = q.gt("target_candle_ts", cursor);
-      const { data } = await q;
+        .limit(PAGE);
+      if (after) q = strictlyAfter ? q.gt("target_candle_ts", after) : q.gte("target_candle_ts", after);
+      const { data, error } = await q;
+      if (error) throw new Error(`ES1 export page failed after ${out.length} rows: ${error.message}`);
       if (!data || data.length === 0) break;
-      out.push(...(data as unknown as Row[]));
-      if (data.length < PAGE) break;
+      const rows = data as unknown as Row[];
+      let added = 0;
+      for (const r of rows) {
+        const k = key(r);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(r);
+        added++;
+      }
+      const last = rows[rows.length - 1]?.target_candle_ts;
+      if (rows.length < PAGE || !last) break;
+      const nextCursor = new Date(String(last)).toISOString();
+      // Re-fetch the boundary timestamp (ties across model_version) but never
+      // stall: if a full page shared one timestamp, step past it.
+      strictlyAfter = nextCursor === after || added === 0;
+      after = nextCursor;
     }
     return out;
   };
