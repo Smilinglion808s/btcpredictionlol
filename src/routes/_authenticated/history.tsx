@@ -661,6 +661,14 @@ function CsvDataPage() {
               hint="Balanced Binance 3-of-4 decisions"
               base="B4x4_ES1"
             />
+            <ExportButton
+              id="es1-24h"
+              variant="secondary"
+              label="B4x4-ES1 (last 24h)"
+              hint="LIVE, non-catchup rows only"
+              base="B4x4_ES1_last24h"
+            />
+
           </div>
         </CardContent>
       </Card>
