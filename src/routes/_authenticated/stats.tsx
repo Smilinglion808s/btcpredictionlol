@@ -41,18 +41,11 @@ export const Route = createFileRoute("/_authenticated/stats")({
   component: StatsPage,
 });
 
-const ALL_VERSIONS = "__all__";
 const STATS_REFRESH_MS = 120_000;
 const PENDING_REFRESH_MS = 15_000;
 
 function StatsPage() {
   const qc = useQueryClient();
-  const statsFn = useServerFn(getPredictionStats);
-  const settingsFn = useServerFn(getActiveSettings);
-  const versionsFn = useServerFn(listModelVersions);
-
-  const settingsQ = useQuery({ queryKey: ["active-settings"], queryFn: () => settingsFn() });
-  const versionsQ = useQuery({ queryKey: ["model-versions"], queryFn: () => versionsFn(), refetchInterval: 60_000 });
 
   const td1Fn = useServerFn(getTd1RcShadowStats);
   const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
