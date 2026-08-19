@@ -7,6 +7,14 @@ const TF_MS = 15 * 60 * 1000;
 const FRESH_WINDOW_MS = 60_000;
 /** Longest we are willing to sit and wait for a future boundary to arrive. */
 const MAX_WAIT_FOR_BOUNDARY_MS = 120_000;
+/**
+ * Above this lead the request only warms and returns. Sitting through a full
+ * pre-boundary minute made the request straddle the edge gateway's timeout, and
+ * a single slow warm turned the whole boundary into a 502 with no row written.
+ */
+const WARM_ONLY_LEAD_MS = 25_000;
+/** How late a `mode=recover` pass may still write the current candle's row. */
+const RECOVER_WINDOW_MS = 5 * 60_000;
 
 
 /**
