@@ -6,6 +6,7 @@
 // research logic in `precisionStack.ts`; nothing here may alter it.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { scorePrecisionLeg } from "./precisionScoring";
 import { buildTechnicalRows, type RawCandle } from "@/lib/v6/technical";
 import {
   PRECISION_FILL_MIN_CONFIDENCE,
@@ -532,19 +533,15 @@ export async function resolvePrecisionRow(
   row: DbRow,
   actual: Outcome,
 ): Promise<void> {
-  const score = (traded: boolean, dir: unknown) => {
-    if (!traded || (dir !== "GREEN" && dir !== "RED") || actual === "PUSH") {
-      return { result: "PUSH" as const, score: 0 };
-    }
-    return dir === actual
-      ? { result: "WIN" as const, score: 1 }
-      : { result: "LOSS" as const, score: -1 };
-  };
-
-  const combined = score(row.precision_would_trade === true, row.precision_candidate_direction);
-  const balanced = score(
-    row.precision_balanced_would_trade === true,
+  const combined = scorePrecisionLeg(
+    row.precision_would_trade as boolean | null | undefined,
+    row.precision_candidate_direction,
+    actual,
+  );
+  const balanced = scorePrecisionLeg(
+    row.precision_balanced_would_trade as boolean | null | undefined,
     row.precision_balanced_direction,
+    actual,
   );
 
   await sb
