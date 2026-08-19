@@ -26,3 +26,8 @@ export const getEs1Pending = createServerFn({ method: "GET" }).handler(async () 
 
 /** Full ES1 CSV export — every tracked column plus explicit outcome flags. */
 export const exportEs1Csv = createServerFn({ method: "GET" }).handler(async () => buildEs1Csv());
+
+/** Latest-24-hours ES1 export (LIVE, non-CATCHUP) with diagnostics. */
+export const exportEs1Last24hCsv = createServerFn({ method: "GET" }).handler(async () =>
+  buildEs1Last24hCsv(),
+);
