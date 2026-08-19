@@ -183,22 +183,6 @@ function StatsPage() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  const activeVersion = settingsQ.data?.model_version ?? null;
-  const [selected, setSelected] = useState<string>(ALL_VERSIONS);
-
-  useEffect(() => {
-    if (activeVersion && selected === ALL_VERSIONS) setSelected(activeVersion);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeVersion]);
-
-  const versionFilter = selected === ALL_VERSIONS ? null : selected;
-
-  const statsQ = useQuery({
-    queryKey: ["stats", versionFilter ?? "all"],
-    queryFn: () => statsFn({ data: { modelVersion: versionFilter } }),
-    refetchInterval: STATS_REFRESH_MS,
-    staleTime: 10_000,
-  });
   const b4x4RecentFn = useServerFn(listB4x4Recent);
   const listQ = useQuery({
     queryKey: ["b4x4-recent-stats"],
