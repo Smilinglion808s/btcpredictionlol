@@ -41,6 +41,7 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
 
+        const mode = new URL(request.url).searchParams.get("mode") ?? "auto";
         const now = Date.now();
         // Target must always be an UPCOMING candle — the one that is opening
         // right now (cron fires on the boundary) or, if we fired early/late,
@@ -48,9 +49,14 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
         // meaningfully underway.
         const floor = Math.floor(now / TF_MS) * TF_MS;
         const intoCandle = now - floor; // ms elapsed since the current candle opened
+        // `mode=recover` is the late safety net: when the boundary pass never
+        // ran (worker 502, cron startup timeout), we still want the row for the
+        // candle already underway. The webhook layer keeps its own 90s freshness
+        // guard, so a late recovery can never publish a stale trade signal.
+        const recovering = mode === "recover" && intoCandle <= RECOVER_WINDOW_MS;
         const targetMs =
-          intoCandle <= FRESH_WINDOW_MS
-            ? floor // fired on the boundary: predict the candle just opening
+          intoCandle <= FRESH_WINDOW_MS || recovering
+            ? floor // fired on the boundary (or recovering it): predict that candle
             : floor + TF_MS; // fired early or late: predict the next boundary
         const targetTs = new Date(targetMs).toISOString();
         const sourceTs = new Date(targetMs - TF_MS).toISOString();
