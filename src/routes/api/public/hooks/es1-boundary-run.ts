@@ -154,6 +154,21 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
             mark("warm_total_ms", t);
           }
 
+          // Warm-only pass: return instead of sleeping through the rest of the
+          // pre-boundary minute. The boundary-minute cron owns the decision, so
+          // no single request has to span warm + wait + predict (which is what
+          // pushed this endpoint past the gateway timeout and produced a 502
+          // with no prediction row at all).
+          if (targetMs - Date.now() > WARM_ONLY_LEAD_MS) {
+            out.warm_only = true;
+            out.stages = stages;
+            out.elapsed_ms = Date.now() - started;
+            return new Response(JSON.stringify(out), {
+              headers: { "content-type": "application/json" },
+            });
+          }
+
+
           // Wait for the source candle to be closed and ingested. Bounded so
           // this endpoint can never outlive its own 15-minute slot.
           //
