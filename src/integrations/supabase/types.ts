@@ -7206,6 +7206,330 @@ export type Database = {
         }
         Relationships: []
       }
+      t45_pf_activation: {
+        Row: {
+          activation_target_ts: string | null
+          approval_note: string | null
+          approved_at: string | null
+          config_hash: string
+          mode: string
+          model_version: string
+          singleton_key: string
+          updated_at: string
+          webhooks_enabled: boolean
+        }
+        Insert: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash: string
+          mode?: string
+          model_version: string
+          singleton_key: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Update: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash?: string
+          mode?: string
+          model_version?: string
+          singleton_key?: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Relationships: []
+      }
+      t45_pf_fits: {
+        Row: {
+          artifact_hash: string | null
+          block_index: number
+          block_start_index: number
+          certified: boolean
+          coefficients: number[] | null
+          config_hash: string
+          converged: boolean | null
+          created_at: string
+          feature_order: string[]
+          feature_order_hash: string
+          feature_schema: string
+          fit_id: string
+          gradient_norm: number | null
+          id: string
+          impl_revision: string | null
+          intercept: number | null
+          iterations: number | null
+          logistic_c: number | null
+          model_version: string
+          scaler: string | null
+          scaler_center: number[] | null
+          scaler_scale: number[] | null
+          solver: string | null
+          training_end_ts: string | null
+          training_fingerprint: string | null
+          training_row_count: number
+          training_start_ts: string | null
+        }
+        Insert: {
+          artifact_hash?: string | null
+          block_index: number
+          block_start_index: number
+          certified?: boolean
+          coefficients?: number[] | null
+          config_hash: string
+          converged?: boolean | null
+          created_at?: string
+          feature_order: string[]
+          feature_order_hash: string
+          feature_schema: string
+          fit_id: string
+          gradient_norm?: number | null
+          id?: string
+          impl_revision?: string | null
+          intercept?: number | null
+          iterations?: number | null
+          logistic_c?: number | null
+          model_version: string
+          scaler?: string | null
+          scaler_center?: number[] | null
+          scaler_scale?: number[] | null
+          solver?: string | null
+          training_end_ts?: string | null
+          training_fingerprint?: string | null
+          training_row_count: number
+          training_start_ts?: string | null
+        }
+        Update: {
+          artifact_hash?: string | null
+          block_index?: number
+          block_start_index?: number
+          certified?: boolean
+          coefficients?: number[] | null
+          config_hash?: string
+          converged?: boolean | null
+          created_at?: string
+          feature_order?: string[]
+          feature_order_hash?: string
+          feature_schema?: string
+          fit_id?: string
+          gradient_norm?: number | null
+          id?: string
+          impl_revision?: string | null
+          intercept?: number | null
+          iterations?: number | null
+          logistic_c?: number | null
+          model_version?: string
+          scaler?: string | null
+          scaler_center?: number[] | null
+          scaler_scale?: number[] | null
+          solver?: string | null
+          training_end_ts?: string | null
+          training_fingerprint?: string | null
+          training_row_count?: number
+          training_start_ts?: string | null
+        }
+        Relationships: []
+      }
+      t45_pf_predictions: {
+        Row: {
+          activation_mode: string
+          active_prediction: number | null
+          active_result: string | null
+          active_score: number | null
+          active_sleeve: string | null
+          active_would_trade: boolean
+          actual_close: number | null
+          actual_direction: number | null
+          actual_high: number | null
+          actual_low: number | null
+          actual_observations: number | null
+          actual_open: number | null
+          base_direction: number | null
+          base_head: string | null
+          confidence: number | null
+          confidence_rank: number | null
+          config_hash: string
+          created_at: string
+          decided_at: string | null
+          decision_cutoff_ts: string | null
+          decision_reason: string | null
+          decision_valid: boolean
+          duplicate_offsets: number[] | null
+          expected_observations: number | null
+          feature_complete: boolean | null
+          feature_order_hash: string
+          feature_schema: string
+          feature_values_json: Json | null
+          fit_artifact_hash: string | null
+          fit_block_index: number | null
+          fit_block_start_index: number | null
+          fit_certified: boolean | null
+          fit_id: string | null
+          fit_training_fingerprint: string | null
+          fit_training_row_count: number | null
+          id: string
+          impl_revision: string | null
+          last_resolution_error: string | null
+          local_date: string | null
+          max_offset_seconds: number | null
+          min_offset_seconds: number | null
+          missing_offsets: number[] | null
+          model_name: string
+          model_variant: string
+          model_version: string
+          outcome_source: string | null
+          packet_ready: boolean | null
+          probability_green: number | null
+          rank_history_count: number | null
+          resolution_attempts: number
+          resolved_at: string | null
+          run_mode: string
+          scaler: string | null
+          solver: string | null
+          source_last_bar_ts: string | null
+          target_ts: string
+          timing_valid: boolean | null
+          unique_observations: number | null
+          updated_at: string
+          utc_date: string | null
+          webhook_eligible: boolean
+          webhook_idempotency_key: string | null
+          webhook_sent: boolean
+        }
+        Insert: {
+          activation_mode?: string
+          active_prediction?: number | null
+          active_result?: string | null
+          active_score?: number | null
+          active_sleeve?: string | null
+          active_would_trade?: boolean
+          actual_close?: number | null
+          actual_direction?: number | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_observations?: number | null
+          actual_open?: number | null
+          base_direction?: number | null
+          base_head?: string | null
+          confidence?: number | null
+          confidence_rank?: number | null
+          config_hash: string
+          created_at?: string
+          decided_at?: string | null
+          decision_cutoff_ts?: string | null
+          decision_reason?: string | null
+          decision_valid?: boolean
+          duplicate_offsets?: number[] | null
+          expected_observations?: number | null
+          feature_complete?: boolean | null
+          feature_order_hash: string
+          feature_schema: string
+          feature_values_json?: Json | null
+          fit_artifact_hash?: string | null
+          fit_block_index?: number | null
+          fit_block_start_index?: number | null
+          fit_certified?: boolean | null
+          fit_id?: string | null
+          fit_training_fingerprint?: string | null
+          fit_training_row_count?: number | null
+          id?: string
+          impl_revision?: string | null
+          last_resolution_error?: string | null
+          local_date?: string | null
+          max_offset_seconds?: number | null
+          min_offset_seconds?: number | null
+          missing_offsets?: number[] | null
+          model_name: string
+          model_variant: string
+          model_version: string
+          outcome_source?: string | null
+          packet_ready?: boolean | null
+          probability_green?: number | null
+          rank_history_count?: number | null
+          resolution_attempts?: number
+          resolved_at?: string | null
+          run_mode: string
+          scaler?: string | null
+          solver?: string | null
+          source_last_bar_ts?: string | null
+          target_ts: string
+          timing_valid?: boolean | null
+          unique_observations?: number | null
+          updated_at?: string
+          utc_date?: string | null
+          webhook_eligible?: boolean
+          webhook_idempotency_key?: string | null
+          webhook_sent?: boolean
+        }
+        Update: {
+          activation_mode?: string
+          active_prediction?: number | null
+          active_result?: string | null
+          active_score?: number | null
+          active_sleeve?: string | null
+          active_would_trade?: boolean
+          actual_close?: number | null
+          actual_direction?: number | null
+          actual_high?: number | null
+          actual_low?: number | null
+          actual_observations?: number | null
+          actual_open?: number | null
+          base_direction?: number | null
+          base_head?: string | null
+          confidence?: number | null
+          confidence_rank?: number | null
+          config_hash?: string
+          created_at?: string
+          decided_at?: string | null
+          decision_cutoff_ts?: string | null
+          decision_reason?: string | null
+          decision_valid?: boolean
+          duplicate_offsets?: number[] | null
+          expected_observations?: number | null
+          feature_complete?: boolean | null
+          feature_order_hash?: string
+          feature_schema?: string
+          feature_values_json?: Json | null
+          fit_artifact_hash?: string | null
+          fit_block_index?: number | null
+          fit_block_start_index?: number | null
+          fit_certified?: boolean | null
+          fit_id?: string | null
+          fit_training_fingerprint?: string | null
+          fit_training_row_count?: number | null
+          id?: string
+          impl_revision?: string | null
+          last_resolution_error?: string | null
+          local_date?: string | null
+          max_offset_seconds?: number | null
+          min_offset_seconds?: number | null
+          missing_offsets?: number[] | null
+          model_name?: string
+          model_variant?: string
+          model_version?: string
+          outcome_source?: string | null
+          packet_ready?: boolean | null
+          probability_green?: number | null
+          rank_history_count?: number | null
+          resolution_attempts?: number
+          resolved_at?: string | null
+          run_mode?: string
+          scaler?: string | null
+          solver?: string | null
+          source_last_bar_ts?: string | null
+          target_ts?: string
+          timing_valid?: boolean | null
+          unique_observations?: number | null
+          updated_at?: string
+          utc_date?: string | null
+          webhook_eligible?: boolean
+          webhook_idempotency_key?: string | null
+          webhook_sent?: boolean
+        }
+        Relationships: []
+      }
       t45_predictions: {
         Row: {
           active_prediction: number | null

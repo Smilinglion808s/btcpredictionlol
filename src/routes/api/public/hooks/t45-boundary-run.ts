@@ -12,6 +12,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { createHmac, timingSafeEqual } from "crypto";
 import { runT45Boundary, resolveT45Backlog, t45TargetFor } from "@/lib/t45/orchestrator.server";
+import {
+  runPriceFlowBoundary,
+  resolvePriceFlowBacklog,
+} from "@/lib/t45pf/orchestrator.server";
 import { T45_CUTOFF_OFFSET_MS, T45_PUBLISH_DEADLINE_MS, TF_MS } from "@/lib/t45/config";
 
 /** Never sit longer than this waiting for the T+45s cutoff. */
@@ -78,7 +82,14 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
 
         if (mode === "resolve") {
           const res = await resolveT45Backlog(supabase, { limit: 500 });
-          return Response.json({ ok: true, mode, ...res, elapsed_ms: Date.now() - started });
+          const pf = await resolvePriceFlowBacklog(supabase, { limit: 500 });
+          return Response.json({
+            ok: true,
+            mode,
+            ...res,
+            price_flow_resolved: pf.resolved,
+            elapsed_ms: Date.now() - started,
+          });
         }
 
         const now = Date.now();
@@ -117,12 +128,24 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         }
 
         const result = await runT45Boundary(supabase, target, { allowLate });
+        // Independent shadow model — its failures can never affect T45 Balanced.
+        let priceFlow: unknown = null;
+        try {
+          priceFlow = await runPriceFlowBoundary(supabase, target, { allowLate });
+        } catch (e) {
+          priceFlow = { error: e instanceof Error ? e.message : String(e) };
+        }
         const resolved = await resolveT45Backlog(supabase, { limit: 200 });
+        const pfResolved = await resolvePriceFlowBacklog(supabase, { limit: 200 }).catch(() => ({
+          resolved: 0,
+        }));
 
         return Response.json({
           ok: true,
           mode,
           ...result,
+          price_flow: priceFlow,
+          price_flow_resolved: pfResolved.resolved,
           resolved: resolved.resolved,
           elapsed_ms: Date.now() - started,
         });
