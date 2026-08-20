@@ -82,7 +82,14 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
 
         if (mode === "resolve") {
           const res = await resolveT45Backlog(supabase, { limit: 500 });
-          return Response.json({ ok: true, mode, ...res, elapsed_ms: Date.now() - started });
+          const pf = await resolvePriceFlowBacklog(supabase, { limit: 500 });
+          return Response.json({
+            ok: true,
+            mode,
+            ...res,
+            price_flow_resolved: pf.resolved,
+            elapsed_ms: Date.now() - started,
+          });
         }
 
         const now = Date.now();
@@ -121,12 +128,24 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         }
 
         const result = await runT45Boundary(supabase, target, { allowLate });
+        // Independent shadow model — its failures can never affect T45 Balanced.
+        let priceFlow: unknown = null;
+        try {
+          priceFlow = await runPriceFlowBoundary(supabase, target, { allowLate });
+        } catch (e) {
+          priceFlow = { error: e instanceof Error ? e.message : String(e) };
+        }
         const resolved = await resolveT45Backlog(supabase, { limit: 200 });
+        const pfResolved = await resolvePriceFlowBacklog(supabase, { limit: 200 }).catch(() => ({
+          resolved: 0,
+        }));
 
         return Response.json({
           ok: true,
           mode,
           ...result,
+          price_flow: priceFlow,
+          price_flow_resolved: pfResolved.resolved,
           resolved: resolved.resolved,
           elapsed_ms: Date.now() - started,
         });
