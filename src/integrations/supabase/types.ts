@@ -6747,6 +6747,702 @@ export type Database = {
         }
         Relationships: []
       }
+      t45_activation: {
+        Row: {
+          activation_target_ts: string | null
+          approval_note: string | null
+          approved_at: string | null
+          freeze_sha256: string | null
+          mode: string
+          singleton_key: string
+          updated_at: string
+          webhooks_enabled: boolean
+        }
+        Insert: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          freeze_sha256?: string | null
+          mode?: string
+          singleton_key?: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Update: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          freeze_sha256?: string | null
+          mode?: string
+          singleton_key?: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Relationships: []
+      }
+      t45_collector_health: {
+        Row: {
+          build_identifier: string | null
+          collector_version: string | null
+          consecutive_errors: number
+          deployment_id: string | null
+          id: string
+          last_bar_close_ts: string | null
+          last_error_code: string | null
+          last_error_message: string | null
+          last_heartbeat_at: string | null
+          last_received_at: string | null
+          last_target_seconds: number | null
+          last_target_ts: string | null
+          reconnect_count: number
+          status: string
+          stream_key: string
+          symbol: string
+          updated_at: string
+          venue: string
+        }
+        Insert: {
+          build_identifier?: string | null
+          collector_version?: string | null
+          consecutive_errors?: number
+          deployment_id?: string | null
+          id?: string
+          last_bar_close_ts?: string | null
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
+          last_target_seconds?: number | null
+          last_target_ts?: string | null
+          reconnect_count?: number
+          status?: string
+          stream_key: string
+          symbol?: string
+          updated_at?: string
+          venue?: string
+        }
+        Update: {
+          build_identifier?: string | null
+          collector_version?: string | null
+          consecutive_errors?: number
+          deployment_id?: string | null
+          id?: string
+          last_bar_close_ts?: string | null
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
+          last_target_seconds?: number | null
+          last_target_ts?: string | null
+          reconnect_count?: number
+          status?: string
+          stream_key?: string
+          symbol?: string
+          updated_at?: string
+          venue?: string
+        }
+        Relationships: []
+      }
+      t45_features: {
+        Row: {
+          config_hash: string | null
+          created_at: string
+          feature_complete: boolean
+          feature_cutoff_ts: string | null
+          feature_invalid_reason: string | null
+          feature_values_json: Json | null
+          feature_vector_hash: string | null
+          feature_version: string
+          id: string
+          r2_prior_key: string | null
+          r2_prior_source: string | null
+          row_source: string
+          seconds_present: number | null
+          spot_complete: boolean
+          t45_body_range_45s: number | null
+          t45_book_age_at_cutoff_s: number | null
+          t45_book_final_offset_s: number | null
+          t45_book_first_offset_s: number | null
+          t45_book_imb_100: number | null
+          t45_book_imb_20: number | null
+          t45_book_imb_200: number | null
+          t45_book_imb_300: number | null
+          t45_book_imb_400: number | null
+          t45_book_imb_500: number | null
+          t45_book_imb_delta_100: number | null
+          t45_book_imb_delta_20: number | null
+          t45_book_imb_delta_200: number | null
+          t45_book_imb_delta_300: number | null
+          t45_book_imb_delta_400: number | null
+          t45_book_imb_delta_500: number | null
+          t45_book_log_total_depth_100: number | null
+          t45_book_log_total_depth_20: number | null
+          t45_book_log_total_depth_200: number | null
+          t45_book_log_total_depth_300: number | null
+          t45_book_log_total_depth_400: number | null
+          t45_book_log_total_depth_500: number | null
+          t45_book_log_total_notional_100: number | null
+          t45_book_log_total_notional_20: number | null
+          t45_book_log_total_notional_200: number | null
+          t45_book_log_total_notional_300: number | null
+          t45_book_log_total_notional_400: number | null
+          t45_book_log_total_notional_500: number | null
+          t45_book_snapshot_count: number | null
+          t45_close_15s: number | null
+          t45_close_30s: number | null
+          t45_close_45s: number | null
+          t45_close_5s: number | null
+          t45_close_location_45s: number | null
+          t45_close_vwap_gap_bps: number | null
+          t45_first_offset_s: number | null
+          t45_last_offset_s: number | null
+          t45_last15_ret_bps: number | null
+          t45_last30_ret_bps: number | null
+          t45_log_price_slope_bps_per_s: number | null
+          t45_log_quote_volume_45s: number | null
+          t45_log_trade_count_45s: number | null
+          t45_partial_direction: number | null
+          t45_path_direction_consistency: number | null
+          t45_path_efficiency_45s: number | null
+          t45_price_flow_alignment: number | null
+          t45_quote_flow_15s: number | null
+          t45_quote_flow_30s: number | null
+          t45_quote_flow_45s: number | null
+          t45_quote_flow_5s: number | null
+          t45_quote_volume_15s: number | null
+          t45_quote_volume_30s: number | null
+          t45_quote_volume_45s: number | null
+          t45_quote_volume_5s: number | null
+          t45_quote_volume_last15_share: number | null
+          t45_r2_partial_agreement: number | null
+          t45_r2_prediction: number | null
+          t45_r2_ret45_interaction: number | null
+          t45_r2_would_trade: number | null
+          t45_range_15s_bps: number | null
+          t45_range_30s_bps: number | null
+          t45_range_45s_bps: number | null
+          t45_range_5s_bps: number | null
+          t45_realized_vol_45s_bps: number | null
+          t45_ret_15s_bps: number | null
+          t45_ret_30s_bps: number | null
+          t45_ret_45s_bps: number | null
+          t45_ret_5s_bps: number | null
+          t45_return_accel_15_45_bps: number | null
+          t45_return_sign_changes: number | null
+          t45_return_sign_persistence: number | null
+          t45_seconds_count: number | null
+          t45_spot_complete: number | null
+          t45_spot_open: number | null
+          t45_trade_count_15s: number | null
+          t45_trade_count_30s: number | null
+          t45_trade_count_45s: number | null
+          t45_trade_count_5s: number | null
+          t45_trade_count_last15_share: number | null
+          target_ts: string
+        }
+        Insert: {
+          config_hash?: string | null
+          created_at?: string
+          feature_complete?: boolean
+          feature_cutoff_ts?: string | null
+          feature_invalid_reason?: string | null
+          feature_values_json?: Json | null
+          feature_vector_hash?: string | null
+          feature_version?: string
+          id?: string
+          r2_prior_key?: string | null
+          r2_prior_source?: string | null
+          row_source?: string
+          seconds_present?: number | null
+          spot_complete?: boolean
+          t45_body_range_45s?: number | null
+          t45_book_age_at_cutoff_s?: number | null
+          t45_book_final_offset_s?: number | null
+          t45_book_first_offset_s?: number | null
+          t45_book_imb_100?: number | null
+          t45_book_imb_20?: number | null
+          t45_book_imb_200?: number | null
+          t45_book_imb_300?: number | null
+          t45_book_imb_400?: number | null
+          t45_book_imb_500?: number | null
+          t45_book_imb_delta_100?: number | null
+          t45_book_imb_delta_20?: number | null
+          t45_book_imb_delta_200?: number | null
+          t45_book_imb_delta_300?: number | null
+          t45_book_imb_delta_400?: number | null
+          t45_book_imb_delta_500?: number | null
+          t45_book_log_total_depth_100?: number | null
+          t45_book_log_total_depth_20?: number | null
+          t45_book_log_total_depth_200?: number | null
+          t45_book_log_total_depth_300?: number | null
+          t45_book_log_total_depth_400?: number | null
+          t45_book_log_total_depth_500?: number | null
+          t45_book_log_total_notional_100?: number | null
+          t45_book_log_total_notional_20?: number | null
+          t45_book_log_total_notional_200?: number | null
+          t45_book_log_total_notional_300?: number | null
+          t45_book_log_total_notional_400?: number | null
+          t45_book_log_total_notional_500?: number | null
+          t45_book_snapshot_count?: number | null
+          t45_close_15s?: number | null
+          t45_close_30s?: number | null
+          t45_close_45s?: number | null
+          t45_close_5s?: number | null
+          t45_close_location_45s?: number | null
+          t45_close_vwap_gap_bps?: number | null
+          t45_first_offset_s?: number | null
+          t45_last_offset_s?: number | null
+          t45_last15_ret_bps?: number | null
+          t45_last30_ret_bps?: number | null
+          t45_log_price_slope_bps_per_s?: number | null
+          t45_log_quote_volume_45s?: number | null
+          t45_log_trade_count_45s?: number | null
+          t45_partial_direction?: number | null
+          t45_path_direction_consistency?: number | null
+          t45_path_efficiency_45s?: number | null
+          t45_price_flow_alignment?: number | null
+          t45_quote_flow_15s?: number | null
+          t45_quote_flow_30s?: number | null
+          t45_quote_flow_45s?: number | null
+          t45_quote_flow_5s?: number | null
+          t45_quote_volume_15s?: number | null
+          t45_quote_volume_30s?: number | null
+          t45_quote_volume_45s?: number | null
+          t45_quote_volume_5s?: number | null
+          t45_quote_volume_last15_share?: number | null
+          t45_r2_partial_agreement?: number | null
+          t45_r2_prediction?: number | null
+          t45_r2_ret45_interaction?: number | null
+          t45_r2_would_trade?: number | null
+          t45_range_15s_bps?: number | null
+          t45_range_30s_bps?: number | null
+          t45_range_45s_bps?: number | null
+          t45_range_5s_bps?: number | null
+          t45_realized_vol_45s_bps?: number | null
+          t45_ret_15s_bps?: number | null
+          t45_ret_30s_bps?: number | null
+          t45_ret_45s_bps?: number | null
+          t45_ret_5s_bps?: number | null
+          t45_return_accel_15_45_bps?: number | null
+          t45_return_sign_changes?: number | null
+          t45_return_sign_persistence?: number | null
+          t45_seconds_count?: number | null
+          t45_spot_complete?: number | null
+          t45_spot_open?: number | null
+          t45_trade_count_15s?: number | null
+          t45_trade_count_30s?: number | null
+          t45_trade_count_45s?: number | null
+          t45_trade_count_5s?: number | null
+          t45_trade_count_last15_share?: number | null
+          target_ts: string
+        }
+        Update: {
+          config_hash?: string | null
+          created_at?: string
+          feature_complete?: boolean
+          feature_cutoff_ts?: string | null
+          feature_invalid_reason?: string | null
+          feature_values_json?: Json | null
+          feature_vector_hash?: string | null
+          feature_version?: string
+          id?: string
+          r2_prior_key?: string | null
+          r2_prior_source?: string | null
+          row_source?: string
+          seconds_present?: number | null
+          spot_complete?: boolean
+          t45_body_range_45s?: number | null
+          t45_book_age_at_cutoff_s?: number | null
+          t45_book_final_offset_s?: number | null
+          t45_book_first_offset_s?: number | null
+          t45_book_imb_100?: number | null
+          t45_book_imb_20?: number | null
+          t45_book_imb_200?: number | null
+          t45_book_imb_300?: number | null
+          t45_book_imb_400?: number | null
+          t45_book_imb_500?: number | null
+          t45_book_imb_delta_100?: number | null
+          t45_book_imb_delta_20?: number | null
+          t45_book_imb_delta_200?: number | null
+          t45_book_imb_delta_300?: number | null
+          t45_book_imb_delta_400?: number | null
+          t45_book_imb_delta_500?: number | null
+          t45_book_log_total_depth_100?: number | null
+          t45_book_log_total_depth_20?: number | null
+          t45_book_log_total_depth_200?: number | null
+          t45_book_log_total_depth_300?: number | null
+          t45_book_log_total_depth_400?: number | null
+          t45_book_log_total_depth_500?: number | null
+          t45_book_log_total_notional_100?: number | null
+          t45_book_log_total_notional_20?: number | null
+          t45_book_log_total_notional_200?: number | null
+          t45_book_log_total_notional_300?: number | null
+          t45_book_log_total_notional_400?: number | null
+          t45_book_log_total_notional_500?: number | null
+          t45_book_snapshot_count?: number | null
+          t45_close_15s?: number | null
+          t45_close_30s?: number | null
+          t45_close_45s?: number | null
+          t45_close_5s?: number | null
+          t45_close_location_45s?: number | null
+          t45_close_vwap_gap_bps?: number | null
+          t45_first_offset_s?: number | null
+          t45_last_offset_s?: number | null
+          t45_last15_ret_bps?: number | null
+          t45_last30_ret_bps?: number | null
+          t45_log_price_slope_bps_per_s?: number | null
+          t45_log_quote_volume_45s?: number | null
+          t45_log_trade_count_45s?: number | null
+          t45_partial_direction?: number | null
+          t45_path_direction_consistency?: number | null
+          t45_path_efficiency_45s?: number | null
+          t45_price_flow_alignment?: number | null
+          t45_quote_flow_15s?: number | null
+          t45_quote_flow_30s?: number | null
+          t45_quote_flow_45s?: number | null
+          t45_quote_flow_5s?: number | null
+          t45_quote_volume_15s?: number | null
+          t45_quote_volume_30s?: number | null
+          t45_quote_volume_45s?: number | null
+          t45_quote_volume_5s?: number | null
+          t45_quote_volume_last15_share?: number | null
+          t45_r2_partial_agreement?: number | null
+          t45_r2_prediction?: number | null
+          t45_r2_ret45_interaction?: number | null
+          t45_r2_would_trade?: number | null
+          t45_range_15s_bps?: number | null
+          t45_range_30s_bps?: number | null
+          t45_range_45s_bps?: number | null
+          t45_range_5s_bps?: number | null
+          t45_realized_vol_45s_bps?: number | null
+          t45_ret_15s_bps?: number | null
+          t45_ret_30s_bps?: number | null
+          t45_ret_45s_bps?: number | null
+          t45_ret_5s_bps?: number | null
+          t45_return_accel_15_45_bps?: number | null
+          t45_return_sign_changes?: number | null
+          t45_return_sign_persistence?: number | null
+          t45_seconds_count?: number | null
+          t45_spot_complete?: number | null
+          t45_spot_open?: number | null
+          t45_trade_count_15s?: number | null
+          t45_trade_count_30s?: number | null
+          t45_trade_count_45s?: number | null
+          t45_trade_count_5s?: number | null
+          t45_trade_count_last15_share?: number | null
+          target_ts?: string
+        }
+        Relationships: []
+      }
+      t45_fits: {
+        Row: {
+          artifact_sha256: string | null
+          block_index: number
+          block_start_index: number
+          coefficients: number[]
+          converged: boolean
+          created_at: string
+          feature_order: string[]
+          fit_id: string
+          fitter_code_hash: string | null
+          gradient_norm: number | null
+          id: string
+          intercept: number
+          iterations: number | null
+          logistic_c: number
+          model_version: string
+          scaler_center: number[]
+          scaler_scale: number[]
+          solver: string
+          training_end_ts: string | null
+          training_row_count: number
+          training_start_ts: string | null
+        }
+        Insert: {
+          artifact_sha256?: string | null
+          block_index: number
+          block_start_index: number
+          coefficients: number[]
+          converged: boolean
+          created_at?: string
+          feature_order: string[]
+          fit_id: string
+          fitter_code_hash?: string | null
+          gradient_norm?: number | null
+          id?: string
+          intercept: number
+          iterations?: number | null
+          logistic_c: number
+          model_version: string
+          scaler_center: number[]
+          scaler_scale: number[]
+          solver: string
+          training_end_ts?: string | null
+          training_row_count: number
+          training_start_ts?: string | null
+        }
+        Update: {
+          artifact_sha256?: string | null
+          block_index?: number
+          block_start_index?: number
+          coefficients?: number[]
+          converged?: boolean
+          created_at?: string
+          feature_order?: string[]
+          fit_id?: string
+          fitter_code_hash?: string | null
+          gradient_norm?: number | null
+          id?: string
+          intercept?: number
+          iterations?: number | null
+          logistic_c?: number
+          model_version?: string
+          scaler_center?: number[]
+          scaler_scale?: number[]
+          solver?: string
+          training_end_ts?: string | null
+          training_row_count?: number
+          training_start_ts?: string | null
+        }
+        Relationships: []
+      }
+      t45_predictions: {
+        Row: {
+          active_prediction: number | null
+          active_result: string | null
+          active_score: number | null
+          active_sleeve: string | null
+          active_would_trade: boolean | null
+          actual_close: number | null
+          actual_direction: number | null
+          actual_open: number | null
+          base_direction: number | null
+          base_head: string
+          build_identifier: string | null
+          confidence: number | null
+          confidence_rank: number | null
+          config_hash: string | null
+          created_at: string
+          decided_at: string | null
+          decision_cutoff_ts: string | null
+          decision_invalid_reason: string | null
+          decision_valid: boolean
+          feature_complete: boolean | null
+          fit_block_index: number | null
+          fit_id: string | null
+          fit_training_row_count: number | null
+          id: string
+          local_date: string | null
+          model_name: string
+          model_variant: string
+          model_version: string
+          outcome_source: string | null
+          precision_core: boolean | null
+          probability_green: number | null
+          r2_prior_available: boolean
+          r2_prior_key: string | null
+          r2_prior_prediction: number | null
+          r2_prior_source: string | null
+          rank_history_count: number | null
+          resolved_at: string | null
+          run_mode: string
+          target_ts: string
+          webhook_eligible: boolean
+          webhook_sent: boolean
+        }
+        Insert: {
+          active_prediction?: number | null
+          active_result?: string | null
+          active_score?: number | null
+          active_sleeve?: string | null
+          active_would_trade?: boolean | null
+          actual_close?: number | null
+          actual_direction?: number | null
+          actual_open?: number | null
+          base_direction?: number | null
+          base_head?: string
+          build_identifier?: string | null
+          confidence?: number | null
+          confidence_rank?: number | null
+          config_hash?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decision_cutoff_ts?: string | null
+          decision_invalid_reason?: string | null
+          decision_valid?: boolean
+          feature_complete?: boolean | null
+          fit_block_index?: number | null
+          fit_id?: string | null
+          fit_training_row_count?: number | null
+          id?: string
+          local_date?: string | null
+          model_name?: string
+          model_variant?: string
+          model_version?: string
+          outcome_source?: string | null
+          precision_core?: boolean | null
+          probability_green?: number | null
+          r2_prior_available?: boolean
+          r2_prior_key?: string | null
+          r2_prior_prediction?: number | null
+          r2_prior_source?: string | null
+          rank_history_count?: number | null
+          resolved_at?: string | null
+          run_mode?: string
+          target_ts: string
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
+        }
+        Update: {
+          active_prediction?: number | null
+          active_result?: string | null
+          active_score?: number | null
+          active_sleeve?: string | null
+          active_would_trade?: boolean | null
+          actual_close?: number | null
+          actual_direction?: number | null
+          actual_open?: number | null
+          base_direction?: number | null
+          base_head?: string
+          build_identifier?: string | null
+          confidence?: number | null
+          confidence_rank?: number | null
+          config_hash?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decision_cutoff_ts?: string | null
+          decision_invalid_reason?: string | null
+          decision_valid?: boolean
+          feature_complete?: boolean | null
+          fit_block_index?: number | null
+          fit_id?: string | null
+          fit_training_row_count?: number | null
+          id?: string
+          local_date?: string | null
+          model_name?: string
+          model_variant?: string
+          model_version?: string
+          outcome_source?: string | null
+          precision_core?: boolean | null
+          probability_green?: number | null
+          r2_prior_available?: boolean
+          r2_prior_key?: string | null
+          r2_prior_prediction?: number | null
+          r2_prior_source?: string | null
+          rank_history_count?: number | null
+          resolved_at?: string | null
+          run_mode?: string
+          target_ts?: string
+          webhook_eligible?: boolean
+          webhook_sent?: boolean
+        }
+        Relationships: []
+      }
+      t45_second_samples: {
+        Row: {
+          bar_close_ts: string | null
+          bar_open_ts: string | null
+          build_identifier: string | null
+          capture_reason: string | null
+          capture_status: string
+          close: number | null
+          collector_version: string
+          created_at: string
+          high: number | null
+          id: string
+          is_final: boolean
+          low: number | null
+          offset_seconds: number
+          open: number | null
+          quote_volume: number | null
+          received_at: string | null
+          source_stream_id: string
+          symbol: string
+          taker_buy_quote_volume: number | null
+          taker_buy_volume: number | null
+          target_ts: string
+          trade_count: number | null
+          venue: string
+          volume: number | null
+        }
+        Insert: {
+          bar_close_ts?: string | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
+          capture_reason?: string | null
+          capture_status?: string
+          close?: number | null
+          collector_version: string
+          created_at?: string
+          high?: number | null
+          id?: string
+          is_final?: boolean
+          low?: number | null
+          offset_seconds: number
+          open?: number | null
+          quote_volume?: number | null
+          received_at?: string | null
+          source_stream_id: string
+          symbol?: string
+          taker_buy_quote_volume?: number | null
+          taker_buy_volume?: number | null
+          target_ts: string
+          trade_count?: number | null
+          venue?: string
+          volume?: number | null
+        }
+        Update: {
+          bar_close_ts?: string | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
+          capture_reason?: string | null
+          capture_status?: string
+          close?: number | null
+          collector_version?: string
+          created_at?: string
+          high?: number | null
+          id?: string
+          is_final?: boolean
+          low?: number | null
+          offset_seconds?: number
+          open?: number | null
+          quote_volume?: number | null
+          received_at?: string | null
+          source_stream_id?: string
+          symbol?: string
+          taker_buy_quote_volume?: number | null
+          taker_buy_volume?: number | null
+          target_ts?: string
+          trade_count?: number | null
+          venue?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
+      t45_training_labels: {
+        Row: {
+          evaluation_label_strict: number | null
+          label_source: string | null
+          target_ts: string
+          training_label_feedback: number | null
+          updated_at: string
+        }
+        Insert: {
+          evaluation_label_strict?: number | null
+          label_source?: string | null
+          target_ts: string
+          training_label_feedback?: number | null
+          updated_at?: string
+        }
+        Update: {
+          evaluation_label_strict?: number | null
+          label_source?: string | null
+          target_ts?: string
+          training_label_feedback?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       td1_rc_visual_stats_reset: {
         Row: {
           created_at: string
