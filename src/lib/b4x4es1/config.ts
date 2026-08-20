@@ -24,8 +24,8 @@ export const ES1_PROSPECTIVE_TEST_ID = "B4X4_ES1_ALIGNED_P045_R1_ACTIVE";
 export const ES1_IMPLEMENTATION_REVISION = "b4x4-es1-active-r2-frozen-parity";
 
 export const ES1_PUBLICATION_ENABLED = true;
-// Held OFF pending row-level parity reconciliation against the frozen replay.
-export const ES1_WEBHOOKS_ENABLED = true;
+// OFF by user request (2026-08-20): all outbound webhooks halted until re-enabled.
+export const ES1_WEBHOOKS_ENABLED = false;
 
 // ---- canonical market ----
 export const ES1_SYMBOL = "BTC-USDT";
