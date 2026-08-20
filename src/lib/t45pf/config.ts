@@ -162,11 +162,11 @@ export const T45PF_CONFIG_CANONICAL = JSON.stringify({
  * Verified by src/lib/t45pf/__tests__/identity.test.ts.
  */
 export const T45PF_CONFIG_HASH =
-  "__PENDING__" as const;
+  "9b20f6a3c54c11b594aa659574780a6562831268e360c771b7ba1b3c21c238db" as const;
 
 /** sha256 of the feature order alone — proves R2 is absent from the matrix. */
 export const T45PF_FEATURE_ORDER_HASH =
-  "__PENDING__" as const;
+  "3e487b3f291810e484e0b42033cbe98c378a0c218c25e6140691f117341820a5" as const;
 
 /** Exact 15-minute UTC boundary at/preceding `ms`. */
 export function floorTarget(ms: number): number {
