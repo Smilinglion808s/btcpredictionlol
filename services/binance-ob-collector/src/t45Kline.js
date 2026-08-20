@@ -24,7 +24,13 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, log = console }) {
+export function createT45Collector({
+  ingestUrl,
+  secret,
+  boundaryUrl = null,
+  buildIdentifier = null,
+  log = console,
+}) {
   if (!ingestUrl || !secret) {
     log.warn?.("[t45] disabled: T45_INGEST_URL / T45_INGEST_SECRET not configured");
     return { start() {}, stop() {} };
@@ -32,6 +38,8 @@ export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, 
 
   /** target_ts(ms) -> Map(offset -> sample) */
   const pending = new Map();
+  /** target_ts(ms) already handed to the boundary hook — exactly once each. */
+  const triggered = new Set();
   let ws = null;
   let heartbeat = null;
   let stopped = false;
@@ -44,8 +52,18 @@ export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, 
     last_error_message: null,
     last_target_ts: null,
     last_target_seconds: null,
+    last_boundary_target_ts: null,
+    last_boundary_status: null,
     deployment_id: buildIdentifier,
   };
+
+  function sign(body) {
+    const timestamp = String(Date.now());
+    return {
+      timestamp,
+      signature: createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex"),
+    };
+  }
 
   async function post(samples, extra = {}) {
     const body = JSON.stringify({
@@ -54,8 +72,7 @@ export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, 
       samples,
       health: { ...health, ...extra },
     });
-    const timestamp = String(Date.now());
-    const signature = createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");
+    const { timestamp, signature } = sign(body);
     try {
       const res = await fetch(ingestUrl, {
         method: "POST",
@@ -82,6 +99,44 @@ export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, 
     }
   }
 
+  /**
+   * Trigger the app's T+45 decision the instant the finalized offset-44 bar has
+   * been persisted. Cloudflare cron cannot be trusted to fire at a precise
+   * second, so this always-on process owns the timing. The app hook is
+   * idempotent, so an extra retry can never produce a second prediction.
+   */
+  async function triggerBoundary(targetMs) {
+    if (!boundaryUrl || triggered.has(targetMs)) return;
+    triggered.add(targetMs);
+    for (const key of triggered) if (key < targetMs - 4 * TF_MS) triggered.delete(key);
+
+    const targetTs = new Date(targetMs).toISOString();
+    const body = JSON.stringify({ target_ts: targetTs, source: COLLECTOR_VERSION });
+    const { timestamp, signature } = sign(body);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(boundaryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-t45-timestamp": timestamp,
+            "x-t45-signature": signature,
+          },
+          body,
+        });
+        health.last_boundary_target_ts = targetTs;
+        health.last_boundary_status = `HTTP_${res.status}`;
+        log.log?.(`[t45] boundary trigger ${targetTs} -> ${res.status}`);
+        if (res.ok) return;
+      } catch (error) {
+        health.last_boundary_target_ts = targetTs;
+        health.last_boundary_status = "FETCH_FAILED";
+        health.last_error_message = String(error).slice(0, 300);
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+  }
+
   function flush(targetMs) {
     const bucket = pending.get(targetMs);
     if (!bucket) return;
@@ -90,7 +145,11 @@ export function createT45Collector({ ingestUrl, secret, buildIdentifier = null, 
     health.last_target_ts = new Date(targetMs).toISOString();
     health.last_target_seconds = samples.length;
     health.status = samples.length === EXPECTED ? "LIVE" : "PARTIAL";
-    void post(samples);
+    // Persist first, then decide: the decision must never read a partial window.
+    void post(samples).then(() => {
+      if (samples.length === EXPECTED) return triggerBoundary(targetMs);
+      return undefined;
+    });
   }
 
   function onKline(k) {
