@@ -17,6 +17,8 @@ import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
+import { T45Card } from "@/components/t45-card";
+import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
@@ -85,6 +87,38 @@ function StatsPage() {
     refetchInterval: 60_000,
   });
   const [exportingEs1, setExportingEs1] = useState(false);
+
+  // T45 Balanced — shadow only. Its pending tile must flip as soon as the
+  // collector-triggered T+45s decision lands, so poll it at the same cadence.
+  const t45Fn = useServerFn(getT45Stats);
+  const t45Q = useQuery({ queryKey: ["t45-stats"], queryFn: () => t45Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const t45PendingFn = useServerFn(getT45Pending);
+  const t45PendingQ = useQuery({ queryKey: ["t45-pending"], queryFn: () => t45PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  const exportT45Fn = useServerFn(exportT45Csv);
+  const exportT45FeaturesFn = useServerFn(exportT45FeaturesCsv);
+  const [exportingT45, setExportingT45] = useState(false);
+
+  async function downloadT45Csv() {
+    try {
+      setExportingT45(true);
+      const res = await exportT45Fn();
+      if (!res || res.rows === 0) { alert("No T45 rows to export."); return; }
+      triggerDownload(res.csv, res.filename);
+    } finally {
+      setExportingT45(false);
+    }
+  }
+
+  async function downloadT45FeaturesCsv() {
+    try {
+      setExportingT45(true);
+      const res = await exportT45FeaturesFn();
+      if (!res || res.rows === 0) { alert("No T45 feature rows to export."); return; }
+      triggerDownload(res.csv, res.filename);
+    } finally {
+      setExportingT45(false);
+    }
+  }
 
   async function downloadEs1Csv() {
     try {
@@ -296,6 +330,14 @@ function StatsPage() {
           pending={(es1PendingQ.data as any) ?? null}
           onExport={downloadEs1Csv}
           exporting={exportingEs1}
+        />
+
+        <T45Card
+          stats={(t45Q.data as any) ?? {}}
+          pending={(t45PendingQ.data as any) ?? null}
+          onExport={downloadT45Csv}
+          onExportFeatures={downloadT45FeaturesCsv}
+          exporting={exportingT45}
         />
 
         <TD1Card

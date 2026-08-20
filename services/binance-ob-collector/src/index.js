@@ -22,6 +22,10 @@ const T45_INGEST_URL =
   INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-ingest");
 const T45_INGEST_SECRET = process.env.T45_INGEST_SECRET || process.env.BINANCE_OB_INGEST_SECRET;
 const T45_ENABLED = process.env.T45_ENABLED !== "false";
+// The always-on process owns T+45 timing; Cloudflare cron is only a watchdog.
+const T45_BOUNDARY_URL =
+  process.env.T45_BOUNDARY_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-boundary-run");
 const INGEST_SECRET = requireEnv("BINANCE_OB_INGEST_SECRET");
 
 const COLLECTOR_VERSION = "binance-ob-collector-r1";
@@ -456,11 +460,12 @@ async function main() {
     const t45 = createT45Collector({
       ingestUrl: T45_INGEST_URL,
       secret: T45_INGEST_SECRET,
+      boundaryUrl: T45_BOUNDARY_URL,
       buildIdentifier: BUILD_IDENTIFIER,
       log: { log, warn: (...a) => log(...a) },
     });
     t45.start();
-    log("[t45] started", { ingest: T45_INGEST_URL });
+    log("[t45] started", { ingest: T45_INGEST_URL, boundary: T45_BOUNDARY_URL });
   }
 
   log("[collector] started", { ingest: INGEST_URL, version: COLLECTOR_VERSION });

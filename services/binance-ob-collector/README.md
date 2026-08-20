@@ -28,6 +28,37 @@ direction, confidence, or webhook.
 | `BINANCE_OB_CONFIG_HASH` | no | Frozen config hash for audit parity |
 | `BINANCE_OB_FEATURE_SCHEMA_HASH` | no | Frozen feature schema hash |
 | `BINANCE_OB_BUILD_ID` | no | Deploy identifier recorded on every row |
+| `T45_ENABLED` | no | `false` disables the T45 stream entirely (default on) |
+| `T45_INGEST_URL` | no | Defaults to `<app-host>/api/public/hooks/t45-ingest` |
+| `T45_BOUNDARY_URL` | no | Defaults to `<app-host>/api/public/hooks/t45-boundary-run` |
+| `T45_INGEST_SECRET` | no | Defaults to `BINANCE_OB_INGEST_SECRET`; signs both T45 calls |
+
+## T45 Balanced (second stream, same process)
+
+The same always-on process also consumes Binance **Global** Spot
+`btcusdt@kline_1s`, keeps only FINAL bars at offsets **0..44** of each
+15-minute UTC candle, and:
+
+1. POSTs the 45 bars to `/api/public/hooks/t45-ingest` (HMAC signed).
+2. Immediately after that write succeeds, POSTs
+   `{ "target_ts": "<candle ISO>" }` to `/api/public/hooks/t45-boundary-run`
+   (same HMAC scheme) so the decision runs at a true T+45s.
+
+Cloudflare cron cannot be trusted with second-level timing, so this process —
+not cron — owns the T+45 trigger. A once-a-minute `mode=recover` cron watchdog
+exists only as a backstop; the app hook is idempotent, so a retry can never
+produce a second prediction row or webhook.
+
+Offset 45 and later bars are dropped before ingest, and a partially received
+window is posted but never triggers a decision.
+
+## Redeploying on Railway
+
+1. Push this repo (service root `services/binance-ob-collector`).
+2. Set/confirm the variables above — only `T45_*` are new, and all four are
+   optional if the ES1 values are already correct for the same app host.
+3. Redeploy; watch logs for `[t45] started` and, each quarter hour,
+   `[t45] boundary trigger <ts> -> 200`.
 
 ## Run
 
