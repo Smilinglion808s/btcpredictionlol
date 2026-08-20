@@ -420,11 +420,18 @@ async function postOnce(url: string, body: string, signature: string, event: Web
   }
 }
 
+/**
+ * Master kill switch for ALL outbound webhooks (every model, every event).
+ * Set to true only when the user explicitly asks to turn webhooks back on.
+ */
+export const OUTBOUND_WEBHOOKS_ENABLED = false;
+
 export async function deliverWebhook(
   supabase: SupabaseClient,
   event: WebhookEvent,
   payloadObj: Record<string, unknown>,
 ) {
+  if (!OUTBOUND_WEBHOOKS_ENABLED) return { delivered: 0 };
   const { data: endpoints } = await supabase
     .from("webhook_endpoints")
     .select("id,url,secret,events,is_active")
