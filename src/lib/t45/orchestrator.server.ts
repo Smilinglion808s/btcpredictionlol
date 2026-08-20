@@ -134,6 +134,31 @@ export async function runT45Boundary(
     return done({ reason: "TARGET_NOT_BOUNDARY" });
   }
   const targetMs = new Date(targetTs).getTime();
+
+  // Idempotency: exactly one decision per target. A watchdog retry, a duplicate
+  // collector trigger or a manual recover call must never write a second row.
+  const { data: existingRow } = await sb
+    .from("t45_predictions")
+    .select(
+      "decision_valid, probability_green, confidence_rank, active_prediction, active_sleeve, fit_id",
+    )
+    .eq("target_ts", targetTs)
+    .eq("model_version", T45_MODEL_VERSION)
+    .eq("run_mode", "LIVE")
+    .maybeSingle();
+  const existing = (existingRow ?? null) as Row | null;
+  if (existing && existing.decision_valid === true) {
+    return done({
+      decided: true,
+      reason: "ALREADY_DECIDED",
+      probabilityGreen: (existing.probability_green as number | null) ?? null,
+      confidenceRank: (existing.confidence_rank as number | null) ?? null,
+      activePrediction: (existing.active_prediction as number | null) ?? null,
+      activeSleeve: (existing.active_sleeve as string | null) ?? null,
+      fitId: (existing.fit_id as string | null) ?? null,
+    });
+  }
+
   const intoCandle = Date.now() - targetMs;
   if (intoCandle < T45_CUTOFF_OFFSET_MS) {
     return done({ reason: "BEFORE_CUTOFF" });
