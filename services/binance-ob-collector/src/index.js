@@ -12,8 +12,16 @@ import { createHmac } from "node:crypto";
 import { LocalOrderBook } from "./localBook.js";
 import { computeBookMetrics } from "./metrics.js";
 import { CollectorRuntime, HEARTBEAT_INTERVAL_MS as RUNTIME_HEARTBEAT_MS } from "./runtimeEvents.js";
+import { createT45Collector } from "./t45Kline.js";
 
 const INGEST_URL = requireEnv("BINANCE_OB_INGEST_URL");
+// T45 Balanced runs in the same always-on process but is a fully separate
+// stream, endpoint and secret. If it is not configured it simply stays off.
+const T45_INGEST_URL =
+  process.env.T45_INGEST_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-ingest");
+const T45_INGEST_SECRET = process.env.T45_INGEST_SECRET || process.env.BINANCE_OB_INGEST_SECRET;
+const T45_ENABLED = process.env.T45_ENABLED !== "false";
 const INGEST_SECRET = requireEnv("BINANCE_OB_INGEST_SECRET");
 
 const COLLECTOR_VERSION = "binance-ob-collector-r1";
@@ -443,6 +451,17 @@ async function main() {
     setTimeout(tick, 1000 - drift);
   };
   setTimeout(tick, 1000 - ((Date.now() + SAMPLE_LEAD_MS) % 1000));
+
+  if (T45_ENABLED) {
+    const t45 = createT45Collector({
+      ingestUrl: T45_INGEST_URL,
+      secret: T45_INGEST_SECRET,
+      buildIdentifier: BUILD_IDENTIFIER,
+      log: { log, warn: (...a) => log(...a) },
+    });
+    t45.start();
+    log("[t45] started", { ingest: T45_INGEST_URL });
+  }
 
   log("[collector] started", { ingest: INGEST_URL, version: COLLECTOR_VERSION });
 }
