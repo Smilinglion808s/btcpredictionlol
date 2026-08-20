@@ -257,7 +257,7 @@ export async function buildPriceFlowStats() {
   };
 }
 
-export async function loadPriceFlowPending(): Promise<Row | null> {
+export async function loadPriceFlowPending(): Promise<Record<string, string | number | boolean | null> | null> {
   const { data } = await (supabaseAdmin as any)
     .from(T45PF_PREDICTIONS_TABLE)
     .select("*")
@@ -266,7 +266,7 @@ export async function loadPriceFlowPending(): Promise<Row | null> {
     .order("target_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as Row | null) ?? null;
+  return (data as Record<string, string | number | boolean | null> | null) ?? null;
 }
 
 function csvEscape(v: unknown): string {
