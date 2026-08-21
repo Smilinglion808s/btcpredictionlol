@@ -18,7 +18,9 @@ import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
+import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
+import { getPriceFlowStats, getPriceFlowPending, exportPriceFlowCsv } from "@/lib/t45pf.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
