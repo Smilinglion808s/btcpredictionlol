@@ -1,7 +1,7 @@
 // T45 PriceFlow Q37.5 — boundary orchestration, decisioning and resolution.
 //
-// Shadow-only: `webhook_eligible` and `webhook_sent` are forced false on every
-// row and no outbound call exists in this module. Writes only to t45_pf_*.
+// Sole active webhook source: only LIVE, rank-passing, would-trade rows emit,
+// and only when activation is ACTIVE with webhooks enabled. Writes only to t45_pf_*.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -51,6 +51,7 @@ import {
   loadPFBars,
   loadPFPriorConfidences,
   loadPFTrainingRows,
+  markPFWebhook,
   pfRowIndex,
   readPFActivation,
   readPFFit,
@@ -69,7 +70,7 @@ export interface PFRunResult {
   wouldTrade: boolean;
   observations: number;
   fitId: string | null;
-  webhookEligible: false;
+  webhookEligible: boolean;
   elapsedMs: number;
 }
 
