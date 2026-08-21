@@ -1,6 +1,7 @@
 // T45 PriceFlow Q37.5 — dashboard stats and CSV exports (server only).
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { incrementalRows } from "../statsCache.server";
 import {
   FEATURE_SCHEMA,
   MODEL_NAME,
