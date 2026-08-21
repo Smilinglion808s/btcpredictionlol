@@ -18,7 +18,9 @@ import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
+import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
+import { getPriceFlowStats, getPriceFlowPending, exportPriceFlowCsv } from "@/lib/t45pf.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
@@ -98,6 +100,14 @@ function StatsPage() {
   const exportT45FeaturesFn = useServerFn(exportT45FeaturesCsv);
   const [exportingT45, setExportingT45] = useState(false);
 
+  // T45 PriceFlow Q37.5 — independent shadow model (no R2 input).
+  const pfFn = useServerFn(getPriceFlowStats);
+  const pfQ = useQuery({ queryKey: ["t45pf-stats"], queryFn: () => pfFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const pfPendingFn = useServerFn(getPriceFlowPending);
+  const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  const exportPfFn = useServerFn(exportPriceFlowCsv);
+  const [exportingPf, setExportingPf] = useState(false);
+
   async function downloadT45Csv() {
     try {
       setExportingT45(true);
@@ -119,6 +129,19 @@ function StatsPage() {
       setExportingT45(false);
     }
   }
+
+  async function downloadPriceFlowCsv() {
+    try {
+      setExportingPf(true);
+      const res = await exportPfFn();
+      if (!res || res.rows === 0) { alert("No PriceFlow rows to export."); return; }
+      triggerDownload(res.csv, res.filename);
+    } finally {
+      setExportingPf(false);
+    }
+  }
+
+
 
   async function downloadEs1Csv() {
     try {
@@ -339,6 +362,15 @@ function StatsPage() {
           onExportFeatures={downloadT45FeaturesCsv}
           exporting={exportingT45}
         />
+
+        <T45PriceFlowCard
+          stats={(pfQ.data as any) ?? {}}
+          pending={(pfPendingQ.data as any) ?? null}
+          onExport={downloadPriceFlowCsv}
+          exporting={exportingPf}
+        />
+
+
 
         <TD1Card
           title="TD1-RC"

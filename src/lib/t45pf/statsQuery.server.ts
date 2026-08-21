@@ -242,6 +242,8 @@ export async function buildPriceFlowStats() {
       null,
     ),
     legacyCounterfactual: {
+      label: "non-certified stored baseline",
+      certified: false,
       modelVersion: "t45-balanced-q375-r1",
       trades: legacy.trades,
       wins: legacy.wins,

@@ -88,7 +88,9 @@ export function T45PriceFlowCard({
           tone={Number(combined.net ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}
         />
         <Stat label="Win rate" value={pct(combined.winRate, 2)} />
-        <Stat label="Coverage" value={pct(combined.scheduledCoverage)} />
+        <Stat label="Scheduled coverage" value={pct(combined.scheduledCoverage)} />
+        <Stat label="Evaluable coverage" value={pct(combined.evaluableCoverage)} />
+        <Stat label="Evaluable rows" value={String(combined.evaluable ?? 0)} />
         <Stat label="Max drawdown" value={String(combined.maxDrawdown ?? 0)} />
         <Stat label="Max loss streak" value={String(combined.maxLossStreak ?? 0)} />
       </div>
@@ -126,10 +128,13 @@ export function T45PriceFlowCard({
       </div>
 
       <div className="mt-3 text-[10px] font-mono text-muted-foreground">
-        R2-dependent T45 counterfactual: {legacy.trades ?? 0} trades · {pct(legacy.winRate, 2)} ·
-        net {signed(legacy.net)} — webhook eligible rows: {stats.webhookProof?.eligibleRows ?? 0},
-        sent: {stats.webhookProof?.sentRows ?? 0}
+        Legacy R2-dependent T45 — non-certified stored baseline (stored decision stream; its hash
+        does not match the original oracle hash, so it is a reference only, not a certified
+        comparison): {legacy.trades ?? 0} trades · {pct(legacy.winRate, 2)} · net{" "}
+        {signed(legacy.net)} — webhook eligible rows: {stats.webhookProof?.eligibleRows ?? 0}, sent:{" "}
+        {stats.webhookProof?.sentRows ?? 0}
       </div>
+
 
       {daily.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1">
