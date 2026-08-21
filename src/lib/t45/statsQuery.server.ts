@@ -198,7 +198,7 @@ export async function buildT45Stats(): Promise<T45Stats> {
     mode: String(activation?.mode ?? "SHADOW_ONLY"),
     webhooksEnabled: activation?.webhooks_enabled === true,
     live: liveBucket,
-    research: bucket(researchRows),
+    research: researchBucket,
     collector: {
       streamKey: T45_STREAM_KEY,
       status: String(health?.status ?? "NO_DATA"),
