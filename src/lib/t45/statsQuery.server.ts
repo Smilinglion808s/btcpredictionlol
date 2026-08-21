@@ -182,7 +182,7 @@ export async function buildT45Stats(): Promise<T45Stats> {
 
   const blockers: string[] = [];
   if (!alive) blockers.push("ONE_SECOND_COLLECTOR_NOT_LIVE");
-  const liveBucket = bucket(liveRows);
+  
   if (liveBucket.rows === 0) blockers.push("NO_OBSERVED_LIVE_CYCLE");
   blockers.push("CERTIFIED_LIVE_R2_PRIOR_UNAVAILABLE");
   if (activation?.webhooks_enabled !== true) blockers.push("PUBLICATION_DISABLED");
