@@ -98,6 +98,14 @@ function StatsPage() {
   const exportT45FeaturesFn = useServerFn(exportT45FeaturesCsv);
   const [exportingT45, setExportingT45] = useState(false);
 
+  // T45 PriceFlow Q37.5 — independent shadow model (no R2 input).
+  const pfFn = useServerFn(getPriceFlowStats);
+  const pfQ = useQuery({ queryKey: ["t45pf-stats"], queryFn: () => pfFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const pfPendingFn = useServerFn(getPriceFlowPending);
+  const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  const exportPfFn = useServerFn(exportPriceFlowCsv);
+  const [exportingPf, setExportingPf] = useState(false);
+
   async function downloadT45Csv() {
     try {
       setExportingT45(true);
