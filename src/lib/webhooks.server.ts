@@ -440,6 +440,153 @@ export const OUTBOUND_WEBHOOKS_ENABLED = true;
  */
 export const WEBHOOK_ALLOWED_MODELS = new Set(["t45-priceflow"]);
 
+// ── Latency-critical delivery path ───────────────────────────────────────────
+// The active model must reach the bot the instant the decision exists, so the
+// endpoint list is cached (and pre-warmed before the boundary) and the first
+// POST goes out before any database logging happens.
+
+const ENDPOINT_CACHE_TTL_MS = 120_000;
+const FAST_POST_TIMEOUT_MS = 3_500;
+let endpointCache: { at: number; list: Endpoint[] } | null = null;
+
+/** Warm the endpoint cache ahead of the boundary so send-time does zero DB reads. */
+export async function primeWebhookEndpoints(
+  supabase: SupabaseClient,
+  force = false,
+): Promise<Endpoint[]> {
+  const now = Date.now();
+  if (!force && endpointCache && now - endpointCache.at < ENDPOINT_CACHE_TTL_MS) {
+    return endpointCache.list;
+  }
+  const { data } = await supabase
+    .from("webhook_endpoints")
+    .select("id,url,secret,events,is_active")
+    .eq("is_active", true);
+  endpointCache = { at: now, list: (data ?? []) as Endpoint[] };
+  return endpointCache.list;
+}
+
+export interface FastDeliveryResult {
+  delivered: number;
+  attempted: number;
+  latencyMs: number;
+  sentAt: string | null;
+  /** Logging + retries for failed endpoints; await it after the hot path. */
+  settle: Promise<void>;
+}
+
+/**
+ * Send now, log later. First attempt fires immediately with a short timeout;
+ * delivery rows, retries and endpoint bookkeeping run afterwards in `settle`.
+ */
+export async function deliverWebhookNow(
+  supabase: SupabaseClient,
+  event: WebhookEvent,
+  payloadObj: Record<string, unknown>,
+): Promise<FastDeliveryResult> {
+  const noop: FastDeliveryResult = {
+    delivered: 0,
+    attempted: 0,
+    latencyMs: 0,
+    sentAt: null,
+    settle: Promise.resolve(),
+  };
+  if (!OUTBOUND_WEBHOOKS_ENABLED) return noop;
+  const source = String(payloadObj.model ?? payloadObj.model_name ?? "");
+  if (!WEBHOOK_ALLOWED_MODELS.has(source)) return noop;
+
+  const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
+    e.events?.includes(event),
+  );
+  if (!endpoints.length) return noop;
+
+  const body = JSON.stringify({ event, ...payloadObj });
+  const signatures = endpoints.map((ep) =>
+    createHmac("sha256", ep.secret).update(body).digest("hex"),
+  );
+
+  const t0 = Date.now();
+  const first = await Promise.all(
+    endpoints.map(async (ep, i) => {
+      try {
+        const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
+        return { ep, i, status: r.status, ok: r.ok, resBody: r.body, error: null as string | null };
+      } catch (e) {
+        return {
+          ep,
+          i,
+          status: null as number | null,
+          ok: false,
+          resBody: null as string | null,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    }),
+  );
+  const latencyMs = Date.now() - t0;
+  const delivered = first.filter((r) => r.ok).length;
+
+  const payloadJson = JSON.parse(body);
+  const settle = (async () => {
+    await Promise.all(
+      first.map(async (r) => {
+        let lastStatus = r.status;
+        await supabase.from("webhook_deliveries").insert({
+          endpoint_id: r.ep.id,
+          event,
+          payload: payloadJson,
+          status_code: r.status,
+          response_body: r.resBody,
+          error: r.error,
+          attempt: 1,
+        });
+
+        if (!r.ok) {
+          for (let attempt = 2; attempt <= BACKOFFS_MS.length; attempt++) {
+            await new Promise((res) => setTimeout(res, BACKOFFS_MS[attempt - 1] ?? 2_000));
+            try {
+              const retry = await postOnce(r.ep.url, body, signatures[r.i], event);
+              lastStatus = retry.status;
+              await supabase.from("webhook_deliveries").insert({
+                endpoint_id: r.ep.id,
+                event,
+                payload: payloadJson,
+                status_code: retry.status,
+                response_body: retry.body,
+                attempt,
+              });
+              if (retry.ok) break;
+            } catch (e) {
+              await supabase.from("webhook_deliveries").insert({
+                endpoint_id: r.ep.id,
+                event,
+                payload: payloadJson,
+                error: e instanceof Error ? e.message : String(e),
+                attempt,
+              });
+            }
+          }
+        }
+
+        await supabase
+          .from("webhook_endpoints")
+          .update({ last_delivery_at: new Date().toISOString(), last_status: lastStatus })
+          .eq("id", r.ep.id);
+      }),
+    );
+  })();
+
+  return {
+    delivered,
+    attempted: endpoints.length,
+    latencyMs,
+    sentAt: new Date(t0).toISOString(),
+    settle,
+  };
+}
+
+
+
 export async function deliverWebhook(
   supabase: SupabaseClient,
   event: WebhookEvent,
