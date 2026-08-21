@@ -1,6 +1,7 @@
 // T45 PriceFlow Q37.5 — dashboard stats and CSV exports (server only).
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { incrementalRows } from "../statsCache.server";
 import {
   FEATURE_SCHEMA,
   MODEL_NAME,
@@ -151,22 +152,32 @@ function rolling7(days: { date: string; net: number }[]): { min: number | null; 
   return { min, latest };
 }
 
+/** Only the columns the dashboard aggregates need — never `*` (wide feature JSON). */
+const STATS_COLUMNS =
+  "target_ts, local_date, decision_valid, active_result, packet_ready, timing_valid, unique_observations, fit_certified, rank_history_count, webhook_eligible, webhook_sent";
+
+/** Immutable-tail cached row read: only the recent window is re-queried. */
+function cachedRows(cacheKey: string, table: string, columns: string, apply: (q: any) => any) {
+  return incrementalRows<Row>(
+    cacheKey,
+    (sinceIso) =>
+      pageAll(table, columns, (q) => {
+        const scoped = apply(q);
+        return (sinceIso ? scoped.gte("target_ts", sinceIso) : scoped).order("target_ts", {
+          ascending: true,
+        });
+      }) as Promise<Row[]>,
+    { tsKey: "target_ts", keyFn: (r) => String(r.target_ts) },
+  );
+}
+
 export async function buildPriceFlowStats() {
   const [liveRows, backfillRows, healthRes, activationRes, legacyRows] = await Promise.all([
-    pageAll(T45PF_PREDICTIONS_TABLE, "*", (q) =>
-      q
-        .eq("model_version", MODEL_VERSION)
-        .eq("run_mode", "LIVE")
-        .order("target_ts", { ascending: true }),
+    cachedRows("t45pf:live", T45PF_PREDICTIONS_TABLE, STATS_COLUMNS, (q) =>
+      q.eq("model_version", MODEL_VERSION).eq("run_mode", "LIVE"),
     ),
-    pageAll(
-      T45PF_PREDICTIONS_TABLE,
-      "target_ts, local_date, decision_valid, active_result, packet_ready, timing_valid, unique_observations, fit_certified, rank_history_count",
-      (q) =>
-        q
-          .eq("model_version", MODEL_VERSION)
-          .eq("run_mode", "BACKFILL")
-          .order("target_ts", { ascending: true }),
+    cachedRows("t45pf:backfill", T45PF_PREDICTIONS_TABLE, STATS_COLUMNS, (q) =>
+      q.eq("model_version", MODEL_VERSION).eq("run_mode", "BACKFILL"),
     ),
     (supabaseAdmin as any)
       .from("t45_collector_health")
@@ -178,10 +189,11 @@ export async function buildPriceFlowStats() {
       .select("*")
       .eq("singleton_key", T45PF_ACTIVATION_KEY)
       .maybeSingle(),
-    pageAll("t45_predictions", "target_ts, active_result", (q) =>
-      q.eq("model_version", "t45-balanced-q375-r1").order("target_ts", { ascending: true }),
+    cachedRows("t45pf:legacy", "t45_predictions", "target_ts, active_result", (q) =>
+      q.eq("model_version", "t45-balanced-q375-r1"),
     ),
   ]);
+
 
   const health = (healthRes?.data ?? null) as Row | null;
   const activation = (activationRes?.data ?? null) as Row | null;
