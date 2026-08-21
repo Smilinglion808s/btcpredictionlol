@@ -101,8 +101,9 @@ export function T45PriceFlowCard({
         </div>
       </div>
 
-
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
         <Stat label="Opportunities" value={String(combined.scheduled ?? 0)} />
+
         <Stat label="Trades" value={String(combined.trades ?? 0)} />
         <Stat
           label="W / L / P / A"
