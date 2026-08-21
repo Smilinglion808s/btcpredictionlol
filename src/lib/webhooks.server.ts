@@ -393,9 +393,16 @@ export function buildResolvedWebhookPayload(
   };
 }
 
-async function postOnce(url: string, body: string, signature: string, event: WebhookEvent) {
+async function postOnce(
+  url: string,
+  body: string,
+  signature: string,
+  event: WebhookEvent,
+  timeoutMs = 5_000,
+) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(url, {
       method: "POST",
