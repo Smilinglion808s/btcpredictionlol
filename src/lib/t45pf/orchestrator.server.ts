@@ -1,7 +1,7 @@
 // T45 PriceFlow Q37.5 — boundary orchestration, decisioning and resolution.
 //
-// Shadow-only: `webhook_eligible` and `webhook_sent` are forced false on every
-// row and no outbound call exists in this module. Writes only to t45_pf_*.
+// Sole active webhook source: only LIVE, rank-passing, would-trade rows emit,
+// and only when activation is ACTIVE with webhooks enabled. Writes only to t45_pf_*.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -51,6 +51,7 @@ import {
   loadPFBars,
   loadPFPriorConfidences,
   loadPFTrainingRows,
+  markPFWebhook,
   pfRowIndex,
   readPFActivation,
   readPFFit,
@@ -69,7 +70,7 @@ export interface PFRunResult {
   wouldTrade: boolean;
   observations: number;
   fitId: string | null;
-  webhookEligible: false;
+  webhookEligible: boolean;
   elapsedMs: number;
 }
 
@@ -390,14 +391,53 @@ export async function runPriceFlowBoundary(
     decision_reason: decision.reason,
   });
 
+  // Outbound webhook — LIVE tradeable decisions only, and only while the
+  // activation row says ACTIVE with webhooks enabled. Never for BACKFILL,
+  // abstains, invalid rows or resolutions. Failures never affect the decision.
+  const tradeable =
+    runMode === "LIVE" &&
+    rankReady &&
+    decision.activeWouldTrade === true &&
+    (decision.activePrediction === 1 || decision.activePrediction === -1);
+  let webhookSent = false;
+  if (tradeable && mode === "ACTIVE" && activation.webhooks_enabled === true) {
+    try {
+      const { deliverWebhook } = await import("@/lib/webhooks.server");
+      const { buildPriceFlowWebhookPayload } = await import("./webhook.server");
+      const res = await deliverWebhook(
+        sb,
+        "prediction.created",
+        buildPriceFlowWebhookPayload({
+          targetTs,
+          direction: decision.activePrediction as 1 | -1,
+          probabilityGreen: decision.probabilityGreen,
+          confidenceRank: decision.confidenceRank,
+          fitId,
+          openPrice: bars.length ? bars[0].open : null,
+        }),
+      );
+      webhookSent = res.delivered > 0;
+    } catch (e) {
+      await auditPF(
+        sb,
+        "webhook-error",
+        { target_ts: targetTs, error: e instanceof Error ? e.message : String(e) },
+        false,
+      );
+    }
+    await markPFWebhook(sb, targetTs, runMode, webhookSent);
+  }
+
   await auditPF(sb, "boundary", {
     target_ts: targetTs,
     probability: decision.probabilityGreen,
     rank: decision.confidenceRank,
     reason: decision.reason,
     fit_id: fitId,
+    webhook_sent: webhookSent,
     elapsed_ms: Date.now() - started,
   });
+
 
   return done({
     decided: rankReady,
