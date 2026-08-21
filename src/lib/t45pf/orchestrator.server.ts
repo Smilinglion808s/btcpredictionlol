@@ -197,6 +197,15 @@ export async function runPriceFlowBoundary(
   const activation = await readPFActivation(sb);
   const mode = String(activation.mode ?? PUBLICATION_MODE);
   identity.activation_mode = mode;
+
+  // Warm the webhook endpoint cache while we still have time budget, so the
+  // send at decision time performs zero database reads.
+  const webhookArmed =
+    runMode === "LIVE" && mode === "ACTIVE" && activation.webhooks_enabled === true;
+  if (webhookArmed) {
+    void primeWebhookEndpoints(sb).catch(() => {});
+  }
+
   const write = async (extra: Row) => {
     await upsertPFPrediction(sb, {
       ...identity,
@@ -204,6 +213,7 @@ export async function runPriceFlowBoundary(
       ...extra,
     });
   };
+
 
   if (mode !== "SHADOW_ONLY" && mode !== "ACTIVE") {
     await write({ decision_valid: false, decision_reason: T45PF_REASONS.INACTIVE });
