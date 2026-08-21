@@ -234,11 +234,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
       })
-
-      .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["v6-stats"] });
-        qc.invalidateQueries({ queryKey: ["v6-pending"] });
-      })
       .on("postgres_changes", { event: "*", schema: "public", table: "b4x4_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["b4x4-stats"] });
         qc.invalidateQueries({ queryKey: ["b4x4-pending"] });
