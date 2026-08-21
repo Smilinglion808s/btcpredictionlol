@@ -120,6 +120,19 @@ function StatsPage() {
     }
   }
 
+  async function downloadPriceFlowCsv() {
+    try {
+      setExportingPf(true);
+      const res = await exportPfFn();
+      if (!res || res.rows === 0) { alert("No PriceFlow rows to export."); return; }
+      triggerDownload(res.csv, res.filename);
+    } finally {
+      setExportingPf(false);
+    }
+  }
+
+
+
   async function downloadEs1Csv() {
     try {
       setExportingEs1(true);
