@@ -74,15 +74,8 @@ export async function sweepUnresolvedRows(
   const sinceIso = new Date(nowMs - LOOKBACK_MS).toISOString();
   const candles = await loadConfirmedCandles(supabase, sinceIso);
 
-  // ---- V6: its own resolver already sweeps every due unresolved row. ----
-  let v6Swept = false;
-  try {
-    const { resolveDueV6 } = await import("@/lib/v6/orchestrator");
-    await resolveDueV6(supabase);
-    v6Swept = true;
-  } catch (e) {
-    errors.push(`v6: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  // ---- V6: retired. No further tracking or resolution sweeping. ----
+  const v6Swept = false;
 
   // ---- B4x4: resolve any closed target still missing resolved_at. ----
   const b4Targets: string[] = [];

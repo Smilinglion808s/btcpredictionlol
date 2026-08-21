@@ -12,8 +12,6 @@ import {
   resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 
-import { getV6Stats, getV6Pending, exportV6Csv, getV6Warmup, getV6RegimeInverter, resetV6VisualStats } from "@/lib/v6.functions";
-import { initV6Warmup, runV6AtBoundary } from "@/lib/v6-admin.functions";
 import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
@@ -65,16 +63,6 @@ function StatsPage() {
   const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
 
 
-  const v6Fn = useServerFn(getV6Stats);
-  const v6Q = useQuery({ queryKey: ["v6-stats"], queryFn: () => v6Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const v6PendingFn = useServerFn(getV6Pending);
-  const v6PendingQ = useQuery({ queryKey: ["v6-pending"], queryFn: () => v6PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
-  const v6WarmupFn = useServerFn(getV6Warmup);
-  const v6WarmupQ = useQuery({ queryKey: ["v6-warmup"], queryFn: () => v6WarmupFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const v6InverterFn = useServerFn(getV6RegimeInverter);
-  const v6InverterQ = useQuery({ queryKey: ["v6-regime-inverter"], queryFn: () => v6InverterFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const exportV6Fn = useServerFn(exportV6Csv);
-  const resetV6Fn = useServerFn(resetV6VisualStats);
   const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
 
@@ -163,34 +151,11 @@ function StatsPage() {
 
 
 
-  const [exportingV6, setExportingV6] = useState(false);
-  const [resettingV6, setResettingV6] = useState(false);
-
-  async function doResetV6Stats() {
-    if (!confirm("Reset V6 visual stats to zero? The CSV export and all tracking keep every historical row.")) return;
-    try {
-      setResettingV6(true);
-      await resetV6Fn();
-      qc.invalidateQueries({ queryKey: ["v6-stats"] });
-    } finally {
-      setResettingV6(false);
-    }
-  }
 
   const [resettingTd1, setResettingTd1] = useState(false);
   const [exportingTd1, setExportingTd1] = useState(false);
 
 
-  async function downloadV6Csv() {
-    try {
-      setExportingV6(true);
-      const res = await exportV6Fn();
-      if (!res || res.rows === 0) { alert("No V6 rows to export."); return; }
-      triggerDownload(res.csv, `V6-${stamp()}.csv`);
-    } finally {
-      setExportingV6(false);
-    }
-  }
 
   async function doResetTd1Stats() {
     if (!confirm("Reset TD1-RC visual stats to zero? The CSV export will keep all historical rows.")) return;
@@ -269,11 +234,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
       })
-
-      .on("postgres_changes", { event: "*", schema: "public", table: "v6_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["v6-stats"] });
-        qc.invalidateQueries({ queryKey: ["v6-pending"] });
-      })
       .on("postgres_changes", { event: "*", schema: "public", table: "b4x4_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["b4x4-stats"] });
         qc.invalidateQueries({ queryKey: ["b4x4-pending"] });
@@ -315,9 +275,6 @@ function StatsPage() {
 
   const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
 
-  const v6Stats = (v6Q.data ?? {}) as Record<string, any>;
-  const v6Pending = v6PendingQ.data as Record<string, any> | null;
-  const v6Fmt = (n: unknown, digits = 2) => (n == null || n === "" ? "—" : Number(n).toFixed(digits));
 
   const [refreshing, setRefreshing] = useState(false);
   const forceRefreshFn = useServerFn(forceRefreshStats);
@@ -395,17 +352,6 @@ function StatsPage() {
           dailyCount={7}
         />
 
-        <V6Card
-          stats={v6Stats}
-          pending={v6Pending}
-          warmup={(v6WarmupQ.data as Record<string, any> | null) ?? null}
-          inverter={(v6InverterQ.data as Record<string, any> | null) ?? null}
-          fmt={v6Fmt}
-          onExport={downloadV6Csv}
-          exporting={exportingV6}
-          onReset={doResetV6Stats}
-          resetting={resettingV6}
-        />
       </div>
 
 
@@ -949,386 +895,3 @@ function TD1Card({
 }
 
 
-function V6Stat({ label, value, tone }: { label: string; value: string | number; tone?: "bull" | "bear" | "violet" }) {
-  const toneClass = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : tone === "violet" ? "text-violet" : "text-foreground";
-  return (
-    <div className="v6-chip px-3 py-2">
-      <div className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className={`font-mono text-sm font-semibold mt-0.5 tabular-nums ${toneClass}`}>{value}</div>
-    </div>
-  );
-}
-
-function V6Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-5">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{title}</span>
-        <span className="h-px flex-1 bg-gradient-to-r from-violet/40 to-transparent" />
-      </div>
-      <div className="grid grid-cols-2 gap-2">{children}</div>
-    </div>
-  );
-}
-
-function V6Card({
-  stats,
-  pending,
-  warmup,
-  inverter,
-  fmt,
-  onExport,
-  exporting,
-  onReset,
-  resetting,
-}: {
-  stats: Record<string, any>;
-  pending: Record<string, any> | null;
-  warmup: Record<string, any> | null;
-  inverter: Record<string, any> | null;
-  fmt: (n: unknown, digits?: number) => string;
-  onExport: () => void;
-  exporting: boolean;
-  onReset: () => void;
-  resetting: boolean;
-}) {
-
-  const invWins = Number(stats.inverter_shadow_wins ?? 0);
-  const invLosses = Number(stats.inverter_shadow_losses ?? 0);
-
-  const winRate = Number(stats.win_rate ?? 0);
-  const breakeven = 50;
-
-  const rawNet = Number(stats.raw_net ?? 0);
-  const wins = Number(stats.wins ?? 0);
-  const losses = Number(stats.losses ?? 0);
-  const pushes = Number(stats.pushes ?? 0);
-  const pendingCount = Number(stats.pending ?? 0);
-  const aboveBreakeven = winRate >= breakeven;
-
-
-  const upper = String(pending?.final_prediction ?? "—").toUpperCase();
-  const predTone =
-    upper === "GREEN"
-      ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
-      : upper === "RED"
-        ? "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]"
-        : "border-violet/40 text-violet bg-violet/10";
-
-  const gaugeR = 34;
-  const circumference = 2 * Math.PI * gaugeR;
-  const pct = Math.max(0, Math.min(100, winRate));
-
-  return (
-    <Card className="v6-shell rounded-2xl p-6">
-      <span className="v6-orbit-ring" aria-hidden />
-      <span className="v6-sheen" aria-hidden />
-
-      <div className="relative flex items-start justify-between gap-3 mb-6">
-        <div className="min-w-0">
-          <div className="text-[9px] uppercase tracking-[0.28em] text-violet/80 mb-1">Frozen forward test</div>
-          <h3 className="v6-title text-4xl font-bold font-heading tracking-tight leading-none">V6</h3>
-          <div className="text-[10px] text-muted-foreground mt-1">V6-r5.1 Router + Route Brake</div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onExport} disabled={exporting}>
-            {exporting ? "…" : "CSV"}
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs border-violet/30 hover:border-violet/60" onClick={onReset} disabled={resetting}>
-            {resetting ? "…" : "Reset"}
-          </Button>
-
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-violet/40 bg-violet/10 text-[10px] font-bold uppercase tracking-[0.16em] text-violet">
-            <span className="size-1.5 rounded-full bg-violet v6-live-dot" />
-            Live
-          </div>
-        </div>
-      </div>
-
-      <div className="relative flex items-center gap-5 mb-5">
-        <div className="relative size-[86px] shrink-0">
-          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
-            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
-            <circle
-              cx="40"
-              cy="40"
-              r={gaugeR}
-              fill="none"
-              stroke={aboveBreakeven ? "var(--bull)" : "var(--violet)"}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - pct / 100)}
-              className="transition-all duration-700"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-mono text-lg font-bold tabular-nums leading-none">{winRate}%</span>
-            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">win rate</span>
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Raw net · primary</div>
-          <div
-            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${rawNet > 0 ? "text-bull" : rawNet < 0 ? "text-bear" : "text-foreground"}`}
-          >
-            {rawNet > 0 ? "+" : ""}{fmt(rawNet)}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
-            break-even {fmt(breakeven, 2)}%
-            <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
-              {aboveBreakeven ? "▲ above" : "▼ below"}
-            </span>
-          </div>
-
-        </div>
-      </div>
-
-      <div className="relative grid grid-cols-4 gap-2">
-        <V6Stat label="Wins" value={wins} tone="bull" />
-        <V6Stat label="Losses" value={losses} tone="bear" />
-        <V6Stat label="Pushes" value={pushes} />
-        <V6Stat label="Pending" value={pendingCount} />
-      </div>
-
-      <div className="relative">
-        <Daily3d days={(stats.daily_3d ?? []) as Array<Record<string, any>>} accent="cyan" />
-      </div>
-
-      {/* Slimmed tile: high-level W/L only. Full rule-by-rule diagnostics,
-          per-branch audits and current-candle internals stay in the V6 CSV. */}
-      <div className="relative">
-        <V6Section title="Forward test">
-          <V6Stat label="Coverage" value={`${Number(stats.coverage ?? 0)}%`} />
-          <V6Stat label="GREEN W/L" value={`${Number(stats.green_wins ?? 0)}/${Number(stats.green_losses ?? 0)}`} />
-          <V6Stat label="RED W/L" value={`${Number(stats.red_wins ?? 0)}/${Number(stats.red_losses ?? 0)}`} />
-          <V6Stat label="Longest loss streak" value={Number(stats.max_loss_streak ?? 0)} />
-          <V6Stat label="Max raw drawdown" value={fmt(stats.max_raw_drawdown)} tone="bear" />
-          <V6Stat label="Rolling 96 raw net" value={fmt(stats.rolling96_raw_net)} />
-        </V6Section>
-
-        <V6Section title="Router · V6-r5 (live authority)">
-          <V6Stat
-            label="GREEN route"
-            value={pending?.r5_green_candidate ? "PASS" : pending?.r5_green_evaluable ? "FAIL" : "n/a"}
-            tone={pending?.r5_green_candidate ? "bull" : undefined}
-          />
-          <V6Stat
-            label="RED anchor route"
-            value={pending?.r5_red_anchor_candidate ? "PASS" : pending?.r5_red_anchor_evaluable ? "FAIL" : "n/a"}
-            tone={pending?.r5_red_anchor_candidate ? "bear" : undefined}
-          />
-          <V6Stat
-            label="RED broad route"
-            value={pending?.r5_red_broad_candidate ? "PASS" : pending?.r5_red_broad_evaluable ? "FAIL" : "n/a"}
-            tone={pending?.r5_red_broad_candidate ? "bear" : undefined}
-          />
-          <V6Stat label="Router decision" value={String(pending?.r5_router_decision ?? "—")} />
-          <V6Stat label="Route conflict" value={pending?.r5_conflict ? "YES" : "no"} tone={pending?.r5_conflict ? "bear" : undefined} />
-          <V6Stat label="Legacy layers" value="shadow only" tone="violet" />
-        </V6Section>
-
-        <V6Section title="Route brake · V6-r5.1 (veto only)">
-          <V6Stat
-            label="GREEN route"
-            value={pending?.r5_green_route_pause_active ? "PAUSED" : "armed"}
-            tone={pending?.r5_green_route_pause_active ? "bear" : "bull"}
-          />
-          <V6Stat
-            label="GREEN loss streak"
-            value={`${Number(pending?.r5_green_route_consecutive_shadow_losses ?? 0)}/2`}
-          />
-          <V6Stat
-            label="Anchor RED route"
-            value={pending?.r5_anchor_red_route_pause_active ? "PAUSED" : "armed"}
-            tone={pending?.r5_anchor_red_route_pause_active ? "bear" : "bull"}
-          />
-          <V6Stat
-            label="Anchor RED loss streak"
-            value={`${Number(pending?.r5_anchor_red_route_consecutive_shadow_losses ?? 0)}/2`}
-          />
-          <V6Stat label="Broad RED route" value="unrestricted" tone="violet" />
-          <V6Stat
-            label="Brake this candle"
-            value={pending?.r5_route_brake_triggered ? String(pending?.r5_route_brake_route_key ?? "YES") : "no"}
-            tone={pending?.r5_route_brake_triggered ? "bear" : undefined}
-          />
-        </V6Section>
-
-
-        <V6Section title="Selectivity · legacy shadows">
-          <V6Stat label="Strategic abstains" value={Number(stats.strategic_abstains ?? 0)} />
-          <V6Stat label="Structure vetoes" value={Number(stats.structure_vetoes ?? 0)} />
-          <V6Stat label="Avoided losses" value={Number(stats.structure_avoided_losses ?? 0)} tone="bull" />
-          <V6Stat label="Sacrificed wins" value={Number(stats.structure_sacrificed_wins ?? 0)} tone="bear" />
-          <V6Stat label="Inverter shadow W/L" value={`${invWins}/${invLosses}`} tone="violet" />
-          <V6Stat label="Operational failures" value={Number(stats.op_fails ?? 0)} />
-        </V6Section>
-      </div>
-
-
-      <V6WarmupPanel warmup={warmup} />
-
-      <div className="relative mt-6 pt-4 border-t border-violet/20">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Current prediction</div>
-            {pending?.target_candle_ts && (
-              <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
-                {new Date(pending.target_candle_ts).toLocaleString()}
-              </div>
-            )}
-          </div>
-          <span className={`px-4 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-[0.16em] font-mono ${predTone}`}>
-            {upper}
-          </span>
-        </div>
-        {(pending?.abstain_reason || pending?.operational_error) && (
-          <div className="text-[10px] text-muted-foreground mt-2 text-right">
-            {pending.abstain_reason ?? pending.operational_error}
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-
-
-
-
-
-function V6WarmupPanel({ warmup }: { warmup: Record<string, any> | null }) {
-  const status = String(warmup?.v6_warmup_status ?? "NOT_STARTED");
-  const ready = status === "READY";
-  const count = Number(warmup?.warmup_candle_count ?? 0);
-  const baseCount = Number(warmup?.warmup_base_predictions_count ?? 0);
-  const decisions = Array.isArray(warmup?.warmup_base_predictions_json)
-    ? (warmup?.warmup_base_predictions_json as Array<Record<string, any>>)
-    : [];
-  const tone = ready
-    ? "border-bull/50 text-bull bg-bull/10"
-    : status === "FAILED"
-      ? "border-bear/50 text-bear bg-bear/10"
-      : "border-violet/40 text-violet bg-violet/10";
-  const ts = (v: unknown) => (v ? new Date(String(v)).toLocaleString() : "—");
-
-  const qc = useQueryClient();
-  const initFn = useServerFn(initV6Warmup);
-  const boundaryFn = useServerFn(runV6AtBoundary);
-  const [initing, setIniting] = useState(false);
-  const [init, setInit] = useState<Record<string, any> | null>(null);
-  const [initErr, setInitErr] = useState<string | null>(null);
-  const [watching, setWatching] = useState(false);
-
-  const onInit = async () => {
-    setIniting(true);
-    setInitErr(null);
-    try {
-      const res = (await initFn()) as Record<string, any>;
-      setInit(res);
-      setWatching(true);
-      qc.invalidateQueries({ queryKey: ["v6-warmup"] });
-    } catch (e) {
-      setInitErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIniting(false);
-    }
-  };
-
-  // Once initialized, invoke runV6 at the next boundary and keep refreshing
-  // readiness until the canonical replay reports READY or FAILED.
-  useEffect(() => {
-    if (!watching) return;
-    if (status === "READY" || status === "FAILED") {
-      setWatching(false);
-      return;
-    }
-    const targetMs = init?.next_target_ts ? new Date(String(init.next_target_ts)).getTime() : 0;
-    const tick = async () => {
-      if (targetMs && Date.now() >= targetMs) {
-        try {
-          await boundaryFn();
-        } catch (e) {
-          setInitErr(e instanceof Error ? e.message : String(e));
-        }
-      }
-      qc.invalidateQueries({ queryKey: ["v6-warmup"] });
-      qc.invalidateQueries({ queryKey: ["v6-pending"] });
-    };
-    const id = setInterval(tick, 10_000);
-    return () => clearInterval(id);
-  }, [watching, status, init, boundaryFn, qc]);
-
-  return (
-    <div className="relative mt-6 pt-4 border-t border-violet/20">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Warmup / readiness</div>
-        <span className={`px-3 py-1 rounded-lg border text-[11px] font-bold uppercase tracking-[0.14em] font-mono ${tone}`}>
-          {ready ? "V6 READY" : status}
-        </span>
-      </div>
-
-      {ready && (
-        <div className="mt-2 text-[11px] font-mono text-bull">
-          {count} confirmed candles replayed · {baseCount} prior base predictions restored
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={onInit} disabled={initing} className="h-7 text-[10px]">
-          {initing ? "Initializing…" : "Initialize V6 Warmup"}
-        </Button>
-        {watching && <span className="text-[10px] text-muted-foreground">waiting for next boundary…</span>}
-      </div>
-
-      {init && (
-        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
-          <div>Contiguous confirmed candles</div>
-          <div className={`text-right ${init.sufficient_history ? "text-bull" : "text-bear"}`}>
-            {init.contiguous_candles} / {init.required_candles}
-          </div>
-          <div>Next target candle</div>
-          <div className="text-right text-foreground truncate">{ts(init.next_target_ts)}</div>
-          <div>Canonical stream</div>
-          <div className="text-right text-foreground truncate">{String(init.stream ?? "")}</div>
-        </div>
-      )}
-
-      {(initErr || init?.error) && (
-        <div className="mt-2 text-[10px] text-bear break-all">{String(initErr ?? init?.error)}</div>
-      )}
-
-
-
-      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
-        <div>Confirmed history</div><div className="text-right text-foreground">{count}</div>
-        <div>First warmup candle</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_first_candle_ts)}</div>
-        <div>Last warmup candle</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_last_candle_ts)}</div>
-        <div>Continuity valid</div><div className="text-right text-foreground">{warmup?.warmup_continuity_valid ? "yes" : "no"}</div>
-        <div>Technical state valid</div><div className="text-right text-foreground">{warmup?.warmup_feature_valid ? "yes" : "no"}</div>
-        <div>Prior base predictions</div><div className="text-right text-foreground">{baseCount} / 7</div>
-        <div>Warmup completed</div><div className="text-right text-foreground truncate">{ts(warmup?.warmup_completed_at)}</div>
-      </div>
-
-      {decisions.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {decisions.map((d, i) => {
-            const dir = String(d.base_v6_prediction ?? "—").toUpperCase();
-            const c = dir === "GREEN" ? "text-bull border-bull/40" : dir === "RED" ? "text-bear border-bear/40" : "text-muted-foreground border-border";
-            return (
-              <span key={i} className={`px-1.5 py-0.5 rounded border text-[9px] font-mono ${c}`} title={String(d.target_candle_ts ?? "")}>
-                {dir}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {warmup?.warmup_error && (
-        <div className="mt-2 text-[10px] text-bear break-all">{String(warmup.warmup_error)}</div>
-      )}
-    </div>
-  );
-}
