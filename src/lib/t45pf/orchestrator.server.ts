@@ -57,6 +57,8 @@ import {
   readPFFit,
   upsertPFPrediction,
 } from "./store.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
+import { buildPriceFlowWebhookPayload } from "./webhook.server";
 
 type Row = Record<string, unknown>;
 
@@ -197,6 +199,15 @@ export async function runPriceFlowBoundary(
   const activation = await readPFActivation(sb);
   const mode = String(activation.mode ?? PUBLICATION_MODE);
   identity.activation_mode = mode;
+
+  // Warm the webhook endpoint cache while we still have time budget, so the
+  // send at decision time performs zero database reads.
+  const webhookArmed =
+    runMode === "LIVE" && mode === "ACTIVE" && activation.webhooks_enabled === true;
+  if (webhookArmed) {
+    void primeWebhookEndpoints(sb).catch(() => {});
+  }
+
   const write = async (extra: Row) => {
     await upsertPFPrediction(sb, {
       ...identity,
@@ -204,6 +215,7 @@ export async function runPriceFlowBoundary(
       ...extra,
     });
   };
+
 
   if (mode !== "SHADOW_ONLY" && mode !== "ACTIVE") {
     await write({ decision_valid: false, decision_reason: T45PF_REASONS.INACTIVE });
@@ -376,7 +388,40 @@ export async function runPriceFlowBoundary(
   const decision = pfDecide(probability, priorConfidences, T45PF_REASONS);
   const rankReady = decision.confidenceRank != null;
 
-  await write({
+  // Outbound webhook — LIVE tradeable decisions only, and only while the
+  // activation row says ACTIVE with webhooks enabled. Never for BACKFILL,
+  // abstains, invalid rows or resolutions. Failures never affect the decision.
+  const tradeable =
+    rankReady &&
+    decision.activeWouldTrade === true &&
+    (decision.activePrediction === 1 || decision.activePrediction === -1);
+
+  // Send FIRST: the POST leaves before the prediction row is persisted, and the
+  // database write runs concurrently with it. Nothing may sit in front of the
+  // wire on the hot path.
+  const sendPromise: Promise<
+    { delivered: number; latencyMs: number; settle: Promise<void>; error?: string } | null
+  > = webhookArmed && tradeable
+    ? deliverWebhookNow(
+        sb,
+        "prediction.created",
+        buildPriceFlowWebhookPayload({
+          targetTs,
+          direction: decision.activePrediction as 1 | -1,
+          probabilityGreen: decision.probabilityGreen,
+          confidenceRank: decision.confidenceRank,
+          fitId,
+          openPrice: bars.length ? bars[0].open : null,
+        }),
+      ).catch((e) => ({
+        delivered: 0,
+        latencyMs: 0,
+        settle: Promise.resolve(),
+        error: e instanceof Error ? e.message : String(e),
+      }))
+    : Promise.resolve(null);
+
+  const writePromise = write({
     ...packetRow,
     ...fitRow,
     probability_green: decision.probabilityGreen,
@@ -391,41 +436,19 @@ export async function runPriceFlowBoundary(
     decision_reason: decision.reason,
   });
 
-  // Outbound webhook — LIVE tradeable decisions only, and only while the
-  // activation row says ACTIVE with webhooks enabled. Never for BACKFILL,
-  // abstains, invalid rows or resolutions. Failures never affect the decision.
-  const tradeable =
-    runMode === "LIVE" &&
-    rankReady &&
-    decision.activeWouldTrade === true &&
-    (decision.activePrediction === 1 || decision.activePrediction === -1);
+  const [send] = await Promise.all([sendPromise, writePromise]);
+
   let webhookSent = false;
-  if (tradeable && mode === "ACTIVE" && activation.webhooks_enabled === true) {
-    try {
-      const { deliverWebhook } = await import("@/lib/webhooks.server");
-      const { buildPriceFlowWebhookPayload } = await import("./webhook.server");
-      const res = await deliverWebhook(
-        sb,
-        "prediction.created",
-        buildPriceFlowWebhookPayload({
-          targetTs,
-          direction: decision.activePrediction as 1 | -1,
-          probabilityGreen: decision.probabilityGreen,
-          confidenceRank: decision.confidenceRank,
-          fitId,
-          openPrice: bars.length ? bars[0].open : null,
-        }),
-      );
-      webhookSent = res.delivered > 0;
-    } catch (e) {
-      await auditPF(
-        sb,
-        "webhook-error",
-        { target_ts: targetTs, error: e instanceof Error ? e.message : String(e) },
-        false,
-      );
-    }
+  let webhookLatencyMs: number | null = null;
+  if (send) {
+    webhookSent = send.delivered > 0;
+    webhookLatencyMs = send.latencyMs;
     await markPFWebhook(sb, targetTs, runMode, webhookSent);
+    if (send.error) {
+      await auditPF(sb, "webhook-error", { target_ts: targetTs, error: send.error }, false);
+    }
+    // Delivery logging and retries for failed endpoints, off the hot path.
+    await send.settle.catch(() => {});
   }
 
   await auditPF(sb, "boundary", {
@@ -435,8 +458,10 @@ export async function runPriceFlowBoundary(
     reason: decision.reason,
     fit_id: fitId,
     webhook_sent: webhookSent,
+    webhook_latency_ms: webhookLatencyMs,
     elapsed_ms: Date.now() - started,
   });
+
 
 
   return done({
