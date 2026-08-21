@@ -355,13 +355,17 @@ function StatsPage() {
           exporting={exportingEs1}
         />
 
-        <T45Card
-          stats={(t45Q.data as any) ?? {}}
-          pending={(t45PendingQ.data as any) ?? null}
-          onExport={downloadT45Csv}
-          onExportFeatures={downloadT45FeaturesCsv}
-          exporting={exportingT45}
-        />
+        {/* Legacy R2-dependent T45 Balanced — retired from the dashboard. */}
+        {SHOW_LEGACY_T45 && (
+          <T45Card
+            stats={(t45Q.data as any) ?? {}}
+            pending={(t45PendingQ.data as any) ?? null}
+            onExport={downloadT45Csv}
+            onExportFeatures={downloadT45FeaturesCsv}
+            exporting={exportingT45}
+          />
+        )}
+
 
         <T45PriceFlowCard
           stats={(pfQ.data as any) ?? {}}
