@@ -19,11 +19,12 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 }
 
 /**
- * T45 PriceFlow Q37.5 — shadow-only tile.
+ * T45 PriceFlow Q37.5 — live tile.
  *
  * Separate identity, storage and statistics from T45 Balanced. No R2 prior is
- * an input, and no row here can ever be webhook eligible.
+ * an input. This is the only model permitted to emit outbound webhooks.
  */
+
 export function T45PriceFlowCard({
   stats,
   pending,
