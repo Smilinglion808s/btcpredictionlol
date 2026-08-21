@@ -78,7 +78,30 @@ export function T45PriceFlowCard({
         <Stat label="Rank ready" value={readiness.rankReady ? "YES" : "NO"} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+      <div className="mt-4 rounded-lg border border-lightning/30 p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-lightning mb-2">
+          Live tracking (run_mode = LIVE)
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Stat label="Live trades" value={String(live.trades ?? 0)} />
+          <Stat
+            label="W / L / P / A"
+            value={`${live.wins ?? 0}/${live.losses ?? 0}/${live.pushes ?? 0}/${live.abstains ?? 0}`}
+          />
+          <Stat label="Live win rate" value={pct(live.winRate, 2)} />
+          <Stat
+            label="Live net"
+            value={signed(live.net)}
+            tone={Number(live.net ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}
+          />
+          <Stat label="Live coverage" value={pct(live.evaluableCoverage)} />
+          <Stat label="Unresolved" value={String(live.unresolved ?? 0)} />
+          <Stat label="Webhooks sent" value={String(stats.webhookProof?.sentRows ?? 0)} />
+          <Stat label="Last live target" value={live.lastTs ? String(live.lastTs).slice(5, 16) : "—"} />
+        </div>
+      </div>
+
+
         <Stat label="Opportunities" value={String(combined.scheduled ?? 0)} />
         <Stat label="Trades" value={String(combined.trades ?? 0)} />
         <Stat
