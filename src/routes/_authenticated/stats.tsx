@@ -363,6 +363,15 @@ function StatsPage() {
           exporting={exportingT45}
         />
 
+        <T45PriceFlowCard
+          stats={(pfQ.data as any) ?? {}}
+          pending={(pfPendingQ.data as any) ?? null}
+          onExport={downloadPriceFlowCsv}
+          exporting={exportingPf}
+        />
+
+
+
         <TD1Card
           title="TD1-RC"
           eyebrow="Active layer · webhook source"
