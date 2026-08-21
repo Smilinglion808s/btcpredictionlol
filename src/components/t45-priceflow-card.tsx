@@ -88,7 +88,9 @@ export function T45PriceFlowCard({
           tone={Number(combined.net ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}
         />
         <Stat label="Win rate" value={pct(combined.winRate, 2)} />
-        <Stat label="Coverage" value={pct(combined.scheduledCoverage)} />
+        <Stat label="Scheduled coverage" value={pct(combined.scheduledCoverage)} />
+        <Stat label="Evaluable coverage" value={pct(combined.evaluableCoverage)} />
+        <Stat label="Evaluable rows" value={String(combined.evaluable ?? 0)} />
         <Stat label="Max drawdown" value={String(combined.maxDrawdown ?? 0)} />
         <Stat label="Max loss streak" value={String(combined.maxLossStreak ?? 0)} />
       </div>
