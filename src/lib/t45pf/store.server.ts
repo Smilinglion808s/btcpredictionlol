@@ -173,14 +173,41 @@ export async function loadPFPriorConfidences(
     .reverse();
 }
 
-/** Shadow-only invariant enforced in code as well as in the schema default. */
+/**
+ * Webhook flags default to false; only a LIVE tradeable decision may set them
+ * true, and only after the delivery attempt has been made.
+ */
 export async function upsertPFPrediction(sb: SupabaseClient, row: Row): Promise<void> {
   const { error } = await sb.from(T45PF_PREDICTIONS_TABLE).upsert(
-    { ...row, webhook_eligible: false, webhook_sent: false } as never,
+    {
+      webhook_eligible: false,
+      webhook_sent: false,
+      ...row,
+    } as never,
     { onConflict: "target_ts,model_version,run_mode", ignoreDuplicates: false },
   );
   if (error) throw new Error(`t45pf_prediction_upsert:${error.message}`);
 }
+
+/** Marks the row after a delivery attempt. Never blocks decisioning. */
+export async function markPFWebhook(
+  sb: SupabaseClient,
+  targetTs: string,
+  runMode: string,
+  sent: boolean,
+): Promise<void> {
+  try {
+    await sb
+      .from(T45PF_PREDICTIONS_TABLE)
+      .update({ webhook_eligible: true, webhook_sent: sent } as never)
+      .eq("target_ts", targetTs)
+      .eq("model_version", MODEL_VERSION)
+      .eq("run_mode", runMode);
+  } catch {
+    /* ignore */
+  }
+}
+
 
 export async function auditPF(
   sb: SupabaseClient,
