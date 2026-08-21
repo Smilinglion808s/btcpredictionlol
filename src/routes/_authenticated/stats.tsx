@@ -97,9 +97,9 @@ function StatsPage() {
   // T45 Balanced — shadow only. Its pending tile must flip as soon as the
   // collector-triggered T+45s decision lands, so poll it at the same cadence.
   const t45Fn = useServerFn(getT45Stats);
-  const t45Q = useQuery({ queryKey: ["t45-stats"], queryFn: () => t45Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const t45Q = useQuery({ queryKey: ["t45-stats"], queryFn: () => t45Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000, enabled: SHOW_LEGACY_T45 });
   const t45PendingFn = useServerFn(getT45Pending);
-  const t45PendingQ = useQuery({ queryKey: ["t45-pending"], queryFn: () => t45PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  const t45PendingQ = useQuery({ queryKey: ["t45-pending"], queryFn: () => t45PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000, enabled: SHOW_LEGACY_T45 });
   const exportT45Fn = useServerFn(exportT45Csv);
   const exportT45FeaturesFn = useServerFn(exportT45FeaturesCsv);
   const [exportingT45, setExportingT45] = useState(false);

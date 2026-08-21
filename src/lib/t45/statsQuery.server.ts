@@ -71,62 +71,56 @@ export interface T45Bucket {
   lastTs: string | null;
 }
 
-function bucket(rows: readonly Row[]): T45Bucket {
-  let wins = 0;
-  let losses = 0;
-  let pushes = 0;
-  let abstains = 0;
-  let unresolved = 0;
-  for (const r of rows) {
-    switch (r.active_result) {
-      case "WIN":
-        wins++;
-        break;
-      case "LOSS":
-        losses++;
-        break;
-      case "PUSH":
-        pushes++;
-        break;
-      case "ABSTAIN":
-        abstains++;
-        break;
-      default:
-        unresolved++;
-    }
-  }
-  const trades = wins + losses + pushes;
+
+async function bucketFor(runMode: string): Promise<T45Bucket> {
+  const results = ["WIN", "LOSS", "PUSH", "ABSTAIN"] as const;
+  const base = () =>
+    (supabaseAdmin as any)
+      .from("t45_predictions")
+      .select("target_ts", { count: "exact", head: true })
+      .eq("model_version", T45_MODEL_VERSION)
+      .eq("run_mode", runMode);
+
+  const [total, ...counts] = await Promise.all([
+    base(),
+    ...results.map((r) => base().eq("active_result", r)),
+  ]);
+  const [wins, losses, pushes, abstains] = counts.map((c: any) => Number(c?.count ?? 0));
+
+  const edge = async (asc: boolean) => {
+    const { data } = await (supabaseAdmin as any)
+      .from("t45_predictions")
+      .select("target_ts")
+      .eq("model_version", T45_MODEL_VERSION)
+      .eq("run_mode", runMode)
+      .order("target_ts", { ascending: asc })
+      .limit(1)
+      .maybeSingle();
+    return data?.target_ts ? String(data.target_ts) : null;
+  };
+  const [firstTs, lastTs] = await Promise.all([edge(true), edge(false)]);
+
+  const rows = Number((total as any)?.count ?? 0);
   const decided = wins + losses;
-  const ts = rows.map((r) => String(r.target_ts)).sort();
   return {
-    rows: rows.length,
-    trades,
+    rows,
+    trades: wins + losses + pushes,
     wins,
     losses,
     pushes,
     abstains,
-    unresolved,
+    unresolved: Math.max(0, rows - wins - losses - pushes - abstains),
     winRate: decided > 0 ? (wins / decided) * 100 : null,
     net: wins - losses,
-    firstTs: ts[0] ?? null,
-    lastTs: ts[ts.length - 1] ?? null,
+    firstTs,
+    lastTs,
   };
 }
 
 export async function buildT45Stats(): Promise<T45Stats> {
-  const [liveRows, researchRows, healthRes, activationRes] = await Promise.all([
-    pageAll("t45_predictions", "target_ts, active_result", (q) =>
-      q
-        .eq("model_version", T45_MODEL_VERSION)
-        .eq("run_mode", "LIVE")
-        .order("target_ts", { ascending: true }),
-    ),
-    pageAll("t45_predictions", "target_ts, active_result", (q) =>
-      q
-        .eq("model_version", T45_MODEL_VERSION)
-        .eq("run_mode", "BACKFILL")
-        .order("target_ts", { ascending: true }),
-    ),
+  const [liveBucket, researchBucket, healthRes, activationRes] = await Promise.all([
+    bucketFor("LIVE"),
+    bucketFor("BACKFILL"),
     (supabaseAdmin as any)
       .from("t45_collector_health")
       .select("*")
@@ -139,6 +133,7 @@ export async function buildT45Stats(): Promise<T45Stats> {
       .maybeSingle(),
   ]);
 
+
   const health = (healthRes?.data ?? null) as Row | null;
   const activation = (activationRes?.data ?? null) as Row | null;
   const heartbeat = health?.last_heartbeat_at ? String(health.last_heartbeat_at) : null;
@@ -146,7 +141,7 @@ export async function buildT45Stats(): Promise<T45Stats> {
 
   const blockers: string[] = [];
   if (!alive) blockers.push("ONE_SECOND_COLLECTOR_NOT_LIVE");
-  const liveBucket = bucket(liveRows);
+  
   if (liveBucket.rows === 0) blockers.push("NO_OBSERVED_LIVE_CYCLE");
   blockers.push("CERTIFIED_LIVE_R2_PRIOR_UNAVAILABLE");
   if (activation?.webhooks_enabled !== true) blockers.push("PUBLICATION_DISABLED");
@@ -162,7 +157,7 @@ export async function buildT45Stats(): Promise<T45Stats> {
     mode: String(activation?.mode ?? "SHADOW_ONLY"),
     webhooksEnabled: activation?.webhooks_enabled === true,
     live: liveBucket,
-    research: bucket(researchRows),
+    research: researchBucket,
     collector: {
       streamKey: T45_STREAM_KEY,
       status: String(health?.status ?? "NO_DATA"),
