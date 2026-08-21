@@ -19,6 +19,10 @@ import { listB4x4Recent } from "@/lib/b4x4.functions";
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
+
+/** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
+const SHOW_LEGACY_T45 = false as boolean;
+
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
 import { getPriceFlowStats, getPriceFlowPending, exportPriceFlowCsv } from "@/lib/t45pf.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
@@ -355,13 +359,17 @@ function StatsPage() {
           exporting={exportingEs1}
         />
 
-        <T45Card
-          stats={(t45Q.data as any) ?? {}}
-          pending={(t45PendingQ.data as any) ?? null}
-          onExport={downloadT45Csv}
-          onExportFeatures={downloadT45FeaturesCsv}
-          exporting={exportingT45}
-        />
+        {/* Legacy R2-dependent T45 Balanced — retired from the dashboard. */}
+        {SHOW_LEGACY_T45 && (
+          <T45Card
+            stats={(t45Q.data as any) ?? {}}
+            pending={(t45PendingQ.data as any) ?? null}
+            onExport={downloadT45Csv}
+            onExportFeatures={downloadT45FeaturesCsv}
+            exporting={exportingT45}
+          />
+        )}
+
 
         <T45PriceFlowCard
           stats={(pfQ.data as any) ?? {}}
