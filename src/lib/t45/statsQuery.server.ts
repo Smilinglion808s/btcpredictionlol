@@ -71,47 +71,6 @@ export interface T45Bucket {
   lastTs: string | null;
 }
 
-function bucket(rows: readonly Row[]): T45Bucket {
-  let wins = 0;
-  let losses = 0;
-  let pushes = 0;
-  let abstains = 0;
-  let unresolved = 0;
-  for (const r of rows) {
-    switch (r.active_result) {
-      case "WIN":
-        wins++;
-        break;
-      case "LOSS":
-        losses++;
-        break;
-      case "PUSH":
-        pushes++;
-        break;
-      case "ABSTAIN":
-        abstains++;
-        break;
-      default:
-        unresolved++;
-    }
-  }
-  const trades = wins + losses + pushes;
-  const decided = wins + losses;
-  const ts = rows.map((r) => String(r.target_ts)).sort();
-  return {
-    rows: rows.length,
-    trades,
-    wins,
-    losses,
-    pushes,
-    abstains,
-    unresolved,
-    winRate: decided > 0 ? (wins / decided) * 100 : null,
-    net: wins - losses,
-    firstTs: ts[0] ?? null,
-    lastTs: ts[ts.length - 1] ?? null,
-  };
-}
 
 async function bucketFor(runMode: string): Promise<T45Bucket> {
   const results = ["WIN", "LOSS", "PUSH", "ABSTAIN"] as const;
