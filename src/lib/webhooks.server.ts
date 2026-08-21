@@ -424,7 +424,14 @@ async function postOnce(url: string, body: string, signature: string, event: Web
  * Master kill switch for ALL outbound webhooks (every model, every event).
  * Set to true only when the user explicitly asks to turn webhooks back on.
  */
-export const OUTBOUND_WEBHOOKS_ENABLED = false;
+export const OUTBOUND_WEBHOOKS_ENABLED = true;
+
+/**
+ * Single permitted outbound source. Every other model (B4x4, ES1, V6, TD1-RC,
+ * A2, Model 3/6/7) may still call deliverWebhook — their payloads are dropped
+ * here so exactly one model can ever reach the bot.
+ */
+export const WEBHOOK_ALLOWED_MODELS = new Set(["t45-priceflow"]);
 
 export async function deliverWebhook(
   supabase: SupabaseClient,
@@ -432,6 +439,9 @@ export async function deliverWebhook(
   payloadObj: Record<string, unknown>,
 ) {
   if (!OUTBOUND_WEBHOOKS_ENABLED) return { delivered: 0 };
+  const source = String(payloadObj.model ?? payloadObj.model_name ?? "");
+  if (!WEBHOOK_ALLOWED_MODELS.has(source)) return { delivered: 0 };
+
   const { data: endpoints } = await supabase
     .from("webhook_endpoints")
     .select("id,url,secret,events,is_active")
