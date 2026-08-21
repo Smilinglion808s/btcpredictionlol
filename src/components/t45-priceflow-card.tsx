@@ -52,13 +52,15 @@ export function T45PriceFlowCard({
             T45 PriceFlow Q37.5
           </h3>
           <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-            {stats.modelVersion ?? "t45-price-flow-q375-r1"} · no R2 input · shadow only
+            {stats.modelVersion ?? "t45-price-flow-q375-r1"} · no R2 input ·{" "}
+            {stats.webhooksEnabled ? "webhooks LIVE" : "webhooks off"}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[9px] uppercase tracking-[0.16em] px-2 py-1 rounded-full border border-lightning/40 text-lightning">
             {stats.activationMode ?? "SHADOW_ONLY"}
           </span>
+
           <Button size="sm" variant="outline" onClick={onExport} disabled={exporting}>
             {exporting ? "Exporting…" : "CSV"}
           </Button>
