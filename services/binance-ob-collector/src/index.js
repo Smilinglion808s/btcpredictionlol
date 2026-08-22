@@ -28,6 +28,17 @@ const T45_ENABLED = process.env.T45_ENABLED !== "false";
 const T45_BOUNDARY_URL =
   process.env.T45_BOUNDARY_URL ||
   INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-boundary-run");
+// T30 PriceFlow Balanced — a third fully separate stream, endpoint and secret.
+// It owns its own WebSocket so it can never perturb T45 capture or timing.
+const T30_INGEST_URL =
+  process.env.T30_INGEST_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t30-ingest");
+const T30_INGEST_SECRET = process.env.T30_INGEST_SECRET || process.env.BINANCE_OB_INGEST_SECRET;
+const T30_ENABLED = process.env.T30_ENABLED !== "false";
+const T30_BOUNDARY_URL =
+  process.env.T30_BOUNDARY_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t30-boundary-run");
+
 const INGEST_SECRET = requireEnv("BINANCE_OB_INGEST_SECRET");
 
 const COLLECTOR_VERSION = "binance-ob-collector-r1";
