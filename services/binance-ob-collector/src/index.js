@@ -13,6 +13,8 @@ import { LocalOrderBook } from "./localBook.js";
 import { computeBookMetrics } from "./metrics.js";
 import { CollectorRuntime, HEARTBEAT_INTERVAL_MS as RUNTIME_HEARTBEAT_MS } from "./runtimeEvents.js";
 import { createT45Collector } from "./t45Kline.js";
+import { createT30Collector } from "./t30Kline.js";
+
 
 const INGEST_URL = requireEnv("BINANCE_OB_INGEST_URL");
 // T45 Balanced runs in the same always-on process but is a fully separate
