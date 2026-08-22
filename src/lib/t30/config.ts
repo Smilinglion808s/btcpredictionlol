@@ -185,8 +185,8 @@ export const T30_CONFIG_CANONICAL = JSON.stringify({
  * client and server agree without pulling node:crypto into the browser bundle.
  * Verified by src/lib/t30/__tests__/identity.test.ts.
  */
-export const T30_CONFIG_HASH = "__T30_CONFIG_HASH__";
-export const T30_FEATURE_ORDER_HASH = "__T30_FEATURE_ORDER_HASH__";
+export const T30_CONFIG_HASH = "9cffa47d20199d8f66b728b8d20ff49281d86be6c6c41880c8034672e2db9be4";
+export const T30_FEATURE_ORDER_HASH = "5d25a446e95d92d4bfb9fc71df4274c16097572b8c2b3006b4766785e7cff1ed";
 
 export function floorTarget(ms: number): number {
   return Math.floor(ms / TF_MS) * TF_MS;
