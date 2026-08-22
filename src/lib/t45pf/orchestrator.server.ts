@@ -35,26 +35,22 @@ import {
 } from "./config";
 import { buildT45Features, type T45SecondBar } from "@/lib/t45/features";
 import {
-  fitPFHead,
   pfBlockIndex,
   pfBlockStart,
   pfDecide,
-  pfFitCertified,
   pfProbability,
   pfScore,
-  type PFHead,
 } from "./head";
-import { pfArtifactHash, pfFitId } from "./replay";
+import { ensurePFFit, pfRolloverAudit } from "./fitService.server";
+import { pfArtifactHash } from "./replay";
 import {
   auditPF,
-  insertPFFit,
   loadPFBars,
   loadPFPriorConfidences,
   loadPFTrainingRows,
   markPFWebhook,
   pfRowIndex,
   readPFActivation,
-  readPFFit,
   upsertPFPrediction,
 } from "./store.server";
 import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
@@ -133,7 +129,11 @@ export function pfVectorFrom(values: Record<string, number | null>): number[] | 
 export async function runPriceFlowBoundary(
   sb: SupabaseClient,
   targetTsInput: string,
-  opts: { allowLate?: boolean; runMode?: "LIVE" | "BACKFILL" } = {},
+  opts: {
+    allowLate?: boolean;
+    runMode?: "LIVE" | "BACKFILL";
+    executionPath?: "IMMEDIATE_BOUNDARY" | "WATCHDOG" | "CATCHUP" | "BACKFILL";
+  } = {},
 ): Promise<PFRunResult> {
   const started = Date.now();
   const targetTs = new Date(targetTsInput).toISOString();
@@ -163,6 +163,7 @@ export async function runPriceFlowBoundary(
     feature_order_hash: T45PF_FEATURE_ORDER_HASH,
     impl_revision: T45PF_IMPL_REVISION,
     run_mode: runMode,
+    execution_path: opts.executionPath ?? (runMode === "LIVE" ? "IMMEDIATE_BOUNDARY" : "BACKFILL"),
     utc_date: utcDate(targetTs),
     local_date: boiseDate(targetTs),
     scaler: T45PF_SCALER,
@@ -299,68 +300,61 @@ export async function runPriceFlowBoundary(
     return done({ reason: T45PF_REASONS.FIT_NOT_READY, observations: packet.unique });
   }
 
-  const fitId = pfFitId(blockStart);
-  const stored = await readPFFit(sb, fitId);
-  let head: PFHead | null = stored
-    ? {
-        scaler: {
-          center: stored.scaler_center as number[],
-          scale: stored.scaler_scale as number[],
-        },
-        coefficients: stored.coefficients as number[],
-        intercept: Number(stored.intercept),
-        trainingRowCount: Number(stored.training_row_count),
-        trainingStartTs: String(stored.training_start_ts ?? ""),
-        trainingEndTs: String(stored.training_end_ts ?? ""),
-        trainingFingerprint: String(stored.training_fingerprint ?? ""),
-        blockIndex: Number(stored.block_index),
-        blockStartIndex: Number(stored.block_start_index),
-        converged: stored.converged === true,
-        iterations: Number(stored.iterations ?? 0),
-        gradientNorm: Number(stored.gradient_norm ?? 0),
-      }
-    : null;
-
-  if (!head) {
-    const history = await loadPFTrainingRows(sb, blockStart);
-    head = fitPFHead(blockStart, history);
-    if (!head) {
-      await write({
-        ...packetRow,
-        fit_block_index: pfBlockIndex(blockStart),
-        fit_block_start_index: blockStart,
-        decision_valid: false,
-        decision_reason: T45PF_REASONS.FIT_NOT_READY,
-      });
-      return done({ reason: T45PF_REASONS.FIT_NOT_READY, observations: packet.unique });
-    }
-    await insertPFFit(sb, {
-      fit_id: fitId,
-      model_version: MODEL_VERSION,
-      config_hash: T45PF_CONFIG_HASH,
-      feature_schema: FEATURE_SCHEMA,
-      feature_order_hash: T45PF_FEATURE_ORDER_HASH,
-      block_index: head.blockIndex,
-      block_start_index: head.blockStartIndex,
-      training_start_ts: head.trainingStartTs,
-      training_end_ts: head.trainingEndTs,
-      training_row_count: head.trainingRowCount,
-      training_fingerprint: head.trainingFingerprint,
-      feature_order: T45PF_FEATURE_ORDER,
-      scaler: T45PF_SCALER,
-      scaler_center: head.scaler.center,
-      scaler_scale: head.scaler.scale,
-      coefficients: head.coefficients,
-      intercept: head.intercept,
-      logistic_c: T45PF_LOGISTIC_C,
-      solver: T45PF_SOLVER,
-      converged: head.converged,
-      certified: pfFitCertified(head),
-      iterations: head.iterations,
-      gradient_norm: head.gradientNorm,
-      artifact_hash: pfArtifactHash(head),
-      impl_revision: T45PF_IMPL_REVISION,
+  // Load-or-mint the certified fit for this 96-row block. Fit failures never
+  // abort the request: the fail-closed row is written immediately with the
+  // exact operational error.
+  let ensured;
+  try {
+    ensured = await ensurePFFit(sb, blockStart);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await write({
+      ...packetRow,
+      fit_block_index: pfBlockIndex(blockStart),
+      fit_block_start_index: blockStart,
+      decision_valid: false,
+      decision_reason: T45PF_REASONS.FIT_NOT_READY,
+      last_resolution_error: `fit_exception:${message}`.slice(0, 400),
     });
+    await auditPF(
+      sb,
+      "fit-exception",
+      { target_ts: targetTs, block_start: blockStart, error: message },
+      false,
+    );
+    return done({ reason: T45PF_REASONS.FIT_NOT_READY, observations: packet.unique });
+  }
+
+  const fitId = ensured.fitId;
+  const head = ensured.head;
+  if (!head || !ensured.certified) {
+    const uncertified =
+      ensured.status === "UNCERTIFIED" || ensured.status === "CONFLICTING_ARTIFACT";
+    const reason = uncertified
+      ? T45PF_REASONS.FIT_UNCERTIFIED
+      : T45PF_REASONS.FIT_NOT_READY;
+    await write({
+      ...packetRow,
+      fit_id: uncertified ? fitId : null,
+      fit_block_index: pfBlockIndex(blockStart),
+      fit_block_start_index: blockStart,
+      fit_certified: false,
+      decision_valid: false,
+      decision_reason: reason,
+      last_resolution_error: ensured.error?.slice(0, 400) ?? null,
+    });
+    await auditPF(
+      sb,
+      "fit-not-ready",
+      {
+        target_ts: targetTs,
+        block_start: blockStart,
+        status: ensured.status,
+        error: ensured.error,
+      },
+      false,
+    );
+    return done({ reason, fitId: uncertified ? fitId : null, observations: packet.unique });
   }
 
   const fitRow: Row = {
@@ -370,18 +364,9 @@ export async function runPriceFlowBoundary(
     fit_training_row_count: head.trainingRowCount,
     fit_training_fingerprint: head.trainingFingerprint,
     fit_artifact_hash: pfArtifactHash(head),
-    fit_certified: pfFitCertified(head),
+    fit_certified: true,
   };
 
-  if (!pfFitCertified(head)) {
-    await write({
-      ...packetRow,
-      ...fitRow,
-      decision_valid: false,
-      decision_reason: T45PF_REASONS.FIT_UNCERTIFIED,
-    });
-    return done({ reason: T45PF_REASONS.FIT_UNCERTIFIED, fitId, observations: packet.unique });
-  }
 
   const probability = pfProbability(head, vector);
   const priorConfidences = await loadPFPriorConfidences(sb, targetTs);
@@ -450,6 +435,12 @@ export async function runPriceFlowBoundary(
     // Delivery logging and retries for failed endpoints, off the hot path.
     await send.settle.catch(() => {});
   }
+
+  // Preflight the next rollover so the following boundary never mints on the
+  // hot path. Never allowed to affect this decision.
+  void pfRolloverAudit(sb, index + 1, { prepare: true })
+    .then((a) => auditPF(sb, "rollover-preflight", a as unknown as Row, a.error == null))
+    .catch(() => {});
 
   await auditPF(sb, "boundary", {
     target_ts: targetTs,
