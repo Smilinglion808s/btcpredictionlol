@@ -104,16 +104,27 @@ export async function upsertT30FeatureBatch(
   rows: readonly Row[],
 ): Promise<number> {
   let n = 0;
-  for (let i = 0; i < rows.length; i += 400) {
-    const chunk = rows.slice(i, i + 400);
-    const { error } = await sb
-      .from(T30_FEATURES_TABLE)
-      .upsert(chunk as never, { onConflict: "target_ts,feature_version" });
-    if (error) throw new Error(`t30_feature_batch:${error.message}`);
+  for (let i = 0; i < rows.length; i += 96) {
+    const chunk = rows.slice(i, i + 96);
+    let lastErr = "";
+    let ok = false;
+    for (let attempt = 0; attempt < 5 && !ok; attempt++) {
+      const { error } = await sb
+        .from(T30_FEATURES_TABLE)
+        .upsert(chunk as never, { onConflict: "target_ts,feature_version" });
+      if (!error) {
+        ok = true;
+        break;
+      }
+      lastErr = error.message;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+    if (!ok) throw new Error(`t30_feature_batch:${lastErr}`);
     n += chunk.length;
   }
   return n;
 }
+
 
 /** Absolute walk-forward index: feature rows strictly before `targetTs`. */
 export async function t30RowIndex(sb: SupabaseClient, targetTs: string): Promise<number> {
