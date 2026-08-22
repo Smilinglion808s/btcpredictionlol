@@ -481,6 +481,19 @@ async function main() {
     log("[t45] started", { ingest: T45_INGEST_URL, boundary: T45_BOUNDARY_URL });
   }
 
+  if (T30_ENABLED) {
+    const t30 = createT30Collector({
+      ingestUrl: T30_INGEST_URL,
+      secret: T30_INGEST_SECRET,
+      boundaryUrl: T30_BOUNDARY_URL,
+      buildIdentifier: BUILD_IDENTIFIER,
+      log: { log, warn: (...a) => log(...a) },
+    });
+    t30.start();
+    log("[t30] started", { ingest: T30_INGEST_URL, boundary: T30_BOUNDARY_URL });
+  }
+
+
   log("[collector] started", { ingest: INGEST_URL, version: COLLECTOR_VERSION });
 }
 
