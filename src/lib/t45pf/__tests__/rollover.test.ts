@@ -5,8 +5,15 @@
 // block boundary failed the minimum-rows gate and the model abstained with
 // FIT_NOT_READY forever.
 
-import { describe, expect, it } from "vitest";
-import { T45PF_BLOCK_SIZE, T45PF_FEATURE_ORDER, T45PF_TRAIN_WINDOW } from "../config";
+import { describe, expect, it, vi } from "vitest";
+import {
+  MODEL_VERSION,
+  T45PF_BLOCK_SIZE,
+  T45PF_CONFIG_HASH,
+  T45PF_FEATURE_ORDER,
+  T45PF_FEATURE_ORDER_HASH,
+  T45PF_TRAIN_WINDOW,
+} from "../config";
 import { fitPFHead, pfBlockStart, pfFitCertified, type PFTrainingRow } from "../head";
 import { pfArtifactHash, pfFitId, pfStableArtifactHash } from "../replay";
 import { ensurePFFit, headFromFitRow } from "../fitService.server";
@@ -14,6 +21,31 @@ import { ensurePFFit, headFromFitRow } from "../fitService.server";
 // ---------------------------------------------------------------- fake store
 
 type Row = Record<string, unknown>;
+
+const state = {
+  fits: [] as Row[],
+  training: [] as PFTrainingRow[],
+  inserts: 0,
+};
+
+vi.mock("../store.server", () => ({
+  loadPFTrainingRows: async () => state.training,
+  readPFFit: async (_sb: unknown, fitId: string) =>
+    state.fits.find((f) => f.fit_id === fitId) ?? null,
+  insertPFFit: async (_sb: unknown, row: Row) => {
+    state.inserts++;
+    // Mirrors the database uniqueness constraint on (model_version, block).
+    if (!state.fits.some((f) => f.fit_id === row.fit_id)) state.fits.push(row);
+  },
+}));
+
+const sb = {} as never;
+
+function reset(training: PFTrainingRow[], fits: Row[] = []) {
+  state.fits = [...fits];
+  state.training = training;
+  state.inserts = 0;
+}
 
 function makeRows(blockStart: number, n: number): PFTrainingRow[] {
   const rows: PFTrainingRow[] = [];
@@ -29,56 +61,6 @@ function makeRows(blockStart: number, n: number): PFTrainingRow[] {
     });
   }
   return rows;
-}
-
-/** Minimal Supabase stand-in covering exactly the calls ensurePFFit makes. */
-function fakeSb(opts: {
-  fits?: Row[];
-  training: PFTrainingRow[];
-  onInsert?: (row: Row) => void;
-  failInsert?: boolean;
-}) {
-  const fits: Row[] = [...(opts.fits ?? [])];
-  const calls = { inserts: 0, trainingLoads: 0 };
-  const sb = {
-    from(table: string) {
-      if (table === "t45_pf_fits") {
-        return {
-          _eq: null as string | null,
-          select() {
-            return this;
-          },
-          eq(_col: string, val: string) {
-            this._eq = val;
-            return this;
-          },
-          async maybeSingle() {
-            return { data: fits.find((f) => f.fit_id === this._eq) ?? null };
-          },
-          async upsert(row: Row) {
-            calls.inserts++;
-            opts.onInsert?.(row);
-            if (opts.failInsert) return { error: { message: "duplicate" } };
-            if (!fits.some((f) => f.fit_id === row.fit_id)) fits.push(row);
-            return { error: null };
-          },
-        };
-      }
-      throw new Error(`unexpected table ${table}`);
-    },
-  };
-  return { sb: sb as never, fits, calls };
-}
-
-// Route loadPFTrainingRows through the fake by stubbing the module.
-import * as store from "../store.server";
-
-function withTraining(rows: PFTrainingRow[], fn: () => Promise<void>) {
-  const original = store.loadPFTrainingRows;
-  (store as { loadPFTrainingRows: unknown }).loadPFTrainingRows = async () => rows;
-  return fn().finally(() => {
-    (store as { loadPFTrainingRows: unknown }).loadPFTrainingRows = original;
-  });
 }
 
 // ------------------------------------------------------------------- boundary
@@ -143,48 +125,28 @@ describe("ensurePFFit", () => {
   const rows = makeRows(25152, 8278);
 
   it("mints at a rollover, then loads the same artifact idempotently", async () => {
-    await withTraining(rows, async () => {
-      const { sb, calls } = fakeSb({ training: rows });
-      const first = await ensurePFFit(sb, 25152);
-      expect(first.status).toBe("MINTED");
-      expect(first.certified).toBe(true);
-      const second = await ensurePFFit(sb, 25152);
-      expect(second.status).toBe("LOADED");
-      expect(second.minted).toBe(false);
-      expect(second.artifactHash).toBe(first.artifactHash);
-      expect(calls.inserts).toBe(1);
-    });
+    reset(rows);
+    const first = await ensurePFFit(sb, 25152);
+    expect(first.status).toBe("MINTED");
+    expect(first.certified).toBe(true);
+    const second = await ensurePFFit(sb, 25152);
+    expect(second.status).toBe("LOADED");
+    expect(second.minted).toBe(false);
+    expect(second.artifactHash).toBe(first.artifactHash);
+    expect(state.inserts).toBe(1);
   });
 
   it("concurrent mints converge on one stored artifact", async () => {
-    await withTraining(rows, async () => {
-      const { sb, fits } = fakeSb({ training: rows });
-      const [a, b] = await Promise.all([ensurePFFit(sb, 25152), ensurePFFit(sb, 25152)]);
-      expect(fits.filter((f) => f.block_start_index === 25152)).toHaveLength(1);
-      expect(a.artifactHash).toBe(b.artifactHash);
-      expect(a.certified && b.certified).toBe(true);
-    });
+    reset(rows);
+    const [a, b] = await Promise.all([ensurePFFit(sb, 25152), ensurePFFit(sb, 25152)]);
+    expect(state.fits.filter((f) => f.block_start_index === 25152)).toHaveLength(1);
+    expect(a.artifactHash).toBe(b.artifactHash);
+    expect(a.certified && b.certified).toBe(true);
   });
 
   it("rejects a conflicting stored artifact and fails closed", async () => {
     const head = fitPFHead(25152, rows)!;
-    const bad: Row = {
-      fit_id: pfFitId(25152),
-      model_version: "t45-price-flow-q375-r1",
-      config_hash: (await import("../config")).T45PF_CONFIG_HASH,
-      feature_order_hash: (await import("../config")).T45PF_FEATURE_ORDER_HASH,
-      block_index: head.blockIndex,
-      block_start_index: 25152,
-      training_row_count: head.trainingRowCount,
-      training_fingerprint: head.trainingFingerprint,
-      scaler_center: head.scaler.center,
-      scaler_scale: head.scaler.scale,
-      coefficients: head.coefficients,
-      intercept: head.intercept,
-      converged: true,
-      artifact_stable_hash: "deadbeefdeadbeef",
-    };
-    const { sb } = fakeSb({ training: rows, fits: [bad] });
+    reset(rows, [{ ...storedRowFor(head), artifact_stable_hash: "deadbeefdeadbeef" }]);
     const res = await ensurePFFit(sb, 25152);
     expect(res.status).toBe("CONFLICTING_ARTIFACT");
     expect(res.certified).toBe(false);
@@ -192,48 +154,49 @@ describe("ensurePFFit", () => {
   });
 
   it("fails closed when the window is too small to certify", async () => {
-    const short = makeRows(25152, 1000);
-    await withTraining(short, async () => {
-      const { sb } = fakeSb({ training: short });
-      const res = await ensurePFFit(sb, 25152);
-      expect(res.status).toBe("UNTRAINABLE");
-      expect(res.certified).toBe(false);
-      expect(res.error).toContain("insufficient_training_rows");
-    });
+    reset(makeRows(25152, 1000));
+    const res = await ensurePFFit(sb, 25152);
+    expect(res.status).toBe("UNTRAINABLE");
+    expect(res.certified).toBe(false);
+    expect(res.error).toContain("insufficient_training_rows");
   });
 
   it("never mints when minting is disabled", async () => {
-    await withTraining(rows, async () => {
-      const { sb, calls } = fakeSb({ training: rows });
-      const res = await ensurePFFit(sb, 25152, { allowMint: false });
-      expect(res.status).toBe("UNTRAINABLE");
-      expect(calls.inserts).toBe(0);
-    });
+    reset(rows);
+    const res = await ensurePFFit(sb, 25152, { allowMint: false });
+    expect(res.status).toBe("UNTRAINABLE");
+    expect(state.inserts).toBe(0);
   });
 
   it("a stored uncertified fit stays uncertified", async () => {
     const head = fitPFHead(25152, rows)!;
-    const row: Row = {
-      fit_id: pfFitId(25152),
-      model_version: "t45-price-flow-q375-r1",
-      config_hash: (await import("../config")).T45PF_CONFIG_HASH,
-      feature_order_hash: (await import("../config")).T45PF_FEATURE_ORDER_HASH,
-      block_index: head.blockIndex,
-      block_start_index: 25152,
-      training_row_count: head.trainingRowCount,
-      training_fingerprint: head.trainingFingerprint,
-      scaler_center: head.scaler.center,
-      scaler_scale: head.scaler.scale,
-      coefficients: head.coefficients,
-      intercept: head.intercept,
-      converged: false,
-      iterations: 1,
-      gradient_norm: 5,
-    };
-    const { sb } = fakeSb({ training: rows, fits: [row] });
+    const row = { ...storedRowFor(head), converged: false, gradient_norm: 5 };
+    reset(rows, [row]);
     const res = await ensurePFFit(sb, 25152);
     expect(res.status).toBe("UNCERTIFIED");
     expect(res.certified).toBe(false);
     expect(headFromFitRow(row).converged).toBe(false);
   });
 });
+
+function storedRowFor(head: ReturnType<typeof fitPFHead> & object): Row {
+  const h = head!;
+  return {
+    fit_id: pfFitId(h.blockStartIndex),
+    model_version: MODEL_VERSION,
+    config_hash: T45PF_CONFIG_HASH,
+    feature_order_hash: T45PF_FEATURE_ORDER_HASH,
+    block_index: h.blockIndex,
+    block_start_index: h.blockStartIndex,
+    training_row_count: h.trainingRowCount,
+    training_fingerprint: h.trainingFingerprint,
+    scaler_center: h.scaler.center,
+    scaler_scale: h.scaler.scale,
+    coefficients: h.coefficients,
+    intercept: h.intercept,
+    converged: h.converged,
+    iterations: h.iterations,
+    gradient_norm: h.gradientNorm,
+    artifact_stable_hash: pfStableArtifactHash(h),
+  };
+}
