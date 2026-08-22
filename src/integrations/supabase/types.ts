@@ -7245,6 +7245,7 @@ export type Database = {
       t45_pf_fits: {
         Row: {
           artifact_hash: string | null
+          artifact_stable_hash: string | null
           block_index: number
           block_start_index: number
           certified: boolean
@@ -7274,6 +7275,7 @@ export type Database = {
         }
         Insert: {
           artifact_hash?: string | null
+          artifact_stable_hash?: string | null
           block_index: number
           block_start_index: number
           certified?: boolean
@@ -7303,6 +7305,7 @@ export type Database = {
         }
         Update: {
           artifact_hash?: string | null
+          artifact_stable_hash?: string | null
           block_index?: number
           block_start_index?: number
           certified?: boolean

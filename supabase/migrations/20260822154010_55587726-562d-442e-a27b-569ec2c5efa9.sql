@@ -1,0 +1,1 @@
+ALTER TABLE public.t45_pf_fits ADD COLUMN IF NOT EXISTS artifact_stable_hash text;
