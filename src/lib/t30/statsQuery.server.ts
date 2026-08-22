@@ -187,7 +187,7 @@ export async function buildT30Stats(): Promise<T30Stats> {
   };
 }
 
-export async function loadT30Pending(): Promise<Row | null> {
+export async function loadT30Pending(): Promise<Record<string, string | number | boolean | null> | null> {
   const { data } = await sb()
     .from(T30_PREDICTIONS_TABLE)
     .select(
@@ -198,7 +198,7 @@ export async function loadT30Pending(): Promise<Row | null> {
     .order("target_ts", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as Row | null) ?? null;
+  return (data as Record<string, string | number | boolean | null> | null) ?? null;
 }
 
 const CSV_COLUMNS = [
