@@ -8,6 +8,7 @@ import {
   T45PF_REASONS,
   type T45PFDirection,
 } from "./config";
+import type { PFHead as _PFHeadUnused } from "./head";
 import {
   fitPFHead,
   pfBlockIndex,
@@ -74,6 +75,29 @@ export function pfArtifactHash(head: PFHead): string {
     ...head.scaler.center,
     ...head.scaler.scale,
   ].join("|"));
+}
+
+/**
+ * Precision-stable artifact hash. PostgREST returns float8 with 15 significant
+ * digits, so a hash over raw doubles can never survive a database round-trip.
+ * Formatting every number to 15 significant digits makes the hash identical
+ * before persistence and after re-reading the stored row, which is what makes
+ * conflicting-artifact detection meaningful. Model outputs are unaffected —
+ * this is a verification hash only.
+ */
+export function pfStableArtifactHash(head: PFHead): string {
+  const n = (v: number) => (Number.isFinite(v) ? Number(v).toPrecision(15) : String(v));
+  return fnv(
+    [
+      head.blockStartIndex,
+      head.trainingRowCount,
+      head.trainingFingerprint,
+      n(head.intercept),
+      ...head.coefficients.map(n),
+      ...head.scaler.center.map(n),
+      ...head.scaler.scale.map(n),
+    ].join("|"),
+  );
 }
 
 function fnv(s: string): string {
