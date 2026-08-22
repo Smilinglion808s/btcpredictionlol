@@ -1,10 +1,11 @@
-// T30 Balanced — Binance Global Spot 1s kline capture.
+// T30 PriceFlow Balanced — Binance Global Spot 1s kline capture.
 //
 // Runs inside the existing always-on collector process (Cloudflare Workers
-// cannot hold a persistent WebSocket). It subscribes to
+// cannot hold a persistent WebSocket) on its OWN WebSocket connection, so it
+// can never perturb the T45 capture path. It subscribes to
 // `btcusdt@kline_1s`, keeps only FINAL bars whose open time falls in offsets
-// 0..44 of a 15-minute UTC candle, and flushes each candle's 45 bars to the
-// app immediately after offset 44 closes — well before T+60s.
+// 0..29 of a 15-minute UTC candle, and flushes each candle's 30 bars to the
+// app immediately after offset 29 closes, then triggers the T+30s decision.
 //
 // Binance Global only. Binance.US is never an acceptable substitute.
 
@@ -100,7 +101,7 @@ export function createT30Collector({
   }
 
   /**
-   * Trigger the app's T+45 decision the instant the finalized offset-44 bar has
+   * Trigger the app's T+30s decision the instant the finalized offset-29 bar has
    * been persisted. Cloudflare cron cannot be trusted to fire at a precise
    * second, so this always-on process owns the timing. The app hook is
    * idempotent, so an extra retry can never produce a second prediction.
