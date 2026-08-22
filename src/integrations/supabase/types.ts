@@ -7245,6 +7245,7 @@ export type Database = {
       t45_pf_fits: {
         Row: {
           artifact_hash: string | null
+          artifact_stable_hash: string | null
           block_index: number
           block_start_index: number
           certified: boolean
@@ -7274,6 +7275,7 @@ export type Database = {
         }
         Insert: {
           artifact_hash?: string | null
+          artifact_stable_hash?: string | null
           block_index: number
           block_start_index: number
           certified?: boolean
@@ -7303,6 +7305,7 @@ export type Database = {
         }
         Update: {
           artifact_hash?: string | null
+          artifact_stable_hash?: string | null
           block_index?: number
           block_start_index?: number
           certified?: boolean
@@ -7357,6 +7360,7 @@ export type Database = {
           decision_reason: string | null
           decision_valid: boolean
           duplicate_offsets: number[] | null
+          execution_path: string | null
           expected_observations: number | null
           feature_complete: boolean | null
           feature_order_hash: string
@@ -7383,6 +7387,15 @@ export type Database = {
           packet_ready: boolean | null
           probability_green: number | null
           rank_history_count: number | null
+          repair_base_direction: number | null
+          repair_confidence: number | null
+          repair_confidence_rank: number | null
+          repair_fit_id: string | null
+          repair_prediction: number | null
+          repair_probability_green: number | null
+          repair_state_checksum: string | null
+          repair_would_trade: boolean | null
+          repaired_at: string | null
           resolution_attempts: number
           resolved_at: string | null
           run_mode: string
@@ -7422,6 +7435,7 @@ export type Database = {
           decision_reason?: string | null
           decision_valid?: boolean
           duplicate_offsets?: number[] | null
+          execution_path?: string | null
           expected_observations?: number | null
           feature_complete?: boolean | null
           feature_order_hash: string
@@ -7448,6 +7462,15 @@ export type Database = {
           packet_ready?: boolean | null
           probability_green?: number | null
           rank_history_count?: number | null
+          repair_base_direction?: number | null
+          repair_confidence?: number | null
+          repair_confidence_rank?: number | null
+          repair_fit_id?: string | null
+          repair_prediction?: number | null
+          repair_probability_green?: number | null
+          repair_state_checksum?: string | null
+          repair_would_trade?: boolean | null
+          repaired_at?: string | null
           resolution_attempts?: number
           resolved_at?: string | null
           run_mode: string
@@ -7487,6 +7510,7 @@ export type Database = {
           decision_reason?: string | null
           decision_valid?: boolean
           duplicate_offsets?: number[] | null
+          execution_path?: string | null
           expected_observations?: number | null
           feature_complete?: boolean | null
           feature_order_hash?: string
@@ -7513,6 +7537,15 @@ export type Database = {
           packet_ready?: boolean | null
           probability_green?: number | null
           rank_history_count?: number | null
+          repair_base_direction?: number | null
+          repair_confidence?: number | null
+          repair_confidence_rank?: number | null
+          repair_fit_id?: string | null
+          repair_prediction?: number | null
+          repair_probability_green?: number | null
+          repair_state_checksum?: string | null
+          repair_would_trade?: boolean | null
+          repaired_at?: string | null
           resolution_attempts?: number
           resolved_at?: string | null
           run_mode?: string
@@ -9854,6 +9887,7 @@ export type Database = {
         }
         Returns: Json
       }
+      t45pf_mint_lock: { Args: { p_block_start: number }; Returns: boolean }
     }
     Enums: {
       binance_ob_capture_status:

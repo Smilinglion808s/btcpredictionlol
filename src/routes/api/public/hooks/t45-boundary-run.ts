@@ -127,28 +127,42 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
           });
         }
 
-        const result = await runT45Boundary(supabase, target, { allowLate });
-        // Independent shadow model — its failures can never affect T45 Balanced.
+        // PriceFlow is the active model: it runs FIRST and is fully isolated,
+        // so a failure in any other T45 model can never delay or block it.
+        const executionPath =
+          mode === "recover" ? "WATCHDOG" : explicit ? "CATCHUP" : "IMMEDIATE_BOUNDARY";
         let priceFlow: unknown = null;
         try {
-          priceFlow = await runPriceFlowBoundary(supabase, target, { allowLate });
+          priceFlow = await runPriceFlowBoundary(supabase, target, { allowLate, executionPath });
         } catch (e) {
           priceFlow = { error: e instanceof Error ? e.message : String(e) };
         }
-        const resolved = await resolveT45Backlog(supabase, { limit: 200 });
+
+        let result: unknown = null;
+        try {
+          result = await runT45Boundary(supabase, target, { allowLate });
+        } catch (e) {
+          result = { error: e instanceof Error ? e.message : String(e) };
+        }
+        const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
+          resolved: 0,
+        }));
         const pfResolved = await resolvePriceFlowBacklog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
 
+
         return Response.json({
           ok: true,
           mode,
-          ...result,
+          execution_path: executionPath,
+          t45_balanced: result,
           price_flow: priceFlow,
           price_flow_resolved: pfResolved.resolved,
           resolved: resolved.resolved,
           elapsed_ms: Date.now() - started,
         });
+
       },
     },
   },

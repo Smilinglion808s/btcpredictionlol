@@ -72,20 +72,33 @@ export async function pfRowIndex(sb: SupabaseClient, targetTs: string): Promise<
   return count ?? 0;
 }
 
+/** PostgREST caps any single response at 1,000 rows, so the 8,640-row
+ * training window MUST be paged. Reading it in one shot silently truncates the
+ * window and makes every fit fail the minimum-rows gate. */
+const PF_PAGE = 1000;
+
 export async function loadPFTrainingRows(
   sb: SupabaseClient,
   blockStart: number,
 ): Promise<PFTrainingRow[]> {
   const lo = Math.max(0, blockStart - T45PF_TRAIN_WINDOW);
+  const hi = blockStart - 1;
+  if (hi < lo) return [];
   const cols = ["target_ts", "spot_complete", ...T45PF_FEATURE_ORDER].join(", ");
-  const { data, error } = await sb
-    .from(FEATURES_TABLE)
-    .select(cols)
-    .eq("feature_version", T45_FEATURE_VERSION)
-    .order("target_ts", { ascending: true })
-    .range(lo, blockStart - 1);
-  if (error) throw new Error(`t45pf_training_load:${error.message}`);
-  const rows = (data ?? []) as unknown as Row[];
+  const rows: Row[] = [];
+  for (let from = lo; from <= hi; from += PF_PAGE) {
+    const to = Math.min(hi, from + PF_PAGE - 1);
+    const { data, error } = await sb
+      .from(FEATURES_TABLE)
+      .select(cols)
+      .eq("feature_version", T45_FEATURE_VERSION)
+      .order("target_ts", { ascending: true })
+      .range(from, to);
+    if (error) throw new Error(`t45pf_training_load:${error.message}`);
+    const page = (data ?? []) as unknown as Row[];
+    rows.push(...page);
+    if (page.length < to - from + 1) break;
+  }
   if (rows.length === 0) return [];
 
   const labels = await loadPFLabels(
@@ -110,6 +123,7 @@ export async function loadPFTrainingRows(
   });
   return out;
 }
+
 
 export async function loadPFLabels(
   sb: SupabaseClient,
