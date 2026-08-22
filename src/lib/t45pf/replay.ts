@@ -8,7 +8,6 @@ import {
   T45PF_REASONS,
   type T45PFDirection,
 } from "./config";
-import type { PFHead as _PFHeadUnused } from "./head";
 import {
   fitPFHead,
   pfBlockIndex,

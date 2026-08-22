@@ -25,7 +25,7 @@ import {
   T45PF_TRAIN_WINDOW,
 } from "./config";
 import { fitPFHead, pfBlockIndex, pfBlockStart, pfFitCertified, type PFHead } from "./head";
-import { pfArtifactHash, pfFitId } from "./replay";
+import { pfArtifactHash, pfFitId, pfStableArtifactHash } from "./replay";
 import { insertPFFit, loadPFTrainingRows, readPFFit } from "./store.server";
 
 type Row = Record<string, unknown>;
@@ -98,6 +98,7 @@ function fitRowFor(head: PFHead): Row {
     iterations: head.iterations,
     gradient_norm: head.gradientNorm,
     artifact_hash: pfArtifactHash(head),
+    artifact_stable_hash: pfStableArtifactHash(head),
     impl_revision: T45PF_IMPL_REVISION,
   };
 }
@@ -108,8 +109,10 @@ function verifyStored(row: Row, head: PFHead): string | null {
   if (String(row.config_hash) !== T45PF_CONFIG_HASH) return "config_hash";
   if (String(row.feature_order_hash) !== T45PF_FEATURE_ORDER_HASH) return "feature_order_hash";
   if (Number(row.block_start_index) !== head.blockStartIndex) return "block_start_index";
-  const stored = row.artifact_hash == null ? null : String(row.artifact_hash);
-  if (stored && stored !== pfArtifactHash(head)) return "artifact_hash";
+  // Verify against the precision-stable hash: raw float8 values lose digits on
+  // the database round-trip, so only the stable hash can be re-derived here.
+  const stable = row.artifact_stable_hash == null ? null : String(row.artifact_stable_hash);
+  if (stable && stable !== pfStableArtifactHash(head)) return "artifact_stable_hash";
   if (!Array.isArray(head.coefficients) || head.coefficients.length !== T45PF_FEATURE_ORDER.length) {
     return "coefficient_arity";
   }
@@ -208,7 +211,7 @@ export async function ensurePFFit(
   const persisted = await readPFFit(sb, fitId);
   if (!persisted) return fail(fitId, blockStart, "UNTRAINABLE", "fit_not_persisted");
   const persistedHead = headFromFitRow(persisted);
-  if (pfArtifactHash(persistedHead) !== pfArtifactHash(head)) {
+  if (pfStableArtifactHash(persistedHead) !== pfStableArtifactHash(head)) {
     return fail(fitId, blockStart, "CONFLICTING_ARTIFACT", "persisted_artifact_divergence");
   }
   const bad = verifyStored(persisted, persistedHead);
