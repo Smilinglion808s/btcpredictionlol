@@ -13,6 +13,8 @@ import { LocalOrderBook } from "./localBook.js";
 import { computeBookMetrics } from "./metrics.js";
 import { CollectorRuntime, HEARTBEAT_INTERVAL_MS as RUNTIME_HEARTBEAT_MS } from "./runtimeEvents.js";
 import { createT45Collector } from "./t45Kline.js";
+import { createT30Collector } from "./t30Kline.js";
+
 
 const INGEST_URL = requireEnv("BINANCE_OB_INGEST_URL");
 // T45 Balanced runs in the same always-on process but is a fully separate
@@ -26,6 +28,17 @@ const T45_ENABLED = process.env.T45_ENABLED !== "false";
 const T45_BOUNDARY_URL =
   process.env.T45_BOUNDARY_URL ||
   INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-boundary-run");
+// T30 PriceFlow Balanced — a third fully separate stream, endpoint and secret.
+// It owns its own WebSocket so it can never perturb T45 capture or timing.
+const T30_INGEST_URL =
+  process.env.T30_INGEST_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t30-ingest");
+const T30_INGEST_SECRET = process.env.T30_INGEST_SECRET || process.env.BINANCE_OB_INGEST_SECRET;
+const T30_ENABLED = process.env.T30_ENABLED !== "false";
+const T30_BOUNDARY_URL =
+  process.env.T30_BOUNDARY_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t30-boundary-run");
+
 const INGEST_SECRET = requireEnv("BINANCE_OB_INGEST_SECRET");
 
 const COLLECTOR_VERSION = "binance-ob-collector-r1";
@@ -467,6 +480,19 @@ async function main() {
     t45.start();
     log("[t45] started", { ingest: T45_INGEST_URL, boundary: T45_BOUNDARY_URL });
   }
+
+  if (T30_ENABLED) {
+    const t30 = createT30Collector({
+      ingestUrl: T30_INGEST_URL,
+      secret: T30_INGEST_SECRET,
+      boundaryUrl: T30_BOUNDARY_URL,
+      buildIdentifier: BUILD_IDENTIFIER,
+      log: { log, warn: (...a) => log(...a) },
+    });
+    t30.start();
+    log("[t30] started", { ingest: T30_INGEST_URL, boundary: T30_BOUNDARY_URL });
+  }
+
 
   log("[collector] started", { ingest: INGEST_URL, version: COLLECTOR_VERSION });
 }

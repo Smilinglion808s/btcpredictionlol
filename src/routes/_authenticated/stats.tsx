@@ -17,12 +17,14 @@ import { listB4x4Recent } from "@/lib/b4x4.functions";
 import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
+import { T30Card } from "@/components/t30-card";
 
 /** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
 const SHOW_LEGACY_T45 = false as boolean;
 
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
 import { getPriceFlowStats, getPriceFlowPending, exportPriceFlowCsv } from "@/lib/t45pf.functions";
+import { getT30Stats, getT30Pending, exportT30Csv } from "@/lib/t30.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
@@ -98,7 +100,15 @@ function StatsPage() {
   const pfPendingFn = useServerFn(getPriceFlowPending);
   const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
   const exportPfFn = useServerFn(exportPriceFlowCsv);
+
+  // T30 PriceFlow Balanced R1 — independent shadow model (T+30s, dual rank).
+  const t30Fn = useServerFn(getT30Stats);
+  const t30Q = useQuery({ queryKey: ["t30-stats"], queryFn: () => t30Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const t30PendingFn = useServerFn(getT30Pending);
+  const t30PendingQ = useQuery({ queryKey: ["t30-pending"], queryFn: () => t30PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  const exportT30Fn = useServerFn(exportT30Csv);
   const [exportingPf, setExportingPf] = useState(false);
+  const [exportingT30, setExportingT30] = useState(false);
 
   async function downloadT45Csv() {
     try {
@@ -119,6 +129,17 @@ function StatsPage() {
       triggerDownload(res.csv, res.filename);
     } finally {
       setExportingT45(false);
+    }
+  }
+
+  async function downloadT30Csv() {
+    try {
+      setExportingT30(true);
+      const res = await exportT30Fn();
+      if (!res || res.rows === 0) { alert("No T30 rows to export."); return; }
+      triggerDownload(res.csv, res.filename);
+    } finally {
+      setExportingT30(false);
     }
   }
 
@@ -333,6 +354,13 @@ function StatsPage() {
           pending={(pfPendingQ.data as any) ?? null}
           onExport={downloadPriceFlowCsv}
           exporting={exportingPf}
+        />
+
+        <T30Card
+          stats={(t30Q.data as any) ?? {}}
+          pending={(t30PendingQ.data as any) ?? null}
+          onExport={downloadT30Csv}
+          exporting={exportingT30}
         />
 
 
