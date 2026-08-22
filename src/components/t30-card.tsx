@@ -10,7 +10,7 @@ const signed = (n: number | null | undefined) =>
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="t45-chip px-3 py-2">
+    <div className="t30-chip px-3 py-2">
       <div className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
       <div className={`text-sm font-mono font-semibold tabular-nums mt-0.5 ${tone ?? ""}`}>
         {value}
@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
           {title}
         </span>
-        <span className="h-px flex-1 bg-gradient-to-r from-primary/40 to-transparent" />
+        <span className="h-px flex-1 bg-gradient-to-r from-voltgreen/40 to-transparent" />
       </div>
       {children}
     </div>
@@ -34,7 +34,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
- * T30 PriceFlow Balanced R1 — shadow tile.
+ * T30 PriceFlow Balanced R1 — shadow hero tile (lightning green).
  *
  * Fully separate identity, storage, fit and statistics from T45. Shadow only:
  * this model never emits an outbound webhook.
@@ -54,6 +54,7 @@ export function T30Card({
   const losses = Number(stats.losses ?? 0);
   const graded = wins + losses;
   const wr = stats.win_rate == null ? null : Number(stats.win_rate);
+  const net = stats.net_units == null ? null : Number(stats.net_units);
   const today: Any = stats.today ?? {};
   const shadows: Any[] = stats.shadows ?? [];
 
@@ -64,85 +65,124 @@ export function T30Card({
 
   const wouldTrade = pending?.model_would_trade === true;
   const dir = Number(pending?.model_direction ?? 0);
-  const dirLabel = wouldTrade ? (dir > 0 ? "GREEN" : "RED") : "NO TRADE";
+  const dirLabel = wouldTrade ? (dir > 0 ? "GREEN" : dir < 0 ? "RED" : "TRADE") : "NO TRADE";
   const dirTone = !wouldTrade
-    ? "border-primary/40 text-primary bg-primary/10"
+    ? "border-voltgreen/40 text-voltgreen bg-voltgreen/10"
     : dir > 0
-      ? "border-bull/50 text-bull bg-bull/10"
-      : "border-bear/50 text-bear bg-bear/10";
+      ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
+      : "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]";
 
   const targetMs = pending?.target_ts ? new Date(String(pending.target_ts)).getTime() : NaN;
   const candleLabel = Number.isFinite(targetMs)
     ? `${new Date(targetMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${new Date(
         targetMs + 15 * 60_000,
       ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-    : "—";
+    : null;
 
   return (
-    <Card className="relative overflow-hidden p-5 space-y-5 border-primary/25">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold tracking-tight">T30 PriceFlow Balanced</h3>
-            <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-primary">
-              Shadow only
-            </span>
+    <Card className="t30-shell rounded-2xl p-6 space-y-5">
+      <span className="t30-orbit-ring" aria-hidden />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-voltgreen/80 mb-1">
+            Shadow model · no webhooks
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-            {stats.model_version ?? "t30-price-flow-balanced-r1"} · T+30s · 28 features · dual
-            rank 0.625 / 0.50
-          </p>
+          <h3 className="t30-title text-4xl font-bold font-heading tracking-tight leading-none">
+            T30 PriceFlow
+          </h3>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            T+30s cutoff · 28 features · dual rank 0.625 / 0.50
+          </div>
+          <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
+            {stats.model_version ?? "t30-price-flow-balanced-r1"}
+          </div>
         </div>
-        <Button size="sm" variant="outline" onClick={onExport} disabled={exporting}>
-          {exporting ? "Exporting…" : "Export CSV"}
-        </Button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-voltgreen/30 hover:border-voltgreen/60"
+            onClick={onExport}
+            disabled={exporting}
+          >
+            {exporting ? "…" : "CSV"}
+          </Button>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-voltgreen/40 bg-voltgreen/10 text-[10px] font-bold uppercase tracking-[0.16em] text-voltgreen">
+            <span className="size-1.5 rounded-full bg-voltgreen t30-live-dot" />
+            Shadow
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-[auto_1fr] items-center">
-        <div className="relative h-[92px] w-[92px]">
-          <svg viewBox="0 0 92 92" className="h-full w-full -rotate-90">
-            <circle cx="46" cy="46" r={gaugeR} fill="none" strokeWidth="8" className="stroke-muted" />
+      <div className="relative flex items-center gap-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
             <circle
-              cx="46"
-              cy="46"
+              cx="40"
+              cy="40"
               r={gaugeR}
               fill="none"
-              strokeWidth="8"
+              stroke={above ? "var(--bull)" : "var(--bear)"}
+              strokeWidth="7"
               strokeLinecap="round"
-              className={above ? "stroke-bull" : "stroke-bear"}
-              strokeDasharray={`${(gaugePct / 100) * circumference} ${circumference}`}
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - gaugePct / 100)}
+              className="transition-all duration-700"
             />
           </svg>
-          <div className="absolute inset-0 grid place-items-center">
-            <div className="text-center">
-              <div className="text-lg font-mono font-bold tabular-nums">{pct(wr)}</div>
-              <div className="text-[8px] uppercase tracking-[0.16em] text-muted-foreground">
-                Win rate
-              </div>
-            </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">{pct(wr)}</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground mt-0.5">
+              win rate
+            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Traded" value={String(graded)} />
-          <Stat label="Wins" value={String(wins)} tone="text-bull" />
-          <Stat label="Losses" value={String(losses)} tone="text-bear" />
-          <Stat label="Net" value={signed(stats.net_units)} />
-          <Stat label="Abstains" value={String(stats.abstains ?? 0)} />
-          <Stat label="Pushes" value={String(stats.pushes ?? 0)} />
-          <Stat label="Pending" value={String(stats.pending ?? 0)} />
-          <Stat label="Packet ready" value={pct(stats.packet_ready_rate, 0)} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Net units · {graded} traded
+          </div>
+          <div
+            className={`font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none mt-1 ${
+              (net ?? 0) > 0 ? "text-bull" : (net ?? 0) < 0 ? "text-bear" : "text-foreground"
+            }`}
+          >
+            {signed(net)}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+            break-even 50.00%
+            <span className={`ml-1.5 font-semibold ${above ? "text-bull" : "text-bear"}`}>
+              {above ? "▲ above" : "▼ below"}
+            </span>
+          </div>
         </div>
       </div>
 
-      <Section title="Pending candle">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Stat label="Wins" value={String(wins)} tone="text-bull" />
+        <Stat label="Losses" value={String(losses)} tone="text-bear" />
+        <Stat label="Abstains" value={String(stats.abstains ?? 0)} />
+        <Stat label="Pushes" value={String(stats.pushes ?? 0)} />
+        <Stat label="Pending" value={String(stats.pending ?? 0)} />
+        <Stat label="Packet ready" value={pct(stats.packet_ready_rate, 0)} />
+        <Stat label="Today traded" value={String(today.traded ?? 0)} />
+        <Stat label="Today WR" value={pct(today.win_rate)} />
+      </div>
+
+      <Section title="Current candle">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
-            className={`rounded-full border px-3 py-1 text-xs font-semibold tracking-wide ${dirTone}`}
+            className={`px-4 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-[0.16em] font-mono ${dirTone}`}
           >
             {dirLabel}
           </span>
-          <span className="text-xs font-mono text-muted-foreground">{candleLabel}</span>
+          {candleLabel ? (
+            <span className="text-[10px] font-mono text-voltgreen tabular-nums">
+              {candleLabel}
+            </span>
+          ) : null}
           <span className="text-[10px] font-mono text-muted-foreground">
             {pending?.decision_reason ?? "—"}
           </span>
@@ -175,22 +215,13 @@ export function T30Card({
         </div>
       </Section>
 
-      <Section title={`Today · ${today.date ?? "—"}`}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Traded" value={String(today.traded ?? 0)} />
-          <Stat label="Wins" value={String(today.wins ?? 0)} tone="text-bull" />
-          <Stat label="Losses" value={String(today.losses ?? 0)} tone="text-bear" />
-          <Stat label="Win rate" value={pct(today.win_rate)} />
-        </div>
-      </Section>
-
       {shadows.length > 0 && (
         <Section title="Reporting-only shadow policies">
           <div className="grid gap-1.5">
             {shadows.map((s) => (
               <div
                 key={s.policy}
-                className="flex items-center justify-between rounded-md border border-border/60 px-3 py-1.5"
+                className="t30-chip flex items-center justify-between px-3 py-1.5"
               >
                 <span className="text-[11px] font-mono text-muted-foreground">{s.policy}</span>
                 <span className="text-[11px] font-mono tabular-nums">
@@ -202,7 +233,7 @@ export function T30Card({
         </Section>
       )}
 
-      <p className="text-[10px] text-muted-foreground font-mono">
+      <p className="relative text-[10px] text-muted-foreground/80 font-mono truncate">
         config {String(stats.config_hash ?? "").slice(0, 12)} · features{" "}
         {String(stats.feature_order_hash ?? "").slice(0, 12)} · webhooks{" "}
         {stats.webhooks_enabled ? "ON" : "OFF"}
