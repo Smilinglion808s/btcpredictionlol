@@ -1,8 +1,8 @@
 // T30 PriceFlow Balanced R1 — boundary orchestration and resolution.
 //
 // Fully isolated: it reads t30_samples / t30_features / t30_pf_fits and the
-// confirmed OKX candle table, and writes only t30_* rows. It emits no webhook
-// and never mutates a T45 (or any other model's) row, decision or statistic.
+// confirmed OKX candle table, and writes only t30_* rows. It is the single
+// outbound webhook source and never mutates a T45 (or any other model's) row.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -31,6 +31,8 @@ import {
 import { buildT30Features, type T30FeatureResult } from "./features";
 import { t30Decide, t30OddsUnits, t30Probability, t30Score, type T30Decision } from "./head";
 import { evaluateT30Shadows } from "./shadows";
+import { buildT30WebhookPayload } from "./webhook.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 import { ensureT30Fit } from "./fitService.server";
 import {
   auditT30,
@@ -169,6 +171,14 @@ export async function runT30Boundary(
   const activation = await readT30Activation(sb);
   const inactive = String(activation.mode ?? "SHADOW_ONLY") === "DISABLED";
 
+  // T30 owns the wire: warm the endpoint cache now so the send at decision
+  // time performs zero database reads.
+  const webhookArmed =
+    runMode === "LIVE" &&
+    String(activation.mode ?? "SHADOW_ONLY") === "ACTIVE" &&
+    activation.webhooks_enabled === true;
+  if (webhookArmed) void primeWebhookEndpoints(sb).catch(() => {});
+
   // 1. Packet + features.
   const bars = await loadT30Bars(sb, targetTs);
   const inWindow = bars.filter(
@@ -179,7 +189,9 @@ export async function runT30Boundary(
   const subset = featureSubset(features);
 
   const rowIndex = await t30RowIndex(sb, targetTs);
-  await upsertT30Features(sb, {
+  // Feature persistence runs concurrently with fit + decision + send: it is a
+  // logging write and must never sit in front of the wire.
+  const featureWrite = upsertT30Features(sb, {
     target_ts: targetTs,
     feature_version: T30_FEATURE_SCHEMA,
     feature_order_hash: T30_FEATURE_ORDER_HASH,
@@ -196,12 +208,14 @@ export async function runT30Boundary(
   });
 
   if (inactive) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.INACTIVE, { packet_ready: false, packet_reason: pkReason }),
       {},
     );
   }
   if (pkReason || !features.vector) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.PACKET_NOT_READY, {
         packet_ready: false,
@@ -232,6 +246,7 @@ export async function runT30Boundary(
   // 2. Fit governing this row.
   const fit = await ensureT30Fit(sb, rowIndex, runMode === "LIVE" ? "LIVE" : "REPLAY");
   if (!fit || !fit.certified) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.FIT_NOT_READY, {
         ...packetCommon,
@@ -270,7 +285,43 @@ export async function runT30Boundary(
     decision_reason: decision.reason,
   };
 
-  // 4. Reporting-only shadows — cannot influence anything above.
+  // 4. Outbound webhook — fires BEFORE any remaining database write so the POST
+  // leaves the moment the decision exists. LIVE tradeable decisions only;
+  // failures never affect the decision or the persisted row.
+  const tradeable =
+    decision.decisionValid &&
+    decision.modelWouldTrade === true &&
+    (decision.modelDirection === 1 || decision.modelDirection === -1);
+
+  const sendPromise: Promise<{ delivered: number; latencyMs: number } | null> =
+    webhookArmed && tradeable
+      ? deliverWebhookNow(
+          sb,
+          "prediction.created",
+          buildT30WebhookPayload({
+            targetTs,
+            direction: decision.modelDirection as 1 | -1,
+            probabilityGreen: decision.probabilityGreen,
+            longRank: decision.longRank.rank,
+            fastRank: decision.fastRank.rank,
+            fitId: fit.fitId,
+            openPrice: (features.values.t30_spot_open as number | undefined) ?? null,
+          }),
+        ).catch(() => ({ delivered: 0, latencyMs: 0 }))
+      : Promise.resolve(null);
+
+  const finishPromise = finish(row, {});
+  const [send, finished] = await Promise.all([sendPromise, finishPromise, featureWrite]);
+  if (send) {
+    await auditT30(
+      sb,
+      "webhook",
+      { targetTs, delivered: send.delivered, latency_ms: send.latencyMs },
+      send.delivered > 0,
+    ).catch(() => {});
+  }
+
+  // 5. Reporting-only shadows — cannot influence anything above.
   try {
     await upsertT30Shadows(
       sb,
@@ -287,7 +338,7 @@ export async function runT30Boundary(
     await auditT30(sb, "shadow-error", { targetTs, error: String(e) }, false);
   }
 
-  return finish(row, {});
+  return finished;
 }
 
 /**
