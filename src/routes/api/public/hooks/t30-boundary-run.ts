@@ -4,7 +4,7 @@
 // collector fires this hook the instant the finalized offset-29 bar is stored.
 // Cron/apikey calls exist only as a late watchdog.
 //
-// Shadow-only: this hook never emits a webhook and never touches T45 or any
+// T30 has wire priority: it emits the outbound webhook and never touches T45 or any
 // other model's tables.
 
 import { createFileRoute } from "@tanstack/react-router";
