@@ -154,7 +154,7 @@ function rolling7(days: { date: string; net: number }[]): { min: number | null; 
 
 /** Only the columns the dashboard aggregates need — never `*` (wide feature JSON). */
 const STATS_COLUMNS =
-  "target_ts, local_date, decision_valid, active_result, packet_ready, timing_valid, unique_observations, fit_certified, rank_history_count, webhook_eligible, webhook_sent";
+  "target_ts, local_date, decision_valid, active_result, packet_ready, timing_valid, unique_observations, fit_certified, rank_history_count, webhook_eligible, webhook_sent, decision_offset_ms, webhook_sent_at, webhook_latency_ms, webhook_offset_ms";
 
 /** Immutable-tail cached row read: only the recent window is re-queried. */
 function cachedRows(cacheKey: string, table: string, columns: string, apply: (q: any) => any) {
@@ -169,6 +169,30 @@ function cachedRows(cacheKey: string, table: string, columns: string, apply: (q:
       }) as Promise<Row[]>,
     { tsKey: "target_ts", keyFn: (r) => String(r.target_ts) },
   );
+}
+
+/** Seconds-resolution decision + delivery timing off the most recent LIVE rows. */
+function pfTiming(rows: readonly Row[]) {
+  const lastRow = rows.length ? rows[rows.length - 1] : null;
+  const sent = rows.filter((r) => r.webhook_sent === true && r.webhook_offset_ms != null);
+  const lastSent = sent.length ? sent[sent.length - 1] : null;
+  const window = sent.slice(-50);
+  const avg = (key: string) =>
+    window.length
+      ? window.reduce((a, r) => a + Number(r[key] ?? 0), 0) / window.length
+      : null;
+  return {
+    lastDecisionOffsetMs:
+      lastRow?.decision_offset_ms == null ? null : Number(lastRow.decision_offset_ms),
+    lastWebhookAt: lastSent?.webhook_sent_at ? String(lastSent.webhook_sent_at) : null,
+    lastWebhookOffsetMs:
+      lastSent?.webhook_offset_ms == null ? null : Number(lastSent.webhook_offset_ms),
+    lastWebhookLatencyMs:
+      lastSent?.webhook_latency_ms == null ? null : Number(lastSent.webhook_latency_ms),
+    avgWebhookOffsetMs: avg("webhook_offset_ms"),
+    avgWebhookLatencyMs: avg("webhook_latency_ms"),
+    sentCount: sent.length,
+  };
 }
 
 export async function buildPriceFlowStats() {
@@ -268,6 +292,7 @@ export async function buildPriceFlowStats() {
       eligibleRows: all.filter((r) => r.webhook_eligible === true).length,
       sentRows: all.filter((r) => r.webhook_sent === true).length,
     },
+    timing: pfTiming(liveRows),
   };
 }
 
