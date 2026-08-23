@@ -317,10 +317,23 @@ export async function runT30Boundary(
   const finishPromise = finish(row, {});
   const [send, finished] = await Promise.all([sendPromise, finishPromise, featureWrite]);
   if (send) {
+    // Timing audit trail, written after the wire so it never delays the POST.
+    const sentAtMs = sendStartedAt + send.latencyMs;
+    await markT30Webhook(sb, targetTs, runMode, {
+      sent: send.delivered > 0,
+      sentAtMs,
+      latencyMs: send.latencyMs,
+      offsetMs: sentAtMs - targetMs,
+    });
     await auditT30(
       sb,
       "webhook",
-      { targetTs, delivered: send.delivered, latency_ms: send.latencyMs },
+      {
+        targetTs,
+        delivered: send.delivered,
+        latency_ms: send.latencyMs,
+        sent_offset_ms: sentAtMs - targetMs,
+      },
       send.delivered > 0,
     ).catch(() => {});
   }
