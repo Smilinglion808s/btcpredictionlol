@@ -210,9 +210,12 @@ export async function runPriceFlowBoundary(
   }
 
   const write = async (extra: Row) => {
+    const decidedAt = Date.now();
     await upsertPFPrediction(sb, {
       ...identity,
-      decided_at: new Date().toISOString(),
+      decided_at: new Date(decidedAt).toISOString(),
+      // Seconds-resolution timing: how far past the candle open the decision landed.
+      decision_offset_ms: decidedAt - targetMs,
       ...extra,
     });
   };
