@@ -196,30 +196,53 @@ export async function insertT30Fit(sb: SupabaseClient, row: Row): Promise<void> 
 /**
  * Strictly past-only confidences, oldest→newest, for the rank windows.
  * The current target is excluded by the `lt` filter, never by slicing.
+ *
+ * Run-mode agnostic (the T45 convention): BACKFILL rows are the deterministic
+ * replay of the same frozen head over the same certified fit chain, so the
+ * rank window is continuous across the backfill→live handoff instead of
+ * restarting a 768-candle warm-up at go-live. When both a LIVE and a BACKFILL
+ * row exist for one target, LIVE wins.
  */
 export async function loadT30PriorConfidences(
   sb: SupabaseClient,
   targetTs: string,
   runMode = "LIVE",
 ): Promise<T30PriorConfidence[]> {
-  const { data, error } = await sb
-    .from(T30_PREDICTIONS_TABLE)
-    .select("target_ts, confidence")
-    .eq("model_version", T30_MODEL_VERSION)
-    .eq("run_mode", runMode)
-    .not("confidence", "is", null)
-    .lt("target_ts", targetTs)
-    .order("target_ts", { ascending: false })
-    .limit(T30_LONG_RANK_WINDOW);
-  if (error) throw new Error(`t30_rank_history:${error.message}`);
-  return ((data ?? []) as Row[])
-    .map((r) => ({
-      targetTs: new Date(String(r.target_ts)).toISOString(),
-      confidence: Number(r.confidence),
-    }))
-    .filter((p) => Number.isFinite(p.confidence))
-    .reverse();
+  // PostgREST caps a single response at 1000 rows, so page explicitly.
+  const PAGE = 1000;
+  const NEED = T30_LONG_RANK_WINDOW * 2;
+  const rows: Row[] = [];
+  for (let from = 0; from < NEED; from += PAGE) {
+    const to = Math.min(from + PAGE, NEED) - 1;
+    const { data, error } = await sb
+      .from(T30_PREDICTIONS_TABLE)
+      .select("target_ts, run_mode, confidence")
+      .eq("model_version", T30_MODEL_VERSION)
+      .not("confidence", "is", null)
+      .lt("target_ts", targetTs)
+      .order("target_ts", { ascending: false })
+      .range(from, to);
+    if (error) throw new Error(`t30_rank_history:${error.message}`);
+    const page = (data ?? []) as Row[];
+    rows.push(...page);
+    if (page.length < to - from + 1) break;
+  }
+  const byTarget = new Map<string, { targetTs: string; confidence: number; live: boolean }>();
+  for (const r of rows) {
+    const confidence = Number(r.confidence);
+    if (!Number.isFinite(confidence)) continue;
+    const ts = new Date(String(r.target_ts)).toISOString();
+    const live = String(r.run_mode) === runMode;
+    const existing = byTarget.get(ts);
+    if (!existing || (live && !existing.live)) byTarget.set(ts, { targetTs: ts, confidence, live });
+  }
+
+  return [...byTarget.values()]
+    .sort((a, b) => a.targetTs.localeCompare(b.targetTs))
+    .slice(-T30_LONG_RANK_WINDOW)
+    .map(({ targetTs: ts, confidence }) => ({ targetTs: ts, confidence }));
 }
+
 
 export async function upsertT30Prediction(sb: SupabaseClient, row: Row): Promise<void> {
   const { error } = await sb
