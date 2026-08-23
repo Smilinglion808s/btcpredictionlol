@@ -336,7 +336,7 @@ export async function runT30Boundary(
     await auditT30(sb, "shadow-error", { targetTs, error: String(e) }, false);
   }
 
-  return finish(row, {});
+  return finished;
 }
 
 /**
