@@ -52,6 +52,25 @@ produce a second prediction row or webhook.
 Offset 45 and later bars are dropped before ingest, and a partially received
 window is posted but never triggers a decision.
 
+## T30 PriceFlow Balanced (third stream, same process)
+
+Same process, its own WebSocket to Binance **Global** Spot `btcusdt@kline_1s`.
+Keeps FINAL bars at offsets **0..29** of each 15-minute UTC candle, then:
+
+1. POSTs the 30 bars to `/api/public/hooks/t30-ingest` (HMAC signed).
+2. Immediately POSTs `{ "target_ts": "<candle ISO>" }` to
+   `/api/public/hooks/t30-boundary-run` so the decision runs at a true T+30s.
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `T30_ENABLED` | no | `false` disables the T30 stream (default on) |
+| `T30_INGEST_URL` | no | Defaults to `<app-host>/api/public/hooks/t30-ingest` |
+| `T30_BOUNDARY_URL` | no | Defaults to `<app-host>/api/public/hooks/t30-boundary-run` |
+| `T30_INGEST_SECRET` | no | Defaults to `BINANCE_OB_INGEST_SECRET`; signs both T30 calls |
+
+Watch logs for `[t30] started` and, each quarter hour,
+`[t30] boundary trigger <ts> -> 200`.
+
 ## Redeploying on Railway
 
 1. Push this repo (service root `services/binance-ob-collector`).
