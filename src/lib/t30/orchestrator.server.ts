@@ -206,6 +206,7 @@ export async function runT30Boundary(
   });
 
   if (inactive) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.INACTIVE, { packet_ready: false, packet_reason: pkReason }),
       {},
