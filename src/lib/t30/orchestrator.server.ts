@@ -213,6 +213,7 @@ export async function runT30Boundary(
     );
   }
   if (pkReason || !features.vector) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.PACKET_NOT_READY, {
         packet_ready: false,
