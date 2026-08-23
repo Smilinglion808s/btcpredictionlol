@@ -129,9 +129,12 @@ export async function runT30Boundary(
   const finish = async (row: Row, result: Partial<T30RunResult>): Promise<T30RunResult> => {
     const latency = Date.now() - startedAt;
     const withinDeadline = Date.now() - targetMs <= T30_PUBLISH_DEADLINE_MS;
+    // Seconds-resolution timing: how far past the candle open the decision was minted.
+    const decidedMs = row.decided_at ? new Date(String(row.decided_at)).getTime() : Date.now();
     await upsertT30Prediction(sb, {
       ...row,
       decision_latency_ms: latency,
+      decision_offset_ms: decidedMs - targetMs,
       within_publish_deadline: withinDeadline,
     });
     return {
