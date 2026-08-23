@@ -61,6 +61,11 @@ export interface T30Stats {
   last_target_ts: string | null;
   last_decision_reason: string | null;
   last_latency_ms: number | null;
+  last_decision_offset_ms: number | null;
+  last_webhook_sent: boolean | null;
+  last_webhook_sent_at: string | null;
+  last_webhook_latency_ms: number | null;
+  last_webhook_offset_ms: number | null;
   today: { date: string; traded: number; wins: number; losses: number; win_rate: number | null };
   shadows: {
     policy: string;
@@ -95,7 +100,9 @@ export async function buildT30Stats(): Promise<T30Stats> {
 
   const { data: last } = await client
     .from(T30_PREDICTIONS_TABLE)
-    .select("target_ts, decision_reason, decision_latency_ms")
+    .select(
+      "target_ts, decision_reason, decision_latency_ms, decision_offset_ms, webhook_sent, webhook_sent_at, webhook_latency_ms, webhook_offset_ms",
+    )
     .eq("model_version", T30_MODEL_VERSION)
     .eq("run_mode", "LIVE")
     .order("target_ts", { ascending: false })
@@ -168,6 +175,11 @@ export async function buildT30Stats(): Promise<T30Stats> {
     last_target_ts: last ? String(last.target_ts) : null,
     last_decision_reason: last ? ((last.decision_reason as string | null) ?? null) : null,
     last_latency_ms: last ? ((last.decision_latency_ms as number | null) ?? null) : null,
+    last_decision_offset_ms: last ? ((last.decision_offset_ms as number | null) ?? null) : null,
+    last_webhook_sent: last ? ((last.webhook_sent as boolean | null) ?? null) : null,
+    last_webhook_sent_at: last?.webhook_sent_at ? String(last.webhook_sent_at) : null,
+    last_webhook_latency_ms: last ? ((last.webhook_latency_ms as number | null) ?? null) : null,
+    last_webhook_offset_ms: last ? ((last.webhook_offset_ms as number | null) ?? null) : null,
     today: {
       date: todayKey,
       traded: tT,
@@ -191,7 +203,7 @@ export async function loadT30Pending(): Promise<Record<string, string | number |
   const { data } = await sb()
     .from(T30_PREDICTIONS_TABLE)
     .select(
-      "target_ts, decided_at, decision_reason, decision_valid, model_would_trade, model_direction, probability_green, confidence, long_rank, fast_rank, packet_ready, packet_reason, seconds_present, fit_id, fit_certified, decision_latency_ms, within_publish_deadline, result, resolved_at",
+      "target_ts, decided_at, decision_reason, decision_valid, model_would_trade, model_direction, probability_green, confidence, long_rank, fast_rank, packet_ready, packet_reason, seconds_present, fit_id, fit_certified, decision_latency_ms, decision_offset_ms, webhook_sent, webhook_sent_at, webhook_latency_ms, webhook_offset_ms, within_publish_deadline, result, resolved_at",
     )
     .eq("model_version", T30_MODEL_VERSION)
     .eq("run_mode", "LIVE")
@@ -207,6 +219,11 @@ const CSV_COLUMNS = [
   "trigger_kind",
   "decided_at",
   "decision_latency_ms",
+  "decision_offset_ms",
+  "webhook_sent",
+  "webhook_sent_at",
+  "webhook_latency_ms",
+  "webhook_offset_ms",
   "within_publish_deadline",
   "packet_ready",
   "packet_reason",

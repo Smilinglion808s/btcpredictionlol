@@ -251,6 +251,30 @@ export async function upsertT30Prediction(sb: SupabaseClient, row: Row): Promise
   if (error) throw new Error(`t30_prediction_upsert:${error.message}`);
 }
 
+/** Stamp webhook delivery timing on a decided row. Never throws. */
+export async function markT30Webhook(
+  sb: SupabaseClient,
+  targetTs: string,
+  runMode: string,
+  t: { sent: boolean; sentAtMs: number; latencyMs: number; offsetMs: number },
+): Promise<void> {
+  try {
+    await sb
+      .from(T30_PREDICTIONS_TABLE)
+      .update({
+        webhook_sent: t.sent,
+        webhook_sent_at: new Date(t.sentAtMs).toISOString(),
+        webhook_latency_ms: t.latencyMs,
+        webhook_offset_ms: t.offsetMs,
+      } as never)
+      .eq("target_ts", targetTs)
+      .eq("model_version", T30_MODEL_VERSION)
+      .eq("run_mode", runMode);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function upsertT30Shadows(
   sb: SupabaseClient,
   rows: readonly Row[],

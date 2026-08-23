@@ -210,9 +210,12 @@ export async function runPriceFlowBoundary(
   }
 
   const write = async (extra: Row) => {
+    const decidedAt = Date.now();
     await upsertPFPrediction(sb, {
       ...identity,
-      decided_at: new Date().toISOString(),
+      decided_at: new Date(decidedAt).toISOString(),
+      // Seconds-resolution timing: how far past the candle open the decision landed.
+      decision_offset_ms: decidedAt - targetMs,
       ...extra,
     });
   };
@@ -384,6 +387,7 @@ export async function runPriceFlowBoundary(
   // Send FIRST: the POST leaves before the prediction row is persisted, and the
   // database write runs concurrently with it. Nothing may sit in front of the
   // wire on the hot path.
+  const sendStartedAt = Date.now();
   const sendPromise: Promise<
     { delivered: number; latencyMs: number; settle: Promise<void>; error?: string } | null
   > = webhookArmed && tradeable
@@ -428,7 +432,12 @@ export async function runPriceFlowBoundary(
   if (send) {
     webhookSent = send.delivered > 0;
     webhookLatencyMs = send.latencyMs;
-    await markPFWebhook(sb, targetTs, runMode, webhookSent);
+    const sentAtMs = sendStartedAt + send.latencyMs;
+    await markPFWebhook(sb, targetTs, runMode, webhookSent, {
+      sentAtMs,
+      latencyMs: send.latencyMs,
+      offsetMs: sentAtMs - targetMs,
+    });
     if (send.error) {
       await auditPF(sb, "webhook-error", { target_ts: targetTs, error: send.error }, false);
     }

@@ -36,8 +36,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /**
  * T30 PriceFlow Balanced R1 — shadow hero tile (lightning green).
  *
- * Fully separate identity, storage, fit and statistics from T45. Shadow only:
- * this model never emits an outbound webhook.
+ * Fully separate identity, storage, fit and statistics from T45. Live model:
+ * emits outbound webhooks on tradeable decisions.
  */
 export function T30Card({
   stats,
@@ -72,6 +72,11 @@ export function T30Card({
       ? "border-bull/50 text-bull bg-bull/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bull)_70%,transparent)]"
       : "border-bear/50 text-bear bg-bear/10 shadow-[0_0_26px_-6px_color-mix(in_oklab,var(--bear)_70%,transparent)]";
 
+  const secs = (ms: unknown) =>
+    ms == null || !Number.isFinite(Number(ms)) ? "—" : `T+${(Number(ms) / 1000).toFixed(1)}s`;
+  const millis = (ms: unknown) =>
+    ms == null || !Number.isFinite(Number(ms)) ? "—" : `${Math.round(Number(ms))} ms`;
+
   const targetMs = pending?.target_ts ? new Date(String(pending.target_ts)).getTime() : NaN;
   const candleLabel = Number.isFinite(targetMs)
     ? `${new Date(targetMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${new Date(
@@ -86,7 +91,7 @@ export function T30Card({
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.28em] text-voltgreen/80 mb-1">
-            Shadow model · no webhooks
+            {stats.webhooks_enabled ? "Active model · webhook source" : "Shadow model · no webhooks"}
           </div>
           <h3 className="t30-title text-4xl font-bold font-heading tracking-tight leading-none">
             T30 PriceFlow
@@ -110,7 +115,7 @@ export function T30Card({
           </Button>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-voltgreen/40 bg-voltgreen/10 text-[10px] font-bold uppercase tracking-[0.16em] text-voltgreen">
             <span className="size-1.5 rounded-full bg-voltgreen t30-live-dot" />
-            Shadow
+            {stats.webhooks_enabled ? "Live" : "Shadow"}
           </div>
         </div>
       </div>
@@ -212,6 +217,21 @@ export function T30Card({
                 : `${Number(pending.decision_latency_ms)} ms`
             }
           />
+        </div>
+      </Section>
+
+      <Section title="Decision & delivery timing (last live candle)">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <Stat label="Predicted at" value={secs(stats.last_decision_offset_ms)} />
+          <Stat
+            label="Webhook at"
+            value={stats.last_webhook_sent ? secs(stats.last_webhook_offset_ms) : "—"}
+          />
+          <Stat
+            label="Send time"
+            value={stats.last_webhook_sent ? millis(stats.last_webhook_latency_ms) : "—"}
+          />
+          <Stat label="Compute" value={millis(stats.last_latency_ms)} />
         </div>
       </Section>
 

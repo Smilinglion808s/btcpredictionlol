@@ -39,6 +39,7 @@ import {
   loadConfirmedCandles,
   loadT30Bars,
   loadT30PriorConfidences,
+  markT30Webhook,
   readT30Activation,
   t30RowIndex,
   upsertT30Features,
@@ -129,9 +130,12 @@ export async function runT30Boundary(
   const finish = async (row: Row, result: Partial<T30RunResult>): Promise<T30RunResult> => {
     const latency = Date.now() - startedAt;
     const withinDeadline = Date.now() - targetMs <= T30_PUBLISH_DEADLINE_MS;
+    // Seconds-resolution timing: how far past the candle open the decision was minted.
+    const decidedMs = row.decided_at ? new Date(String(row.decided_at)).getTime() : Date.now();
     await upsertT30Prediction(sb, {
       ...row,
       decision_latency_ms: latency,
+      decision_offset_ms: decidedMs - targetMs,
       within_publish_deadline: withinDeadline,
     });
     return {
@@ -293,6 +297,7 @@ export async function runT30Boundary(
     decision.modelWouldTrade === true &&
     (decision.modelDirection === 1 || decision.modelDirection === -1);
 
+  const sendStartedAt = Date.now();
   const sendPromise: Promise<{ delivered: number; latencyMs: number } | null> =
     webhookArmed && tradeable
       ? deliverWebhookNow(
@@ -313,10 +318,23 @@ export async function runT30Boundary(
   const finishPromise = finish(row, {});
   const [send, finished] = await Promise.all([sendPromise, finishPromise, featureWrite]);
   if (send) {
+    // Timing audit trail, written after the wire so it never delays the POST.
+    const sentAtMs = sendStartedAt + send.latencyMs;
+    await markT30Webhook(sb, targetTs, runMode, {
+      sent: send.delivered > 0,
+      sentAtMs,
+      latencyMs: send.latencyMs,
+      offsetMs: sentAtMs - targetMs,
+    });
     await auditT30(
       sb,
       "webhook",
-      { targetTs, delivered: send.delivered, latency_ms: send.latencyMs },
+      {
+        targetTs,
+        delivered: send.delivered,
+        latency_ms: send.latencyMs,
+        sent_offset_ms: sentAtMs - targetMs,
+      },
       send.delivered > 0,
     ).catch(() => {});
   }

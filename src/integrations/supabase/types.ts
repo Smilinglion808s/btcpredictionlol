@@ -7026,6 +7026,7 @@ export type Database = {
           decided_at: string | null
           decimal_odds: number | null
           decision_latency_ms: number | null
+          decision_offset_ms: number | null
           decision_reason: string | null
           decision_valid: boolean | null
           error_message: string | null
@@ -7071,6 +7072,10 @@ export type Database = {
           target_ts: string
           trigger_kind: string | null
           updated_at: string
+          webhook_latency_ms: number | null
+          webhook_offset_ms: number | null
+          webhook_sent: boolean
+          webhook_sent_at: string | null
           within_publish_deadline: boolean | null
         }
         Insert: {
@@ -7087,6 +7092,7 @@ export type Database = {
           decided_at?: string | null
           decimal_odds?: number | null
           decision_latency_ms?: number | null
+          decision_offset_ms?: number | null
           decision_reason?: string | null
           decision_valid?: boolean | null
           error_message?: string | null
@@ -7132,6 +7138,10 @@ export type Database = {
           target_ts: string
           trigger_kind?: string | null
           updated_at?: string
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
+          webhook_sent?: boolean
+          webhook_sent_at?: string | null
           within_publish_deadline?: boolean | null
         }
         Update: {
@@ -7148,6 +7158,7 @@ export type Database = {
           decided_at?: string | null
           decimal_odds?: number | null
           decision_latency_ms?: number | null
+          decision_offset_ms?: number | null
           decision_reason?: string | null
           decision_valid?: boolean | null
           error_message?: string | null
@@ -7193,6 +7204,10 @@ export type Database = {
           target_ts?: string
           trigger_kind?: string | null
           updated_at?: string
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
+          webhook_sent?: boolean
+          webhook_sent_at?: string | null
           within_publish_deadline?: boolean | null
         }
         Relationships: []
@@ -7891,6 +7906,7 @@ export type Database = {
           created_at: string
           decided_at: string | null
           decision_cutoff_ts: string | null
+          decision_offset_ms: number | null
           decision_reason: string | null
           decision_valid: boolean
           duplicate_offsets: number[] | null
@@ -7943,7 +7959,10 @@ export type Database = {
           utc_date: string | null
           webhook_eligible: boolean
           webhook_idempotency_key: string | null
+          webhook_latency_ms: number | null
+          webhook_offset_ms: number | null
           webhook_sent: boolean
+          webhook_sent_at: string | null
         }
         Insert: {
           activation_mode?: string
@@ -7966,6 +7985,7 @@ export type Database = {
           created_at?: string
           decided_at?: string | null
           decision_cutoff_ts?: string | null
+          decision_offset_ms?: number | null
           decision_reason?: string | null
           decision_valid?: boolean
           duplicate_offsets?: number[] | null
@@ -8018,7 +8038,10 @@ export type Database = {
           utc_date?: string | null
           webhook_eligible?: boolean
           webhook_idempotency_key?: string | null
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
           webhook_sent?: boolean
+          webhook_sent_at?: string | null
         }
         Update: {
           activation_mode?: string
@@ -8041,6 +8064,7 @@ export type Database = {
           created_at?: string
           decided_at?: string | null
           decision_cutoff_ts?: string | null
+          decision_offset_ms?: number | null
           decision_reason?: string | null
           decision_valid?: boolean
           duplicate_offsets?: number[] | null
@@ -8093,7 +8117,10 @@ export type Database = {
           utc_date?: string | null
           webhook_eligible?: boolean
           webhook_idempotency_key?: string | null
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
           webhook_sent?: boolean
+          webhook_sent_at?: string | null
         }
         Relationships: []
       }
