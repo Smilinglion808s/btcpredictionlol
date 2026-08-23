@@ -283,7 +283,43 @@ export async function runT30Boundary(
     decision_reason: decision.reason,
   };
 
-  // 4. Reporting-only shadows — cannot influence anything above.
+  // 4. Outbound webhook — fires BEFORE any remaining database write so the POST
+  // leaves the moment the decision exists. LIVE tradeable decisions only;
+  // failures never affect the decision or the persisted row.
+  const tradeable =
+    decision.decisionValid &&
+    decision.modelWouldTrade === true &&
+    (decision.modelDirection === 1 || decision.modelDirection === -1);
+
+  const sendPromise: Promise<{ delivered: number; latencyMs: number } | null> =
+    webhookArmed && tradeable
+      ? deliverWebhookNow(
+          sb,
+          "prediction.created",
+          buildT30WebhookPayload({
+            targetTs,
+            direction: decision.modelDirection as 1 | -1,
+            probabilityGreen: decision.probabilityGreen,
+            longRank: decision.longRank.rank,
+            fastRank: decision.fastRank.rank,
+            fitId: fit.fitId,
+            openPrice: (features.values.t30_spot_open as number | undefined) ?? null,
+          }),
+        ).catch(() => ({ delivered: 0, latencyMs: 0 }))
+      : Promise.resolve(null);
+
+  const finishPromise = finish(row, {});
+  const [send, finished] = await Promise.all([sendPromise, finishPromise, featureWrite]);
+  if (send) {
+    await auditT30(
+      sb,
+      "webhook",
+      { targetTs, delivered: send.delivered, latency_ms: send.latencyMs },
+      send.delivered > 0,
+    ).catch(() => {});
+  }
+
+  // 5. Reporting-only shadows — cannot influence anything above.
   try {
     await upsertT30Shadows(
       sb,
