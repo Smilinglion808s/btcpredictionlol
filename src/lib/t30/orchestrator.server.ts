@@ -1,8 +1,8 @@
 // T30 PriceFlow Balanced R1 — boundary orchestration and resolution.
 //
 // Fully isolated: it reads t30_samples / t30_features / t30_pf_fits and the
-// confirmed OKX candle table, and writes only t30_* rows. It emits no webhook
-// and never mutates a T45 (or any other model's) row, decision or statistic.
+// confirmed OKX candle table, and writes only t30_* rows. It is the single
+// outbound webhook source and never mutates a T45 (or any other model's) row.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
