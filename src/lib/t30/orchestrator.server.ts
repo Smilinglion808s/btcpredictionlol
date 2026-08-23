@@ -31,6 +31,8 @@ import {
 import { buildT30Features, type T30FeatureResult } from "./features";
 import { t30Decide, t30OddsUnits, t30Probability, t30Score, type T30Decision } from "./head";
 import { evaluateT30Shadows } from "./shadows";
+import { buildT30WebhookPayload } from "./webhook.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 import { ensureT30Fit } from "./fitService.server";
 import {
   auditT30,
