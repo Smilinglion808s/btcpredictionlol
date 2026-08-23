@@ -169,6 +169,14 @@ export async function runT30Boundary(
   const activation = await readT30Activation(sb);
   const inactive = String(activation.mode ?? "SHADOW_ONLY") === "DISABLED";
 
+  // T30 owns the wire: warm the endpoint cache now so the send at decision
+  // time performs zero database reads.
+  const webhookArmed =
+    runMode === "LIVE" &&
+    String(activation.mode ?? "SHADOW_ONLY") === "ACTIVE" &&
+    activation.webhooks_enabled === true;
+  if (webhookArmed) void primeWebhookEndpoints(sb).catch(() => {});
+
   // 1. Packet + features.
   const bars = await loadT30Bars(sb, targetTs);
   const inWindow = bars.filter(
@@ -179,7 +187,9 @@ export async function runT30Boundary(
   const subset = featureSubset(features);
 
   const rowIndex = await t30RowIndex(sb, targetTs);
-  await upsertT30Features(sb, {
+  // Feature persistence runs concurrently with fit + decision + send: it is a
+  // logging write and must never sit in front of the wire.
+  const featureWrite = upsertT30Features(sb, {
     target_ts: targetTs,
     feature_version: T30_FEATURE_SCHEMA,
     feature_order_hash: T30_FEATURE_ORDER_HASH,
