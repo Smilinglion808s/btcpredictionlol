@@ -296,6 +296,7 @@ export async function runT30Boundary(
     decision.modelWouldTrade === true &&
     (decision.modelDirection === 1 || decision.modelDirection === -1);
 
+  const sendStartedAt = Date.now();
   const sendPromise: Promise<{ delivered: number; latencyMs: number } | null> =
     webhookArmed && tradeable
       ? deliverWebhookNow(
