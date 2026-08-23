@@ -209,11 +209,22 @@ export async function markPFWebhook(
   targetTs: string,
   runMode: string,
   sent: boolean,
+  timing?: { sentAtMs: number; latencyMs: number; offsetMs: number },
 ): Promise<void> {
   try {
     await sb
       .from(T45PF_PREDICTIONS_TABLE)
-      .update({ webhook_eligible: true, webhook_sent: sent } as never)
+      .update({
+        webhook_eligible: true,
+        webhook_sent: sent,
+        ...(timing
+          ? {
+              webhook_sent_at: new Date(timing.sentAtMs).toISOString(),
+              webhook_latency_ms: timing.latencyMs,
+              webhook_offset_ms: timing.offsetMs,
+            }
+          : {}),
+      } as never)
       .eq("target_ts", targetTs)
       .eq("model_version", MODEL_VERSION)
       .eq("run_mode", runMode);
