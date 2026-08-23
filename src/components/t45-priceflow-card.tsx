@@ -66,6 +66,11 @@ export function T45PriceFlowCard({
   const above = heroWr >= 50;
 
   const webhooksLive = stats.webhooksEnabled === true;
+  const timing: Any = stats.timing ?? {};
+  const tSecs = (ms: unknown) =>
+    ms == null || !Number.isFinite(Number(ms)) ? "—" : `T+${(Number(ms) / 1000).toFixed(1)}s`;
+  const tMs = (ms: unknown) =>
+    ms == null || !Number.isFinite(Number(ms)) ? "—" : `${Math.round(Number(ms))} ms`;
   const wouldTrade = pending?.active_would_trade === true;
   const dir = Number(pending?.active_prediction ?? 0);
   const dirLabel = wouldTrade ? (dir > 0 ? "GREEN" : dir < 0 ? "RED" : "TRADE") : "NO TRADE";
@@ -217,6 +222,17 @@ export function T45PriceFlowCard({
             />
             <Stat label="Coverage" value={pct(live.evaluableCoverage)} />
             <Stat label="Webhooks sent" value={String(stats.webhookProof?.sentRows ?? 0)} />
+          </div>
+        </Section>
+      </div>
+
+      <div className="relative mt-4">
+        <Section title="Decision & delivery timing (last live candle)">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Stat label="Predicted at" value={tSecs(timing.lastDecisionOffsetMs)} />
+            <Stat label="Webhook at" value={tSecs(timing.lastWebhookOffsetMs)} />
+            <Stat label="Send time" value={tMs(timing.lastWebhookLatencyMs)} />
+            <Stat label="Avg webhook at" value={tSecs(timing.avgWebhookOffsetMs)} />
           </div>
         </Section>
       </div>
