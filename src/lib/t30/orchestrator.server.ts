@@ -39,6 +39,7 @@ import {
   loadConfirmedCandles,
   loadT30Bars,
   loadT30PriorConfidences,
+  markT30Webhook,
   readT30Activation,
   t30RowIndex,
   upsertT30Features,
