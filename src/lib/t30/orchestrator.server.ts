@@ -244,6 +244,7 @@ export async function runT30Boundary(
   // 2. Fit governing this row.
   const fit = await ensureT30Fit(sb, rowIndex, runMode === "LIVE" ? "LIVE" : "REPLAY");
   if (!fit || !fit.certified) {
+    await featureWrite;
     return finish(
       fail(T30_REASONS.FIT_NOT_READY, {
         ...packetCommon,
