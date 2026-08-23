@@ -208,17 +208,27 @@ export async function loadT30PriorConfidences(
   targetTs: string,
   runMode = "LIVE",
 ): Promise<T30PriorConfidence[]> {
-  const { data, error } = await sb
-    .from(T30_PREDICTIONS_TABLE)
-    .select("target_ts, run_mode, confidence")
-    .eq("model_version", T30_MODEL_VERSION)
-    .not("confidence", "is", null)
-    .lt("target_ts", targetTs)
-    .order("target_ts", { ascending: false })
-    .limit(T30_LONG_RANK_WINDOW * 2);
-  if (error) throw new Error(`t30_rank_history:${error.message}`);
+  // PostgREST caps a single response at 1000 rows, so page explicitly.
+  const PAGE = 1000;
+  const NEED = T30_LONG_RANK_WINDOW * 2;
+  const rows: Row[] = [];
+  for (let from = 0; from < NEED; from += PAGE) {
+    const to = Math.min(from + PAGE, NEED) - 1;
+    const { data, error } = await sb
+      .from(T30_PREDICTIONS_TABLE)
+      .select("target_ts, run_mode, confidence")
+      .eq("model_version", T30_MODEL_VERSION)
+      .not("confidence", "is", null)
+      .lt("target_ts", targetTs)
+      .order("target_ts", { ascending: false })
+      .range(from, to);
+    if (error) throw new Error(`t30_rank_history:${error.message}`);
+    const page = (data ?? []) as Row[];
+    rows.push(...page);
+    if (page.length < to - from + 1) break;
+  }
   const byTarget = new Map<string, { targetTs: string; confidence: number; live: boolean }>();
-  for (const r of (data ?? []) as Row[]) {
+  for (const r of rows) {
     const confidence = Number(r.confidence);
     if (!Number.isFinite(confidence)) continue;
     const ts = new Date(String(r.target_ts)).toISOString();
@@ -226,6 +236,7 @@ export async function loadT30PriorConfidences(
     const existing = byTarget.get(ts);
     if (!existing || (live && !existing.live)) byTarget.set(ts, { targetTs: ts, confidence, live });
   }
+
   return [...byTarget.values()]
     .sort((a, b) => a.targetTs.localeCompare(b.targetTs))
     .slice(-T30_LONG_RANK_WINDOW)
