@@ -438,7 +438,7 @@ export const OUTBOUND_WEBHOOKS_ENABLED = true;
  * A2, Model 3/6/7) may still call deliverWebhook — their payloads are dropped
  * here so exactly one model can ever reach the bot.
  */
-export const WEBHOOK_ALLOWED_MODELS = new Set(["t45-priceflow"]);
+export const WEBHOOK_ALLOWED_MODELS = new Set(["t30-priceflow"]);
 
 // ── Latency-critical delivery path ───────────────────────────────────────────
 // The active model must reach the bot the instant the decision exists, so the
