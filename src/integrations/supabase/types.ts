@@ -6801,6 +6801,593 @@ export type Database = {
         }
         Relationships: []
       }
+      t30_cross89_activation: {
+        Row: {
+          activation_target_ts: string | null
+          approval_note: string | null
+          approved_at: string | null
+          config_hash: string | null
+          created_at: string
+          id: boolean
+          mode: string
+          model_version: string
+          updated_at: string
+          webhooks_enabled: boolean
+        }
+        Insert: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash?: string | null
+          created_at?: string
+          id?: boolean
+          mode?: string
+          model_version: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Update: {
+          activation_target_ts?: string | null
+          approval_note?: string | null
+          approved_at?: string | null
+          config_hash?: string | null
+          created_at?: string
+          id?: boolean
+          mode?: string
+          model_version?: string
+          updated_at?: string
+          webhooks_enabled?: boolean
+        }
+        Relationships: []
+      }
+      t30_cross89_features: {
+        Row: {
+          base_direction: number | null
+          created_at: string
+          feature_complete: boolean
+          feature_order_hash: string
+          feature_version: string
+          features: Json | null
+          first_offset_s: number | null
+          fut_tech_ready: boolean
+          invalid_reason: string | null
+          label: number | null
+          label_source: string | null
+          last_offset_s: number | null
+          okx_close: number | null
+          okx_direction: number | null
+          okx_high: number | null
+          okx_low: number | null
+          okx_open: number | null
+          packet_ready: boolean
+          packet_reason: string | null
+          seconds_present: number
+          source: string
+          source_index: number | null
+          spot_tech_ready: boolean
+          target_ts: string
+          updated_at: string
+          vector: number[] | null
+        }
+        Insert: {
+          base_direction?: number | null
+          created_at?: string
+          feature_complete?: boolean
+          feature_order_hash: string
+          feature_version: string
+          features?: Json | null
+          first_offset_s?: number | null
+          fut_tech_ready?: boolean
+          invalid_reason?: string | null
+          label?: number | null
+          label_source?: string | null
+          last_offset_s?: number | null
+          okx_close?: number | null
+          okx_direction?: number | null
+          okx_high?: number | null
+          okx_low?: number | null
+          okx_open?: number | null
+          packet_ready?: boolean
+          packet_reason?: string | null
+          seconds_present?: number
+          source?: string
+          source_index?: number | null
+          spot_tech_ready?: boolean
+          target_ts: string
+          updated_at?: string
+          vector?: number[] | null
+        }
+        Update: {
+          base_direction?: number | null
+          created_at?: string
+          feature_complete?: boolean
+          feature_order_hash?: string
+          feature_version?: string
+          features?: Json | null
+          first_offset_s?: number | null
+          fut_tech_ready?: boolean
+          invalid_reason?: string | null
+          label?: number | null
+          label_source?: string | null
+          last_offset_s?: number | null
+          okx_close?: number | null
+          okx_direction?: number | null
+          okx_high?: number | null
+          okx_low?: number | null
+          okx_open?: number | null
+          packet_ready?: boolean
+          packet_reason?: string | null
+          seconds_present?: number
+          source?: string
+          source_index?: number | null
+          spot_tech_ready?: boolean
+          target_ts?: string
+          updated_at?: string
+          vector?: number[] | null
+        }
+        Relationships: []
+      }
+      t30_cross89_fits: {
+        Row: {
+          artifact_hash: string
+          block_index: number
+          block_start_index: number
+          center: number[]
+          certification_note: string | null
+          certified: boolean
+          coefficients: number[]
+          config_hash: string | null
+          converged: boolean
+          created_at: string
+          feature_order_hash: string
+          fit_id: string
+          gradient_norm: number
+          intercept: number
+          iterations: number
+          model_version: string
+          scale: number[]
+          solver: string
+          training_end_index: number
+          training_end_ts: string
+          training_row_count: number
+          training_start_index: number
+          training_start_ts: string
+          window_fingerprint: string
+        }
+        Insert: {
+          artifact_hash: string
+          block_index: number
+          block_start_index: number
+          center: number[]
+          certification_note?: string | null
+          certified?: boolean
+          coefficients: number[]
+          config_hash?: string | null
+          converged: boolean
+          created_at?: string
+          feature_order_hash: string
+          fit_id: string
+          gradient_norm: number
+          intercept: number
+          iterations: number
+          model_version: string
+          scale: number[]
+          solver: string
+          training_end_index: number
+          training_end_ts: string
+          training_row_count: number
+          training_start_index: number
+          training_start_ts: string
+          window_fingerprint: string
+        }
+        Update: {
+          artifact_hash?: string
+          block_index?: number
+          block_start_index?: number
+          center?: number[]
+          certification_note?: string | null
+          certified?: boolean
+          coefficients?: number[]
+          config_hash?: string | null
+          converged?: boolean
+          created_at?: string
+          feature_order_hash?: string
+          fit_id?: string
+          gradient_norm?: number
+          intercept?: number
+          iterations?: number
+          model_version?: string
+          scale?: number[]
+          solver?: string
+          training_end_index?: number
+          training_end_ts?: string
+          training_row_count?: number
+          training_start_index?: number
+          training_start_ts?: string
+          window_fingerprint?: string
+        }
+        Relationships: []
+      }
+      t30_cross89_policy_shadows: {
+        Row: {
+          created_at: string
+          direction: number | null
+          fast_rank: number | null
+          id: string
+          long_rank: number | null
+          outcome: string | null
+          policy: string
+          prediction_id: string | null
+          probability_correct: number | null
+          raw_score: number | null
+          resolved_at: string | null
+          target_ts: string
+          would_trade: boolean
+        }
+        Insert: {
+          created_at?: string
+          direction?: number | null
+          fast_rank?: number | null
+          id?: string
+          long_rank?: number | null
+          outcome?: string | null
+          policy: string
+          prediction_id?: string | null
+          probability_correct?: number | null
+          raw_score?: number | null
+          resolved_at?: string | null
+          target_ts: string
+          would_trade?: boolean
+        }
+        Update: {
+          created_at?: string
+          direction?: number | null
+          fast_rank?: number | null
+          id?: string
+          long_rank?: number | null
+          outcome?: string | null
+          policy?: string
+          prediction_id?: string | null
+          probability_correct?: number | null
+          raw_score?: number | null
+          resolved_at?: string | null
+          target_ts?: string
+          would_trade?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "t30_cross89_policy_shadows_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "t30_cross89_predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      t30_cross89_predictions: {
+        Row: {
+          activation_mode: string
+          activation_target_ts: string | null
+          base_direction: number | null
+          bet_decimal_odds: number | null
+          bet_placed: boolean | null
+          bet_recorded_at: string | null
+          betting_units: number | null
+          config_hash: string | null
+          correctness_label: number | null
+          created_at: string
+          decided_at: string | null
+          decision_offset_ms: number | null
+          decision_reason: string
+          decision_valid: boolean
+          execution_path: string | null
+          fast_rank: number | null
+          fast_rank_count: number | null
+          fast_rank_end_ts: string | null
+          fast_rank_start_ts: string | null
+          fast_rank_window: number | null
+          feature_complete: boolean
+          feature_order_hash: string
+          feature_schema: string
+          features: Json | null
+          first_offset_s: number | null
+          fit_artifact_hash: string | null
+          fit_block_index: number | null
+          fit_block_start_index: number | null
+          fit_certified: boolean | null
+          fit_id: string | null
+          fit_training_row_count: number | null
+          fut_tech_ready: boolean
+          gate_fast_pass: boolean | null
+          gate_long_pass: boolean | null
+          id: string
+          impl_revision: string
+          last_offset_s: number | null
+          long_rank: number | null
+          long_rank_count: number | null
+          long_rank_end_ts: string | null
+          long_rank_start_ts: string | null
+          long_rank_window: number | null
+          model_direction: number | null
+          model_name: string
+          model_variant: string
+          model_version: string
+          model_would_trade: boolean
+          no_decimal_odds: number | null
+          odds_age_ms: number | null
+          odds_captured_at: string | null
+          odds_source: string | null
+          okx_close: number | null
+          okx_direction: number | null
+          okx_high: number | null
+          okx_low: number | null
+          okx_open: number | null
+          outcome: string | null
+          packet_finalized_at: string | null
+          packet_ready: boolean
+          packet_reason: string | null
+          probability_correct: number | null
+          raw_score: number | null
+          resolution_attempts: number
+          resolution_error: string | null
+          resolved_at: string | null
+          run_mode: string
+          seconds_present: number | null
+          selected_decimal_odds: number | null
+          source_index: number | null
+          spot_tech_ready: boolean
+          target_ts: string
+          trigger_kind: string | null
+          updated_at: string
+          vector: number[] | null
+          webhook_claimed_at: string | null
+          webhook_eligible: boolean
+          webhook_error: string | null
+          webhook_idempotency_key: string | null
+          webhook_latency_ms: number | null
+          webhook_offset_ms: number | null
+          webhook_sent_at: string | null
+          yes_decimal_odds: number | null
+        }
+        Insert: {
+          activation_mode?: string
+          activation_target_ts?: string | null
+          base_direction?: number | null
+          bet_decimal_odds?: number | null
+          bet_placed?: boolean | null
+          bet_recorded_at?: string | null
+          betting_units?: number | null
+          config_hash?: string | null
+          correctness_label?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decision_offset_ms?: number | null
+          decision_reason: string
+          decision_valid?: boolean
+          execution_path?: string | null
+          fast_rank?: number | null
+          fast_rank_count?: number | null
+          fast_rank_end_ts?: string | null
+          fast_rank_start_ts?: string | null
+          fast_rank_window?: number | null
+          feature_complete?: boolean
+          feature_order_hash: string
+          feature_schema: string
+          features?: Json | null
+          first_offset_s?: number | null
+          fit_artifact_hash?: string | null
+          fit_block_index?: number | null
+          fit_block_start_index?: number | null
+          fit_certified?: boolean | null
+          fit_id?: string | null
+          fit_training_row_count?: number | null
+          fut_tech_ready?: boolean
+          gate_fast_pass?: boolean | null
+          gate_long_pass?: boolean | null
+          id?: string
+          impl_revision: string
+          last_offset_s?: number | null
+          long_rank?: number | null
+          long_rank_count?: number | null
+          long_rank_end_ts?: string | null
+          long_rank_start_ts?: string | null
+          long_rank_window?: number | null
+          model_direction?: number | null
+          model_name: string
+          model_variant: string
+          model_version: string
+          model_would_trade?: boolean
+          no_decimal_odds?: number | null
+          odds_age_ms?: number | null
+          odds_captured_at?: string | null
+          odds_source?: string | null
+          okx_close?: number | null
+          okx_direction?: number | null
+          okx_high?: number | null
+          okx_low?: number | null
+          okx_open?: number | null
+          outcome?: string | null
+          packet_finalized_at?: string | null
+          packet_ready?: boolean
+          packet_reason?: string | null
+          probability_correct?: number | null
+          raw_score?: number | null
+          resolution_attempts?: number
+          resolution_error?: string | null
+          resolved_at?: string | null
+          run_mode?: string
+          seconds_present?: number | null
+          selected_decimal_odds?: number | null
+          source_index?: number | null
+          spot_tech_ready?: boolean
+          target_ts: string
+          trigger_kind?: string | null
+          updated_at?: string
+          vector?: number[] | null
+          webhook_claimed_at?: string | null
+          webhook_eligible?: boolean
+          webhook_error?: string | null
+          webhook_idempotency_key?: string | null
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
+          webhook_sent_at?: string | null
+          yes_decimal_odds?: number | null
+        }
+        Update: {
+          activation_mode?: string
+          activation_target_ts?: string | null
+          base_direction?: number | null
+          bet_decimal_odds?: number | null
+          bet_placed?: boolean | null
+          bet_recorded_at?: string | null
+          betting_units?: number | null
+          config_hash?: string | null
+          correctness_label?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decision_offset_ms?: number | null
+          decision_reason?: string
+          decision_valid?: boolean
+          execution_path?: string | null
+          fast_rank?: number | null
+          fast_rank_count?: number | null
+          fast_rank_end_ts?: string | null
+          fast_rank_start_ts?: string | null
+          fast_rank_window?: number | null
+          feature_complete?: boolean
+          feature_order_hash?: string
+          feature_schema?: string
+          features?: Json | null
+          first_offset_s?: number | null
+          fit_artifact_hash?: string | null
+          fit_block_index?: number | null
+          fit_block_start_index?: number | null
+          fit_certified?: boolean | null
+          fit_id?: string | null
+          fit_training_row_count?: number | null
+          fut_tech_ready?: boolean
+          gate_fast_pass?: boolean | null
+          gate_long_pass?: boolean | null
+          id?: string
+          impl_revision?: string
+          last_offset_s?: number | null
+          long_rank?: number | null
+          long_rank_count?: number | null
+          long_rank_end_ts?: string | null
+          long_rank_start_ts?: string | null
+          long_rank_window?: number | null
+          model_direction?: number | null
+          model_name?: string
+          model_variant?: string
+          model_version?: string
+          model_would_trade?: boolean
+          no_decimal_odds?: number | null
+          odds_age_ms?: number | null
+          odds_captured_at?: string | null
+          odds_source?: string | null
+          okx_close?: number | null
+          okx_direction?: number | null
+          okx_high?: number | null
+          okx_low?: number | null
+          okx_open?: number | null
+          outcome?: string | null
+          packet_finalized_at?: string | null
+          packet_ready?: boolean
+          packet_reason?: string | null
+          probability_correct?: number | null
+          raw_score?: number | null
+          resolution_attempts?: number
+          resolution_error?: string | null
+          resolved_at?: string | null
+          run_mode?: string
+          seconds_present?: number | null
+          selected_decimal_odds?: number | null
+          source_index?: number | null
+          spot_tech_ready?: boolean
+          target_ts?: string
+          trigger_kind?: string | null
+          updated_at?: string
+          vector?: number[] | null
+          webhook_claimed_at?: string | null
+          webhook_eligible?: boolean
+          webhook_error?: string | null
+          webhook_idempotency_key?: string | null
+          webhook_latency_ms?: number | null
+          webhook_offset_ms?: number | null
+          webhook_sent_at?: string | null
+          yes_decimal_odds?: number | null
+        }
+        Relationships: []
+      }
+      t30_cross89_samples: {
+        Row: {
+          bar_close_ts: string
+          bar_open_ms: number
+          build_identifier: string | null
+          close: number
+          collector_version: string | null
+          created_at: string
+          event_time_ms: number | null
+          final_event_ms: number | null
+          high: number
+          is_final: boolean
+          low: number
+          offset_seconds: number
+          open: number
+          quote_volume: number
+          received_at: string
+          taker_buy_quote_volume: number
+          taker_buy_volume: number | null
+          target_ts: string
+          trade_count: number
+          volume: number
+        }
+        Insert: {
+          bar_close_ts: string
+          bar_open_ms: number
+          build_identifier?: string | null
+          close: number
+          collector_version?: string | null
+          created_at?: string
+          event_time_ms?: number | null
+          final_event_ms?: number | null
+          high: number
+          is_final?: boolean
+          low: number
+          offset_seconds: number
+          open: number
+          quote_volume: number
+          received_at?: string
+          taker_buy_quote_volume: number
+          taker_buy_volume?: number | null
+          target_ts: string
+          trade_count: number
+          volume: number
+        }
+        Update: {
+          bar_close_ts?: string
+          bar_open_ms?: number
+          build_identifier?: string | null
+          close?: number
+          collector_version?: string | null
+          created_at?: string
+          event_time_ms?: number | null
+          final_event_ms?: number | null
+          high?: number
+          is_final?: boolean
+          low?: number
+          offset_seconds?: number
+          open?: number
+          quote_volume?: number
+          received_at?: string
+          taker_buy_quote_volume?: number
+          taker_buy_volume?: number | null
+          target_ts?: string
+          trade_count?: number
+          volume?: number
+        }
+        Relationships: []
+      }
       t30_features: {
         Row: {
           actual_close: number | null
