@@ -231,7 +231,26 @@ export function createT10Collector({
     start() {
       stopped = false;
       connect();
-      heartbeat = setInterval(() => void post([]), HEARTBEAT_INTERVAL_MS);
+      heartbeat = setInterval(() => {
+        void (async () => {
+          const now = Date.now();
+          let klines = [];
+          if (now - lastKlinePushMs > KLINE_REFRESH_MS) {
+            klines = await fetchPriorKlines();
+            if (klines.length) lastKlinePushMs = now;
+          }
+          await post([], {}, klines);
+        })();
+      }, HEARTBEAT_INTERVAL_MS);
+      // Push the technical history immediately on boot so the very next
+      // boundary can score instead of abstaining.
+      void (async () => {
+        const klines = await fetchPriorKlines();
+        if (klines.length) {
+          lastKlinePushMs = Date.now();
+          await post([], {}, klines);
+        }
+      })();
     },
     stop() {
       stopped = true;
