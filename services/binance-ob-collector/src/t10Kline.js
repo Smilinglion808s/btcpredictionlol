@@ -19,6 +19,48 @@ const TF_MS = 15 * 60 * 1000;
 const LAST_OFFSET_S = 9;
 const EXPECTED = 10;
 const HEARTBEAT_INTERVAL_MS = 5_000;
+// The app's edge worker is geo-blocked from Binance REST (HTTP 403), so this
+// always-on process owns the completed 15m technical history too.
+const KLINE_REFRESH_MS = 60_000;
+const KLINE_LIMIT = 80;
+const SPOT_KLINE_URL = "https://api.binance.com/api/v3/klines";
+const FUT_KLINE_URL = "https://fapi.binance.com/fapi/v1/klines";
+let lastKlinePushMs = 0;
+
+async function fetchVenueKlines(url, venue) {
+  const qs = `symbol=BTCUSDT&interval=15m&limit=${KLINE_LIMIT}`;
+  const res = await fetch(`${url}?${qs}`);
+  if (!res.ok) throw new Error(`t10_kline_history_${venue}_${res.status}`);
+  const rows = await res.json();
+  const nowMs = Date.now();
+  return rows
+    // Only fully CLOSED candles may become technical inputs.
+    .filter((k) => Number(k[6]) < nowMs)
+    .map((k) => ({
+      venue,
+      open_ms: Number(k[0]),
+      open: Number(k[1]),
+      high: Number(k[2]),
+      low: Number(k[3]),
+      close: Number(k[4]),
+      volume: Number(k[5]),
+      quote_volume: Number(k[7]),
+      trade_count: Number(k[8]),
+      taker_buy_quote_volume: Number(k[10]),
+    }));
+}
+
+async function fetchPriorKlines() {
+  try {
+    const [spot, fut] = await Promise.all([
+      fetchVenueKlines(SPOT_KLINE_URL, "SPOT"),
+      fetchVenueKlines(FUT_KLINE_URL, "FUT"),
+    ]);
+    return [...spot, ...fut];
+  } catch {
+    return [];
+  }
+}
 
 const num = (v) => {
   const n = Number(v);
