@@ -44,6 +44,7 @@ export function T10Card({ stats, pending }: { stats: Any; pending: Any | null })
   const net = wins - losses;
   const today: Any = stats.today ?? {};
   const todayNet = today.net_units == null ? null : Number(today.net_units);
+  const daily: Any[] = stats.daily ?? [];
 
   const gaugeR = 34;
   const circumference = 2 * Math.PI * gaugeR;
@@ -212,6 +213,23 @@ export function T10Card({ stats, pending }: { stats: Any; pending: Any | null })
           />
         </div>
       </Section>
+
+      {daily.length > 0 && (
+        <Section title="Daily net · last 14 days">
+          <div className="flex flex-wrap gap-1">
+            {daily.map((d) => (
+              <span
+                key={d.date}
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded border tabular-nums ${
+                  d.net >= 0 ? "border-bull/30 text-bull" : "border-bear/30 text-bear"
+                }`}
+              >
+                {String(d.date).slice(5)} {signed(d.net)} · {pct(d.win_rate, 0)}
+              </span>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <p className="relative text-[10px] text-muted-foreground/80 font-mono truncate">
         config {String(stats.config_hash ?? "").slice(0, 12)} · features{" "}
