@@ -253,7 +253,15 @@ function replay(): { rows: ReplayRow[]; fits: Map<number, T10Head>; hash: string
       decision_at: new Date(ms + 10_000).toISOString(),
       decision_offset_ms: 10_000,
       webhook_eligible: false,
+      webhook_sent: false,
       final_prediction: null,
+      packet_complete: false,
+      prior_technicals_ready: false,
+      features_valid: false,
+      fit_certified: false,
+      rank_certified: false,
+      policy_would_trade: false,
+      resolution_attempt_count: 0,
     };
 
     const emit = (extra: Row, wouldTrade = false, direction = 0) => {
