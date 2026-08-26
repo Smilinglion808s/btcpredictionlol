@@ -337,7 +337,9 @@ function StatsPage() {
         <T10Card
           stats={(t10Q.data as any) ?? {}}
           pending={(t10PendingQ.data as any) ?? null}
+          onExport={downloadT10Csv}
         />
+
 
 
 
