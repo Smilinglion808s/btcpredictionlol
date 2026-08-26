@@ -29,7 +29,7 @@ function toCandle(k: Kline): T10Candle {
 }
 
 async function fetchKlines(
-  url: string,
+  hosts: readonly string[],
   targetMs: number,
   limit: number,
 ): Promise<T10Candle[]> {
@@ -39,14 +39,28 @@ async function fetchKlines(
     endTime: String(targetMs - 1),
     limit: String(limit),
   });
-  const res = await fetch(`${url}?${qs.toString()}`);
-  if (!res.ok) throw new Error(`t10_klines_${res.status}`);
-  const rows = (await res.json()) as Kline[];
-  return rows
-    .map(toCandle)
-    // Keep only candles whose close time is at or before the target boundary.
-    .filter((c) => new Date(c.ts).getTime() + TF_MS <= targetMs);
+  let lastError = "t10_klines_no_host";
+  // Some edge egress IPs are geo-blocked (HTTP 403/451) by the primary
+  // Binance host, so identical public-data mirrors are tried in order.
+  for (const url of hosts) {
+    try {
+      const res = await fetch(`${url}?${qs.toString()}`);
+      if (!res.ok) {
+        lastError = `t10_klines_${res.status}`;
+        continue;
+      }
+      const rows = (await res.json()) as Kline[];
+      return rows
+        .map(toCandle)
+        // Keep only candles whose close time is at or before the boundary.
+        .filter((c) => new Date(c.ts).getTime() + TF_MS <= targetMs);
+    } catch (e) {
+      lastError = e instanceof Error ? `t10_klines_${e.message}` : "t10_klines_fetch_failed";
+    }
+  }
+  throw new Error(lastError);
 }
+
 
 export interface T10MarketData {
   spot: T10Candle[];
