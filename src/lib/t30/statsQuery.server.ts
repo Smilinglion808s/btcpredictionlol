@@ -66,7 +66,22 @@ export interface T30Stats {
   last_webhook_sent_at: string | null;
   last_webhook_latency_ms: number | null;
   last_webhook_offset_ms: number | null;
-  today: { date: string; traded: number; wins: number; losses: number; win_rate: number | null };
+  today: {
+    date: string;
+    traded: number;
+    wins: number;
+    losses: number;
+    net_units: number;
+    win_rate: number | null;
+  };
+  daily: {
+    date: string;
+    traded: number;
+    wins: number;
+    losses: number;
+    net: number;
+    win_rate: number | null;
+  }[];
   shadows: {
     policy: string;
     traded: number;
@@ -110,7 +125,7 @@ export async function buildT30Stats(): Promise<T30Stats> {
     .maybeSingle();
 
   // Today (America/Boise) — small bounded window.
-  const since = new Date(Date.now() - 36 * 3600_000).toISOString();
+  const since = new Date(Date.now() - 16 * 24 * 3600_000).toISOString();
   const { data: recent } = await client
     .from(T30_PREDICTIONS_TABLE)
     .select("target_ts, result")
@@ -122,15 +137,30 @@ export async function buildT30Stats(): Promise<T30Stats> {
   let tW = 0;
   let tL = 0;
   let tT = 0;
+  const dayMap = new Map<string, { traded: number; wins: number; losses: number }>();
   for (const r of (recent ?? []) as Row[]) {
-    if (boiseDate(String(r.target_ts)) !== todayKey) continue;
+    const day = boiseDate(String(r.target_ts));
+    const isToday = day === todayKey;
+    const agg = dayMap.get(day) ?? { traded: 0, wins: 0, losses: 0 };
     if (r.result === "WIN") {
-      tW++;
-      tT++;
+      agg.wins++;
+      agg.traded++;
+      if (isToday) {
+        tW++;
+        tT++;
+      }
     } else if (r.result === "LOSS") {
-      tL++;
-      tT++;
-    } else if (r.result === "PUSH") tT++;
+      agg.losses++;
+      agg.traded++;
+      if (isToday) {
+        tL++;
+        tT++;
+      }
+    } else if (r.result === "PUSH") {
+      agg.traded++;
+      if (isToday) tT++;
+    } else continue;
+    dayMap.set(day, agg);
   }
 
   const { data: shadowRows } = await client
@@ -185,8 +215,20 @@ export async function buildT30Stats(): Promise<T30Stats> {
       traded: tT,
       wins: tW,
       losses: tL,
+      net_units: tW - tL,
       win_rate: tW + tL ? (tW / (tW + tL)) * 100 : null,
     },
+    daily: [...dayMap.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-14)
+      .map(([date, a]) => ({
+        date,
+        traded: a.traded,
+        wins: a.wins,
+        losses: a.losses,
+        net: a.wins - a.losses,
+        win_rate: a.wins + a.losses ? (a.wins / (a.wins + a.losses)) * 100 : null,
+      })),
     shadows: [...byPolicy.entries()]
       .map(([policy, a]) => ({
         policy,
