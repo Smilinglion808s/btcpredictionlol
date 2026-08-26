@@ -7163,14 +7163,18 @@ export type Database = {
       }
       t10_collector_health: {
         Row: {
+          build_identifier: string | null
           collector_version: string | null
           consecutive_errors: number | null
           created_at: string
           deployment_id: string | null
+          last_bar_close_ts: string | null
           last_boundary_status: string | null
           last_boundary_target_ts: string | null
           last_error_code: string | null
           last_error_message: string | null
+          last_heartbeat_at: string | null
+          last_received_at: string | null
           last_target_seconds: number | null
           last_target_ts: string | null
           reconnect_count: number | null
@@ -7179,14 +7183,18 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          build_identifier?: string | null
           collector_version?: string | null
           consecutive_errors?: number | null
           created_at?: string
           deployment_id?: string | null
+          last_bar_close_ts?: string | null
           last_boundary_status?: string | null
           last_boundary_target_ts?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
           last_target_seconds?: number | null
           last_target_ts?: string | null
           reconnect_count?: number | null
@@ -7195,14 +7203,18 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          build_identifier?: string | null
           collector_version?: string | null
           consecutive_errors?: number | null
           created_at?: string
           deployment_id?: string | null
+          last_bar_close_ts?: string | null
           last_boundary_status?: string | null
           last_boundary_target_ts?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
           last_target_seconds?: number | null
           last_target_ts?: string | null
           reconnect_count?: number | null
