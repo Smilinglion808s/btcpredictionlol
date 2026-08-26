@@ -106,6 +106,28 @@ export const Route = createFileRoute("/api/public/hooks/t10-ingest")({
           return Response.json({ ok: false, error: String(e) }, { status: 500 });
         }
 
+        let klines = 0;
+        if (body.prior_klines.length) {
+          const { error } = await supabase.from("t10_prior_klines").upsert(
+            body.prior_klines.map((k) => ({
+              venue: k.venue,
+              candle_ts: new Date(k.open_ms).toISOString(),
+              open: k.open,
+              high: k.high,
+              low: k.low,
+              close: k.close,
+              volume: k.volume,
+              quote_volume: k.quote_volume,
+              taker_buy_quote_volume: k.taker_buy_quote_volume,
+              trade_count: k.trade_count,
+              updated_at: new Date().toISOString(),
+            })) as never,
+            { onConflict: "venue,candle_ts" },
+          );
+          if (!error) klines = body.prior_klines.length;
+        }
+
+
         const h = (body.health ?? {}) as Record<string, unknown>;
         const last = rows[rows.length - 1];
         await upsertT10Health(supabase, {
