@@ -33,10 +33,25 @@ const sampleSchema = z.object({
   received_at_ms: z.number().nullable().optional(),
 });
 
+/** Completed 15m candle pushed by the collector (Binance REST is edge-blocked). */
+const klineSchema = z.object({
+  venue: z.enum(["SPOT", "FUT"]),
+  open_ms: z.number(),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  volume: z.number(),
+  quote_volume: z.number(),
+  taker_buy_quote_volume: z.number(),
+  trade_count: z.number(),
+});
+
 const bodySchema = z.object({
   collector_version: z.string().min(1).max(120),
   build_identifier: z.string().max(200).nullable().optional(),
   samples: z.array(sampleSchema).max(MAX_SAMPLES).default([]),
+  prior_klines: z.array(klineSchema).max(400).default([]),
   health: z.record(z.unknown()).nullable().optional(),
 });
 
