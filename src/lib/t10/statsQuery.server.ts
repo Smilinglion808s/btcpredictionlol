@@ -166,6 +166,14 @@ export async function buildT10Stats(): Promise<T10Stats> {
   today.win_rate = today.wins + today.losses > 0 ? today.wins / (today.wins + today.losses) : null;
 
   const last = live[0] ?? null;
+  // Delivery timing: `live` is newest-first, so the first sent row is the most
+  // recent signal actually put on the wire.
+  const sent = live.filter((r) => r.webhook_sent === true);
+  const lastSent = sent[0] ?? null;
+  const offsets = live
+    .map((r) => Number(r.decision_offset_ms))
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 120_000)
+    .slice(0, 50);
   return {
     model_name: T10_MODEL_NAME,
     model_version: T10_BRIDGE_VERSION,
