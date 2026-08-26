@@ -49,7 +49,9 @@ import {
   upsertT10Prediction,
 } from "./store.server";
 import { buildT10Technicals } from "./technicals";
-import { t10IdempotencyKey, t10WebhookEligible } from "./webhook.server";
+import { buildT10WebhookPayload, t10IdempotencyKey, t10WebhookEligible } from "./webhook.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
+
 
 type Row = Record<string, unknown>;
 
@@ -170,6 +172,11 @@ export async function runT10Boundary(
   const activationBoundaryTs = activation.activation_boundary_ts
     ? new Date(String(activation.activation_boundary_ts)).toISOString()
     : null;
+  if (runMode === "LIVE" && activationMode === "ACTIVE" && activation.webhooks_enabled === true) {
+    void primeWebhookEndpoints(sb).catch(() => {});
+  }
+
+
 
   const base: Row = {
     target_ts: targetTs,
@@ -379,17 +386,41 @@ export async function runT10Boundary(
     decision_offset_ms: Date.now() - targetMs,
   };
 
-  await upsertT10Prediction(sb, { ...base, ...row });
-  // The webhook idempotency key is only minted once a row is actually
-  // eligible; in SHADOW_ONLY no key is ever claimed and nothing is sent.
+  // Outbound webhook fires BEFORE persistence so the POST is never delayed by
+  // a database round-trip. Only eligible LIVE tradeable rows ever get here.
+  let delivery: Awaited<ReturnType<typeof deliverWebhookNow>> | null = null;
   if (eligible) {
-    await sb
-      .from("t10_bridge_predictions")
-      .update({ webhook_idempotency_key: t10IdempotencyKey(`${T10_BRIDGE_VERSION}:${targetTs}`) } as never)
-      .eq("model_version", T10_BRIDGE_VERSION)
-      .eq("target_ts", targetTs)
-      .is("webhook_idempotency_key", null);
+    try {
+      delivery = await deliverWebhookNow(
+        sb,
+        "prediction.created",
+        buildT10WebhookPayload({
+          targetTs,
+          direction: decision.policyDirection === 1 ? 1 : -1,
+          correctnessProbability: probability,
+          longRank: decision.longRank.rank,
+          fastRank: decision.fastRank.rank,
+          fitId,
+          openPrice: packet.bars[0]?.open ?? null,
+        }),
+      );
+    } catch {
+      delivery = null;
+    }
+    row.webhook_idempotency_key = t10IdempotencyKey(`${T10_BRIDGE_VERSION}:${targetTs}`);
+    row.webhook_claimed_at = new Date().toISOString();
+    row.webhook_sent = (delivery?.delivered ?? 0) > 0;
+    row.webhook_sent_at = delivery?.sentAt ?? null;
+    row.webhook_latency_ms = delivery?.latencyMs ?? null;
+    row.webhook_offset_ms = delivery?.sentAt
+      ? new Date(delivery.sentAt).getTime() - targetMs
+      : null;
+    row.webhook_status = delivery ? ((delivery.delivered ?? 0) > 0 ? "SENT" : "FAILED") : "ERROR";
   }
+
+  await upsertT10Prediction(sb, { ...base, ...row });
+  if (delivery) await delivery.settle.catch(() => {});
+
 
   return {
     targetTs,

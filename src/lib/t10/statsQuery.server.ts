@@ -49,7 +49,14 @@ export interface T10Stats {
   last_target_ts: string | null;
   last_decision_reason: string | null;
   last_decision_offset_ms: number | null;
-  today: { date: string; traded: number; wins: number; losses: number; win_rate: number | null };
+  today: {
+    date: string;
+    traded: number;
+    wins: number;
+    losses: number;
+    win_rate: number | null;
+    net_units: number;
+  };
 }
 
 const PAGE = 1000;
@@ -96,7 +103,14 @@ export async function buildT10Stats(): Promise<T10Stats> {
   let abstains = 0;
   let pending = 0;
   let net = 0;
-  const today = { date: todayKey, traded: 0, wins: 0, losses: 0, win_rate: null as number | null };
+  const today = {
+    date: todayKey,
+    traded: 0,
+    wins: 0,
+    losses: 0,
+    win_rate: null as number | null,
+    net_units: 0,
+  };
 
   for (const r of live) {
     if (r.packet_complete === true) packetReady += 1;
@@ -104,6 +118,7 @@ export async function buildT10Stats(): Promise<T10Stats> {
     if (isTrade) traded += 1;
     else abstains += 1;
     const result = String(r.result ?? "");
+    const isToday = String(r.boise_date ?? "") === todayKey;
     if (!r.resolved_at) {
       if (isTrade) pending += 1;
       continue;
@@ -112,12 +127,19 @@ export async function buildT10Stats(): Promise<T10Stats> {
     else if (result === "LOSS") losses += 1;
     else if (result === "PUSH") pushes += 1;
     net += Number(r.raw_score ?? 0);
-    if (String(r.boise_date ?? "") === todayKey && isTrade) {
+    if (isToday && isTrade) {
       today.traded += 1;
-      if (result === "WIN") today.wins += 1;
-      if (result === "LOSS") today.losses += 1;
+      if (result === "WIN") {
+        today.wins += 1;
+        today.net_units += 1;
+      }
+      if (result === "LOSS") {
+        today.losses += 1;
+        today.net_units -= 1;
+      }
     }
   }
+
   const decided = wins + losses;
   today.win_rate = today.wins + today.losses > 0 ? today.wins / (today.wins + today.losses) : null;
 

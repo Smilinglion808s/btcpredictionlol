@@ -74,9 +74,17 @@ export const Route = createFileRoute("/api/public/hooks/t10-boundary-run")({
         let runMode: T10RunMode = "LIVE";
         if (explicit) {
           targetMs = new Date(explicit).getTime();
-          trigger = "WATCHDOG";
-          runMode = "CATCHUP";
+          // The collector names the candle it just sealed. When that is the
+          // candle currently in flight and we are still inside the cutoff
+          // window, this IS the live boundary run, not a watchdog catch-up.
+          const liveNow =
+            targetMs === currentTarget && now - targetMs < T10_CUTOFF_OFFSET_MS + MAX_WAIT_MS;
+          if (!liveNow) {
+            trigger = "WATCHDOG";
+            runMode = "CATCHUP";
+          }
         } else if (age < T10_CUTOFF_OFFSET_MS + MAX_WAIT_MS) {
+
           targetMs = currentTarget;
         } else if (mode === "recover" && age < RECOVER_WINDOW_MS) {
           targetMs = currentTarget;
