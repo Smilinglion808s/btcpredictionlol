@@ -120,18 +120,7 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           }
           timings.b4x4_catchup_ms = Date.now() - cuStart;
 
-          // B4x4-ES1 watchdog: keep fits trained, fill missed targets and
-          // resolve any outstanding ES1 rows. Isolated and never blocking.
-          const es1Start = Date.now();
-          try {
-            const { ensureEs1Warm } = await import("@/lib/b4x4es1/orchestrator.server");
-            results.b4x4_es1_warm = await ensureEs1Warm(supabase, {
-              schedulerInvocationId: `cron-${overallStart}`,
-            });
-          } catch (e) {
-            results.b4x4_es1_warm_error = e instanceof Error ? e.message : String(e);
-          }
-          timings.b4x4_es1_warm_ms = Date.now() - es1Start;
+          // B4x4-ES1 retired: no warm, no catch-up, no resolution passes.
 
 
           // Straggler sweep: close out downstream rows (V6 / B4x4 / TD*) whose
