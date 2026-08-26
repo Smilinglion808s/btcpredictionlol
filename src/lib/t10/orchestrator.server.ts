@@ -387,46 +387,58 @@ export async function runT10Boundary(
     decision_offset_ms: Date.now() - targetMs,
   };
 
-  // Outbound webhook fires BEFORE persistence so the POST is never delayed by
-  // a database round-trip. Only eligible LIVE tradeable rows ever get here.
-  // T10 is first in the cascade: the claim insert runs alongside the POST so it
-  // never sits in front of the wire, and it locks T30/T45 out of this candle.
+  // T10 is first in the cascade. The claim insert runs BEFORE the POST so a
+  // concurrent/retried boundary run for the same candle can never produce a
+  // second webhook; only the run that wins the primary-key insert sends.
   let delivery: Awaited<ReturnType<typeof deliverWebhookNow>> | null = null;
   if (eligible) {
-    const claim = claimWebhookCascade(sb, targetTs, "t10-bridge");
-    try {
-      delivery = await deliverWebhookNow(
+    const won = await claimWebhookCascade(sb, targetTs, "t10-bridge").catch(() => false);
+    if (won) {
+      try {
+        delivery = await deliverWebhookNow(
+          sb,
+          "prediction.created",
+          buildT10WebhookPayload({
+            targetTs,
+            direction: decision.policyDirection === 1 ? 1 : -1,
+            correctnessProbability: probability,
+            longRank: decision.longRank.rank,
+            fastRank: decision.fastRank.rank,
+            fitId,
+            openPrice: packet.bars[0]?.open ?? null,
+          }),
+        );
+      } catch {
+        delivery = null;
+      }
 
-        sb,
-        "prediction.created",
-        buildT10WebhookPayload({
-          targetTs,
-          direction: decision.policyDirection === 1 ? 1 : -1,
-          correctnessProbability: probability,
-          longRank: decision.longRank.rank,
-          fastRank: decision.fastRank.rank,
-          fitId,
-          openPrice: packet.bars[0]?.open ?? null,
-        }),
-      );
-    } catch {
-      delivery = null;
+      row.webhook_idempotency_key = t10IdempotencyKey(`${T10_BRIDGE_VERSION}:${targetTs}`);
+      row.webhook_claimed_at = new Date().toISOString();
+      row.webhook_sent = (delivery?.delivered ?? 0) > 0;
+      row.webhook_sent_at = delivery?.sentAt ?? null;
+      row.webhook_latency_ms = delivery?.latencyMs ?? null;
+      row.webhook_offset_ms = delivery?.sentAt
+        ? new Date(delivery.sentAt).getTime() - targetMs
+        : null;
+      row.webhook_status = delivery ? ((delivery.delivered ?? 0) > 0 ? "SENT" : "FAILED") : "ERROR";
+    } else {
+      row.webhook_eligible = false;
+      row.webhook_status = "DUPLICATE_CLAIM";
     }
-    await claim.catch(() => false);
-
-    row.webhook_idempotency_key = t10IdempotencyKey(`${T10_BRIDGE_VERSION}:${targetTs}`);
-    row.webhook_claimed_at = new Date().toISOString();
-    row.webhook_sent = (delivery?.delivered ?? 0) > 0;
-    row.webhook_sent_at = delivery?.sentAt ?? null;
-    row.webhook_latency_ms = delivery?.latencyMs ?? null;
-    row.webhook_offset_ms = delivery?.sentAt
-      ? new Date(delivery.sentAt).getTime() - targetMs
-      : null;
-    row.webhook_status = delivery ? ((delivery.delivered ?? 0) > 0 ? "SENT" : "FAILED") : "ERROR";
   }
 
-  await upsertT10Prediction(sb, { ...base, ...row });
+  // Persistence must not be lost when the wire already fired: retry once
+  // before surfacing the failure.
+  try {
+    await upsertT10Prediction(sb, { ...base, ...row });
+  } catch (err) {
+    await new Promise((r) => setTimeout(r, 300));
+    await upsertT10Prediction(sb, { ...base, ...row }).catch(() => {
+      throw err;
+    });
+  }
   if (delivery) await delivery.settle.catch(() => {});
+
 
 
   return {
