@@ -57,6 +57,14 @@ export interface T10Stats {
     win_rate: number | null;
     net_units: number;
   };
+  daily: {
+    date: string;
+    traded: number;
+    wins: number;
+    losses: number;
+    net: number;
+    win_rate: number | null;
+  }[];
 }
 
 const PAGE = 1000;
@@ -103,6 +111,7 @@ export async function buildT10Stats(): Promise<T10Stats> {
   let abstains = 0;
   let pending = 0;
   let net = 0;
+  const dayMap = new Map<string, { traded: number; wins: number; losses: number }>();
   const today = {
     date: todayKey,
     traded: 0,
@@ -127,6 +136,14 @@ export async function buildT10Stats(): Promise<T10Stats> {
     else if (result === "LOSS") losses += 1;
     else if (result === "PUSH") pushes += 1;
     net += Number(r.raw_score ?? 0);
+    if (isTrade) {
+      const key = String(r.boise_date ?? boiseDate(String(r.target_ts)));
+      const agg = dayMap.get(key) ?? { traded: 0, wins: 0, losses: 0 };
+      if (result === "WIN" || result === "LOSS" || result === "PUSH") agg.traded += 1;
+      if (result === "WIN") agg.wins += 1;
+      if (result === "LOSS") agg.losses += 1;
+      dayMap.set(key, agg);
+    }
     if (isToday && isTrade) {
       today.traded += 1;
       if (result === "WIN") {
@@ -170,6 +187,17 @@ export async function buildT10Stats(): Promise<T10Stats> {
     last_decision_offset_ms:
       last?.decision_offset_ms == null ? null : Number(last.decision_offset_ms),
     today,
+    daily: [...dayMap.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-14)
+      .map(([date, a]) => ({
+        date,
+        traded: a.traded,
+        wins: a.wins,
+        losses: a.losses,
+        net: a.wins - a.losses,
+        win_rate: a.wins + a.losses ? a.wins / (a.wins + a.losses) : null,
+      })),
   };
 }
 
