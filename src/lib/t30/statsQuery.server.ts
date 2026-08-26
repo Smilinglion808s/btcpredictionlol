@@ -213,7 +213,7 @@ export async function loadT30Pending(): Promise<Record<string, string | number |
   return (data as Record<string, string | number | boolean | null> | null) ?? null;
 }
 
-const CSV_COLUMNS = [
+export const CSV_COLUMNS = [
   "target_ts",
   "run_mode",
   "trigger_kind",
