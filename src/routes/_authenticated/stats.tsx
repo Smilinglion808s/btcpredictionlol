@@ -23,8 +23,8 @@ import { T30Card } from "@/components/t30-card";
 const SHOW_LEGACY_T45 = false as boolean;
 
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
-import { getPriceFlowStats, getPriceFlowPending, exportPriceFlowCsv } from "@/lib/t45pf.functions";
-import { getT30Stats, getT30Pending, exportT30Csv } from "@/lib/t30.functions";
+import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
+import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
@@ -99,14 +99,12 @@ function StatsPage() {
   const pfQ = useQuery({ queryKey: ["t45pf-stats"], queryFn: () => pfFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const pfPendingFn = useServerFn(getPriceFlowPending);
   const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-  const exportPfFn = useServerFn(exportPriceFlowCsv);
 
   // T30 PriceFlow Balanced R1 — independent shadow model (T+30s, dual rank).
   const t30Fn = useServerFn(getT30Stats);
   const t30Q = useQuery({ queryKey: ["t30-stats"], queryFn: () => t30Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const t30PendingFn = useServerFn(getT30Pending);
   const t30PendingQ = useQuery({ queryKey: ["t30-pending"], queryFn: () => t30PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-  const exportT30Fn = useServerFn(exportT30Csv);
   const [exportingPf, setExportingPf] = useState(false);
   const [exportingT30, setExportingT30] = useState(false);
 
