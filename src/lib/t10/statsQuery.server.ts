@@ -199,6 +199,15 @@ export async function buildT10Stats(): Promise<T10Stats> {
     last_decision_reason: (last?.policy_decision_reason as string | null) ?? null,
     last_decision_offset_ms:
       last?.decision_offset_ms == null ? null : Number(last.decision_offset_ms),
+    signals_sent: sent.length,
+    last_webhook_offset_ms:
+      lastSent?.webhook_offset_ms == null ? null : Number(lastSent.webhook_offset_ms),
+    last_webhook_latency_ms:
+      lastSent?.webhook_latency_ms == null ? null : Number(lastSent.webhook_latency_ms),
+    last_webhook_target_ts: lastSent ? new Date(String(lastSent.target_ts)).toISOString() : null,
+    avg_decision_offset_ms: offsets.length
+      ? offsets.reduce((a, b) => a + b, 0) / offsets.length
+      : null,
     today,
     daily: [...dayMap.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
