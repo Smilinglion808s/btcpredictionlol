@@ -147,16 +147,6 @@ function StatsPage() {
     window.location.href = "/api/export/t45pf-csv";
   }
 
-  async function downloadEs1Csv() {
-    try {
-      setExportingEs1(true);
-      const res = await exportEs1Fn();
-      if (!res || res.rows === 0) { alert("No B4x4-ES1 rows to export."); return; }
-      triggerDownload(res.csv, `B4x4-ES1-${stamp()}.csv`);
-    } finally {
-      setExportingEs1(false);
-    }
-  }
 
 
 
