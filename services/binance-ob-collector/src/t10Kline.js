@@ -66,11 +66,12 @@ export function createT10Collector({
     };
   }
 
-  async function post(samples, extra = {}) {
+  async function post(samples, extra = {}, priorKlines = []) {
     const body = JSON.stringify({
       collector_version: COLLECTOR_VERSION,
       build_identifier: buildIdentifier,
       samples,
+      prior_klines: priorKlines,
       health: { ...health, ...extra },
     });
     const { timestamp, signature } = sign(body);
