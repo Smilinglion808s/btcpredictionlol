@@ -49,6 +49,11 @@ export interface T10Stats {
   last_target_ts: string | null;
   last_decision_reason: string | null;
   last_decision_offset_ms: number | null;
+  signals_sent: number;
+  last_webhook_offset_ms: number | null;
+  last_webhook_latency_ms: number | null;
+  last_webhook_target_ts: string | null;
+  avg_decision_offset_ms: number | null;
   today: {
     date: string;
     traded: number;
