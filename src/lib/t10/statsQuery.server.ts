@@ -49,7 +49,14 @@ export interface T10Stats {
   last_target_ts: string | null;
   last_decision_reason: string | null;
   last_decision_offset_ms: number | null;
-  today: { date: string; traded: number; wins: number; losses: number; win_rate: number | null };
+  today: {
+    date: string;
+    traded: number;
+    wins: number;
+    losses: number;
+    win_rate: number | null;
+    net_units: number;
+  };
 }
 
 const PAGE = 1000;
