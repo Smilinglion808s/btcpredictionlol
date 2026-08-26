@@ -7103,11 +7103,16 @@ export type Database = {
       }
       t10_bridge_samples: {
         Row: {
+          bar_close_ts: string | null
           bar_open_ms: number | null
+          bar_open_ts: string | null
+          build_identifier: string | null
           close: number | null
           collector_version: string
           created_at: string
+          event_time: string | null
           event_time_ms: number | null
+          final_event_at: string | null
           high: number | null
           is_final: boolean
           low: number | null
@@ -7115,18 +7120,25 @@ export type Database = {
           open: number | null
           quote_volume: number | null
           received_at: string
+          symbol: string | null
           taker_buy_quote_volume: number | null
           taker_buy_volume: number | null
           target_ts: string
           trade_count: number | null
+          venue: string | null
           volume: number | null
         }
         Insert: {
+          bar_close_ts?: string | null
           bar_open_ms?: number | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
           close?: number | null
           collector_version: string
           created_at?: string
+          event_time?: string | null
           event_time_ms?: number | null
+          final_event_at?: string | null
           high?: number | null
           is_final?: boolean
           low?: number | null
@@ -7134,18 +7146,25 @@ export type Database = {
           open?: number | null
           quote_volume?: number | null
           received_at?: string
+          symbol?: string | null
           taker_buy_quote_volume?: number | null
           taker_buy_volume?: number | null
           target_ts: string
           trade_count?: number | null
+          venue?: string | null
           volume?: number | null
         }
         Update: {
+          bar_close_ts?: string | null
           bar_open_ms?: number | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
           close?: number | null
           collector_version?: string
           created_at?: string
+          event_time?: string | null
           event_time_ms?: number | null
+          final_event_at?: string | null
           high?: number | null
           is_final?: boolean
           low?: number | null
@@ -7153,10 +7172,12 @@ export type Database = {
           open?: number | null
           quote_volume?: number | null
           received_at?: string
+          symbol?: string | null
           taker_buy_quote_volume?: number | null
           taker_buy_volume?: number | null
           target_ts?: string
           trade_count?: number | null
+          venue?: string | null
           volume?: number | null
         }
         Relationships: []
