@@ -150,6 +150,7 @@ export const Route = createFileRoute("/api/public/hooks/t10-ingest")({
           ok: true,
           received: body.samples.length,
           stored,
+          prior_klines: klines,
           rejected: rejected.length,
           rejected_reasons: rejected.slice(0, 10),
         });
