@@ -77,7 +77,7 @@ async function loadRecent(limit = 4000): Promise<Row[]> {
     const { data, error } = await client
       .from(T10_PREDICTIONS_TABLE)
       .select(
-        "target_ts, run_mode, packet_complete, policy_would_trade, policy_decision_reason, result, raw_score, actual_direction, resolved_at, decision_offset_ms, boise_date",
+        "target_ts, run_mode, packet_complete, policy_would_trade, policy_decision_reason, result, raw_score, actual_direction, resolved_at, decision_offset_ms, boise_date, webhook_sent, webhook_sent_at, webhook_offset_ms, webhook_latency_ms",
       )
       .eq("model_version", T10_BRIDGE_VERSION)
       .order("target_ts", { ascending: false })
