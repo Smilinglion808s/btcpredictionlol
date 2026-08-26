@@ -57,6 +57,8 @@ export function T30Card({
   const net = stats.net_units == null ? null : Number(stats.net_units);
   const today: Any = stats.today ?? {};
   const shadows: Any[] = stats.shadows ?? [];
+  const daily: Any[] = stats.daily ?? [];
+  const todayNet = today.net_units == null ? null : Number(today.net_units);
 
   const gaugeR = 34;
   const circumference = 2 * Math.PI * gaugeR;
@@ -174,6 +176,13 @@ export function T30Card({
         <Stat label="Packet ready" value={pct(stats.packet_ready_rate, 0)} />
         <Stat label="Today traded" value={String(today.traded ?? 0)} />
         <Stat label="Today WR" value={pct(today.win_rate)} />
+        <Stat
+          label="Daily net"
+          value={signed(todayNet)}
+          tone={
+            (todayNet ?? 0) > 0 ? "text-bull" : (todayNet ?? 0) < 0 ? "text-bear" : undefined
+          }
+        />
       </div>
 
       <Section title="Current candle">
@@ -248,6 +257,23 @@ export function T30Card({
                   {s.wins}W / {s.losses}L · {pct(s.win_rate)}
                 </span>
               </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {daily.length > 0 && (
+        <Section title="Daily net · last 14 days">
+          <div className="flex flex-wrap gap-1">
+            {daily.map((d) => (
+              <span
+                key={d.date}
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded border tabular-nums ${
+                  d.net >= 0 ? "border-bull/30 text-bull" : "border-bear/30 text-bear"
+                }`}
+              >
+                {String(d.date).slice(5)} {signed(d.net)} · {pct(d.win_rate, 0)}
+              </span>
             ))}
           </div>
         </Section>
