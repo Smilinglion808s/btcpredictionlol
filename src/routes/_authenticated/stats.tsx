@@ -132,29 +132,15 @@ function StatsPage() {
     }
   }
 
-  async function downloadT30Csv() {
-    try {
-      setExportingT30(true);
-      const res = await exportT30Fn();
-      if (!res || res.rows === 0) { alert("No T30 rows to export."); return; }
-      triggerDownload(res.csv, res.filename);
-    } finally {
-      setExportingT30(false);
-    }
+  function downloadT30Csv() {
+    // Full history is streamed straight from the server as text/csv; a JSON
+    // server-function payload of this size timed out before completing.
+    window.location.href = "/api/export/t30-csv";
   }
 
-  async function downloadPriceFlowCsv() {
-    try {
-      setExportingPf(true);
-      const res = await exportPfFn();
-      if (!res || res.rows === 0) { alert("No PriceFlow rows to export."); return; }
-      triggerDownload(res.csv, res.filename);
-    } finally {
-      setExportingPf(false);
-    }
+  function downloadPriceFlowCsv() {
+    window.location.href = "/api/export/t45pf-csv";
   }
-
-
 
   async function downloadEs1Csv() {
     try {

@@ -16,6 +16,7 @@ import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
+import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
 import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
@@ -68,6 +69,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
 const ApiExportT30CsvRoute = ApiExportT30CsvRouteImport.update({
   id: '/api/export/t30-csv',
   path: '/api/export/t30-csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExportT45pfCsvRoute = ApiExportT45pfCsvRouteImport.update({
+  id: '/api/export/t45pf-csv',
+  path: '/api/export/t45pf-csv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksB4x4BackfillRoute =
@@ -189,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
+  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -216,6 +223,7 @@ export interface FileRoutesByTo {
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
+  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -245,6 +253,7 @@ export interface FileRoutesById {
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
+  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -274,6 +283,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/api/export/t30-csv'
+    | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/'
     | '/api/export/t30-csv'
+    | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/_authenticated/stats'
     | '/_authenticated/'
     | '/api/export/t30-csv'
+    | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/b4x4-ob-shadow-capture'
@@ -353,6 +365,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
+  ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
   ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
   ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/api/export/t30-csv'
       fullPath: '/api/export/t30-csv'
       preLoaderRoute: typeof ApiExportT30CsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/export/t45pf-csv': {
+      id: '/api/export/t45pf-csv'
+      path: '/api/export/t45pf-csv'
+      fullPath: '/api/export/t45pf-csv'
+      preLoaderRoute: typeof ApiExportT45pfCsvRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/b4x4-backfill': {
@@ -583,6 +603,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
+  ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
   ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,
   ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
   ApiPublicHooksB4x4ObShadowCaptureRoute:
