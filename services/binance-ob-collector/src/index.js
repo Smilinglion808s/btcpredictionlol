@@ -14,6 +14,7 @@ import { computeBookMetrics } from "./metrics.js";
 import { CollectorRuntime, HEARTBEAT_INTERVAL_MS as RUNTIME_HEARTBEAT_MS } from "./runtimeEvents.js";
 import { createT45Collector } from "./t45Kline.js";
 import { createT30Collector } from "./t30Kline.js";
+import { createT10Collector } from "./t10Kline.js";
 
 
 const INGEST_URL = requireEnv("BINANCE_OB_INGEST_URL");
@@ -28,6 +29,15 @@ const T45_ENABLED = process.env.T45_ENABLED !== "false";
 const T45_BOUNDARY_URL =
   process.env.T45_BOUNDARY_URL ||
   INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t45-boundary-run");
+// T10 Bridge R1 — a fourth fully separate stream, endpoint and secret.
+const T10_INGEST_URL =
+  process.env.T10_INGEST_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t10-ingest");
+const T10_INGEST_SECRET = process.env.T10_INGEST_SECRET || process.env.BINANCE_OB_INGEST_SECRET;
+const T10_ENABLED = process.env.T10_ENABLED !== "false";
+const T10_BOUNDARY_URL =
+  process.env.T10_BOUNDARY_URL ||
+  INGEST_URL.replace(/\/api\/public\/hooks\/.*$/, "/api/public/hooks/t10-boundary-run");
 // T30 PriceFlow Balanced — a third fully separate stream, endpoint and secret.
 // It owns its own WebSocket so it can never perturb T45 capture or timing.
 const T30_INGEST_URL =
@@ -491,6 +501,18 @@ async function main() {
     });
     t30.start();
     log("[t30] started", { ingest: T30_INGEST_URL, boundary: T30_BOUNDARY_URL });
+  }
+
+  if (T10_ENABLED) {
+    const t10 = createT10Collector({
+      ingestUrl: T10_INGEST_URL,
+      secret: T10_INGEST_SECRET,
+      boundaryUrl: T10_BOUNDARY_URL,
+      buildIdentifier: BUILD_IDENTIFIER,
+      log: { log, warn: (...a) => log(...a) },
+    });
+    t10.start();
+    log("[t10] started", { ingest: T10_INGEST_URL, boundary: T10_BOUNDARY_URL });
   }
 
 
