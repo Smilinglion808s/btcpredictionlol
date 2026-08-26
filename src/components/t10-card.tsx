@@ -220,8 +220,8 @@ export function T10Card({
       <Section title="Last live candle">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Stat label="Predicted at" value={secs(stats.last_decision_offset_ms)} />
+          <Stat label="Avg predict" value={secs(stats.avg_decision_offset_ms)} />
           <Stat label="Mode" value={String(stats.mode ?? "SHADOW_ONLY")} />
-          <Stat label="Webhooks" value={stats.webhooks_enabled ? "ON" : "OFF"} />
           <Stat
             label="Last target"
             value={
@@ -235,6 +235,23 @@ export function T10Card({
           />
         </div>
       </Section>
+
+      <Section title="Webhook delivery">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <Stat label="Webhooks" value={stats.webhooks_enabled ? "ON" : "OFF"} />
+          <Stat label="Signals sent" value={String(stats.signals_sent ?? 0)} />
+          <Stat label="Sent at" value={secs(stats.last_webhook_offset_ms)} />
+          <Stat
+            label="Delivery ms"
+            value={
+              stats.last_webhook_latency_ms == null
+                ? "—"
+                : `${Math.round(Number(stats.last_webhook_latency_ms))} ms`
+            }
+          />
+        </div>
+      </Section>
+
 
       {daily.length > 0 && (
         <Section title="Daily net · last 14 days">
