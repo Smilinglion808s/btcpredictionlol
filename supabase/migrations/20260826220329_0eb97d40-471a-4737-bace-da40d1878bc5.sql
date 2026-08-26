@@ -1,0 +1,1 @@
+ALTER TABLE public.t10_bridge_predictions ALTER COLUMN webhook_status TYPE text USING webhook_status::text; NOTIFY pgrst, 'reload schema';

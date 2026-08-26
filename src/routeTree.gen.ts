@@ -15,6 +15,7 @@ import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
 import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
 import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
@@ -68,6 +69,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: '/stats',
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiExportT10CsvRoute = ApiExportT10CsvRouteImport.update({
+  id: '/api/export/t10-csv',
+  path: '/api/export/t10-csv',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportT30CsvRoute = ApiExportT30CsvRouteImport.update({
   id: '/api/export/t30-csv',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
@@ -311,6 +320,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
+    | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/'
+    | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
+    | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-backfill'
@@ -402,6 +414,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
   ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
   ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
@@ -471,6 +484,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/stats'
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/export/t10-csv': {
+      id: '/api/export/t10-csv'
+      path: '/api/export/t10-csv'
+      fullPath: '/api/export/t10-csv'
+      preLoaderRoute: typeof ApiExportT10CsvRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/export/t30-csv': {
       id: '/api/export/t30-csv'
@@ -664,6 +684,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiExportT10CsvRoute: ApiExportT10CsvRoute,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
   ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
   ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,

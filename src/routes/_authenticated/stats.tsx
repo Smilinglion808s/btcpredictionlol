@@ -137,6 +137,11 @@ function StatsPage() {
     window.location.href = "/api/export/t45pf-csv";
   }
 
+  function downloadT10Csv() {
+    window.location.href = "/api/export/t10-csv";
+  }
+
+
 
 
 
@@ -332,7 +337,9 @@ function StatsPage() {
         <T10Card
           stats={(t10Q.data as any) ?? {}}
           pending={(t10PendingQ.data as any) ?? null}
+          onExport={downloadT10Csv}
         />
+
 
 
 
