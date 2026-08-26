@@ -28,6 +28,7 @@ import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/a
 import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
 import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
+import { Route as ApiPublicHooksT10BoundaryRunRouteImport } from './routes/api/public/hooks/t10-boundary-run'
 import { Route as ApiPublicHooksT10IngestRouteImport } from './routes/api/public/hooks/t10-ingest'
 import { Route as ApiPublicHooksT30BoundaryRunRouteImport } from './routes/api/public/hooks/t30-boundary-run'
 import { Route as ApiPublicHooksT30IngestRouteImport } from './routes/api/public/hooks/t30-ingest'
@@ -143,6 +144,12 @@ const ApiPublicHooksScheduled15mRunRoute =
     path: '/api/public/hooks/scheduled-15m-run',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksT10BoundaryRunRoute =
+  ApiPublicHooksT10BoundaryRunRouteImport.update({
+    id: '/api/public/hooks/t10-boundary-run',
+    path: '/api/public/hooks/t10-boundary-run',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksT10IngestRoute = ApiPublicHooksT10IngestRouteImport.update({
   id: '/api/public/hooks/t10-ingest',
   path: '/api/public/hooks/t10-ingest',
@@ -213,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
   '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
   '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
   '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
@@ -242,6 +250,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
   '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
   '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
   '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
@@ -273,6 +282,7 @@ export interface FileRoutesById {
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
   '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
+  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
   '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
   '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
   '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
@@ -304,6 +314,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/t10-boundary-run'
     | '/api/public/hooks/t10-ingest'
     | '/api/public/hooks/t30-boundary-run'
     | '/api/public/hooks/t30-ingest'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/t10-boundary-run'
     | '/api/public/hooks/t10-ingest'
     | '/api/public/hooks/t30-boundary-run'
     | '/api/public/hooks/t30-ingest'
@@ -363,6 +375,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/model8-v3-bootstrap'
     | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
+    | '/api/public/hooks/t10-boundary-run'
     | '/api/public/hooks/t10-ingest'
     | '/api/public/hooks/t30-boundary-run'
     | '/api/public/hooks/t30-ingest'
@@ -389,6 +402,7 @@ export interface RootRouteChildren {
   ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
   ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
+  ApiPublicHooksT10BoundaryRunRoute: typeof ApiPublicHooksT10BoundaryRunRoute
   ApiPublicHooksT10IngestRoute: typeof ApiPublicHooksT10IngestRoute
   ApiPublicHooksT30BoundaryRunRoute: typeof ApiPublicHooksT30BoundaryRunRoute
   ApiPublicHooksT30IngestRoute: typeof ApiPublicHooksT30IngestRoute
@@ -535,6 +549,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/t10-boundary-run': {
+      id: '/api/public/hooks/t10-boundary-run'
+      path: '/api/public/hooks/t10-boundary-run'
+      fullPath: '/api/public/hooks/t10-boundary-run'
+      preLoaderRoute: typeof ApiPublicHooksT10BoundaryRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/t10-ingest': {
       id: '/api/public/hooks/t10-ingest'
       path: '/api/public/hooks/t10-ingest'
@@ -636,6 +657,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
   ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
+  ApiPublicHooksT10BoundaryRunRoute: ApiPublicHooksT10BoundaryRunRoute,
   ApiPublicHooksT10IngestRoute: ApiPublicHooksT10IngestRoute,
   ApiPublicHooksT30BoundaryRunRoute: ApiPublicHooksT30BoundaryRunRoute,
   ApiPublicHooksT30IngestRoute: ApiPublicHooksT30IngestRoute,
