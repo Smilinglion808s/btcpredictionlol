@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -7103,11 +7103,16 @@ export type Database = {
       }
       t10_bridge_samples: {
         Row: {
+          bar_close_ts: string | null
           bar_open_ms: number | null
+          bar_open_ts: string | null
+          build_identifier: string | null
           close: number | null
           collector_version: string
           created_at: string
+          event_time: string | null
           event_time_ms: number | null
+          final_event_at: string | null
           high: number | null
           is_final: boolean
           low: number | null
@@ -7115,18 +7120,25 @@ export type Database = {
           open: number | null
           quote_volume: number | null
           received_at: string
+          symbol: string | null
           taker_buy_quote_volume: number | null
           taker_buy_volume: number | null
           target_ts: string
           trade_count: number | null
+          venue: string | null
           volume: number | null
         }
         Insert: {
+          bar_close_ts?: string | null
           bar_open_ms?: number | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
           close?: number | null
           collector_version: string
           created_at?: string
+          event_time?: string | null
           event_time_ms?: number | null
+          final_event_at?: string | null
           high?: number | null
           is_final?: boolean
           low?: number | null
@@ -7134,18 +7146,25 @@ export type Database = {
           open?: number | null
           quote_volume?: number | null
           received_at?: string
+          symbol?: string | null
           taker_buy_quote_volume?: number | null
           taker_buy_volume?: number | null
           target_ts: string
           trade_count?: number | null
+          venue?: string | null
           volume?: number | null
         }
         Update: {
+          bar_close_ts?: string | null
           bar_open_ms?: number | null
+          bar_open_ts?: string | null
+          build_identifier?: string | null
           close?: number | null
           collector_version?: string
           created_at?: string
+          event_time?: string | null
           event_time_ms?: number | null
+          final_event_at?: string | null
           high?: number | null
           is_final?: boolean
           low?: number | null
@@ -7153,24 +7172,30 @@ export type Database = {
           open?: number | null
           quote_volume?: number | null
           received_at?: string
+          symbol?: string | null
           taker_buy_quote_volume?: number | null
           taker_buy_volume?: number | null
           target_ts?: string
           trade_count?: number | null
+          venue?: string | null
           volume?: number | null
         }
         Relationships: []
       }
       t10_collector_health: {
         Row: {
+          build_identifier: string | null
           collector_version: string | null
           consecutive_errors: number | null
           created_at: string
           deployment_id: string | null
+          last_bar_close_ts: string | null
           last_boundary_status: string | null
           last_boundary_target_ts: string | null
           last_error_code: string | null
           last_error_message: string | null
+          last_heartbeat_at: string | null
+          last_received_at: string | null
           last_target_seconds: number | null
           last_target_ts: string | null
           reconnect_count: number | null
@@ -7179,14 +7204,18 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          build_identifier?: string | null
           collector_version?: string | null
           consecutive_errors?: number | null
           created_at?: string
           deployment_id?: string | null
+          last_bar_close_ts?: string | null
           last_boundary_status?: string | null
           last_boundary_target_ts?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
           last_target_seconds?: number | null
           last_target_ts?: string | null
           reconnect_count?: number | null
@@ -7195,14 +7224,18 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          build_identifier?: string | null
           collector_version?: string | null
           consecutive_errors?: number | null
           created_at?: string
           deployment_id?: string | null
+          last_bar_close_ts?: string | null
           last_boundary_status?: string | null
           last_boundary_target_ts?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          last_received_at?: string | null
           last_target_seconds?: number | null
           last_target_ts?: string | null
           reconnect_count?: number | null
