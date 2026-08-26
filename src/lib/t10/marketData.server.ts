@@ -6,8 +6,18 @@
 
 import type { T10Candle } from "./technicals";
 
-const SPOT_URL = "https://api.binance.com/api/v3/klines";
-const FUT_URL = "https://fapi.binance.com/fapi/v1/klines";
+const SPOT_URL = [
+  "https://api.binance.com/api/v3/klines",
+  "https://data-api.binance.vision/api/v3/klines",
+  "https://api-gcp.binance.com/api/v3/klines",
+  "https://api1.binance.com/api/v3/klines",
+  "https://api2.binance.com/api/v3/klines",
+] as const;
+const FUT_URL = [
+  "https://fapi.binance.com/fapi/v1/klines",
+  "https://fapi1.binance.com/fapi/v1/klines",
+  "https://fapi2.binance.com/fapi/v1/klines",
+] as const;
 const TF_MS = 15 * 60 * 1000;
 
 type Kline = [
