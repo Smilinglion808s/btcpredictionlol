@@ -411,6 +411,8 @@ export async function runT10Boundary(
     } catch {
       delivery = null;
     }
+    await claim.catch(() => false);
+
     row.webhook_idempotency_key = t10IdempotencyKey(`${T10_BRIDGE_VERSION}:${targetTs}`);
     row.webhook_claimed_at = new Date().toISOString();
     row.webhook_sent = (delivery?.delivered ?? 0) > 0;
