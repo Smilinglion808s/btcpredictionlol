@@ -490,7 +490,21 @@ for (const [blockStart, head] of [...a.fits.entries()].sort((x, y) => x[0] - y[0
 }
 
 console.log("writing BACKFILL predictions…");
-const payload = a.rows.map((r) => r.row);
+// Never overwrite a real LIVE decision with a replayed one.
+const live = new Set<string>();
+for (let off = 0; ; off += 1000) {
+  const { data, error } = await sb
+    .from(T10_PREDICTIONS_TABLE)
+    .select("target_ts, run_mode")
+    .eq("model_version", T10_BRIDGE_VERSION)
+    .neq("run_mode", "BACKFILL")
+    .range(off, off + 999);
+  if (error) throw new Error(error.message);
+  for (const r of data ?? []) live.add(new Date(String(r.target_ts)).toISOString());
+  if ((data ?? []).length < 1000) break;
+}
+console.log("preserving live rows:", live.size);
+const payload = a.rows.filter((r) => !live.has(r.targetTs)).map((r) => r.row);
 for (let i = 0; i < payload.length; i += 96) {
   const chunk = payload.slice(i, i + 96);
   let ok = false;
