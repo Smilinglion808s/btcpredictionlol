@@ -14,7 +14,6 @@ import {
 
 import { listB4x4Recent } from "@/lib/b4x4.functions";
 
-import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { T30Card } from "@/components/t30-card";
@@ -29,7 +28,6 @@ import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
-import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
 import { Button } from "@/components/ui/button";
 import { forceRefreshStats } from "@/lib/statsRefresh.functions";
 import { PredictionBadge, StatusBadge } from "@/components/status-badges";
@@ -71,20 +69,12 @@ function StatsPage() {
 
 
 
-  const es1Fn = useServerFn(getEs1Stats);
-  const es1Q = useQuery({ queryKey: ["b4x4-es1-stats"], queryFn: () => es1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const es1PendingFn = useServerFn(getEs1Pending);
-  // ES1 is the sole live webhook model: poll it near-live so the tile flips
-  // within a few seconds of the boundary run writing its decision.
-  const es1PendingQ = useQuery({ queryKey: ["b4x4-es1-pending"], queryFn: () => es1PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-  const exportEs1Fn = useServerFn(exportEs1Csv);
   const binanceObFn = useServerFn(getBinanceObDashboard);
   const binanceObQ = useQuery({
     queryKey: ["binance-ob-stats"],
     queryFn: () => binanceObFn(),
     refetchInterval: 60_000,
   });
-  const [exportingEs1, setExportingEs1] = useState(false);
 
   // T45 Balanced — shadow only. Its pending tile must flip as soon as the
   // collector-triggered T+45s decision lands, so poll it at the same cadence.
@@ -147,16 +137,6 @@ function StatsPage() {
     window.location.href = "/api/export/t45pf-csv";
   }
 
-  async function downloadEs1Csv() {
-    try {
-      setExportingEs1(true);
-      const res = await exportEs1Fn();
-      if (!res || res.rows === 0) { alert("No B4x4-ES1 rows to export."); return; }
-      triggerDownload(res.csv, `B4x4-ES1-${stamp()}.csv`);
-    } finally {
-      setExportingEs1(false);
-    }
-  }
 
 
 
@@ -320,13 +300,8 @@ function StatsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
+        {/* B4x4-ES1 retired — model stopped and CSV archived. */}
 
-        <B4x4Es1Card
-          stats={(es1Q.data as any) ?? {}}
-          pending={(es1PendingQ.data as any) ?? null}
-          onExport={downloadEs1Csv}
-          exporting={exportingEs1}
-        />
 
         {/* Legacy R2-dependent T45 Balanced — retired from the dashboard. */}
         {SHOW_LEGACY_T45 && (
