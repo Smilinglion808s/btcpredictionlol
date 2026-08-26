@@ -172,6 +172,11 @@ export async function runT10Boundary(
   const activationBoundaryTs = activation.activation_boundary_ts
     ? new Date(String(activation.activation_boundary_ts)).toISOString()
     : null;
+  if (runMode === "LIVE" && activationMode === "ACTIVE" && activation.webhooks_enabled === true) {
+    void primeWebhookEndpoints(sb).catch(() => {});
+  }
+
+
 
   const base: Row = {
     target_ts: targetTs,
