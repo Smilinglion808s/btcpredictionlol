@@ -388,10 +388,14 @@ export async function runT10Boundary(
 
   // Outbound webhook fires BEFORE persistence so the POST is never delayed by
   // a database round-trip. Only eligible LIVE tradeable rows ever get here.
+  // T10 is first in the cascade: the claim insert runs alongside the POST so it
+  // never sits in front of the wire, and it locks T30/T45 out of this candle.
   let delivery: Awaited<ReturnType<typeof deliverWebhookNow>> | null = null;
   if (eligible) {
+    const claim = claimWebhookCascade(sb, targetTs, "t10-bridge");
     try {
       delivery = await deliverWebhookNow(
+
         sb,
         "prediction.created",
         buildT10WebhookPayload({
