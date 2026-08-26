@@ -36,7 +36,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
  * Fully separate identity, storage, fit and statistics from T30/T45. Live
  * model: emits outbound webhooks on tradeable decisions once activated.
  */
-export function T10Card({ stats, pending }: { stats: Any; pending: Any | null }) {
+export function T10Card({
+  stats,
+  pending,
+  onExport,
+}: {
+  stats: Any;
+  pending: Any | null;
+  onExport?: () => void;
+}) {
   const wins = Number(stats.wins ?? 0);
   const losses = Number(stats.losses ?? 0);
   const graded = wins + losses;
