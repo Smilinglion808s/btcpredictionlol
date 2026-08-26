@@ -36,7 +36,15 @@ export const Route = createFileRoute("/api/public/hooks/es1-boundary-run")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // B4x4-ES1 is RETIRED (2026-08-26). Its history and CSV are archived;
+        // this endpoint no longer mints predictions for any target.
+        return Response.json(
+          { ok: false, retired: true, model: "b4x4-es1", retired_at: "2026-08-26" },
+          { status: 410 },
+        );
+        // eslint-disable-next-line no-unreachable
         const started = Date.now();
+
         setB4x4RequestHost(request.headers.get("host"));
         const apikey = request.headers.get("apikey");
         const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
