@@ -33,6 +33,7 @@ import { t30Decide, t30OddsUnits, t30Probability, t30Score, type T30Decision } f
 import { evaluateT30Shadows } from "./shadows";
 import { buildT30WebhookPayload } from "./webhook.server";
 import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
+import { claimWebhookCascade } from "@/lib/webhookCascade.server";
 import { ensureT30Fit } from "./fitService.server";
 import {
   auditT30,
@@ -297,9 +298,15 @@ export async function runT30Boundary(
     decision.modelWouldTrade === true &&
     (decision.modelDirection === 1 || decision.modelDirection === -1);
 
+  // Cascade: T30 only sends when T10 abstained (no claim exists for this candle).
+  const cascadeOk =
+    webhookArmed && tradeable
+      ? await claimWebhookCascade(sb, targetTs, "t30-priceflow")
+      : false;
+
   const sendStartedAt = Date.now();
   const sendPromise: Promise<{ delivered: number; latencyMs: number } | null> =
-    webhookArmed && tradeable
+    cascadeOk
       ? deliverWebhookNow(
           sb,
           "prediction.created",
