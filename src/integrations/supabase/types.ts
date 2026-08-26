@@ -7245,6 +7245,48 @@ export type Database = {
         }
         Relationships: []
       }
+      t10_prior_klines: {
+        Row: {
+          candle_ts: string
+          close: number
+          high: number
+          low: number
+          open: number
+          quote_volume: number
+          taker_buy_quote_volume: number
+          trade_count: number
+          updated_at: string
+          venue: string
+          volume: number
+        }
+        Insert: {
+          candle_ts: string
+          close: number
+          high: number
+          low: number
+          open: number
+          quote_volume?: number
+          taker_buy_quote_volume?: number
+          trade_count?: number
+          updated_at?: string
+          venue: string
+          volume?: number
+        }
+        Update: {
+          candle_ts?: string
+          close?: number
+          high?: number
+          low?: number
+          open?: number
+          quote_volume?: number
+          taker_buy_quote_volume?: number
+          trade_count?: number
+          updated_at?: string
+          venue?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       t30_collector_health: {
         Row: {
           build_identifier: string | null

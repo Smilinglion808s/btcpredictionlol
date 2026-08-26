@@ -253,7 +253,7 @@ export async function runT10Boundary(
   };
 
   // 2. Prior Spot/Futures technical inputs.
-  const market = await loadT10PriorCandles(targetTs);
+  const market = await loadT10PriorCandles(targetTs, 64, sb);
   const technicals = buildT10Technicals(
     targetTs,
     packetFeatures.direction,
