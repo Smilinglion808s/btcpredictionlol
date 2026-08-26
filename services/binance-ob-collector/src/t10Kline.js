@@ -1,11 +1,11 @@
-// T30 PriceFlow Balanced — Binance Global Spot 1s kline capture.
+// T10 Bridge R1 — Binance Global Spot 1s kline capture.
 //
 // Runs inside the existing always-on collector process (Cloudflare Workers
 // cannot hold a persistent WebSocket) on its OWN WebSocket connection, so it
-// can never perturb the T45 capture path. It subscribes to
+// can never perturb the T30 or T45 capture paths. It subscribes to
 // `btcusdt@kline_1s`, keeps only FINAL bars whose open time falls in offsets
-// 0..29 of a 15-minute UTC candle, and flushes each candle's 30 bars to the
-// app immediately after offset 29 closes, then triggers the T+10s decision.
+// 0..9 of a 15-minute UTC candle, and flushes each candle's 10 bars to the
+// app immediately after offset 9 closes, then triggers the T+10s decision.
 //
 // Binance Global only. Binance.US is never an acceptable substitute.
 
