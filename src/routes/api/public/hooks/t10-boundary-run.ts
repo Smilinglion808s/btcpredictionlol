@@ -7,7 +7,6 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { createHmac, timingSafeEqual } from "crypto";
 import {
   resolveT10,
   runT10Boundary,
@@ -15,6 +14,7 @@ import {
   type T10TriggerKind,
 } from "@/lib/t10/orchestrator.server";
 import { T10_CUTOFF_OFFSET_MS, TF_MS, floorTarget } from "@/lib/t10/config";
+import { verifyT10Signature } from "@/lib/t10/signingSecret.server";
 
 /** Never sit longer than this waiting for the T+10s cutoff. */
 const MAX_WAIT_MS = 15_000;
@@ -25,14 +25,7 @@ const MAX_SKEW_MS = 5 * 60 * 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function verifySigned(raw: string, timestamp: string | null, signature: string | null): boolean {
-  const secret = process.env['T10_INGEST_SECRET'] ?? process.env['BINANCE_OB_INGEST_SECRET'];
-  if (!secret || !timestamp || !signature) return false;
-  const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_SKEW_MS) return false;
-  const expected = createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return verifyT10Signature(raw, timestamp, signature, MAX_SKEW_MS);
 }
 
 export const Route = createFileRoute("/api/public/hooks/t10-boundary-run")({

@@ -7,11 +7,11 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { validateT10Samples } from "@/lib/t10/ingest";
 import { T10_STREAM_KEY } from "@/lib/t10/config";
 import { upsertT10Health, upsertT10Samples } from "@/lib/t10/store.server";
+import { verifyT10Signature } from "@/lib/t10/signingSecret.server";
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_SAMPLES = 200;
@@ -41,14 +41,7 @@ const bodySchema = z.object({
 });
 
 function verify(rawBody: string, timestamp: string | null, signature: string | null): boolean {
-  const secret = process.env['T10_INGEST_SECRET'] ?? process.env['BINANCE_OB_INGEST_SECRET'];
-  if (!secret || !timestamp || !signature) return false;
-  const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_SKEW_MS) return false;
-  const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return verifyT10Signature(rawBody, timestamp, signature, MAX_SKEW_MS);
 }
 
 const methodNotAllowed = async () =>
