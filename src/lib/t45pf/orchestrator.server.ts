@@ -54,6 +54,7 @@ import {
   upsertPFPrediction,
 } from "./store.server";
 import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
+import { claimWebhookCascade } from "@/lib/webhookCascade.server";
 import { buildPriceFlowWebhookPayload } from "./webhook.server";
 
 type Row = Record<string, unknown>;
@@ -387,10 +388,16 @@ export async function runPriceFlowBoundary(
   // Send FIRST: the POST leaves before the prediction row is persisted, and the
   // database write runs concurrently with it. Nothing may sit in front of the
   // wire on the hot path.
+  // Cascade: T45 only sends when both T10 and T30 abstained for this candle.
+  const cascadeOk =
+    webhookArmed && tradeable
+      ? await claimWebhookCascade(sb, targetTs, "t45-priceflow")
+      : false;
+
   const sendStartedAt = Date.now();
   const sendPromise: Promise<
     { delivered: number; latencyMs: number; settle: Promise<void>; error?: string } | null
-  > = webhookArmed && tradeable
+  > = cascadeOk
     ? deliverWebhookNow(
         sb,
         "prediction.created",

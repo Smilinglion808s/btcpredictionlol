@@ -11321,6 +11321,24 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_cascade_claims: {
+        Row: {
+          claimed_at: string
+          model: string
+          target_ts: string
+        }
+        Insert: {
+          claimed_at?: string
+          model: string
+          target_ts: string
+        }
+        Update: {
+          claimed_at?: string
+          model?: string
+          target_ts?: string
+        }
+        Relationships: []
+      }
       webhook_deliveries: {
         Row: {
           attempt: number
