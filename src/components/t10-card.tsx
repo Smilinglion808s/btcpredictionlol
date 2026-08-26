@@ -97,10 +97,23 @@ export function T10Card({
             {stats.model_version ?? "t10-bridge-r1"}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-hotpink/40 bg-hotpink/10 text-[10px] font-bold uppercase tracking-[0.16em] text-hotpink shrink-0">
-          <span className="size-1.5 rounded-full bg-hotpink t10-live-dot" />
-          {stats.webhooks_enabled ? "Live" : "Shadow"}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onExport ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs border-hotpink/30 hover:border-hotpink/60"
+              onClick={onExport}
+            >
+              CSV
+            </Button>
+          ) : null}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-hotpink/40 bg-hotpink/10 text-[10px] font-bold uppercase tracking-[0.16em] text-hotpink">
+            <span className="size-1.5 rounded-full bg-hotpink t10-live-dot" />
+            {stats.webhooks_enabled ? "Live" : "Shadow"}
+          </div>
         </div>
+
       </div>
 
       <div className="relative flex items-center gap-5">
