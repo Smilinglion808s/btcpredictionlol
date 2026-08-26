@@ -137,6 +137,11 @@ function StatsPage() {
     window.location.href = "/api/export/t45pf-csv";
   }
 
+  function downloadT10Csv() {
+    window.location.href = "/api/export/t10-csv";
+  }
+
+
 
 
 
