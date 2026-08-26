@@ -18,6 +18,7 @@ import { B4x4Es1Card } from "@/components/b4x4-es1-card";
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { T30Card } from "@/components/t30-card";
+import { T10Card } from "@/components/t10-card";
 
 /** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
 const SHOW_LEGACY_T45 = false as boolean;
@@ -25,6 +26,7 @@ const SHOW_LEGACY_T45 = false as boolean;
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
 import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
+import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { getEs1Stats, getEs1Pending, exportEs1Csv } from "@/lib/b4x4es1.functions";
@@ -105,6 +107,11 @@ function StatsPage() {
   const t30Q = useQuery({ queryKey: ["t30-stats"], queryFn: () => t30Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const t30PendingFn = useServerFn(getT30Pending);
   const t30PendingQ = useQuery({ queryKey: ["t30-pending"], queryFn: () => t30PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  // T10 Bridge R1 — independent shadow model (T+10s, dual rank).
+  const t10Fn = useServerFn(getT10Stats);
+  const t10Q = useQuery({ queryKey: ["t10-stats"], queryFn: () => t10Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const t10PendingFn = useServerFn(getT10Pending);
+  const t10PendingQ = useQuery({ queryKey: ["t10-pending"], queryFn: () => t10PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
   const [exportingPf, setExportingPf] = useState(false);
   const [exportingT30, setExportingT30] = useState(false);
 
@@ -345,6 +352,11 @@ function StatsPage() {
           pending={(t30PendingQ.data as any) ?? null}
           onExport={downloadT30Csv}
           exporting={exportingT30}
+        />
+
+        <T10Card
+          stats={(t10Q.data as any) ?? {}}
+          pending={(t10PendingQ.data as any) ?? null}
         />
 
 
