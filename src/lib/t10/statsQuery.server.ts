@@ -49,6 +49,11 @@ export interface T10Stats {
   last_target_ts: string | null;
   last_decision_reason: string | null;
   last_decision_offset_ms: number | null;
+  signals_sent: number;
+  last_webhook_offset_ms: number | null;
+  last_webhook_latency_ms: number | null;
+  last_webhook_target_ts: string | null;
+  avg_decision_offset_ms: number | null;
   today: {
     date: string;
     traded: number;
@@ -77,7 +82,7 @@ async function loadRecent(limit = 4000): Promise<Row[]> {
     const { data, error } = await client
       .from(T10_PREDICTIONS_TABLE)
       .select(
-        "target_ts, run_mode, packet_complete, policy_would_trade, policy_decision_reason, result, raw_score, actual_direction, resolved_at, decision_offset_ms, boise_date",
+        "target_ts, run_mode, packet_complete, policy_would_trade, policy_decision_reason, result, raw_score, actual_direction, resolved_at, decision_offset_ms, boise_date, webhook_sent, webhook_sent_at, webhook_offset_ms, webhook_latency_ms",
       )
       .eq("model_version", T10_BRIDGE_VERSION)
       .order("target_ts", { ascending: false })
@@ -161,6 +166,14 @@ export async function buildT10Stats(): Promise<T10Stats> {
   today.win_rate = today.wins + today.losses > 0 ? today.wins / (today.wins + today.losses) : null;
 
   const last = live[0] ?? null;
+  // Delivery timing: `live` is newest-first, so the first sent row is the most
+  // recent signal actually put on the wire.
+  const sent = live.filter((r) => r.webhook_sent === true);
+  const lastSent = sent[0] ?? null;
+  const offsets = live
+    .map((r) => Number(r.decision_offset_ms))
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 120_000)
+    .slice(0, 50);
   return {
     model_name: T10_MODEL_NAME,
     model_version: T10_BRIDGE_VERSION,
@@ -186,6 +199,15 @@ export async function buildT10Stats(): Promise<T10Stats> {
     last_decision_reason: (last?.policy_decision_reason as string | null) ?? null,
     last_decision_offset_ms:
       last?.decision_offset_ms == null ? null : Number(last.decision_offset_ms),
+    signals_sent: sent.length,
+    last_webhook_offset_ms:
+      lastSent?.webhook_offset_ms == null ? null : Number(lastSent.webhook_offset_ms),
+    last_webhook_latency_ms:
+      lastSent?.webhook_latency_ms == null ? null : Number(lastSent.webhook_latency_ms),
+    last_webhook_target_ts: lastSent ? new Date(String(lastSent.target_ts)).toISOString() : null,
+    avg_decision_offset_ms: offsets.length
+      ? offsets.reduce((a, b) => a + b, 0) / offsets.length
+      : null,
     today,
     daily: [...dayMap.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
