@@ -49,7 +49,9 @@ import {
   upsertT10Prediction,
 } from "./store.server";
 import { buildT10Technicals } from "./technicals";
-import { t10IdempotencyKey, t10WebhookEligible } from "./webhook.server";
+import { buildT10WebhookPayload, t10IdempotencyKey, t10WebhookEligible } from "./webhook.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
+
 
 type Row = Record<string, unknown>;
 
