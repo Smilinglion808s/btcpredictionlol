@@ -320,13 +320,8 @@ function StatsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
+        {/* B4x4-ES1 retired — model stopped and CSV archived. */}
 
-        <B4x4Es1Card
-          stats={(es1Q.data as any) ?? {}}
-          pending={(es1PendingQ.data as any) ?? null}
-          onExport={downloadEs1Csv}
-          exporting={exportingEs1}
-        />
 
         {/* Legacy R2-dependent T45 Balanced — retired from the dashboard. */}
         {SHOW_LEGACY_T45 && (
