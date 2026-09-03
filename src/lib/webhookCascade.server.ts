@@ -19,6 +19,9 @@ export async function claimWebhookCascade(
   targetTs: string,
   model: CascadeModel,
 ): Promise<boolean> {
+  // Models with webhooks disabled must never claim a candle, otherwise they
+  // would suppress the model that is actually allowed to send.
+  if (!WEBHOOK_ALLOWED_MODELS.has(model)) return false;
   try {
     const ts = new Date(targetTs).toISOString();
     const { data, error } = await sb
