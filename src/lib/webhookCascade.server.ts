@@ -6,6 +6,7 @@
 // primary-key insert, so it is atomic even under concurrent runs.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { WEBHOOK_ALLOWED_MODELS } from "./webhooks.server";
 
 export const CASCADE_PRIORITY = ["t10-bridge", "t30-priceflow", "t45-priceflow"] as const;
 export type CascadeModel = (typeof CASCADE_PRIORITY)[number];
@@ -19,6 +20,9 @@ export async function claimWebhookCascade(
   targetTs: string,
   model: CascadeModel,
 ): Promise<boolean> {
+  // Models with webhooks disabled must never claim a candle, otherwise they
+  // would suppress the model that is actually allowed to send.
+  if (!WEBHOOK_ALLOWED_MODELS.has(model)) return false;
   try {
     const ts = new Date(targetTs).toISOString();
     const { data, error } = await sb
