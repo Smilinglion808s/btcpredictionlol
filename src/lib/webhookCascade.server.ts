@@ -6,6 +6,7 @@
 // primary-key insert, so it is atomic even under concurrent runs.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { WEBHOOK_ALLOWED_MODELS } from "./webhooks.server";
 
 export const CASCADE_PRIORITY = ["t10-bridge", "t30-priceflow", "t45-priceflow"] as const;
 export type CascadeModel = (typeof CASCADE_PRIORITY)[number];
