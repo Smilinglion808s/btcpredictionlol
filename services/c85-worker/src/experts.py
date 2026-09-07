@@ -52,11 +52,71 @@ class ExpertCall:
     detail: dict[str, Any] | None = None
 
 
+class LiveExpertChain:
+    """The transcribed ancestor chain: leaves -> C42 -> C51 -> C54.
+
+    Every stage is the ported original (``src/experts/leaf.py``, ``c42.py``,
+    ``c51.py``, ``c54.py``). Each stage fails closed on its own missing
+    inputs; nothing here substitutes, approximates or skips an ancestor.
+    """
+
+    def __init__(self, c51_fitted_state: Any | None = None) -> None:
+        from .experts.c42 import C42Expert
+        from .experts.c51 import C51Expert
+        from .experts.c54 import C54Expert
+        from .experts.leaf import LeafExperts
+
+        self.leaf = LeafExperts()
+        self.c42 = C42Expert()
+        self.c51 = C51Expert()
+        self.c54 = C54Expert()
+        self.c51_fitted_state = c51_fitted_state
+
+    def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
+        """Produce every ancestor column the C85 feature frame consumes.
+
+        Raises the first stage's fail-closed error unchanged, so the caller
+        can surface the exact unrecovered dependency as the blocker.
+        """
+        leaves = self.leaf.evaluate(packet)  # c30/c36/c37/r4/external + ranks
+        c42 = self.c42.evaluate(packet, leaves)
+        c51_packet = dict(packet)
+        c51_packet["fitted_state"] = self.c51_fitted_state
+        c51 = self.c51.evaluate(c51_packet)
+        c54 = self.c54.evaluate(
+            packet,
+            {
+                "c42_prediction": c42["c42_prediction"],
+                "c51_prediction": c51["c51_prediction"],
+            },
+        )
+        return {**leaves, **c42, **c51, **c54}
+
+    @staticmethod
+    def blocking_reasons() -> list[str]:
+        """Concrete, independently-verifiable blockers for live operation."""
+        return [
+            "C85_LEAF_MODULES_NOT_RECOVERED: c30/c36/c37/r4/external prediction "
+            "logic lives in modules the kit imports but never ships "
+            "(evaluate_external_direction_r1.py, t0_t5_win_containment_deep_dive_r1.py, "
+            "the R4/r5 lab ledger producer). LeafExperts.evaluate fails closed; "
+            "supply the original modules or their ledgers.",
+            "C85_C51_FITTED_STATE_MISSING: C51 is a daily walk-forward head with no "
+            "static parameters; it needs ~90 days of warmup history replayed through "
+            "C51WalkForward plus a live Polymarket pre-open book feed (pm_* fields), "
+            "neither of which exists in the kit fixtures.",
+            "C85_C42_EXTERNAL_FALLBACK_UNDOCUMENTED: 289/19,487 fixture rows "
+            "(c37==0 & r4==0) show an external-only fallback in production that no "
+            "recovered source implements; without it C42 parity is 19,198/19,487.",
+        ]
+
+
 class ExpertRegistry:
     """Fail-closed registry. `connected` stays False until every ancestor runs."""
 
     def __init__(self) -> None:
         self._providers: dict[str, Any] = {}
+        self.chain: LiveExpertChain | None = None
 
     def register(self, name: str, provider: Any) -> None:
         if name not in REQUIRED_EXPERTS:
@@ -69,12 +129,15 @@ class ExpertRegistry:
 
     @property
     def connected(self) -> bool:
-        return not self.missing
+        # The chain is only usable when every stage can actually run: leaf
+        # modules recovered, C51 fitted state present. Ports alone are not
+        # enough, so this stays False until those blockers clear.
+        return not self.missing and self.chain is not None and self.chain.c51_fitted_state is not None
 
     def calls(self, target_open_ns: int) -> dict[str, ExpertCall]:
         if not self.connected:
             raise ExpertUnavailable(
-                "C85_EXPERTS_NOT_CONNECTED: " + ", ".join(self.missing)
+                "C85_EXPERTS_NOT_CONNECTED: " + "; ".join(LiveExpertChain.blocking_reasons())
             )
         return {name: self._providers[name](target_open_ns) for name in REQUIRED_EXPERTS}
 
