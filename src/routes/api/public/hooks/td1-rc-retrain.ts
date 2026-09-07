@@ -13,6 +13,9 @@ export const Route = createFileRoute("/api/public/hooks/td1-rc-retrain")({
         if (!expected || apikey !== expected) {
           return new Response("Unauthorized", { status: 401 });
         }
+        // TD1-RC is paused and archived (2026-09-07).
+        return Response.json({ ok: false, paused: true, reason: "TD1_PAUSED" }, { status: 410 });
+        // eslint-disable-next-line no-unreachable
         const supabase = createClient(
           process.env.SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!,

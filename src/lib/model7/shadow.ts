@@ -706,7 +706,9 @@ async function runA2Policies(
 
     // ---- TD2-RC outbound webhooks are DISABLED. B4x4 is the only sender. ----
     // TD2-RC still runs, persists, resolves and reports; it just never emits.
+    const TD1_PAUSED = true; // TD1/TD2 layer paused and archived (2026-09-07).
     const td1Promise = (async () => {
+      if (TD1_PAUSED) return;
       let td2Row: Record<string, unknown> | null = null;
       try {
         const { runTd1RcForA2Combined } = await import("./td1/orchestrator");
@@ -864,11 +866,7 @@ export async function resolveShadowRowsFor(
     }
   } catch { /* never block resolver */ }
 
-  // TD1-RC resolution (Model 8 layer). Never blocks the resolver.
-  try {
-    const { resolveTd1RcRow } = await import("./td1/orchestrator");
-    await resolveTd1RcRow(supabase, predictionId, actualDirection);
-  } catch { /* never block */ }
+  // TD1-RC resolution paused (layer archived 2026-09-07).
 
   // B4x4 resolution (independent active model). Never blocks the resolver.
   try {
@@ -896,11 +894,7 @@ export async function resolveShadowRowsFor(
 
 
 
-  // Opportunistic TD1-RC retrain (cadence-gated). Never blocks the resolver.
-  try {
-    const { maybeRetrainTd1 } = await import("./td1/retrain");
-    await maybeRetrainTd1(supabase);
-  } catch { /* never block */ }
+  // TD1-RC retrain paused (layer archived 2026-09-07).
 
   // AAS96 resolution handled at top of function (supports DOJI push).
 

@@ -5,11 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   listPredictions,
-  getTd1RcShadowStats,
-  getTd1RcShadowPending,
-  exportTd1RcShadow,
-  getTd1RcTrainingProgress,
-  resetTd1RcVisualStats,
 } from "@/lib/predictions.functions";
 
 import { listB4x4Recent } from "@/lib/b4x4.functions";
@@ -55,17 +50,6 @@ const PENDING_REFRESH_MS = 15_000;
 function StatsPage() {
   const qc = useQueryClient();
 
-  const td1Fn = useServerFn(getTd1RcShadowStats);
-  const td1Q = useQuery({ queryKey: ["td1-rc-shadow-stats"], queryFn: () => td1Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-
-  const td1PendingFn = useServerFn(getTd1RcShadowPending);
-  const td1PendingQ = useQuery({ queryKey: ["td1-rc-shadow-pending"], queryFn: () => td1PendingFn(), refetchInterval: PENDING_REFRESH_MS, staleTime: 5_000 });
-  const exportTd1Fn = useServerFn(exportTd1RcShadow);
-  const td1ProgressFn = useServerFn(getTd1RcTrainingProgress);
-  const td1ProgressQ = useQuery({ queryKey: ["td1-rc-training-progress"], queryFn: () => td1ProgressFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-
-
-  const resetTd1Fn = useServerFn(resetTd1RcVisualStats);
 
 
 
@@ -149,35 +133,6 @@ function StatsPage() {
 
 
 
-  const [resettingTd1, setResettingTd1] = useState(false);
-  const [exportingTd1, setExportingTd1] = useState(false);
-
-
-
-  async function doResetTd1Stats() {
-    if (!confirm("Reset TD1-RC visual stats to zero? The CSV export will keep all historical rows.")) return;
-    try {
-      setResettingTd1(true);
-      await resetTd1Fn();
-      qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
-      qc.invalidateQueries({ queryKey: ["td1-rc-recent-stats"] });
-    } finally {
-      setResettingTd1(false);
-    }
-  }
-
-  async function downloadTd1Csv() {
-    try {
-      setExportingTd1(true);
-      const rows = await exportTd1Fn();
-      if (rows.length === 0) { alert("No TD1-RC shadow rows to export."); return; }
-      triggerDownload(rowsToCsv(rows as any[]), `td1-rc-shadow-${stamp()}.csv`);
-    } finally {
-      setExportingTd1(false);
-    }
-  }
-
-
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return "";
     const headerSet = new Set<string>();
@@ -227,10 +182,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
         qc.invalidateQueries({ queryKey: ["b2-recent"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model7_td1_rc_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-stats"] });
-        qc.invalidateQueries({ queryKey: ["td1-rc-shadow-pending"] });
-      })
       .on("postgres_changes", { event: "*", schema: "public", table: "b4x4_predictions" }, () => {
         qc.invalidateQueries({ queryKey: ["b4x4-stats"] });
         qc.invalidateQueries({ queryKey: ["b4x4-pending"] });
@@ -240,37 +191,6 @@ function StatsPage() {
     return () => { supabase.removeChannel(ch); };
   }, [qc]);
 
-  const td1Stats = (td1Q.data ?? {}) as Record<string, any>;
-  const b2Hero = {
-    total: Number(td1Stats.total ?? 0),
-    wins: Number(td1Stats.wins ?? 0),
-    losses: Number(td1Stats.losses ?? 0),
-    pushes: Number(td1Stats.pushes ?? 0),
-    pending: Number(td1Stats.pending ?? 0),
-    win_rate: Number(td1Stats.win_rate ?? 0),
-    last_10_win_rate: Number(td1Stats.last_10_win_rate ?? 0),
-    last_25_win_rate: Number(td1Stats.last_25_win_rate ?? 0),
-    last_50_win_rate: Number(td1Stats.last_50_win_rate ?? 0),
-    yes_total: Number(td1Stats.yes_total ?? 0),
-    yes_wins: Number(td1Stats.yes_wins ?? 0),
-    yes_win_rate: Number(td1Stats.yes_win_rate ?? 0),
-    no_total: Number(td1Stats.no_total ?? 0),
-    no_wins: Number(td1Stats.no_wins ?? 0),
-    no_win_rate: Number(td1Stats.no_win_rate ?? 0),
-    avg_confidence: Number(td1Stats.avg_confidence ?? 0),
-    avg_confidence_wins: Number(td1Stats.avg_confidence_wins ?? 0),
-    avg_confidence_losses: Number(td1Stats.avg_confidence_losses ?? 0),
-    td1_vetoes: Number(td1Stats.td1_vetoes ?? 0),
-    containment_vetoes: Number(td1Stats.containment_vetoes ?? 0),
-    a2_baseline_win_rate: Number(td1Stats.a2_baseline_win_rate ?? 0),
-    a2_baseline_wins: Number(td1Stats.a2_baseline_wins ?? 0),
-    a2_baseline_losses: Number(td1Stats.a2_baseline_losses ?? 0),
-    compressed_risk: (td1Stats.compressed_risk ?? null) as Record<string, any> | null,
-    daily_3d: (td1Stats.daily_3d ?? []) as Array<Record<string, any>>,
-
-  };
-
-  const b2Resolved = b2Hero.wins + b2Hero.losses + b2Hero.pushes;
 
 
   const [refreshing, setRefreshing] = useState(false);
@@ -343,20 +263,6 @@ function StatsPage() {
 
 
 
-        <TD1Card
-          title="TD1-RC"
-          eyebrow="Active layer · webhook source"
-          showCompressedRisk={false}
-          hero={b2Hero}
-          resolved={b2Resolved}
-          pending={td1PendingQ.data as any}
-          progress={td1ProgressQ.data as any}
-          onExport={downloadTd1Csv}
-          exporting={exportingTd1}
-          onReset={doResetTd1Stats}
-          resetting={resettingTd1}
-          dailyCount={7}
-        />
 
       </div>
 
