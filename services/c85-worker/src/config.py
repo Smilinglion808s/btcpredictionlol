@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 MODEL_VERSION = os.environ.get("C85_MODEL_VERSION", "c85-multi-meta-r1")
 DISPLAY_NAME = "C85"
