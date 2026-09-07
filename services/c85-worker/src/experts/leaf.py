@@ -1,87 +1,52 @@
 """Live decision path for the C30 / C36 / C37 / R4 / external-direction ancestors.
 
-STATUS: PARTIAL TRANSCRIPTION -- FAIL CLOSED FOR ALL NINE OUTPUT KEYS.
+STATUS: PARTIAL TRANSCRIPTION -- STILL FAILS CLOSED FOR ALL NINE OUTPUT KEYS,
+but the reason is now "not yet transcribed", NOT "source missing".
 
-This module faithfully transcribes every piece of decision-path math that is
-actually present in the recovered ancestor sources named in the task:
+Correction (2026-09-07). An earlier revision of this docstring asserted that
+`evaluate_external_direction_r1.py`, `t0_t5_win_containment_deep_dive_r1.py`,
+`t0_t5_fee_coverage_frontier_r1.py`, `c37_balanced_maturation_r1.py`,
+`c30_c70_lab_manager_r2.py`, `r5_lab_manager.py`, `htf_structure_r4_refine.py`
+and the root shadow ledgers were absent. That assertion was wrong. After a
+recursive expansion of C85_Upstream_Recovery.zip (986 files; every nested ZIP
+opened), all seven producer modules and all five named ledgers were located,
+hashed and pinned. See:
 
-    /tmp/kit2/ancestor_source/vault_work/legacy_c30/external_research/
-        c30_c70_lab_manager_r2.py
-        c30_c70_lab_manager_r2_phase2.py
-        c30_c70_lab_manager_r2_phase3.py
-    /tmp/kit2/ancestor_source/vault_work/legacy_c37/external_research/
-        c36_fee_frontier_r3.py
-        c36_maturation_refinement_r2.py
-        c36_timing_robustness_r1.py
-        c37_balanced_maturation_r1.py
-        c37_venue_ensemble_r4.py
+  * evaluation-fixtures/upstream/FILE_INDEX.json      -- full expanded inventory
+  * evaluation-fixtures/upstream/UPSTREAM_RESOLVED.json
+        -- the exact chosen path + sha256 + byte size for each producer/ledger
+  * evaluation-fixtures/upstream/*.parquet
+        -- the five ledgers installed as parity fixtures (identical rows)
+  * dependencies.py::LEAF_DEPENDENCIES
+        -- per-output status, producer function, coverage window, blocker
 
-Reading those files line by line shows that all five requested predictions
-(c30_prediction, c36_prediction, c37_prediction, r4_prediction/r4_probability_
-correct/r4_directional_rank, external_direction/external_rank) are NOT computed
-inside these files. Every one of them is *consumed* from CSV ledgers produced by
-earlier, still-unrecovered ancestors, and from two Python modules that are
-`import`-ed by name but whose source is absent from every directory under
-/tmp/kit2 (confirmed by an exhaustive `grep -rl` across the whole recovered
-kit):
+Coverage of the recovered ledgers: 2026-02-06T23:00Z..2026-08-31T23:45Z
+(fee_coverage / selected / fixed_floor, 19,780 rows each) and
+2025-12-01T00:00Z..2026-08-31T22:30Z (t5_hot_calibration / t5_book_day4h_r4_1
+rows, 26,124 rows each). They are historical intermediates and parity fixtures
+-- they are NOT a live source, and they do not extend past 2026-08-31.
 
-  * `evaluate_external_direction_r1.directional_matrix`   -- builds the raw
-    Binance/Deribit/Hyperliquid feature matrix that every logistic head in
-    C30/C36/C37 is trained on. Not recovered anywhere.
-  * `t0_t5_win_containment_deep_dive_r1.load_rich_frame` ("deep") -- builds the
-    per-candle "frame" (label, candidate_prediction, candidate_t5_router_
-    prediction, candidate_stage, external_direction, external_rank, ...).
-    Not recovered anywhere. (`external_direction`/`external_rank` -- one of
-    the five requested outputs -- is *itself* a column this loader merges in
-    from a still-earlier ledger; its generating formula is not in the kit.)
-  * `t0_t5_fee_coverage_frontier_r1` ("control") -- a *near*-duplicate of this
-    module was found one directory over, in
-    legacy_c42/C42_MATURATION_CONSENSUS_R1/source_context/t0_t5_fee_coverage_frontier_r1.py.
-    Its `directional_past_rank` and `opportunity` functions are transcribed
-    verbatim below because their math is self-contained. Its `load_frame`,
-    however, reads four more upstream CSV ledgers (`continuous_coverage_ledger.csv`,
-    `label_stable_db1_shadow_ledger.csv`, `t5_reliability_r2_rows.csv`,
-    `r5_lab_manager_output/t5_hot_calibration_ledger.csv`) that are themselves
-    not recovered. `r4_prediction`/`r4_probability_correct` are read verbatim
-    out of that last ledger -- i.e. R4 is not a model defined in the recovered
-    C30/C36/C37 sources at all; it is an even earlier ancestor ("r5 lab
-    manager") whose source was not supplied.
-  * C30's own decision rule (`make_dual_score_policy` in
-    c30_c70_lab_manager_r2.py) needs `frame["candidate_stage"]`,
-    `frame["external_direction"]`, and `frame["candidate_t5_router_prediction"]`
-    -- all three trace back to the unrecovered `deep`/`control` root ledgers
-    above, not to any raw market feed.
-  * C36's and C37's admission rules (`make_tail` / `make_tail_policy`, both
-    transcribed verbatim below) gate on `prediction_cov30` / `stage_cov30`
-    (= C30's own output) and `candidate_t5_router_prediction` -- the same
-    unrecovered root signal.
+So each of the nine keys is now `UNPORTED`: producer source and historical
+inputs are both in hand, and what remains is (a) transcribing each producer's
+computation for freshly arriving candles and (b) recovering continuation inputs
+after the ledger cutoff. Where a ledger is used at all, it is used only for
+stage-by-stage parity checking of a transcribed computation -- replaying a
+ledger is never counted as evidence that its producer was ported.
 
-Net effect: the *routing/admission* arithmetic for C30, C36, C37 is fully
-recoverable and is transcribed below as pure functions, but every one of
-those functions takes as input one or more signals
-(`external_direction`, `external_rank`, `candidate_t5_router_prediction`,
-`prediction_cov30`/`stage_cov30`) that this codebase cannot compute from raw
-Binance/Deribit/Hyperliquid/Polymarket data, because the modules that compute
-them were not part of the recovered kit. Fabricating those root signals (e.g.
-guessing at a plausible `directional_matrix` from the naming convention of
-columns in upstream_packet.parquet) would violate the "no approximations, no
-fabricated parameters" instruction, so this module raises instead of guessing.
+Until a producer is transcribed and proven at parity, this module raises rather
+than guessing at a root signal; fabricating `directional_matrix` outputs from
+column naming conventions would violate the "no approximations, no fabricated
+parameters" rule.
 
-`LeafExperts.evaluate()` therefore FAILS CLOSED for every one of the nine
-requested keys: it raises `MissingUpstreamSignalError` naming exactly which
-unrecovered module/ledger/column blocks that key, unless the caller has
-independently supplied the corresponding already-computed upstream field(s)
-in `packet` (e.g. because some other, still-live service reproduces the
-missing ancestor). The pure, faithfully-transcribed helper functions are
-exposed as module-level functions and as `LeafExperts` static/instance
-methods so that a future port -- once `evaluate_external_direction_r1`,
-`t0_t5_win_containment_deep_dive_r1`, and the R4/root ledgers are recovered --
-can be completed by writing only the missing feature-matrix builder and
-wiring it in; nothing here would need to change.
+`LeafExperts.evaluate()` therefore FAILS CLOSED for every one of the nine keys:
+it raises `MissingUpstreamSignalError` naming, per key, the exact producer file
+and the exact blocker, unless the caller has independently supplied the
+already-computed upstream field in `packet`.
 
-Everything below that *is* transcribed is transcribed exactly, with a
-docstring pointing at the file and line range it came from.
+Everything below that *is* transcribed is transcribed exactly, with a docstring
+pointing at the file and line range it came from.
 """
+
 
 from __future__ import annotations
 
