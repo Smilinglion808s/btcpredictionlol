@@ -84,4 +84,23 @@ for item in binance_context_2026 binance_cross_asset_2026 \
   fi
 done
 
+# 6. Binance SPOT 1s daily archives (needed by r4_2_final_audit's boundary build).
+#    Kept in the cache; downloaded once from data.binance.vision, checksum-verified
+#    by Binance's own per-file digests at download time.
+ARCH="$CACHE/binance_spot_1s_archives"
+mkdir -p "$ARCH"
+BASE=https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1s
+D=2026-01-01
+while [ "$D" != 2026-09-01 ]; do
+  F="BTCUSDT-1s-$D.zip"
+  [ -s "$ARCH/$F" ] || curl -sf -o "$ARCH/$F" "$BASE/$F" || echo "missing $F"
+  D=$(date -I -d "$D + 1 day")
+done
+mkdir -p "$ROOT/external_research/binance_spot_1s"
+rm -rf "$ROOT/external_research/binance_spot_1s/archives"
+ln -s "$ARCH" "$ROOT/external_research/binance_spot_1s/archives"
+
+# 7. parity fixtures (gitignored) for the worker test suite
+python3 "$REPO/reproduction/restore_upstream_fixtures.py" || true
+
 echo "workspace ready at $ROOT"
