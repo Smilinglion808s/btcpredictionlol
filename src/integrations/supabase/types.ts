@@ -3668,6 +3668,54 @@ export type Database = {
           },
         ]
       }
+      c85_request_nonces: {
+        Row: {
+          created_at: string
+          nonce: string
+          op: string
+          worker_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          nonce: string
+          op: string
+          worker_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          nonce?: string
+          op?: string
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
+      c85_scheduler_leases: {
+        Row: {
+          acquired_at: string
+          expires_at: string
+          fence: number
+          lease_key: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          acquired_at?: string
+          expires_at: string
+          fence?: number
+          lease_key: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          acquired_at?: string
+          expires_at?: string
+          fence?: number
+          lease_key?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       c85_settlements: {
         Row: {
           consumed_by_deterioration_at: string | null
@@ -12017,6 +12065,23 @@ export type Database = {
         Returns: Json
       }
       b4x4_ob_capture_call: { Args: never; Returns: undefined }
+      c85_acquire_lease: {
+        Args: { p_lease_key: string; p_owner_id: string; p_ttl_seconds: number }
+        Returns: Json
+      }
+      c85_append_checkpoint: { Args: { p_checkpoint: Json }; Returns: Json }
+      c85_commit_decision: {
+        Args: { p_checkpoint?: Json; p_outbox?: Json; p_target: Json }
+        Returns: Json
+      }
+      c85_consume_settlements: {
+        Args: {
+          p_checkpoint?: Json
+          p_model_version: string
+          p_settlement_ids: string[]
+        }
+        Returns: Json
+      }
       consume_td1_containment_slot: {
         Args: { p_base_variant: string; p_side: string }
         Returns: Json
