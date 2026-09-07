@@ -205,16 +205,18 @@ LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
                "Read as `base_direction` / `r4_prediction` from " + _T5_HOT + ". " +
                CONTINUATION_GAP),
     Dependency(
-        "structure_valid", UNPORTED,
+        "structure_valid", REPRODUCED,
         ("research_c85/kalshi.py:27 (f81.source_valid)",
          "c81/lab/research_c79/source.py:73 (the actual source_valid computation: "
          "match & previous.source_valid & ...) and research_c81/run.py:80-82",
-         "C85_Lovable_Kit.zip original_c85_layout/: research_c57, research_c58, research_c61, "
-         "research_c76, research_c78, research_c80 and lab_recovered/"
-         "BTC15M_C71_RESEARCH_CHECKPOINT_2026-09-05/ are all present, path-preserved",),
+         "c81/lab/research_c76/source.py:73 and c81/lab/research_c75/source.py:98 "
+         "(the chained ancestors of that flag)",),
         (),
-        "Package trees ARE supplied; the remaining work is import/packaging configuration "
-        "plus transcribing the f81 source-validity computation. Never pinned true.",
+        "Reproduced by executing the original C75 -> C76 -> C79 modules unchanged "
+        "(reproduction/repro_structure_valid.py) over an independently fetched Binance "
+        "SPOT BTCUSDT 1m minute ledger: 19,487 targets, 19,407 valid / 80 invalid, "
+        "0 mismatches against the reference packet. Both the valid and the invalid case "
+        "are exercised; never pinned true. " + CONTINUATION_GAP,
     ),
 )
 
