@@ -102,11 +102,27 @@ def load_settings() -> Settings:
             )
 
     gateway_url = req("C85_GATEWAY_URL")
-    ops_url = os.environ.get("C85_OPS_URL") or gateway_url.replace(
-        "/hooks/c85-decision", "/hooks/c85-ops"
-    )
-    if not ops_url.endswith("/hooks/c85-ops"):
-        raise RuntimeError("C85_OPS_URL must point at /api/public/hooks/c85-ops")
+    validate_endpoint_url("C85_GATEWAY_URL", gateway_url, GATEWAY_PATH)
+
+    explicit_ops = os.environ.get("C85_OPS_URL", "").strip()
+    if explicit_ops:
+        ops_url = explicit_ops
+    else:
+        if GATEWAY_PATH not in gateway_url:
+            raise ConfigError(
+                "C85_OPS_URL is not set and cannot be derived: C85_GATEWAY_URL does not "
+                f"contain '{GATEWAY_PATH}'. Set C85_OPS_URL explicitly to the "
+                f"'{OPS_PATH}' endpoint."
+            )
+        ops_url = gateway_url.replace(GATEWAY_PATH, OPS_PATH)
+    validate_endpoint_url("C85_OPS_URL", ops_url, OPS_PATH)
+
+    if _origin(gateway_url) != _origin(ops_url):
+        raise ConfigError(
+            "C85_GATEWAY_URL and C85_OPS_URL must share the same origin; they currently "
+            f"resolve to '{_origin(gateway_url)}' and '{_origin(ops_url)}'"
+        )
+
 
     return Settings(
         worker_id=os.environ.get("C85_WORKER_ID", "c85-worker-1"),
