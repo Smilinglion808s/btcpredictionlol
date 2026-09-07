@@ -2,8 +2,9 @@ import sys, pathlib, numpy as np, pandas as pd
 sys.path.insert(0,'/tmp/c30root')
 from external_research import c36_fee_frontier_r3 as fr
 out = pathlib.Path('/tmp/c30root/c36f_repro_out'); out.mkdir(parents=True, exist_ok=True)
-ref_dir = pathlib.Path('/tmp/upx/vault_work/legacy_c37/external_research/c36_fee_frontier_r3_output')
+ref_dir = pathlib.Path('/tmp/upx/upstream/vault_work/legacy_c37/external_research/c36_fee_frontier_r3_output')
 fr.OUT = out
+fr.TIMING_OUT = pathlib.Path('/tmp/c30root/c36t_repro_out')  # connected upstream
 fr.main()
 total=0
 for p in sorted(ref_dir.glob('*.csv')):
