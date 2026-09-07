@@ -200,7 +200,12 @@ export async function runC85Op(
       const { data, error } = await supabase.rpc("c85_append_checkpoint", {
         p_checkpoint: { ...body.checkpoint, model_version: mv },
       });
-      if (error) return { status: 409, result: { ok: false, error: error.message } };
+      if (error) {
+        // 409 only for genuine conflicts (stale parent, serialization, unique);
+        // anything else is a bad payload and must not look like a retryable race.
+        const conflict = /conflict|stale|serialize|duplicate|already/i.test(error.message);
+        return { status: conflict ? 409 : 400, result: { ok: false, error: error.message } };
+      }
       return ok({ checkpoint: data });
     }
 
@@ -222,7 +227,12 @@ export async function runC85Op(
         p_checkpoint: body.checkpoint ? { ...body.checkpoint, model_version: mv } : null,
         p_outbox: body.outbox ?? null,
       });
-      if (error) return { status: 409, result: { ok: false, error: error.message } };
+      if (error) {
+        // 409 only for genuine conflicts (stale parent, serialization, unique);
+        // anything else is a bad payload and must not look like a retryable race.
+        const conflict = /conflict|stale|serialize|duplicate|already/i.test(error.message);
+        return { status: conflict ? 409 : 400, result: { ok: false, error: error.message } };
+      }
       const res = (data ?? {}) as Record<string, unknown>;
       return { status: res.ok === false ? 409 : 200, result: res };
     }
@@ -283,7 +293,12 @@ export async function runC85Op(
         p_settlement_ids: body.settlement_ids,
         p_checkpoint: body.checkpoint ? { ...body.checkpoint, model_version: mv } : null,
       });
-      if (error) return { status: 409, result: { ok: false, error: error.message } };
+      if (error) {
+        // 409 only for genuine conflicts (stale parent, serialization, unique);
+        // anything else is a bad payload and must not look like a retryable race.
+        const conflict = /conflict|stale|serialize|duplicate|already/i.test(error.message);
+        return { status: conflict ? 409 : 400, result: { ok: false, error: error.message } };
+      }
       return ok({ ...((data ?? {}) as Record<string, unknown>) });
     }
 

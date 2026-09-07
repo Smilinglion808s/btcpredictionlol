@@ -87,6 +87,7 @@ describe("C85 operations", () => {
       target: {
         ticker: TICKER,
         target_open_utc: OPEN,
+        deadline_utc: new Date(Date.parse(OPEN) + 5000).toISOString(),
         run_mode: "RESEARCH_BACKFILL",
         status: "ABSTAIN",
         final_side: 0,
@@ -115,7 +116,14 @@ describe("C85 operations", () => {
     // and the whole transaction rolls back — no duplicate decision row.
     const stale = await runC85Op(supabase, WORKER, {
       op: "decision.commit",
-      target: { ticker: TICKER, target_open_utc: OPEN, status: "ABSTAIN", final_side: 0 },
+      target: {
+        ticker: TICKER,
+        target_open_utc: OPEN,
+        deadline_utc: new Date(Date.parse(OPEN) + 5000).toISOString(),
+        status: "ABSTAIN",
+        final_side: 0,
+        gate_reasons: { test: true },
+      },
       checkpoint: { stage: "BRIDGE", expected_parent_seq: parent },
     });
     expect(stale.status).toBe(409);
