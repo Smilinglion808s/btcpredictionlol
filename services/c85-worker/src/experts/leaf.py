@@ -352,12 +352,17 @@ REQUIRED_KEYS = (
     "c36_prediction",
     "c37_prediction",
     "r4_prediction",
+    # The R4.3 expansion-selected T+5 output that the original C42
+    # `apply_composite` actually reads (verified: 19,487/19,487 exact).
+    "expansion_selected_prediction",
+    "opportunity",
     "r4_probability_correct",
     "r4_directional_rank",
     "external_direction",
     "external_rank",
     "mean_135_rank",
 )
+
 
 # Exactly which unrecovered module/ledger blocks each output key. Used only
 # to produce precise, actionable error messages -- never to fabricate values.
