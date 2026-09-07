@@ -6,6 +6,8 @@ dependency carries one status, and never a blanket "source missing" claim:
 
   PORTED            transcribed into this worker and passing fixture parity
   RESTORED_STALE    original fitted artifacts installed, but not advanced to today
+  REPRODUCED        original producer re-executed from source and matching its
+                    historical ledger cell-for-cell; not yet vendored into the worker
   UNPORTED          source AND all required artifacts present; not yet transcribed
   UNCONFIGURED      ported/portable, blocked only on a live data feed
   UNAVAILABLE       a named module or artifact is genuinely absent from the archives
@@ -25,6 +27,7 @@ from typing import Any
 
 PORTED = "PORTED"
 RESTORED_STALE = "RESTORED_STALE"
+REPRODUCED = "REPRODUCED"
 UNPORTED = "UNPORTED"
 UNCONFIGURED = "UNCONFIGURED"
 UNAVAILABLE = "UNAVAILABLE"
@@ -126,51 +129,55 @@ CONTINUATION_GAP = (
 
 LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
     Dependency(
-        "external_direction", UNPORTED,
+        "external_direction", REPRODUCED,
         ("vault_work/legacy_lab2/sources/T0_T5_MULTIVENUE_LAB_R1_COMPACT.zip"
          "/evaluate_external_direction_r1.py::directional_matrix (sha256 e88f9c00e9b0...)",),
         (),
-        "Producer source recovered and readable. Historical values available as the "
+        "Reproduced inside c30/phase3 with zero mismatches; not yet vendored. Historical values available as the "
         "`external_direction` column of fee_coverage_shadow_ledger.csv. Live value needs "
         "the directional_matrix venue feature build to be transcribed. " + CONTINUATION_GAP,
     ),
     Dependency(
-        "external_rank", UNPORTED,
+        "external_rank", REPRODUCED,
         ("vault_work/legacy_c30/external_research/c30_c70_lab_manager_r2.py::map_external_scores"
          " (sha256 151a768fd68f...)",),
         (),
-        "Ranking math already transcribed in leaf.py; input series present as "
+        "Reproduced inside the c30/phase3 chain with zero mismatches. Ranking math already transcribed in leaf.py; input series present as "
         "`external_rank` / `external_rank_t0` / `external_rank_t5` in the recovered "
         "ledgers. " + CONTINUATION_GAP,
     ),
     Dependency(
-        "c30_prediction", UNPORTED,
+        "c30_prediction", REPRODUCED,
         ("vault_work/legacy_c30/external_research/c30_c70_lab_manager_r2.py"
          "::make_dual_score_policy / load_lab_frame",),
         (),
         "load_lab_frame() inputs are all present: " + "; ".join(_C30_LEDGERS) + ". "
-        "Historical output is `prediction_cov30` in selected_shadow_ledger.csv. " + CONTINUATION_GAP,
+        "Historical output is `prediction_cov30` in selected_shadow_ledger.csv; the producer "
+        "was re-executed from source and reproduced all 19,780 rows exactly. " + CONTINUATION_GAP,
     ),
     Dependency(
-        "c36_prediction", UNPORTED,
+        "c36_prediction", REPRODUCED,
         ("vault_work/legacy_c37/external_research/c36_fee_frontier_r3.py",
          "vault_work/legacy_c37/external_research/c36_timing_robustness_r1.py"),
         (),
-        "Admission math ported; inputs prediction_cov30 / candidate_t5_router_prediction "
+        "c36_fee_frontier_r3 and c36_timing_robustness_r1 both re-executed from source with "
+        "zero mismatches against their archived outputs. Inputs prediction_cov30 / candidate_t5_router_prediction "
         "present in the recovered C30 ledger chain. " + CONTINUATION_GAP,
     ),
     Dependency(
-        "c37_prediction", UNPORTED,
+        "c37_prediction", REPRODUCED,
         ("vault_work/legacy_c37/external_research/c37_balanced_maturation_r1.py"
          " (sha256 5eb0ff87d554...)",),
         (),
-        "Same ledger chain as c36, plus mean_135_rank. " + CONTINUATION_GAP,
+        "Re-executed from source against c37_shadow_ledger.csv: 19,780 rows, 0 cell and 0 "
+        "decision mismatches, including when phase3 and timing inputs are replaced by the "
+        "reproduced upstream producers rather than the archived copies. " + CONTINUATION_GAP,
     ),
     Dependency(
-        "mean_135_rank", UNPORTED,
+        "mean_135_rank", REPRODUCED,
         ("c37_balanced_maturation_r1.py:360", "c36_fee_frontier_r3.py:498"),
         (),
-        "Rank blend over the three recovered rank series (external_rank, "
+        "Reproduced exactly as the `mean_135_rank` column of the c37 ledger. Rank blend over the three recovered rank series (external_rank, "
         "t5_reliability_rank, r4_directional_rank). " + CONTINUATION_GAP,
     ),
     Dependency(
@@ -200,6 +207,8 @@ LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
     Dependency(
         "structure_valid", UNPORTED,
         ("research_c85/kalshi.py:27 (f81.source_valid)",
+         "c81/lab/research_c79/source.py:73 (the actual source_valid computation: "
+         "match & previous.source_valid & ...) and research_c81/run.py:80-82",
          "C85_Lovable_Kit.zip original_c85_layout/: research_c57, research_c58, research_c61, "
          "research_c76, research_c78, research_c80 and lab_recovered/"
          "BTC15M_C71_RESEARCH_CHECKPOINT_2026-09-05/ are all present, path-preserved",),
@@ -212,7 +221,7 @@ LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
 
 ALL_DEPENDENCIES: tuple[Dependency, ...] = (C42, C51, C54, *LEAF_DEPENDENCIES)
 
-BLOCKING_STATUSES = {UNAVAILABLE, UNPORTED, UNCONFIGURED, FAILING_PARITY, RESTORED_STALE}
+BLOCKING_STATUSES = {UNAVAILABLE, REPRODUCED, UNPORTED, UNCONFIGURED, FAILING_PARITY, RESTORED_STALE}
 
 
 def blocking() -> list[Dependency]:

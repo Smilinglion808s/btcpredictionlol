@@ -65,6 +65,8 @@ def test_no_leaf_dependency_claims_missing_artifacts() -> None:
     from experts.dependencies import LEAF_DEPENDENCIES  # noqa: PLC0415
 
     for dep in LEAF_DEPENDENCIES:
-        assert dep.status == "UNPORTED", dep.summary()
+        # REPRODUCED = the original producer was re-executed from source and matched
+        # its historical ledger exactly; it still counts as blocking until vendored.
+        assert dep.status in {"UNPORTED", "REPRODUCED"}, dep.summary()
         assert not dep.missing_artifacts, dep.summary()
         assert dep.source_modules, dep.key
