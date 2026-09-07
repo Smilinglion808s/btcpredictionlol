@@ -96,8 +96,8 @@ def recompute_structure_valid(packet: pd.DataFrame) -> pd.Series:
         ["ts", "binance_spot_t5_w005_return_bps", "binance_spot_t5_w005_flow_imbalance"]
     ].copy()
     frame["ts"] = pd.to_datetime(frame.ts, utc=True)
-    indicator75 = c75.market(frame, btc)
-    indicator76 = c76.market(frame, btc, indicator75)
+    context = c75.build(frame, btc)
+    indicator76 = c76.market(frame, btc, context)
     indicator79 = c79.market(frame, btc, indicator76)
     return pd.Series(np.asarray(indicator79.source_valid, dtype=bool), index=packet.index)
 
