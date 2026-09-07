@@ -41,7 +41,11 @@ const bodySchema = z.object({
   decision: z.record(z.unknown()).default({}),
   timing: z.record(nsString).default({}),
   payload: z.record(z.unknown()).nullable().optional(),
+  // Non-executing integration probe: verifies signature, schema, clock and the
+  // dispatch decision that WOULD be taken, and writes nothing at all.
+  dry_run: z.boolean().default(false),
 });
+
 
 const methodNotAllowed = async () =>
   new Response("Method Not Allowed", { status: 405, headers: { allow: "POST" } });
