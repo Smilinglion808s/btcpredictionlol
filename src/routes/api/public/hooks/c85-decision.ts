@@ -76,18 +76,13 @@ export const Route = createFileRoute("/api/public/hooks/c85-decision")({
           return Response.json({ ok: false, error: String(e) }, { status: 400 });
         }
 
-        const supabase = createClient(
-          process.env.SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          { auth: { persistSession: false, autoRefreshToken: false } },
-        );
-
         const targetOpen = new Date(body.target_open_utc);
         if (Number.isNaN(targetOpen.getTime())) {
           return Response.json({ ok: false, error: "bad_target_open_utc" }, { status: 400 });
         }
         const deadline = new Date(targetOpen.getTime() + C85_PUBLICATION_DEADLINE_MS);
         const targetOpenIso = targetOpen.toISOString();
+
 
         // Non-executing probe. Returns the dispatch verdict this request would
         // produce, without touching c85_targets, the outbox or any webhook.
