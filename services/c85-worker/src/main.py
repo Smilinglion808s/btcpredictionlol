@@ -39,11 +39,12 @@ class Worker:
     def __init__(self) -> None:
         self.settings = load_settings()
         self.artifacts = ArtifactStore(self.settings.artifact_dir)
-        self.store = C85Store(
-            self.settings.supabase_url,
-            self.settings.supabase_service_key,
+        self.backend = BackendClient(
+            self.settings.ops_url,
+            self.settings.gateway_secret,
             self.settings.worker_id,
         )
+        self.store = C85Store(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
         self.experts = ExpertRegistry()
         self.gateway = GatewayClient(self.settings.gateway_url, self.settings.gateway_secret)
@@ -51,7 +52,9 @@ class Worker:
         self.state = None
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
+        self.owns_lease = False
         self.scheduler = BoundaryScheduler(self.on_boundary)
+
 
     # -- readiness --------------------------------------------------------------
     def evaluate_readiness(self) -> tuple[str, str | None]:
