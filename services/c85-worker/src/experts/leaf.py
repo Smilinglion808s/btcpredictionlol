@@ -286,10 +286,11 @@ def feature_matrix_columns(
     `feature_matrix`, lines 90-120, applied to whatever superset of columns
     `base.directional_matrix(history, sources, stage)` would have produced.
 
-    NOTE: `base.directional_matrix` itself (evaluate_external_direction_r1.py)
-    is NOT recovered, so this function documents only the *second* filtering
-    stage (horizon truncation + venue-leg exclusion) applied on top of it; it
-    cannot be used standalone to build the actual feature matrix.
+    NOTE: `base.directional_matrix` (evaluate_external_direction_r1.py, sha256
+    e88f9c00e9b0..., recovered -- see dependencies.py) is not yet transcribed
+    here, so this function covers only the *second* filtering stage (horizon
+    truncation + venue-leg exclusion) applied on top of it; it cannot be used
+    standalone to build the actual feature matrix.
     """
 
     keep: list[str] = []
@@ -348,14 +349,14 @@ class LeafExperts:
 
     Every faithfully-recoverable pure function used by these ancestors is
     implemented at module scope above. This class does not fit or store any
-    model state on its own, because none of the training data required to
-    produce that state (the raw evaluate_external_direction_r1 feature
-    matrix, and the unrecovered root ledgers) is available -- see the module
-    docstring. `fitted_pipelines` / `rank_histories` are accepted so that,
-    once the missing feature-matrix builder is recovered/re-derived, a
-    caller can inject real walk-forward-fitted `sklearn` Pipelines and
-    `directional_past_rank` deque state here without touching this file
-    again.
+    model state on its own, because the feature-matrix builder
+    (evaluate_external_direction_r1.directional_matrix) is recovered but not
+    yet transcribed, and no fitted state has been re-derived from it -- see the
+    module docstring and dependencies.py. `fitted_pipelines` / `rank_histories`
+    are accepted so that, once that builder is transcribed and its walk-forward
+    fits are reproduced at parity against the installed ledger fixtures, a
+    caller can inject real `sklearn` Pipelines and `directional_past_rank`
+    deque state here without touching this file again.
     """
 
     fitted_pipelines: dict[str, Pipeline] = field(default_factory=dict)
@@ -366,8 +367,8 @@ class LeafExperts:
 
         `packet` is expected to be a single-candle dict of raw inputs (the
         upstream_packet.parquet row schema). Because none of the nine target
-        keys can be computed from raw inputs alone without the unrecovered
-        modules/ledgers described in the module docstring, this raises
+        keys can be computed from raw inputs alone until the recovered producer
+        modules listed in dependencies.py are transcribed, this raises
         `MissingUpstreamSignalError` for every key unless the caller has
         already placed the fully-computed upstream value for that key
         directly in `packet` (e.g. `packet["external_direction"]`), in which
