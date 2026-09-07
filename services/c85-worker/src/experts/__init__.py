@@ -153,9 +153,12 @@ class ExpertRegistry:
     @property
     def connected(self) -> bool:
         # The chain is only usable when every stage can actually run: leaf
-        # modules recovered, C51 fitted state present. Ports alone are not
-        # enough, so this stays False until those blockers clear.
-        return not self.missing and self.chain is not None and self.chain.c51_fitted_state is not None
+        # computations ported and fed, and the C51 walk-forward state current
+        # (restored AND advanced to today). Ports alone are not enough, so this
+        # stays False until those blockers clear.
+        if self.missing or self.chain is None or self.chain.c51_fitted_state is None:
+            return False
+        return bool(self.chain.c51_state_readiness().get("ready"))
 
     def calls(self, target_open_ns: int) -> dict[str, ExpertCall]:
         if not self.connected:
