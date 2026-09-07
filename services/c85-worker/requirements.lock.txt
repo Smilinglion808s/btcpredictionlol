@@ -1,0 +1,17 @@
+# C85 worker — pinned to the reference replay environment (CPython 3.12.13).
+# Numerical packages MUST match the kit's requirements.lock.txt exactly, or the
+# recovered auxiliary pickles and the reference parity gate are not reproducible.
+numpy==2.3.5
+pandas==2.2.3
+scipy==1.17.0
+scikit-learn==1.8.0
+pyarrow==25.0.1
+requests==2.34.2
+
+# Worker runtime (not part of the model numerics).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+websockets==14.1
+supabase==2.11.0
+python-dotenv==1.0.1
