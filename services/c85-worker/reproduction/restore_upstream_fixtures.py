@@ -131,6 +131,9 @@ def main() -> int:
         }
     (OUT / "UPSTREAM_RESOLVED.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     print(f"UPSTREAM_RESOLVED.json: {len(manifest)} producers pinned")
+
+    build_reference_packet()
+    build_c51_reference_tail()
     return 0
 
 
