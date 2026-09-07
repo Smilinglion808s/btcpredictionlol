@@ -1,10 +1,9 @@
 """Replay historical candles and compare C42Expert against the stored ledger.
 
 Uses the STORED leaf columns from upstream_packet.parquet as leaf_outputs,
-exactly as instructed. Reports match/mismatch counts; does not assert 100%
-match because a documented, unrecovered divergence exists (see c42.py
-module docstring and the written report) affecting rows where both
-c37_prediction and r4_prediction are 0.
+including `expansion_selected_prediction` (the frozen R4.3 expansion-selected
+T+5 output that `apply_composite` actually reads). Parity is exact: any
+mismatch is a regression.
 """
 from __future__ import annotations
 
@@ -24,12 +23,21 @@ LEAF_COLUMNS = [
     "c36_prediction",
     "c37_prediction",
     "r4_prediction",
+    "expansion_selected_prediction",
     "r4_probability_correct",
     "r4_directional_rank",
     "external_direction",
     "external_rank",
     "mean_135_rank",
 ]
+
+DIRECTION_COLUMNS = (
+    "c30_prediction",
+    "c36_prediction",
+    "c37_prediction",
+    "r4_prediction",
+    "external_direction",
+)
 
 
 def _clean(value):
@@ -40,7 +48,7 @@ def _clean(value):
     return value
 
 
-def test_c42_parity_report():
+def test_c42_matches_reference_exactly():
     df = pd.read_parquet(FIXTURE)
     expert = C42Expert()
 
@@ -48,9 +56,7 @@ def test_c42_parity_report():
     mismatches = []
     for idx, row in df.iterrows():
         leaf_outputs = {
-            key: _clean(row[key]) if key in ("c37_prediction", "r4_prediction", "external_direction",
-                                              "c30_prediction", "c36_prediction")
-            else row[key]
+            key: _clean(row[key]) if key in DIRECTION_COLUMNS else row[key]
             for key in LEAF_COLUMNS
         }
         result = expert.evaluate(packet=row.to_dict(), leaf_outputs=leaf_outputs)
@@ -58,28 +64,35 @@ def test_c42_parity_report():
         if result["c42_prediction"] == stored:
             matches += 1
         else:
-            mismatches.append(idx)
+            mismatches.append((idx, row.get("ts")))
 
     total = len(df)
-    print(f"C42 parity: {matches}/{total} matched ({matches/total:.4%}); "
-          f"{len(mismatches)} mismatched.")
-
-    # Known, documented divergence: rows where both c37_prediction and
-    # r4_prediction are 0 (an undocumented production fallback not present
-    # in any recovered ancestor source). We assert the match rate stays at
-    # least at the level explained by the recovered rule, and that every
-    # mismatch is confined to that documented condition, so a silent
-    # regression elsewhere would fail this test.
-    unexplained = 0
-    for idx in mismatches:
-        row = df.loc[idx]
-        c37 = 0 if row["c37_prediction"] != row["c37_prediction"] else int(row["c37_prediction"])
-        r4 = 0 if row["r4_prediction"] != row["r4_prediction"] else int(row["r4_prediction"])
-        if not (c37 == 0 and r4 == 0):
-            unexplained += 1
-
-    assert unexplained <= 2, (
-        f"{unexplained} mismatches occurred outside the documented "
-        "c37==0 & r4==0 divergence condition; this would be a genuine rule bug."
+    assert total == 19_487, total
+    assert not mismatches, (
+        f"C42 parity: {matches}/{total} matched; first mismatches: {mismatches[:5]}"
     )
-    assert matches / total > 0.98
+
+
+def test_wrong_r4_column_would_regress():
+    """Guards the corrected input mapping.
+
+    Reading `r4_prediction` instead of `expansion_selected_prediction`
+    reproduces the historical 287-row divergence; this test pins that the two
+    columns are genuinely different so the mapping cannot silently revert.
+    """
+    df = pd.read_parquet(FIXTURE)
+    core = df["c37_prediction"].fillna(0).astype(int)
+    r43 = df["expansion_selected_prediction"].fillna(0).astype(int)
+    r4 = df["r4_prediction"].fillna(0).astype(int)
+    ext = df["external_direction"].fillna(0).astype(int)
+
+    opportunity = df["opportunity"].fillna(False).astype(bool)
+
+    def compose(expansion):
+        admitted = (core == 0) & (expansion != 0) & (expansion == ext)
+        composed = admitted.map({True: 1, False: 0}) * expansion + (~admitted) * core
+        return composed.where(opportunity, 0)
+
+    stored = df["c42_prediction"].fillna(0).astype(int)
+    assert int(stored.ne(compose(r43)).sum()) == 0
+    assert int(stored.ne(compose(r4)).sum()) == 287
