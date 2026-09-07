@@ -260,8 +260,17 @@ def build_meta_feature_row(raw: dict[str, Any], direct_probability: float, propo
     row["c42_called"] = float(called)
     row["c42_t0"] = float(called and "t0" in c42_stage.lower())
     row["c42_t5"] = float(called and "t5" in c42_stage.lower())
-    for column in RAW_UPSTREAM_PREDICTION_FIELDS[1:]:  # c30/c36/c37/external/r4
+    # Verbatim column order from meta_matrix() in
+    # build_c51_target_native_rebase_r1.py (c30, c36, c37, r4, external).
+    for column in (
+        "c30_prediction",
+        "c36_prediction",
+        "c37_prediction",
+        "r4_prediction",
+        "external_direction",
+    ):
         row[f"proposal_agreement_{column}"] = float(proposal * int(raw.get(column, 0) or 0))
+
 
     for name in RAW_UPSTREAM_RANK_FIELDS:
         value = raw.get(name)
