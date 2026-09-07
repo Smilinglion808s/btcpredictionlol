@@ -153,4 +153,6 @@ class ExpertRegistry:
             "connected": self.connected,
             "required": list(REQUIRED_EXPERTS),
             "missing": self.missing,
+            "blocking_reasons": LiveExpertChain.blocking_reasons(),
+            "ports_present": ["leaf", "c42", "c51", "c54"],
         }

@@ -63,9 +63,10 @@ class Worker:
         if missing_feeds:
             return "BLOCKED", f"C85_FEEDS_STALE: {', '.join(missing_feeds)}"
         if not self.experts.connected:
-            return "BLOCKED", (
-                "C85_EXPERTS_NOT_CONNECTED: " + ", ".join(self.experts.missing)
-            )
+            reasons = self.experts.status().get("blocking_reasons") or [
+                "missing: " + ", ".join(self.experts.missing)
+            ]
+            return "BLOCKED", "C85_EXPERTS_NOT_CONNECTED :: " + " || ".join(reasons)
         if not self.settings.allow_live_publication:
             return "BLOCKED", "C85_ALLOW_LIVE_PUBLICATION=false"
         return "READY", None
