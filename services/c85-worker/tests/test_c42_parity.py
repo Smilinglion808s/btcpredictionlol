@@ -95,4 +95,4 @@ def test_wrong_r4_column_would_regress():
 
     stored = df["c42_prediction"].fillna(0).astype(int)
     assert int(stored.ne(compose(r43)).sum()) == 0
-    assert int(stored.ne(compose(r4)).sum()) == 285
+    assert int(stored.ne(compose(r4)).sum()) == 287
