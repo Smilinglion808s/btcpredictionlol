@@ -112,46 +112,6 @@ export async function sweepUnresolvedRows(
   const tdTargets: string[] = [];
   const tdClosedIneligible = 0;
   // TD1/TD2 layer paused and archived (2026-09-07) — no sweeping.
-  if (false) try {
-    const { data } = await supabase
-      .from("model7_td1_rc_shadow")
-      .select("id, prediction_id, candle_ts, a2_original_decision")
-      .is("resolved_at", null)
-      .gte("candle_ts", sinceIso)
-      .lte("candle_ts", cutoffIso)
-      .order("candle_ts", { ascending: true })
-      .limit(1000);
-    const { resolveTd1RcRow } = await import("@/lib/model7/td1/orchestrator");
-    const seen = new Set<string>();
-    type TdRow = { id: string; prediction_id: string | null; candle_ts: string; a2_original_decision: string | null };
-    for (const r of (data ?? []) as unknown as TdRow[]) {
-      const c = candles.get(new Date(r.candle_ts).toISOString());
-      if (!c) continue;
-      // Ungradeable: A2 never produced a direction, or the candle was a doji
-      // (open == close), which no directional policy can win or lose.
-      const gradeable =
-        (r.a2_original_decision === "YES" || r.a2_original_decision === "NO") && c.dir !== "PUSH";
-      if (!gradeable) {
-        await supabase
-          .from("model7_td1_rc_shadow")
-          .update({
-            actual_direction: c.dir,
-            result: "PUSH",
-            resolved_at: new Date().toISOString(),
-          } as never)
-          .eq("id", r.id);
-        tdClosedIneligible += 1;
-        continue;
-      }
-      if (!r.prediction_id || seen.has(r.prediction_id)) continue;
-
-      seen.add(r.prediction_id);
-      await resolveTd1RcRow(supabase, r.prediction_id, c.dir as "GREEN" | "RED");
-      tdTargets.push(new Date(r.candle_ts).toISOString());
-    }
-  } catch (e) {
-    errors.push(`td1: ${e instanceof Error ? e.message : String(e)}`);
-  }
 
   return {
     v6_swept: v6Swept,
