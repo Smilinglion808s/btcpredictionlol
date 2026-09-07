@@ -122,6 +122,23 @@ def _direction(value: Any, field: str) -> int:
     return numeric
 
 
+def _opportunity(packet: Mapping[str, Any] | None, leaf_outputs: Mapping[str, Any]) -> bool:
+    """`opportunity.fillna(False)` gate from the source `apply_composite`.
+
+    The flag must be supplied (by the packet or the leaf outputs); a silently
+    absent flag is a fail-closed error rather than an assumed opportunity.
+    """
+    for source in (leaf_outputs, packet):
+        if source is not None and "opportunity" in source:
+            value = source["opportunity"]
+            if value is None:
+                return False
+            if isinstance(value, float) and value != value:  # NaN
+                return False
+            return bool(value)
+    raise C42InputError("OPPORTUNITY_MISSING")
+
+
 def _expansion_direction(value: Any) -> int:
     """`expansion_selected_prediction.fillna(0)` from the source rule."""
     if value is None:
@@ -163,6 +180,11 @@ class C42Expert:
         missing = [key for key in REQUIRED_LEAF_KEYS if key not in leaf_outputs]
         if missing:
             raise C42InputError(f"LEAF_OUTPUTS_MISSING_KEYS:{','.join(missing)}")
+
+        opportunity = _opportunity(packet, leaf_outputs)
+        if not opportunity:
+            # `prediction[~opportunity] = 0` in the source `apply_composite`.
+            return {"c42_prediction": 0, "c42_decision_source": "NOT_OPPORTUNITY"}
 
         core = _direction(leaf_outputs["c37_prediction"], "C37_PREDICTION")
         # Source `apply_composite` reads
