@@ -25,6 +25,7 @@ from typing import Any
 import uvicorn
 
 from .artifacts import ArtifactStore
+from .backend import BackendClient
 from .config import DISPLAY_NAME, MODEL_VERSION, load_settings
 from .experts import ExpertRegistry
 from .feeds import FeedRegistry
@@ -39,11 +40,12 @@ class Worker:
     def __init__(self) -> None:
         self.settings = load_settings()
         self.artifacts = ArtifactStore(self.settings.artifact_dir)
-        self.store = C85Store(
-            self.settings.supabase_url,
-            self.settings.supabase_service_key,
+        self.backend = BackendClient(
+            self.settings.ops_url,
+            self.settings.gateway_secret,
             self.settings.worker_id,
         )
+        self.store = C85Store(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
         self.experts = ExpertRegistry()
         self.gateway = GatewayClient(self.settings.gateway_url, self.settings.gateway_secret)
@@ -51,7 +53,9 @@ class Worker:
         self.state = None
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
+        self.owns_lease = False
         self.scheduler = BoundaryScheduler(self.on_boundary)
+
 
     # -- readiness --------------------------------------------------------------
     def evaluate_readiness(self) -> tuple[str, str | None]:
@@ -93,6 +97,16 @@ class Worker:
             self.store.mark_missed(ticker, target, reason or "not_ready")
             return
 
+        # Scheduler ownership: overlapping deployments must never both process
+        # the same target. The lease is short-lived and fenced in the backend.
+        lease = self.store.acquire_lease(self.settings.lease_ttl_seconds)
+        self.owns_lease = bool(lease.get("granted"))
+        if not self.owns_lease:
+            self.store.mark_missed(
+                ticker, target, f"C85_LEASE_HELD_BY:{lease.get('owner_id', 'other')}"
+            )
+            return
+
         timing.compute_started_ns = time.time_ns()
         # Faithful packet construction is gated on the feature port and the
         # inherited experts; both fail closed above, so this point is only
@@ -128,6 +142,13 @@ class Worker:
                     last_checkpoint_seq=self.warmup.progress.checkpoint_seq,
                     build_sha=self.settings.build_sha,
                 )
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                if self.readiness == "READY":
+                    self.owns_lease = bool(
+                        self.store.acquire_lease(self.settings.lease_ttl_seconds).get("granted")
+                    )
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(self.settings.heartbeat_seconds)
