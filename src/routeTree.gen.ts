@@ -25,6 +25,7 @@ import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/
 import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
 import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
 import { Route as ApiPublicHooksC85DecisionRouteImport } from './routes/api/public/hooks/c85-decision'
+import { Route as ApiPublicHooksC85OpsRouteImport } from './routes/api/public/hooks/c85-ops'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
@@ -128,6 +129,11 @@ const ApiPublicHooksC85DecisionRoute =
     path: '/api/public/hooks/c85-decision',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksC85OpsRoute = ApiPublicHooksC85OpsRouteImport.update({
+  id: '/api/public/hooks/c85-ops',
+  path: '/api/public/hooks/c85-ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksDailyArchiveRoute =
   ApiPublicHooksDailyArchiveRouteImport.update({
     id: '/api/public/hooks/daily-archive',
@@ -243,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
+  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -277,6 +284,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
+  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
+  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -349,6 +358,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
+    | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -383,6 +393,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
+    | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -418,6 +429,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
+    | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -449,6 +461,7 @@ export interface RootRouteChildren {
   ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
   ApiPublicHooksBinanceObIngestRoute: typeof ApiPublicHooksBinanceObIngestRoute
   ApiPublicHooksC85DecisionRoute: typeof ApiPublicHooksC85DecisionRoute
+  ApiPublicHooksC85OpsRoute: typeof ApiPublicHooksC85OpsRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -580,6 +593,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/c85-decision'
       fullPath: '/api/public/hooks/c85-decision'
       preLoaderRoute: typeof ApiPublicHooksC85DecisionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/c85-ops': {
+      id: '/api/public/hooks/c85-ops'
+      path: '/api/public/hooks/c85-ops'
+      fullPath: '/api/public/hooks/c85-ops'
+      preLoaderRoute: typeof ApiPublicHooksC85OpsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/daily-archive': {
@@ -736,6 +756,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
   ApiPublicHooksBinanceObIngestRoute: ApiPublicHooksBinanceObIngestRoute,
   ApiPublicHooksC85DecisionRoute: ApiPublicHooksC85DecisionRoute,
+  ApiPublicHooksC85OpsRoute: ApiPublicHooksC85OpsRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
