@@ -15,6 +15,7 @@ import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
 import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
 import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
@@ -70,6 +71,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: '/stats',
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiExportC85CsvRoute = ApiExportC85CsvRouteImport.update({
+  id: '/api/export/c85-csv',
+  path: '/api/export/c85-csv',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportT10CsvRoute = ApiExportT10CsvRouteImport.update({
   id: '/api/export/t10-csv',
@@ -227,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -260,6 +267,7 @@ export interface FileRoutesByTo {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -295,6 +303,7 @@ export interface FileRoutesById {
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -330,6 +339,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -363,6 +373,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -397,6 +408,7 @@ export interface FileRouteTypes {
     | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -427,6 +439,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
   ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
   ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
@@ -498,6 +511,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/stats'
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/export/c85-csv': {
+      id: '/api/export/c85-csv'
+      path: '/api/export/c85-csv'
+      fullPath: '/api/export/c85-csv'
+      preLoaderRoute: typeof ApiExportC85CsvRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/export/t10-csv': {
       id: '/api/export/t10-csv'
@@ -705,6 +725,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiExportC85CsvRoute: ApiExportC85CsvRoute,
   ApiExportT10CsvRoute: ApiExportT10CsvRoute,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
   ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
