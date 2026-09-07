@@ -181,28 +181,37 @@ LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
         "t5_reliability_rank, r4_directional_rank). " + CONTINUATION_GAP,
     ),
     Dependency(
-        "expansion_selected_prediction", UNPORTED,
+        "expansion_selected_prediction", REPRODUCED,
         ("vault_work/legacy_lab2/sources/T5_BASELINE_R4_1_FREEZE_PACKAGE.zip"
          "/external_research/htf_structure_r4_refine.py (sha256 f4c58d7676a8...)",
-         "r5_lab_manager_phase4.py::expansion selector",),
+         "r5_lab_manager_phase4.py::main (emits t5_hot_calibration_ledger.csv)",),
         (),
-        "The R4.3 expansion selector's input freeze IS recovered: " + _R4_LEDGER + ". " +
-        CONTINUATION_GAP,
+        "Reproduced by executing r5_lab_manager_phase4.main() unchanged "
+        "(reproduction/repro_r5_phase4.py) over the R4.1 rows reproduced by "
+        "reproduction/repro_r4.py: 26,124 rows, 0 cell and 0 decision mismatches against "
+        "the archived t5_hot_calibration_ledger.csv. Its own build_frame() enforces the "
+        "frozen R4.1 prediction hash 8fed5535..., so a drifted upstream aborts. " +
+        _R4_LEDGER + ". " + CONTINUATION_GAP,
     ),
-    Dependency("r4_probability_correct", UNPORTED,
+    Dependency("r4_probability_correct", REPRODUCED,
                ("vault_work/legacy_lab2/sources/R5_Lab_Manager_Research_Checkpoint_2026-09-02.zip"
                 "/external_research/r5_lab_manager.py (sha256 b38454a9a2eb...)",),
                (),
-               "Present as `r4_probability_correct` in " + _T5_HOT + ". " + CONTINUATION_GAP),
-    Dependency("r4_directional_rank", UNPORTED,
-               ("r5_lab_manager_phase3.py:92-98",), (),
-               "Rank math ported; probability series recovered in " + _T5_HOT + ". " +
+               "Reproduced end-to-end: reproduction/repro_r4.py re-executes the R4.1 stress "
+               "policy fit (26,124 rows, 0 mismatches) and repro_r5_phase4.py carries the "
+               "column through phase 4 with 0 mismatches. " + _T5_HOT + ". " +
                CONTINUATION_GAP),
-    Dependency("r4_prediction", UNPORTED,
+    Dependency("r4_directional_rank", REPRODUCED,
+               ("r5_lab_manager_phase3.py:92-98",), (),
+               "Reproduced with the same two runs as r4_probability_correct; the rank series "
+               "matches the archived ledgers cell-for-cell. " + _T5_HOT + ". " +
+               CONTINUATION_GAP),
+    Dependency("r4_prediction", REPRODUCED,
                ("vault_work/legacy_lab2/sources/R5_Lab_Manager_Research_Checkpoint_2026-09-02.zip"
                 "/external_research/r5_lab_manager.py",),
                (),
-               "Read as `base_direction` / `r4_prediction` from " + _T5_HOT + ". " +
+               "Reproduced by repro_r4.py / repro_r5_phase4.py with 0 decision mismatches; "
+               "hash-checked against the frozen R4.1 prediction array. " + _T5_HOT + ". " +
                CONTINUATION_GAP),
     Dependency(
         "structure_valid", REPRODUCED,
