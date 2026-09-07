@@ -59,6 +59,60 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+KIT = Path(os.environ.get("C85_ARTIFACT_DIR", "/tmp/c85/kit"))
+C42_INPUTS = "vault_work/legacy_c42/C42_MATURATION_CONSENSUS_R1/inputs"
+ANCESTOR = UPX / "ancestor" / "data"
+REF_COLUMNS = (
+    "direct_probability_green",
+    "primary_proposal",
+    "primary_probability_correct",
+    "primary_directional_rank",
+    "primary_prediction",
+)
+
+
+def build_reference_packet() -> None:
+    """upstream_packet.parquet + the two columns C42 parity reads.
+
+    `expansion_selected_prediction` comes from the R4.3 hot-calibration ledger and
+    `opportunity` from the C37 ledger — both are the exact copies the archived C42
+    build consumed, taken from that package's own `inputs/` directory.
+    """
+    packet = pd.read_parquet(KIT / "fixtures" / "upstream_packet.parquet")
+    packet["ts"] = pd.to_datetime(packet.ts, utc=True)
+    base = UPX / "upstream" / C42_INPUTS
+    hot = pd.read_csv(base / "t5_hot_calibration_ledger.csv", parse_dates=["ts"])
+    c37 = pd.read_csv(base / "c37_shadow_ledger.csv", parse_dates=["ts"])
+    for frame in (hot, c37):
+        frame["ts"] = pd.to_datetime(frame.ts, utc=True)
+    merged = packet.merge(
+        hot[["ts", "expansion_selected_prediction"]], on="ts", how="left"
+    ).merge(c37[["ts", "opportunity"]], on="ts", how="left")
+    target = OUT.parent / "upstream_packet.parquet"
+    merged.to_parquet(target, index=False)
+    print(f"upstream_packet.parquet: {len(merged)} rows")
+
+
+def build_c51_reference_tail() -> None:
+    """Last 900 rows of the recovered C51 grid joined to the archived ledger."""
+    frame = pd.read_parquet(ANCESTOR / "c51_training_frame.parquet")
+    if "ts" not in frame.columns:
+        frame = frame.reset_index()
+    frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
+    ledger = pd.read_csv(
+        ANCESTOR / "C51_TARGET_NATIVE_REBASE_R1_LEDGER.csv.gz", parse_dates=["ts"]
+    )
+    ledger["ts"] = pd.to_datetime(ledger.ts, utc=True)
+    tail = (
+        frame.merge(ledger[["ts", *REF_COLUMNS]], on="ts", how="inner")
+        .sort_values("ts")
+        .tail(900)
+        .rename(columns={name: f"ref_{name}" for name in REF_COLUMNS})
+    )
+    tail.to_parquet(OUT.parent / "c51_reference_tail.parquet", index=False)
+    print(f"c51_reference_tail.parquet: {len(tail)} rows -> {tail.ts.max()}")
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, (basename, fragment) in LEDGERS.items():
