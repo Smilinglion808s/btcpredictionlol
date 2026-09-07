@@ -31,13 +31,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.engine import confirmed_extension_side  # noqa: E402
 from src.state import C85State, DeteriorationState, RankFamily  # noqa: E402
 
+REPO_FIXTURES = Path(__file__).resolve().parents[1] / "evaluation-fixtures"
 ARTIFACTS = Path(os.environ.get("C85_ARTIFACT_DIR", "/artifacts"))
 FIXTURES = ARTIFACTS / "fixtures"
+if not (FIXTURES / "policy_frame.parquet").exists():
+    # Installed, in-repo copy of the kit fixtures (default, so these parity
+    # tests always run instead of silently skipping).
+    FIXTURES = REPO_FIXTURES
 
 pytestmark = pytest.mark.skipif(
     not (FIXTURES / "policy_frame.parquet").exists(),
     reason="kit fixtures not mounted; set C85_ARTIFACT_DIR",
 )
+
 
 
 @pytest.fixture(scope="module")
