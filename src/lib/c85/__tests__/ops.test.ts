@@ -94,7 +94,6 @@ describe("C85 operations", () => {
         gate_reasons: { test: true },
       },
       checkpoint: {
-        model_version: "x",
         stage: "BRIDGE",
         state_sha256: "deadbeef",
         expected_parent_seq: parent,
@@ -117,7 +116,7 @@ describe("C85 operations", () => {
     const stale = await runC85Op(supabase, WORKER, {
       op: "decision.commit",
       target: { ticker: TICKER, target_open_utc: OPEN, status: "ABSTAIN", final_side: 0 },
-      checkpoint: { model_version: "x", stage: "BRIDGE", expected_parent_seq: parent },
+      checkpoint: { stage: "BRIDGE", expected_parent_seq: parent },
     });
     expect(stale.status).toBe(409);
 
@@ -183,6 +182,7 @@ describe("C85 operations", () => {
     await supabase.from("c85_outbox").delete().eq("dedupe_key", `C85:test:${TICKER}`);
     await supabase.from("c85_settlements").delete().eq("ticker", TICKER);
     await supabase.from("c85_targets").delete().eq("ticker", TICKER);
+    await supabase.from("c85_state_checkpoints").delete().eq("state_sha256", "deadbeef");
     expect(true).toBe(true);
   });
 });
