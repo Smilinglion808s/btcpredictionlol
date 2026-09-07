@@ -27,7 +27,7 @@ import uvicorn
 from .artifacts import ArtifactStore
 from .backend import BackendClient
 from .config import DISPLAY_NAME, MODEL_VERSION, load_settings
-from .experts import ExpertRegistry
+from .experts import ExpertRegistry, LiveExpertChain
 from .feeds import FeedRegistry
 from .gateway import GatewayClient
 from .health import create_app
@@ -48,6 +48,10 @@ class Worker:
         self.store = C85Store(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
         self.experts = ExpertRegistry()
+        # The ported ancestor chain (leaf -> C42 -> C51 -> C54). Instantiating it
+        # does not make the worker ready: the registry stays disconnected until
+        # every stage can actually run, and evaluate_readiness surfaces why.
+        self.experts.chain = LiveExpertChain()
         self.gateway = GatewayClient(self.settings.gateway_url, self.settings.gateway_secret)
         self.warmup = WarmupCoordinator(self.artifacts, self.store)
         self.state = None
