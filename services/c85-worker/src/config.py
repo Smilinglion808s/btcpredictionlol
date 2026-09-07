@@ -68,31 +68,52 @@ class Settings:
     worker_id: str
     build_sha: str
     artifact_dir: Path
-    supabase_url: str
-    supabase_service_key: str
     gateway_url: str
+    ops_url: str
     gateway_secret: str
     kalshi_api_base: str
     kalshi_series: str
     heartbeat_seconds: int
     http_port: int
     allow_live_publication: bool
+    lease_ttl_seconds: int
 
 
 def load_settings() -> Settings:
+    """Endpoint mode: the worker needs no database credentials.
+
+    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are deliberately NOT read. All
+    persistence goes through the signed backend endpoints, authenticated with
+    C85_GATEWAY_SECRET. Startup fails closed if the endpoint configuration is
+    incomplete.
+    """
+
     def req(name: str) -> str:
         value = os.environ.get(name, "")
         if not value:
             raise RuntimeError(f"missing required environment variable {name}")
         return value
 
+    for legacy in ("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_URL"):
+        if os.environ.get(legacy):
+            raise RuntimeError(
+                f"{legacy} must not be set on the worker: C85 runs in endpoint mode and "
+                "database credentials stay inside the backend"
+            )
+
+    gateway_url = req("C85_GATEWAY_URL")
+    ops_url = os.environ.get("C85_OPS_URL") or gateway_url.replace(
+        "/hooks/c85-decision", "/hooks/c85-ops"
+    )
+    if not ops_url.endswith("/hooks/c85-ops"):
+        raise RuntimeError("C85_OPS_URL must point at /api/public/hooks/c85-ops")
+
     return Settings(
         worker_id=os.environ.get("C85_WORKER_ID", "c85-worker-1"),
         build_sha=os.environ.get("C85_BUILD_SHA", ""),
         artifact_dir=Path(os.environ.get("C85_ARTIFACT_DIR", "/artifacts")),
-        supabase_url=req("SUPABASE_URL"),
-        supabase_service_key=req("SUPABASE_SERVICE_ROLE_KEY"),
-        gateway_url=req("C85_GATEWAY_URL"),
+        gateway_url=gateway_url,
+        ops_url=ops_url,
         gateway_secret=req("C85_GATEWAY_SECRET"),
         kalshi_api_base=os.environ.get(
             "KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"
@@ -102,4 +123,6 @@ def load_settings() -> Settings:
         http_port=int(os.environ.get("C85_HTTP_PORT", "8080")),
         allow_live_publication=os.environ.get("C85_ALLOW_LIVE_PUBLICATION", "false").lower()
         == "true",
+        lease_ttl_seconds=int(os.environ.get("C85_LEASE_TTL_SECONDS", "60")),
     )
+
