@@ -90,6 +90,12 @@ function StatsPage() {
   const t10Q = useQuery({ queryKey: ["t10-stats"], queryFn: () => t10Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const t10PendingFn = useServerFn(getT10Pending);
   const t10PendingQ = useQuery({ queryKey: ["t10-pending"], queryFn: () => t10PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  // C85 MULTI_META — Python worker publishes by T+5s; app only reads its rows.
+  const c85Fn = useServerFn(getC85Stats);
+  const c85Q = useQuery({ queryKey: ["c85-stats"], queryFn: () => c85Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
+  const c85PendingFn = useServerFn(getC85Pending);
+  const c85PendingQ = useQuery({ queryKey: ["c85-pending"], queryFn: () => c85PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+
   const [exportingPf, setExportingPf] = useState(false);
   const [exportingT30, setExportingT30] = useState(false);
 
