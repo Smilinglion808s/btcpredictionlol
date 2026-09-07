@@ -102,19 +102,26 @@ def validate_endpoint_url(name: str, value: str, expected_path: str) -> None:
     offending variable and echo only the URL (never C85_GATEWAY_SECRET).
     """
 
+    # Endpoint URLs are not secrets (only C85_GATEWAY_SECRET is), so errors echo
+    # the raw value to make misconfigured platform variables visible in logs.
+    shown = repr(value) if len(value) <= 200 else repr(value[:200]) + "…"
     if not value or value != value.strip():
-        raise ConfigError(f"{name} must be a non-empty URL without surrounding whitespace")
+        raise ConfigError(
+            f"{name} must be a non-empty URL without surrounding whitespace (raw={shown})"
+        )
     parts = urlsplit(value)
     if parts.scheme not in ("https", "http"):
-        raise ConfigError(f"{name} must start with https:// (got scheme '{parts.scheme}')")
+        raise ConfigError(
+            f"{name} must start with https:// (got scheme '{parts.scheme}', raw={shown})"
+        )
     if parts.scheme == "http" and parts.hostname not in ("localhost", "127.0.0.1"):
-        raise ConfigError(f"{name} must use https:// for non-local hosts")
+        raise ConfigError(f"{name} must use https:// for non-local hosts (raw={shown})")
     if not parts.hostname:
-        raise ConfigError(f"{name} is missing a host")
+        raise ConfigError(f"{name} is missing a host (raw={shown})")
     if parts.username or parts.password:
         raise ConfigError(f"{name} must not embed credentials in the URL")
     if parts.query or parts.fragment:
-        raise ConfigError(f"{name} must not contain a query string or fragment")
+        raise ConfigError(f"{name} must not contain a query string or fragment (raw={shown})")
     path = parts.path.rstrip("/")
     if path != expected_path:
         raise ConfigError(
