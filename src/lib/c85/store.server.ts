@@ -27,30 +27,33 @@ export interface C85DecisionInput {
   run_mode: RunMode;
   status: string;
 
+  status_reason?: string | null;
+
   binance_complete?: boolean | null;
   anchor_valid?: boolean | null;
   cm_valid?: boolean | null;
-  aux_valid?: boolean | null;
-  direction_valid?: boolean | null;
-  structure_valid?: boolean | null;
+  auxiliary_valid?: boolean | null;
+  source_ok?: boolean | null;
   core_valid?: boolean | null;
+  structure_valid?: boolean | null;
+  market_q1?: boolean | null;
 
   probability_yes?: number | null;
   proposal?: number | null;
   probability_correct?: number | null;
 
-  aux_long_direction_logit?: number | null;
-  aux_long_scale_logit?: number | null;
-  aux_recent_direction_logit?: number | null;
-  aux_recent_scale_logit?: number | null;
+  aux_long_logit?: number | null;
+  aux_long_logscale?: number | null;
+  aux_recent_logit?: number | null;
+  aux_recent_logscale?: number | null;
 
   admission_rank?: number | null;
-  admission_count?: number | null;
+  admission_rank_count?: number | null;
   filter_rank?: number | null;
-  filter_count?: number | null;
+  filter_rank_count?: number | null;
 
   core_side?: number | null;
-  extension_fired?: boolean | null;
+  extension?: boolean | null;
   last_yes_price?: number | null;
   base_side?: number | null;
   weak?: boolean | null;
@@ -74,12 +77,17 @@ export interface C85DecisionInput {
 
   target_open_ns?: string | null;
   packet_freeze_ns?: string | null;
+  last_event_ns?: string | null;
+  last_receipt_ns?: string | null;
+  feed_watermarks?: Record<string, unknown> | null;
   compute_started_ns?: string | null;
   compute_complete_ns?: string | null;
   decision_durable_ns?: string | null;
   dispatch_ns?: string | null;
   publication_offset_ms?: number | null;
+  deadline_met?: boolean | null;
 }
+
 
 export function dedupeKey(ticker: string, targetOpenUtc: string): string {
   return `C85:${C85_MODEL_VERSION}:${ticker}:${targetOpenUtc}`;

@@ -15,6 +15,7 @@ import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
 import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
 import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
@@ -23,6 +24,7 @@ import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/pu
 import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
 import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
 import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
+import { Route as ApiPublicHooksC85DecisionRouteImport } from './routes/api/public/hooks/c85-decision'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
 import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
@@ -70,6 +72,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiExportC85CsvRoute = ApiExportC85CsvRouteImport.update({
+  id: '/api/export/c85-csv',
+  path: '/api/export/c85-csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiExportT10CsvRoute = ApiExportT10CsvRouteImport.update({
   id: '/api/export/t10-csv',
   path: '/api/export/t10-csv',
@@ -113,6 +120,12 @@ const ApiPublicHooksBinanceObIngestRoute =
   ApiPublicHooksBinanceObIngestRouteImport.update({
     id: '/api/public/hooks/binance-ob-ingest',
     path: '/api/public/hooks/binance-ob-ingest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksC85DecisionRoute =
+  ApiPublicHooksC85DecisionRouteImport.update({
+    id: '/api/public/hooks/c85-decision',
+    path: '/api/public/hooks/c85-decision',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksDailyArchiveRoute =
@@ -220,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -228,6 +242,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
+  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -252,6 +267,7 @@ export interface FileRoutesByTo {
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -260,6 +276,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
+  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -286,6 +303,7 @@ export interface FileRoutesById {
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
@@ -294,6 +312,7 @@ export interface FileRoutesById {
   '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
+  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
   '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -320,6 +339,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -328,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
+    | '/api/public/hooks/c85-decision'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -352,6 +373,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/stats'
     | '/'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -360,6 +382,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
+    | '/api/public/hooks/c85-decision'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -385,6 +408,7 @@ export interface FileRouteTypes {
     | '/_authenticated/models'
     | '/_authenticated/stats'
     | '/_authenticated/'
+    | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
@@ -393,6 +417,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
+    | '/api/public/hooks/c85-decision'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
     | '/api/public/hooks/model7-nightly-audit'
@@ -414,6 +439,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
   ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
   ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
@@ -422,6 +448,7 @@ export interface RootRouteChildren {
   ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
   ApiPublicHooksBinanceObIngestRoute: typeof ApiPublicHooksBinanceObIngestRoute
+  ApiPublicHooksC85DecisionRoute: typeof ApiPublicHooksC85DecisionRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
   ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
@@ -485,6 +512,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/export/c85-csv': {
+      id: '/api/export/c85-csv'
+      path: '/api/export/c85-csv'
+      fullPath: '/api/export/c85-csv'
+      preLoaderRoute: typeof ApiExportC85CsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/export/t10-csv': {
       id: '/api/export/t10-csv'
       path: '/api/export/t10-csv'
@@ -539,6 +573,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/binance-ob-ingest'
       fullPath: '/api/public/hooks/binance-ob-ingest'
       preLoaderRoute: typeof ApiPublicHooksBinanceObIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/c85-decision': {
+      id: '/api/public/hooks/c85-decision'
+      path: '/api/public/hooks/c85-decision'
+      fullPath: '/api/public/hooks/c85-decision'
+      preLoaderRoute: typeof ApiPublicHooksC85DecisionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/daily-archive': {
@@ -684,6 +725,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiExportC85CsvRoute: ApiExportC85CsvRoute,
   ApiExportT10CsvRoute: ApiExportT10CsvRoute,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
   ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
@@ -693,6 +735,7 @@ const rootRouteChildren: RootRouteChildren = {
     ApiPublicHooksB4x4ObShadowCaptureRoute,
   ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
   ApiPublicHooksBinanceObIngestRoute: ApiPublicHooksBinanceObIngestRoute,
+  ApiPublicHooksC85DecisionRoute: ApiPublicHooksC85DecisionRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
   ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
