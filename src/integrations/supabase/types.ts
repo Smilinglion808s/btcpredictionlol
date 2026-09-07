@@ -3546,6 +3546,524 @@ export type Database = {
           },
         ]
       }
+      c85_model_versions: {
+        Row: {
+          applies_from_utc: string
+          applies_to_utc: string | null
+          artifact_json: Json | null
+          artifact_sha256: string
+          artifact_storage: string | null
+          as_of_utc: string
+          created_at: string
+          eligible_rows: number | null
+          feature_order_sha256: string
+          id: string
+          kind: string
+          model_version: string
+          positive_rows: number | null
+          recipe: Json
+          source: string
+          training_cutoff_utc: string
+          training_data_sha256: string | null
+          training_rows: number | null
+          updated_at: string
+        }
+        Insert: {
+          applies_from_utc: string
+          applies_to_utc?: string | null
+          artifact_json?: Json | null
+          artifact_sha256: string
+          artifact_storage?: string | null
+          as_of_utc: string
+          created_at?: string
+          eligible_rows?: number | null
+          feature_order_sha256: string
+          id?: string
+          kind: string
+          model_version?: string
+          positive_rows?: number | null
+          recipe?: Json
+          source?: string
+          training_cutoff_utc: string
+          training_data_sha256?: string | null
+          training_rows?: number | null
+          updated_at?: string
+        }
+        Update: {
+          applies_from_utc?: string
+          applies_to_utc?: string | null
+          artifact_json?: Json | null
+          artifact_sha256?: string
+          artifact_storage?: string | null
+          as_of_utc?: string
+          created_at?: string
+          eligible_rows?: number | null
+          feature_order_sha256?: string
+          id?: string
+          kind?: string
+          model_version?: string
+          positive_rows?: number | null
+          recipe?: Json
+          source?: string
+          training_cutoff_utc?: string
+          training_data_sha256?: string | null
+          training_rows?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      c85_outbox: {
+        Row: {
+          attempts: number
+          created_at: string
+          dedupe_key: string
+          expires_at: string
+          id: string
+          last_error: string | null
+          not_before: string
+          payload: Json
+          response_status: number | null
+          sent_at: string | null
+          state: string
+          target_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          dedupe_key: string
+          expires_at: string
+          id?: string
+          last_error?: string | null
+          not_before?: string
+          payload: Json
+          response_status?: number | null
+          sent_at?: string | null
+          state?: string
+          target_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          dedupe_key?: string
+          expires_at?: string
+          id?: string
+          last_error?: string | null
+          not_before?: string
+          payload?: Json
+          response_status?: number | null
+          sent_at?: string | null
+          state?: string
+          target_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "c85_outbox_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "c85_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      c85_settlements: {
+        Row: {
+          consumed_by_deterioration_at: string | null
+          created_at: string
+          id: string
+          label: number | null
+          model_version: string
+          official_result: string | null
+          outcome: string | null
+          raw_net: number | null
+          raw_payload: Json | null
+          settlement_ns: number | null
+          settlement_source: string
+          settlement_ts: string | null
+          settlement_value: number | null
+          target_open_utc: string
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          consumed_by_deterioration_at?: string | null
+          created_at?: string
+          id?: string
+          label?: number | null
+          model_version?: string
+          official_result?: string | null
+          outcome?: string | null
+          raw_net?: number | null
+          raw_payload?: Json | null
+          settlement_ns?: number | null
+          settlement_source?: string
+          settlement_ts?: string | null
+          settlement_value?: number | null
+          target_open_utc: string
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          consumed_by_deterioration_at?: string | null
+          created_at?: string
+          id?: string
+          label?: number | null
+          model_version?: string
+          official_result?: string | null
+          outcome?: string | null
+          raw_net?: number | null
+          raw_payload?: Json | null
+          settlement_ns?: number | null
+          settlement_source?: string
+          settlement_ts?: string | null
+          settlement_value?: number | null
+          target_open_utc?: string
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      c85_state_checkpoints: {
+        Row: {
+          admission_rank_state: Json
+          applicable_fits: Json
+          as_of_utc: string
+          checkpoint_seq: number
+          consumed_settlements: Json
+          created_at: string
+          deterioration_state: Json
+          expert_state: Json
+          filter_rank_state: Json
+          id: string
+          last_processed_target_utc: string | null
+          model_version: string
+          next_target_utc: string | null
+          parent_sha256: string | null
+          pending_base_calls: Json
+          source_watermarks: Json
+          stage: string
+          state_sha256: string
+        }
+        Insert: {
+          admission_rank_state?: Json
+          applicable_fits?: Json
+          as_of_utc: string
+          checkpoint_seq: number
+          consumed_settlements?: Json
+          created_at?: string
+          deterioration_state?: Json
+          expert_state?: Json
+          filter_rank_state?: Json
+          id?: string
+          last_processed_target_utc?: string | null
+          model_version?: string
+          next_target_utc?: string | null
+          parent_sha256?: string | null
+          pending_base_calls?: Json
+          source_watermarks?: Json
+          stage?: string
+          state_sha256: string
+        }
+        Update: {
+          admission_rank_state?: Json
+          applicable_fits?: Json
+          as_of_utc?: string
+          checkpoint_seq?: number
+          consumed_settlements?: Json
+          created_at?: string
+          deterioration_state?: Json
+          expert_state?: Json
+          filter_rank_state?: Json
+          id?: string
+          last_processed_target_utc?: string | null
+          model_version?: string
+          next_target_utc?: string | null
+          parent_sha256?: string | null
+          pending_base_calls?: Json
+          source_watermarks?: Json
+          stage?: string
+          state_sha256?: string
+        }
+        Relationships: []
+      }
+      c85_targets: {
+        Row: {
+          admission_rank: number | null
+          admission_rank_count: number | null
+          anchor_valid: boolean | null
+          aux_fit_month: string | null
+          aux_long_logit: number | null
+          aux_long_logscale: number | null
+          aux_recent_logit: number | null
+          aux_recent_logscale: number | null
+          auxiliary_valid: boolean | null
+          base_side: number | null
+          binance_complete: boolean | null
+          cm_valid: boolean | null
+          compute_complete_ns: number | null
+          compute_started_ns: number | null
+          consumed_state_cutoff_ns: number | null
+          core_side: number | null
+          core_valid: boolean | null
+          created_at: string
+          deadline_met: boolean | null
+          deadline_utc: string
+          decision_durable_ns: number | null
+          deterioration_ewma128: number | null
+          deterioration_ewma16: number | null
+          deterioration_settled_count: number | null
+          deterioration_warmup: boolean | null
+          direction_fit_id: string | null
+          dispatch_ns: number | null
+          executed: boolean
+          extension: boolean | null
+          feature_order_sha256: string | null
+          features: Json | null
+          feed_watermarks: Json | null
+          filter_rank: number | null
+          filter_rank_count: number | null
+          final_side: number | null
+          gate_reasons: Json
+          id: string
+          last_event_ns: number | null
+          last_receipt_ns: number | null
+          last_yes_price: number | null
+          market_q1: boolean | null
+          meta_fit_id: string | null
+          model_version: string
+          packet_freeze_ns: number | null
+          probability_correct: number | null
+          probability_yes: number | null
+          proposal: number | null
+          publication_offset_ms: number | null
+          published_at: string | null
+          run_mode: string
+          source_hash: string | null
+          source_ids: Json | null
+          source_ok: boolean | null
+          status: string
+          status_reason: string | null
+          structure_valid: boolean | null
+          target_open_ns: number | null
+          target_open_utc: string
+          ticker: string
+          updated_at: string
+          weak: boolean | null
+          webhook_attempts: number
+          webhook_dedupe_key: string | null
+          webhook_last_error: string | null
+          webhook_status: string | null
+        }
+        Insert: {
+          admission_rank?: number | null
+          admission_rank_count?: number | null
+          anchor_valid?: boolean | null
+          aux_fit_month?: string | null
+          aux_long_logit?: number | null
+          aux_long_logscale?: number | null
+          aux_recent_logit?: number | null
+          aux_recent_logscale?: number | null
+          auxiliary_valid?: boolean | null
+          base_side?: number | null
+          binance_complete?: boolean | null
+          cm_valid?: boolean | null
+          compute_complete_ns?: number | null
+          compute_started_ns?: number | null
+          consumed_state_cutoff_ns?: number | null
+          core_side?: number | null
+          core_valid?: boolean | null
+          created_at?: string
+          deadline_met?: boolean | null
+          deadline_utc: string
+          decision_durable_ns?: number | null
+          deterioration_ewma128?: number | null
+          deterioration_ewma16?: number | null
+          deterioration_settled_count?: number | null
+          deterioration_warmup?: boolean | null
+          direction_fit_id?: string | null
+          dispatch_ns?: number | null
+          executed?: boolean
+          extension?: boolean | null
+          feature_order_sha256?: string | null
+          features?: Json | null
+          feed_watermarks?: Json | null
+          filter_rank?: number | null
+          filter_rank_count?: number | null
+          final_side?: number | null
+          gate_reasons?: Json
+          id?: string
+          last_event_ns?: number | null
+          last_receipt_ns?: number | null
+          last_yes_price?: number | null
+          market_q1?: boolean | null
+          meta_fit_id?: string | null
+          model_version?: string
+          packet_freeze_ns?: number | null
+          probability_correct?: number | null
+          probability_yes?: number | null
+          proposal?: number | null
+          publication_offset_ms?: number | null
+          published_at?: string | null
+          run_mode?: string
+          source_hash?: string | null
+          source_ids?: Json | null
+          source_ok?: boolean | null
+          status?: string
+          status_reason?: string | null
+          structure_valid?: boolean | null
+          target_open_ns?: number | null
+          target_open_utc: string
+          ticker: string
+          updated_at?: string
+          weak?: boolean | null
+          webhook_attempts?: number
+          webhook_dedupe_key?: string | null
+          webhook_last_error?: string | null
+          webhook_status?: string | null
+        }
+        Update: {
+          admission_rank?: number | null
+          admission_rank_count?: number | null
+          anchor_valid?: boolean | null
+          aux_fit_month?: string | null
+          aux_long_logit?: number | null
+          aux_long_logscale?: number | null
+          aux_recent_logit?: number | null
+          aux_recent_logscale?: number | null
+          auxiliary_valid?: boolean | null
+          base_side?: number | null
+          binance_complete?: boolean | null
+          cm_valid?: boolean | null
+          compute_complete_ns?: number | null
+          compute_started_ns?: number | null
+          consumed_state_cutoff_ns?: number | null
+          core_side?: number | null
+          core_valid?: boolean | null
+          created_at?: string
+          deadline_met?: boolean | null
+          deadline_utc?: string
+          decision_durable_ns?: number | null
+          deterioration_ewma128?: number | null
+          deterioration_ewma16?: number | null
+          deterioration_settled_count?: number | null
+          deterioration_warmup?: boolean | null
+          direction_fit_id?: string | null
+          dispatch_ns?: number | null
+          executed?: boolean
+          extension?: boolean | null
+          feature_order_sha256?: string | null
+          features?: Json | null
+          feed_watermarks?: Json | null
+          filter_rank?: number | null
+          filter_rank_count?: number | null
+          final_side?: number | null
+          gate_reasons?: Json
+          id?: string
+          last_event_ns?: number | null
+          last_receipt_ns?: number | null
+          last_yes_price?: number | null
+          market_q1?: boolean | null
+          meta_fit_id?: string | null
+          model_version?: string
+          packet_freeze_ns?: number | null
+          probability_correct?: number | null
+          probability_yes?: number | null
+          proposal?: number | null
+          publication_offset_ms?: number | null
+          published_at?: string | null
+          run_mode?: string
+          source_hash?: string | null
+          source_ids?: Json | null
+          source_ok?: boolean | null
+          status?: string
+          status_reason?: string | null
+          structure_valid?: boolean | null
+          target_open_ns?: number | null
+          target_open_utc?: string
+          ticker?: string
+          updated_at?: string
+          weak?: boolean | null
+          webhook_attempts?: number
+          webhook_dedupe_key?: string | null
+          webhook_last_error?: string | null
+          webhook_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "c85_targets_direction_fit_id_fkey"
+            columns: ["direction_fit_id"]
+            isOneToOne: false
+            referencedRelation: "c85_model_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "c85_targets_meta_fit_id_fkey"
+            columns: ["meta_fit_id"]
+            isOneToOne: false
+            referencedRelation: "c85_model_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      c85_worker_health: {
+        Row: {
+          blocking_reason: string | null
+          build_sha: string | null
+          created_at: string
+          feed_freshness: Json
+          id: string
+          last_checkpoint_seq: number | null
+          last_heartbeat_at: string
+          last_target_utc: string | null
+          model_as_of_utc: string | null
+          model_version: string
+          next_target_utc: string | null
+          progress: Json
+          readiness: string
+          stage: string | null
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          blocking_reason?: string | null
+          build_sha?: string | null
+          created_at?: string
+          feed_freshness?: Json
+          id?: string
+          last_checkpoint_seq?: number | null
+          last_heartbeat_at?: string
+          last_target_utc?: string | null
+          model_as_of_utc?: string | null
+          model_version?: string
+          next_target_utc?: string | null
+          progress?: Json
+          readiness?: string
+          stage?: string | null
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          blocking_reason?: string | null
+          build_sha?: string | null
+          created_at?: string
+          feed_freshness?: Json
+          id?: string
+          last_checkpoint_seq?: number | null
+          last_heartbeat_at?: string
+          last_target_utc?: string | null
+          model_as_of_utc?: string | null
+          model_version?: string
+          next_target_utc?: string | null
+          progress?: Json
+          readiness?: string
+          stage?: string | null
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: []
+      }
       candles: {
         Row: {
           candle_ts: string
