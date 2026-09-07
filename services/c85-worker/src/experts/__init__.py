@@ -117,21 +117,14 @@ class LiveExpertChain:
 
     @staticmethod
     def blocking_reasons() -> list[str]:
-        """Concrete, independently-verifiable blockers for live operation."""
-        return [
-            "C85_LEAF_MODULES_NOT_RECOVERED: c30/c36/c37/r4/external prediction "
-            "logic lives in modules the kit imports but never ships "
-            "(evaluate_external_direction_r1.py, t0_t5_win_containment_deep_dive_r1.py, "
-            "t0_t5_fee_coverage_frontier_r1.py + t5_hot_calibration_ledger.csv, "
-            "c37_balanced_maturation_r1.py, c30_c70_lab_manager_r2.py, r5_lab_manager.py, "
-            "htf_structure_r4_refine.py). LeafExperts.evaluate fails closed; "
-            "supply the original modules or their ledgers.",
-            "C85_C51_FITTED_STATE_MISSING: C51 is a daily walk-forward head with no "
-            "static parameters; it needs ~90 days of warmup history replayed through "
-            "C51WalkForward plus a live Polymarket pre-open book feed (pm_* fields), "
-            "neither of which exists in the kit fixtures.",
-        ]
+        """Concrete, independently-verifiable blockers, one per dependency.
 
+        Statuses come from `dependencies.py`, which distinguishes source that is
+        available-but-unported from artifacts that are genuinely absent.
+        """
+        from .dependencies import blocking
+
+        return [d.summary() for d in blocking()]
 
 
 class ExpertRegistry:
@@ -180,5 +173,8 @@ class ExpertRegistry:
             "required": list(REQUIRED_EXPERTS),
             "missing": self.missing,
             "blocking_reasons": LiveExpertChain.blocking_reasons(),
+            "dependencies": __import__(
+                "experts.dependencies", fromlist=["report"]
+            ).report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
         }
