@@ -53,10 +53,8 @@ export const Route = createFileRoute("/api/public/hooks/c85-ops")({
         const head = envelope.safeParse(parsed);
         const op = opSchema.safeParse(parsed);
         if (!head.success || !op.success) {
-          return Response.json(
-            { ok: false, error: (head.success ? op : head).error.message },
-            { status: 400 },
-          );
+          const message = !head.success ? head.error.message : op.error!.message;
+          return Response.json({ ok: false, error: message }, { status: 400 });
         }
 
         const supabase = serviceClient();
