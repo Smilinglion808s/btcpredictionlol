@@ -23,6 +23,8 @@ import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "
 import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
+import { getC85Stats, getC85Pending } from "@/lib/c85.functions";
+
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { Button } from "@/components/ui/button";
