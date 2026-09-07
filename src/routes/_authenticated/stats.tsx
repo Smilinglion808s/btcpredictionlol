@@ -13,6 +13,8 @@ import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { T30Card } from "@/components/t30-card";
 import { T10Card } from "@/components/t10-card";
+import { C85Card } from "@/components/c85-card";
+
 
 /** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
 const SHOW_LEGACY_T45 = false as boolean;
