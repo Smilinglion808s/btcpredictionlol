@@ -3,6 +3,9 @@ sys.path.insert(0,'/tmp/c30root')
 from external_research import c30_c70_lab_manager_r2_phase3 as p3
 out = pathlib.Path('/tmp/c30root/phase3_repro_out'); out.mkdir(parents=True, exist_ok=True)
 ref_dir = pathlib.Path('/tmp/c30root/external_research/c30_c70_lab_manager_r2_output')
+# connected: phase3 consumes the ledger just reproduced by repro_c30.py
+import shutil
+shutil.copy('/tmp/c30root/c30_repro_out/selected_shadow_ledger.csv', out/'selected_shadow_ledger.csv')
 p3.OUT = out
 p3.main()
 total=0
