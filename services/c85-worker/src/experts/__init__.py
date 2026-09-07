@@ -60,17 +60,40 @@ class LiveExpertChain:
     inputs; nothing here substitutes, approximates or skips an ancestor.
     """
 
-    def __init__(self, c51_fitted_state: Any | None = None) -> None:
+    def __init__(self, c51_fitted_state: Any | None = None, as_of: Any | None = None) -> None:
+        from datetime import datetime, timezone
+
         from .c42 import C42Expert
         from .c51 import C51Expert
         from .c54 import C54Expert
+        from .c51_state import C51StateStore
         from .leaf import LeafExperts
 
         self.leaf = LeafExperts()
         self.c42 = C42Expert()
         self.c51 = C51Expert()
         self.c54 = C54Expert()
+        # C51 has installed historical walk-forward states (245 direction /
+        # 216 correctness fits, through 2026-08-31). Restore them instead of
+        # claiming no fitted state exists; staleness is reported separately by
+        # `c51_state_readiness()` and gates live use.
+        self.c51_store: C51StateStore | None
+        try:
+            self.c51_store = C51StateStore()
+        except Exception:  # states not installed in this deployment
+            self.c51_store = None
+        if c51_fitted_state is None and self.c51_store is not None:
+            c51_fitted_state = self.c51_store.restore(as_of or datetime.now(timezone.utc))
         self.c51_fitted_state = c51_fitted_state
+
+    def c51_state_readiness(self) -> dict[str, Any]:
+        if self.c51_store is None:
+            return {
+                "ready": False,
+                "blocking_reasons": ["C85_C51_STATES_NOT_INSTALLED: artifacts/c51 missing"],
+            }
+        return self.c51_store.readiness()
+
 
     def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
         """Produce every ancestor column the C85 feature frame consumes.
