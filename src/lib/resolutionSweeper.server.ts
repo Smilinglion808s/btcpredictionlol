@@ -110,8 +110,9 @@ export async function sweepUnresolvedRows(
   // Rows where A2 itself was ineligible can never be graded; close them out
   // against the confirmed candle as PUSH so they stop re-appearing forever.
   const tdTargets: string[] = [];
-  let tdClosedIneligible = 0;
-  try {
+  const tdClosedIneligible = 0;
+  // TD1/TD2 layer paused and archived (2026-09-07) — no sweeping.
+  if (false) try {
     const { data } = await supabase
       .from("model7_td1_rc_shadow")
       .select("id, prediction_id, candle_ts, a2_original_decision")
