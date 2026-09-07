@@ -125,6 +125,11 @@ function StatsPage() {
     window.location.href = "/api/export/t10-csv";
   }
 
+  function downloadC85Csv() {
+    window.location.href = "/api/export/c85-csv";
+  }
+
+
 
 
 
@@ -259,6 +264,13 @@ function StatsPage() {
           pending={(t10PendingQ.data as any) ?? null}
           onExport={downloadT10Csv}
         />
+
+        <C85Card
+          stats={(c85Q.data as any) ?? {}}
+          pending={(c85PendingQ.data as any) ?? null}
+          onExport={downloadC85Csv}
+        />
+
 
 
 
