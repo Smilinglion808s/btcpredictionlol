@@ -79,6 +79,49 @@ class Settings:
     lease_ttl_seconds: int
 
 
+GATEWAY_PATH = "/api/public/hooks/c85-decision"
+OPS_PATH = "/api/public/hooks/c85-ops"
+
+
+class ConfigError(RuntimeError):
+    """Startup configuration failure. Never carries a secret value."""
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def validate_endpoint_url(name: str, value: str, expected_path: str) -> None:
+    """Validate a worker endpoint URL exactly as the HTTP clients consume it.
+
+    Both BackendClient and GatewayClient POST to the configured string verbatim,
+    so the string itself must be an absolute https URL whose path is the exact
+    endpoint path, with no query string, fragment or credentials. Errors name the
+    offending variable and echo only the URL (never C85_GATEWAY_SECRET).
+    """
+
+    if not value or value != value.strip():
+        raise ConfigError(f"{name} must be a non-empty URL without surrounding whitespace")
+    parts = urlsplit(value)
+    if parts.scheme not in ("https", "http"):
+        raise ConfigError(f"{name} must start with https:// (got scheme '{parts.scheme}')")
+    if parts.scheme == "http" and parts.hostname not in ("localhost", "127.0.0.1"):
+        raise ConfigError(f"{name} must use https:// for non-local hosts")
+    if not parts.hostname:
+        raise ConfigError(f"{name} is missing a host")
+    if parts.username or parts.password:
+        raise ConfigError(f"{name} must not embed credentials in the URL")
+    if parts.query or parts.fragment:
+        raise ConfigError(f"{name} must not contain a query string or fragment")
+    path = parts.path.rstrip("/")
+    if path != expected_path:
+        raise ConfigError(
+            f"{name} must end with the exact path '{expected_path}' "
+            f"(got '{parts.path or '/'}' on host '{parts.hostname}')"
+        )
+
+
 def load_settings() -> Settings:
     """Endpoint mode: the worker needs no database credentials.
 
