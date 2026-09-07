@@ -89,9 +89,39 @@ export const Route = createFileRoute("/api/public/hooks/c85-decision")({
         const deadline = new Date(targetOpen.getTime() + C85_PUBLICATION_DEADLINE_MS);
         const targetOpenIso = targetOpen.toISOString();
 
+        // Non-executing probe. Returns the dispatch verdict this request would
+        // produce, without touching c85_targets, the outbox or any webhook.
+        if (body.dry_run) {
+          const nowMs = Date.now();
+          const would =
+            body.final_side === 0
+              ? "ABSTAIN"
+              : body.run_mode !== "LIVE"
+                ? "NOT_LIVE"
+                : nowMs >= deadline.getTime()
+                  ? "EXPIRED"
+                  : WEBHOOK_ALLOWED_MODELS.has(C85_MODEL_VERSION)
+                    ? "WOULD_SEND"
+                    : "SUPPRESSED_BY_ALLOWLIST";
+          return Response.json({
+            ok: true,
+            dry_run: true,
+            persisted: false,
+            model_version: C85_MODEL_VERSION,
+            dedupe_key: dedupeKey(body.ticker, targetOpenIso),
+            target_open_utc: targetOpenIso,
+            deadline_utc: deadline.toISOString(),
+            server_time_utc: new Date(nowMs).toISOString(),
+            clock_offset_to_deadline_ms: deadline.getTime() - nowMs,
+            webhook_allowed_models: [...WEBHOOK_ALLOWED_MODELS],
+            would_dispatch: would,
+          });
+        }
+
         const timing = Object.fromEntries(
           Object.entries(body.timing).map(([k, v]) => [k, v == null ? null : String(v)]),
         );
+
 
         // 1. Durability before dispatch.
         let stored;
