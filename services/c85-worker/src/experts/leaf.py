@@ -352,6 +352,10 @@ REQUIRED_KEYS = (
     "c36_prediction",
     "c37_prediction",
     "r4_prediction",
+    # The R4.3 expansion-selected T+5 output that the original C42
+    # `apply_composite` actually reads (verified: 19,487/19,487 exact).
+    "expansion_selected_prediction",
+    "opportunity",
     "r4_probability_correct",
     "r4_directional_rank",
     "external_direction",
@@ -359,59 +363,18 @@ REQUIRED_KEYS = (
     "mean_135_rank",
 )
 
-# Exactly which unrecovered module/ledger blocks each output key. Used only
-# to produce precise, actionable error messages -- never to fabricate values.
-_BLOCKED_BY: dict[str, str] = {
-    "external_direction": (
-        "requires evaluate_external_direction_r1.directional_matrix (raw Binance/"
-        "Deribit/Hyperliquid feature builder) and t0_t5_win_containment_deep_dive_r1."
-        "load_rich_frame (root ledger merge). Neither module's source was recovered."
-    ),
-    "external_rank": (
-        "requires t0_t5_fee_coverage_frontier_r1.directional_past_rank fed by "
-        "external_direction's own probability-of-correct series, which is produced "
-        "inside c30_c70_lab_manager_r2.select_external_models() from the same "
-        "unrecovered evaluate_external_direction_r1.directional_matrix."
-    ),
-    "c30_prediction": (
-        "requires c30_c70_lab_manager_r2.make_dual_score_policy(), which needs "
-        "frame['candidate_stage'], frame['external_direction'] and "
-        "frame['candidate_t5_router_prediction'] from the unrecovered "
-        "t0_t5_win_containment_deep_dive_r1.load_rich_frame() root ledger, plus the "
-        "unrecovered evaluate_external_direction_r1.directional_matrix training features."
-    ),
-    "c36_prediction": (
-        "make_tail() admission math is transcribed above, but it requires "
-        "prediction_cov30/stage_cov30 (= c30_prediction, itself blocked) and "
-        "candidate_t5_router_prediction (root signal from the unrecovered "
-        "t0_t5_win_containment_deep_dive_r1 ledger)."
-    ),
-    "c37_prediction": (
-        "same blockers as c36_prediction, plus c37_balanced_maturation_r1.py's own "
-        "mean_135_rank input (see mean_135_rank below)."
-    ),
-    "mean_135_rank": (
-        "requires fit_phasewise_probability() run over H1/H3/H5 feature matrices built "
-        "by the unrecovered evaluate_external_direction_r1.directional_matrix, then "
-        "reranked via rerank_router() against candidate_t5_router_prediction -- a root "
-        "signal from the unrecovered t0_t5_win_containment_deep_dive_r1 ledger."
-    ),
-    "r4_prediction": (
-        "read verbatim, not modeled, from external_research/r5_lab_manager_output/"
-        "t5_hot_calibration_ledger.csv ('base_direction') in the recovered "
-        "t0_t5_fee_coverage_frontier_r1.load_frame(). That ledger and its generating "
-        "'r5 lab manager' ancestor were not part of the recovered kit."
-    ),
-    "r4_probability_correct": (
-        "read verbatim from the same unrecovered t5_hot_calibration_ledger.csv "
-        "('r4_probability_correct' column)."
-    ),
-    "r4_directional_rank": (
-        "would be directional_past_rank(r4_probability_correct, r4_prediction, ...) "
-        "-- the ranking math is transcribed above, but its input r4_probability_correct "
-        "is itself blocked (see r4_probability_correct)."
-    ),
-}
+
+# Exact, verified per-key blocker. Source presence and artifact presence are
+# tracked separately in `dependencies.py`; nothing here claims a supplied file
+# is missing, and nothing is ever fabricated.
+from .dependencies import LEAF_DEPENDENCIES  # noqa: E402
+
+_BLOCKED_BY: dict[str, str] = {d.key: d.summary() for d in LEAF_DEPENDENCIES}
+_BLOCKED_BY.setdefault(
+    "opportunity",
+    "opportunity: UNAVAILABLE | the C85 opportunity flag is set by the C85 policy "
+    "frame (kalshi.py candidate gate); supply it on the packet.",
+)
 
 
 @dataclass
@@ -463,8 +426,8 @@ class LeafExperts:
             details = "\n".join(f"  - {key}: {_BLOCKED_BY[key]}" for key in missing)
             raise MissingUpstreamSignalError(
                 "LeafExperts.evaluate(): cannot compute the following keys from raw "
-                "inputs because their upstream ancestor source/ledgers were not "
-                "recovered (see src/experts/leaf.py module docstring for the full "
-                "provenance trace). Fail-closed rather than fabricate:\n" + details
+                "inputs. Status per key below (source modules that ARE available are "
+                "named; only genuinely absent artifacts are listed as missing). "
+                "Fail-closed rather than fabricate:\n" + details
             )
         return result

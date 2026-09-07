@@ -60,17 +60,40 @@ class LiveExpertChain:
     inputs; nothing here substitutes, approximates or skips an ancestor.
     """
 
-    def __init__(self, c51_fitted_state: Any | None = None) -> None:
+    def __init__(self, c51_fitted_state: Any | None = None, as_of: Any | None = None) -> None:
+        from datetime import datetime, timezone
+
         from .c42 import C42Expert
         from .c51 import C51Expert
         from .c54 import C54Expert
+        from .c51_state import C51StateStore
         from .leaf import LeafExperts
 
         self.leaf = LeafExperts()
         self.c42 = C42Expert()
         self.c51 = C51Expert()
         self.c54 = C54Expert()
+        # C51 has installed historical walk-forward states (245 direction /
+        # 216 correctness fits, through 2026-08-31). Restore them instead of
+        # claiming no fitted state exists; staleness is reported separately by
+        # `c51_state_readiness()` and gates live use.
+        self.c51_store: C51StateStore | None
+        try:
+            self.c51_store = C51StateStore()
+        except Exception:  # states not installed in this deployment
+            self.c51_store = None
+        if c51_fitted_state is None and self.c51_store is not None:
+            c51_fitted_state = self.c51_store.restore(as_of or datetime.now(timezone.utc))
         self.c51_fitted_state = c51_fitted_state
+
+    def c51_state_readiness(self) -> dict[str, Any]:
+        if self.c51_store is None:
+            return {
+                "ready": False,
+                "blocking_reasons": ["C85_C51_STATES_NOT_INSTALLED: artifacts/c51 missing"],
+            }
+        return self.c51_store.readiness()
+
 
     def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
         """Produce every ancestor column the C85 feature frame consumes.
@@ -94,21 +117,14 @@ class LiveExpertChain:
 
     @staticmethod
     def blocking_reasons() -> list[str]:
-        """Concrete, independently-verifiable blockers for live operation."""
-        return [
-            "C85_LEAF_MODULES_NOT_RECOVERED: c30/c36/c37/r4/external prediction "
-            "logic lives in modules the kit imports but never ships "
-            "(evaluate_external_direction_r1.py, t0_t5_win_containment_deep_dive_r1.py, "
-            "t0_t5_fee_coverage_frontier_r1.py + t5_hot_calibration_ledger.csv, "
-            "c37_balanced_maturation_r1.py, c30_c70_lab_manager_r2.py, r5_lab_manager.py, "
-            "htf_structure_r4_refine.py). LeafExperts.evaluate fails closed; "
-            "supply the original modules or their ledgers.",
-            "C85_C51_FITTED_STATE_MISSING: C51 is a daily walk-forward head with no "
-            "static parameters; it needs ~90 days of warmup history replayed through "
-            "C51WalkForward plus a live Polymarket pre-open book feed (pm_* fields), "
-            "neither of which exists in the kit fixtures.",
-        ]
+        """Concrete, independently-verifiable blockers, one per dependency.
 
+        Statuses come from `dependencies.py`, which distinguishes source that is
+        available-but-unported from artifacts that are genuinely absent.
+        """
+        from .dependencies import blocking
+
+        return [d.summary() for d in blocking()]
 
 
 class ExpertRegistry:
@@ -130,9 +146,12 @@ class ExpertRegistry:
     @property
     def connected(self) -> bool:
         # The chain is only usable when every stage can actually run: leaf
-        # modules recovered, C51 fitted state present. Ports alone are not
-        # enough, so this stays False until those blockers clear.
-        return not self.missing and self.chain is not None and self.chain.c51_fitted_state is not None
+        # computations ported and fed, and the C51 walk-forward state current
+        # (restored AND advanced to today). Ports alone are not enough, so this
+        # stays False until those blockers clear.
+        if self.missing or self.chain is None or self.chain.c51_fitted_state is None:
+            return False
+        return bool(self.chain.c51_state_readiness().get("ready"))
 
     def calls(self, target_open_ns: int) -> dict[str, ExpertCall]:
         if not self.connected:
@@ -154,5 +173,8 @@ class ExpertRegistry:
             "required": list(REQUIRED_EXPERTS),
             "missing": self.missing,
             "blocking_reasons": LiveExpertChain.blocking_reasons(),
+            "dependencies": __import__(
+                "experts.dependencies", fromlist=["report"]
+            ).report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
         }
