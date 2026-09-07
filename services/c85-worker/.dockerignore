@@ -1,0 +1,20 @@
+# Build context hygiene for the C85 worker image.
+#
+# IMPORTANT: artifacts/ is NOT ignored. The image cannot start without
+# artifacts/feature_order.json, artifacts/models/** and the runtime seed in
+# artifacts/fixtures/. Do not add an artifacts rule here.
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.env
+.env.*
+!.env.example
+
+# Retrospective evaluation fixtures are never part of live inference.
+evaluation-fixtures/
+tests/
