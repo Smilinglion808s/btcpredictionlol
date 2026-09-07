@@ -13,11 +13,12 @@ Transcribed from the recovered ancestor sources:
 DECISION RULE (frozen, no fitted parameters):
 
     core = c37_prediction                      # C37 maturation-stack call
-    r43  = r4_prediction                        # frozen R4.3 (expansion-selected,
-                                                  # T+5) prediction, already an
+    r43  = expansion_selected_prediction        # frozen R4.3 expansion-selected
+                                                  # T+5 prediction, already an
                                                   # admitted +/-1/0 call — NOT a raw
-                                                  # score. C42 does not threshold it
-                                                  # itself.
+                                                  # score, and NOT the same column as
+                                                  # r4_prediction. C42 does not
+                                                  # threshold it itself.
     ext  = external_direction                    # frozen T0 external long-context
                                                   # direction call
 
@@ -38,7 +39,9 @@ per `FROZEN_POLICY["missing_input"] = "FAIL_CLOSED_ABSTAIN"`.
 
 INPUTS CONSUMED AT DECISION TIME (exactly, per recovered sources):
   - c37_prediction         (upstream C37 maturation-stack output)
-  - r4_prediction          (upstream frozen R4.3 expansion-selected T+5 output)
+  - expansion_selected_prediction (upstream frozen R4.3 expansion-selected T+5
+                            output; source `apply_composite` applies .fillna(0),
+                            so an absent value abstains rather than raising)
   - external_direction     (frozen T0 external long-context direction)
 
 Inputs NOT used in the C42 math itself, but present in the packet/leaf-output
@@ -59,23 +62,12 @@ TRAINING PROTOCOL / FITTED STATE:
   which is a data-integrity gate, not a parameter fit. Consequently
   C42Expert requires no fitted-state file; it is stateless.
 
-KNOWN DIVERGENCE FROM EVALUATION FIXTURE (reported, not fabricated):
-  Replaying this exact rule against
-  evaluation-fixtures/upstream_packet.parquet reproduces the stored
-  `c42_prediction` column on 19,198 / 19,487 rows (98.52%). The remaining 289
-  rows are ones where BOTH `c37_prediction == 0` AND `r4_prediction == 0`, yet
-  the stored `c42_prediction` equals `external_direction` on 287 of the 289
-  rows. This implies the live/production system that generated the fixture
-  applies a further fallback (external-direction-only admission, apparently
-  gated on `r4_directional_rank`/`r4_probability_correct` thresholds) that is
-  NOT present in any recovered ancestor source (build script, reference
-  engine, or shadow evaluator all only ever consider the two-branch
-  core/consensus rule above). No clean, exact threshold reproducing all 289
-  rows could be reverse-engineered from the available columns without
-  fabricating parameters, so it is intentionally NOT implemented here. See the
-  written report for detail; this is flagged as a BLOCKED item requiring the
-  original production source (not present in the recovered ancestor kit) to
-  resolve rather than a best-effort guess.
+FIXTURE PARITY (verified 2026-09-07 against C85_Ancestor_Recovery):
+  Replaying this rule against evaluation-fixtures/upstream_packet.parquet
+  reproduces the stored `c42_prediction` on 19,487 / 19,487 rows (100%). The
+  earlier 289-row divergence was an input-mapping error: the port read
+  `r4_prediction` where `apply_composite` reads `expansion_selected_prediction`.
+  There is no external-direction-only fallback and none is implemented.
 """
 
 from __future__ import annotations
@@ -87,6 +79,7 @@ REQUIRED_LEAF_KEYS = (
     "c36_prediction",
     "c37_prediction",
     "r4_prediction",
+    "expansion_selected_prediction",
     "r4_probability_correct",
     "r4_directional_rank",
     "external_direction",
@@ -95,7 +88,11 @@ REQUIRED_LEAF_KEYS = (
 )
 
 # Keys actually consumed by the frozen C42 decision math.
-DECISION_KEYS = ("c37_prediction", "r4_prediction", "external_direction")
+DECISION_KEYS = (
+    "c37_prediction",
+    "expansion_selected_prediction",
+    "external_direction",
+)
 
 _VALID_DIRECTIONS = (-1, 0, 1)
 
@@ -123,6 +120,15 @@ def _direction(value: Any, field: str) -> int:
     if numeric not in _VALID_DIRECTIONS:
         raise C42InputError(f"{field}_INVALID_DIRECTION")
     return numeric
+
+
+def _expansion_direction(value: Any) -> int:
+    """`expansion_selected_prediction.fillna(0)` from the source rule."""
+    if value is None:
+        return 0
+    if isinstance(value, float) and value != value:  # NaN
+        return 0
+    return _direction(value, "EXPANSION_SELECTED_PREDICTION")
 
 
 class C42Expert:
@@ -159,7 +165,10 @@ class C42Expert:
             raise C42InputError(f"LEAF_OUTPUTS_MISSING_KEYS:{','.join(missing)}")
 
         core = _direction(leaf_outputs["c37_prediction"], "C37_PREDICTION")
-        r43 = _direction(leaf_outputs["r4_prediction"], "R4_PREDICTION")
+        # Source `apply_composite` reads
+        # `expansion_selected_prediction.fillna(0)`, so a missing/NaN expansion
+        # value degrades to abstention on that branch rather than raising.
+        r43 = _expansion_direction(leaf_outputs["expansion_selected_prediction"])
         external = _direction(leaf_outputs["external_direction"], "EXTERNAL_DIRECTION")
 
         if core != 0:
