@@ -15,6 +15,7 @@ import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as ApiC85SelfcheckRouteImport } from './routes/api/c85-selfcheck'
 import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
 import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
@@ -72,6 +73,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: '/stats',
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiC85SelfcheckRoute = ApiC85SelfcheckRouteImport.update({
+  id: '/api/c85-selfcheck',
+  path: '/api/c85-selfcheck',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportC85CsvRoute = ApiExportC85CsvRouteImport.update({
   id: '/api/export/c85-csv',
@@ -239,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
@@ -273,6 +280,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
+  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
@@ -348,6 +357,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
+    | '/api/c85-selfcheck'
     | '/api/export/c85-csv'
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
@@ -382,6 +392,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/stats'
+    | '/api/c85-selfcheck'
     | '/'
     | '/api/export/c85-csv'
     | '/api/export/t10-csv'
@@ -418,6 +429,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/models'
     | '/_authenticated/stats'
+    | '/api/c85-selfcheck'
     | '/_authenticated/'
     | '/api/export/c85-csv'
     | '/api/export/t10-csv'
@@ -451,6 +463,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiC85SelfcheckRoute: typeof ApiC85SelfcheckRoute
   ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
   ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
@@ -524,6 +537,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/stats'
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/c85-selfcheck': {
+      id: '/api/c85-selfcheck'
+      path: '/api/c85-selfcheck'
+      fullPath: '/api/c85-selfcheck'
+      preLoaderRoute: typeof ApiC85SelfcheckRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/export/c85-csv': {
       id: '/api/export/c85-csv'
@@ -745,6 +765,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiC85SelfcheckRoute: ApiC85SelfcheckRoute,
   ApiExportC85CsvRoute: ApiExportC85CsvRoute,
   ApiExportT10CsvRoute: ApiExportT10CsvRoute,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
