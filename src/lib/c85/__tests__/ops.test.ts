@@ -7,6 +7,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 import { createHmac } from "crypto";
 import { claimNonce, runC85Op, serviceClient } from "../ops.server";
 import { verifyC85Signature } from "../gateway.server";
+import { C85_MODEL_VERSION } from "../config";
 
 const supabase = serviceClient();
 const WORKER = "c85-test-worker";
@@ -95,6 +96,7 @@ describe("C85 operations", () => {
         gate_reasons: { test: true },
       },
       checkpoint: {
+        model_version: C85_MODEL_VERSION,
         stage: "BRIDGE",
         state_sha256: "deadbeef",
         expected_parent_seq: parent,
@@ -124,7 +126,7 @@ describe("C85 operations", () => {
         final_side: 0,
         gate_reasons: { test: true },
       },
-      checkpoint: { stage: "BRIDGE", expected_parent_seq: parent },
+      checkpoint: { model_version: C85_MODEL_VERSION, stage: "BRIDGE", expected_parent_seq: parent },
     });
     expect(stale.status).toBe(409);
 
