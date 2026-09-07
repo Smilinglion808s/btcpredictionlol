@@ -166,7 +166,8 @@ def main() -> int:
     packet = substitute(stored)
 
     report: dict[str, object] = {"rows": int(len(packet))}
-    leaf_report = {}
+    leaf_report: dict[str, int] = {}
+    gap_report: dict[str, int] = {}
     for column in (
         "c30_prediction",
         "c36_prediction",
@@ -183,8 +184,17 @@ def main() -> int:
         a = pd.to_numeric(stored[column], errors="coerce").to_numpy(float)
         b = pd.to_numeric(packet[column], errors="coerce").to_numpy(float)
         same = np.isclose(a, b, **TOL) | (np.isnan(a) & np.isnan(b))
-        leaf_report[column] = int((~same).sum())
+        differing = ~same
+        # Rows the producer emits no value for at all are the documented
+        # 2026-08-19..08-31 hot-ledger timestamp gap; the packet fail-closes
+        # them to 0 and the engine's fillna(0) does the same, so they are
+        # reported separately rather than counted as a value disagreement.
+        gap = differing & np.isnan(b)
+        leaf_report[column] = int((differing & ~gap).sum())
+        if gap.any():
+            gap_report[column] = int(gap.sum())
     report["recomputed_vs_stored_leaf_mismatches"] = leaf_report
+    report["producer_gap_rows_failed_closed"] = gap_report
 
     packet = drive_experts(packet)
     for column in ("c42_prediction", "c54_prediction"):
