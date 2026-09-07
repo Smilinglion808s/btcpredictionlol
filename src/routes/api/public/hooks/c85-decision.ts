@@ -113,9 +113,17 @@ export const Route = createFileRoute("/api/public/hooks/c85-decision")({
           });
         }
 
+        const supabase = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { persistSession: false, autoRefreshToken: false } },
+        );
+
         const timing = Object.fromEntries(
           Object.entries(body.timing).map(([k, v]) => [k, v == null ? null : String(v)]),
         );
+
+
 
 
         // 1. Durability before dispatch.
