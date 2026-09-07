@@ -86,10 +86,13 @@ def test_wrong_r4_column_would_regress():
     r4 = df["r4_prediction"].fillna(0).astype(int)
     ext = df["external_direction"].fillna(0).astype(int)
 
+    opportunity = df["opportunity"].fillna(False).astype(bool)
+
     def compose(expansion):
         admitted = (core == 0) & (expansion != 0) & (expansion == ext)
-        return admitted.map({True: 1, False: 0}) * expansion + (~admitted) * core
+        composed = admitted.map({True: 1, False: 0}) * expansion + (~admitted) * core
+        return composed.where(opportunity, 0)
 
     stored = df["c42_prediction"].fillna(0).astype(int)
     assert int(stored.ne(compose(r43)).sum()) == 0
-    assert int(stored.ne(compose(r4)).sum()) == 287
+    assert int(stored.ne(compose(r4)).sum()) == 285
