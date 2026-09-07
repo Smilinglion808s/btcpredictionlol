@@ -181,7 +181,9 @@ def load_settings() -> Settings:
         artifact_dir=Path(os.environ.get("C85_ARTIFACT_DIR", "/artifacts")),
         gateway_url=gateway_url,
         ops_url=ops_url,
-        gateway_secret=req("C85_GATEWAY_SECRET"),
+        # .strip(): a trailing newline/space from a dashboard paste would
+        # silently change every signature and surface only as a 401.
+        gateway_secret=req("C85_GATEWAY_SECRET").strip(),
         kalshi_api_base=os.environ.get(
             "KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"
         ),
