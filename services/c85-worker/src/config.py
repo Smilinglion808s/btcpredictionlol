@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 MODEL_VERSION = os.environ.get("C85_MODEL_VERSION", "c85-multi-meta-r1")
 DISPLAY_NAME = "C85"
@@ -79,6 +80,49 @@ class Settings:
     lease_ttl_seconds: int
 
 
+GATEWAY_PATH = "/api/public/hooks/c85-decision"
+OPS_PATH = "/api/public/hooks/c85-ops"
+
+
+class ConfigError(RuntimeError):
+    """Startup configuration failure. Never carries a secret value."""
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def validate_endpoint_url(name: str, value: str, expected_path: str) -> None:
+    """Validate a worker endpoint URL exactly as the HTTP clients consume it.
+
+    Both BackendClient and GatewayClient POST to the configured string verbatim,
+    so the string itself must be an absolute https URL whose path is the exact
+    endpoint path, with no query string, fragment or credentials. Errors name the
+    offending variable and echo only the URL (never C85_GATEWAY_SECRET).
+    """
+
+    if not value or value != value.strip():
+        raise ConfigError(f"{name} must be a non-empty URL without surrounding whitespace")
+    parts = urlsplit(value)
+    if parts.scheme not in ("https", "http"):
+        raise ConfigError(f"{name} must start with https:// (got scheme '{parts.scheme}')")
+    if parts.scheme == "http" and parts.hostname not in ("localhost", "127.0.0.1"):
+        raise ConfigError(f"{name} must use https:// for non-local hosts")
+    if not parts.hostname:
+        raise ConfigError(f"{name} is missing a host")
+    if parts.username or parts.password:
+        raise ConfigError(f"{name} must not embed credentials in the URL")
+    if parts.query or parts.fragment:
+        raise ConfigError(f"{name} must not contain a query string or fragment")
+    path = parts.path.rstrip("/")
+    if path != expected_path:
+        raise ConfigError(
+            f"{name} must end with the exact path '{expected_path}' "
+            f"(got '{parts.path or '/'}' on host '{parts.hostname}')"
+        )
+
+
 def load_settings() -> Settings:
     """Endpoint mode: the worker needs no database credentials.
 
@@ -102,11 +146,27 @@ def load_settings() -> Settings:
             )
 
     gateway_url = req("C85_GATEWAY_URL")
-    ops_url = os.environ.get("C85_OPS_URL") or gateway_url.replace(
-        "/hooks/c85-decision", "/hooks/c85-ops"
-    )
-    if not ops_url.endswith("/hooks/c85-ops"):
-        raise RuntimeError("C85_OPS_URL must point at /api/public/hooks/c85-ops")
+    validate_endpoint_url("C85_GATEWAY_URL", gateway_url, GATEWAY_PATH)
+
+    explicit_ops = os.environ.get("C85_OPS_URL", "").strip()
+    if explicit_ops:
+        ops_url = explicit_ops
+    else:
+        if GATEWAY_PATH not in gateway_url:
+            raise ConfigError(
+                "C85_OPS_URL is not set and cannot be derived: C85_GATEWAY_URL does not "
+                f"contain '{GATEWAY_PATH}'. Set C85_OPS_URL explicitly to the "
+                f"'{OPS_PATH}' endpoint."
+            )
+        ops_url = gateway_url.replace(GATEWAY_PATH, OPS_PATH)
+    validate_endpoint_url("C85_OPS_URL", ops_url, OPS_PATH)
+
+    if _origin(gateway_url) != _origin(ops_url):
+        raise ConfigError(
+            "C85_GATEWAY_URL and C85_OPS_URL must share the same origin; they currently "
+            f"resolve to '{_origin(gateway_url)}' and '{_origin(ops_url)}'"
+        )
+
 
     return Settings(
         worker_id=os.environ.get("C85_WORKER_ID", "c85-worker-1"),

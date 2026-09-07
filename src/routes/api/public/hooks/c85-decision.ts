@@ -41,7 +41,11 @@ const bodySchema = z.object({
   decision: z.record(z.unknown()).default({}),
   timing: z.record(nsString).default({}),
   payload: z.record(z.unknown()).nullable().optional(),
+  // Non-executing integration probe: verifies signature, schema, clock and the
+  // dispatch decision that WOULD be taken, and writes nothing at all.
+  dry_run: z.boolean().default(false),
 });
+
 
 const methodNotAllowed = async () =>
   new Response("Method Not Allowed", { status: 405, headers: { allow: "POST" } });
@@ -72,12 +76,6 @@ export const Route = createFileRoute("/api/public/hooks/c85-decision")({
           return Response.json({ ok: false, error: String(e) }, { status: 400 });
         }
 
-        const supabase = createClient(
-          process.env.SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          { auth: { persistSession: false, autoRefreshToken: false } },
-        );
-
         const targetOpen = new Date(body.target_open_utc);
         if (Number.isNaN(targetOpen.getTime())) {
           return Response.json({ ok: false, error: "bad_target_open_utc" }, { status: 400 });
@@ -85,9 +83,48 @@ export const Route = createFileRoute("/api/public/hooks/c85-decision")({
         const deadline = new Date(targetOpen.getTime() + C85_PUBLICATION_DEADLINE_MS);
         const targetOpenIso = targetOpen.toISOString();
 
+
+        // Non-executing probe. Returns the dispatch verdict this request would
+        // produce, without touching c85_targets, the outbox or any webhook.
+        if (body.dry_run) {
+          const nowMs = Date.now();
+          const would =
+            body.final_side === 0
+              ? "ABSTAIN"
+              : body.run_mode !== "LIVE"
+                ? "NOT_LIVE"
+                : nowMs >= deadline.getTime()
+                  ? "EXPIRED"
+                  : WEBHOOK_ALLOWED_MODELS.has(C85_MODEL_VERSION)
+                    ? "WOULD_SEND"
+                    : "SUPPRESSED_BY_ALLOWLIST";
+          return Response.json({
+            ok: true,
+            dry_run: true,
+            persisted: false,
+            model_version: C85_MODEL_VERSION,
+            dedupe_key: dedupeKey(body.ticker, targetOpenIso),
+            target_open_utc: targetOpenIso,
+            deadline_utc: deadline.toISOString(),
+            server_time_utc: new Date(nowMs).toISOString(),
+            clock_offset_to_deadline_ms: deadline.getTime() - nowMs,
+            webhook_allowed_models: [...WEBHOOK_ALLOWED_MODELS],
+            would_dispatch: would,
+          });
+        }
+
+        const supabase = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { persistSession: false, autoRefreshToken: false } },
+        );
+
         const timing = Object.fromEntries(
           Object.entries(body.timing).map(([k, v]) => [k, v == null ? null : String(v)]),
         );
+
+
+
 
         // 1. Durability before dispatch.
         let stored;
