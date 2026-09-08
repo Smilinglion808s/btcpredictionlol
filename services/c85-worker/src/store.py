@@ -106,9 +106,10 @@ def target_row(decision: Decision, *, published_at: str | None = None) -> dict[s
         "publication_offset_ms": _num(timing.get("publication_offset_ms")),
         "deadline_met": timing.get("deadline_met"),
     }
-    if published:
-        row["published_at"] = datetime.now(timezone.utc).isoformat()
+    if published_at is not None:
+        row["published_at"] = published_at
     return row
+
 
 
 class C85Store:
