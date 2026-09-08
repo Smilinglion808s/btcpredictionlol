@@ -47,6 +47,14 @@ class Stage:
     # when the cursor already matches.
     incremental: bool = True
     description: str = ""
+    # Input-bound stages read recovered capture ledgers that stop at the frozen
+    # research end. Their ceiling is FROZEN_END: asking for a later end cannot
+    # produce more rows, so the runner treats them (and their dependants)
+    # as satisfied at FROZEN_END rather than blocking the graph forever.
+    frozen_end: bool = False
+
+    def target(self, end: pd.Timestamp) -> pd.Timestamp:
+        return min(end, FROZEN_END) if self.frozen_end else end
 
 
 class Checkpoint:
