@@ -13,9 +13,34 @@ MARKET = "BTC 15-minute Kalshi"
 
 # Invariants. These are model identity, not tunables.
 AUTHORITY_SHA256 = "5216419766e0221d19945eee1cea0734904c578d5f5fa38fa0edf3679625a3a3"
-PUBLICATION_DEADLINE_MS = int(os.environ.get("C85_PUBLICATION_DEADLINE_MS", "5000"))
+
+# --- three distinct clocks; never collapse them into one another -------------
+#
+# 1. FEATURE INPUT CUTOFF -- an immutable MODEL rule, not an operational knob.
+#    build_multivenue_features_r1.py records the causal contract verbatim:
+#      "T0 windows end strictly before T. T+5 windows include exchange events
+#       timestamped in [T,T+5s)."
+#    So the T+5 stage admits every source event with T <= ts < T+5000ms and
+#    nothing at or after T+5000ms. It is NOT derived from the deadline and is
+#    NOT reduced by the compute budget. Truncating it to T+3.8s (as an earlier
+#    revision of orchestration.py did) silently changes the model.
+FEATURE_INPUT_CUTOFF_MS = 5000
+FEATURE_INPUT_CUTOFF_INCLUSIVE = False  # half-open [T, T+5s)
+
+# 2. COMPUTE BUDGET -- measured wall time allowed for scoring after the cutoff.
 COMPUTE_BUDGET_MS = int(os.environ.get("C85_COMPUTE_BUDGET_MS", "1200"))
+
+# 3. PUBLICATION DEADLINE -- the hard dispatch ceiling. Never extended.
+PUBLICATION_DEADLINE_MS = int(os.environ.get("C85_PUBLICATION_DEADLINE_MS", "5000"))
+
+# The two are structurally incompatible and this is reported, never papered
+# over: the last legal input arrives just before T+5000ms, and publication is
+# also due at T+5000ms, so the compute budget is a guaranteed overrun.
+CUTOFF_DEADLINE_CONFLICT_MS = (
+    FEATURE_INPUT_CUTOFF_MS + COMPUTE_BUDGET_MS - PUBLICATION_DEADLINE_MS
+)
 TARGET_INTERVAL_MS = 15 * 60 * 1000
+
 
 # Policy constants, taken from the original source. Do not tune.
 RANK_HISTORY = 768
