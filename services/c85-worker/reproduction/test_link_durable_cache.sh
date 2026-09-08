@@ -84,9 +84,10 @@ check "still linked" "$(readlink -f "$LINK")" "$(readlink -f "$DUR")"
 echo "6. unusable durable root fails closed and touches nothing"
 newtree
 mkdir -p "$LINK"; printf 'KEEP' >"$LINK/keep.txt"
-chmod 500 "$DUR"
-rc=$(run); [ "$rc" != 0 ] && ok "non-writable durable root refused" || bad "accepted a non-writable root"
-chmod 700 "$DUR"
+# a plain file where the durable root should be: the mount is not usable.
+# (chmod is not used here: the sandbox runs as root, which bypasses mode bits.)
+rmdir "$DUR"; printf 'not-a-mount' >"$DUR"
+rc=$(run); [ "$rc" != 0 ] && ok "unusable durable root refused" || bad "accepted an unusable root"
 check "local cache untouched" "$(cat "$LINK/keep.txt")" "KEEP"
 
 newtree
