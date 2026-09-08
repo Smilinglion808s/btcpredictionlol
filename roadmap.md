@@ -46,7 +46,16 @@ quarter-hour never triggers a full-history rebuild.
   time/block records this run.
 - Binance futures live search window is limited to the recent 2 days, so live
   vs archive parity for UM is proven over the fetchable slice (88 of 96
-  intervals of 2026-09-06); spot is proven over the full day.
+  intervals of 2026-09-06); spot is proven over the full day. The 8 unverified
+  UM quarter-hours are 2026-09-06T00:00Z..01:45Z; those features came from the
+  published daily archive, so this is a verification gap, not an input gap.
+  Only 2026-09-07 (both venues) was built from the live REST feed.
+- `continuous_coverage_ledger.csv`, `label_stable_db1_shadow_ledger.csv` and
+  `t5_book_day4h_r4_1_rows.csv` are in neither recovery archive: the upstream
+  collector excluded bulk capture caches by design. They must be re-derived from
+  the cached Kalshi inventory/T+5 trades and Binance event features, with the
+  frozen prefix parity-gated against `upstream_packet.parquet`.
+
 
 ## Cached artifacts
 `services/c85-worker/evaluation-fixtures/cache/continuation/`
