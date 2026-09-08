@@ -38,8 +38,13 @@ def _iso(dt: datetime | None) -> str | None:
     return None if dt is None else dt.astimezone(timezone.utc).isoformat()
 
 
-def target_row(decision: Decision, *, published: bool) -> dict[str, Any]:
-    """The exact c85_targets column payload for one decision."""
+def target_row(decision: Decision, *, published_at: str | None = None) -> dict[str, Any]:
+    """The exact c85_targets column payload for one decision.
+
+    `published_at` is written ONLY by the caller that has a gateway acceptance
+    in hand. A decision that was computed and durably logged but not accepted
+    (suppressed, expired, dispatch failed) is never stamped as published.
+    """
     open_utc = decision.target_open.astimezone(timezone.utc)
     timing = decision.timing
     row: dict[str, Any] = {
@@ -50,6 +55,7 @@ def target_row(decision: Decision, *, published: bool) -> dict[str, Any]:
         "run_mode": decision.run_mode,
         "status": decision.status,
         "status_reason": decision.status_reason,
+
         "binance_complete": decision.validity.get("binance_complete"),
         "anchor_valid": decision.validity.get("anchor_valid"),
         "cm_valid": decision.validity.get("cm_valid"),
