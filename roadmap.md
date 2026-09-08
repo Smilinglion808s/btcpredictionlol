@@ -64,3 +64,41 @@ quarter-hour never triggers a full-history rebuild.
 - `C60_KALSHI_T5_ALL_TRADES_ACQUISITION_R1.json`, `kalshi_market_page_manifest.csv`
 - `LIVE_FEED_ARCHIVE_PARITY_R1.json`
 
+
+## C85 continuation rebuild (2026-09-08)
+
+Harness: `services/c85-worker/continuation/` — resumable, dependency-ordered,
+configurable research end (`C85_RESEARCH_END`), checkpoints under
+`evaluation-fixtures/cache/continuation/checkpoints/`.
+
+Registered stages (dependency order):
+binance_events, kalshi_t5, structure_valid, r4_1, r5_phase4,
+external_direction, fee_coverage_chain, c30, c36, c37, c42,
+polymarket_inventory, polymarket_early_prior, c51_target_native,
+c51_rebase, c54.
+
+DONE
+- [x] binance_events — 26,976 rows, cursor 2026-09-07T23:45Z (live REST recovery
+      for unpublished days; live-vs-archive parity 190 cols / 0 mismatches)
+- [x] kalshi_t5 — 25,261 markets, cursor 2026-09-07T23:45Z
+- [x] stage modules written: stage_r4.py, stage_c42.py, stage_c51.py
+      (stage_c30.py incomplete)
+
+BLOCKED — upstream research archives lost from the sandbox
+- [ ] `T5_BASELINE_R4_1_FREEZE_PACKAGE.zip` absent; `HTF_STRUCTURE_R3_PACKAGE.zip`
+      truncated (no end-of-central-directory). No copy on disk or in uploads.
+      `C85_Upstream_Recovery.zip` is no longer in user uploads.
+      => blocks structure_valid parity, r4_1, r5_phase4, and every
+         parity fixture under evaluation-fixtures/upstream/.
+- [ ] fee_coverage_chain also needs the two capture caches
+      (`t5_second_path_features.csv`, `label_stable_db1_shadow_ledger.csv`);
+      re-derivation cannot be parity-gated until the fixtures return.
+
+OPEN DESIGN ITEMS (not blockers)
+- [ ] c51_rebase does not emit the serving-schema scaler/imputation vectors;
+      must reuse the reviewed transcription in `src/experts/c51.py`.
+- [ ] c54 producer is hash-gated to frozen inputs; needs a decision on how it
+      advances past the freeze.
+
+C85 IS NOT LIVE. T45 execution unchanged; C85 excluded from
+WEBHOOK_ALLOWED_MODELS.
