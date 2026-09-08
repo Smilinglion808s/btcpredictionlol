@@ -266,3 +266,43 @@ STAGES = [
         description="Kalshi KXBTC15M market inventory and [T,T+5s) trades",
     ),
 ]
+
+
+def _extend(module_name: str, attribute: str) -> None:
+    """Attach a downstream stage group when its module is present.
+
+    The groups live in separate modules so each ancestry branch can be built and
+    reviewed independently. A branch that is not present yet simply does not
+    register stages; it never silently degrades an existing one.
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(f".{module_name}", __package__)
+    except ModuleNotFoundError:
+        return
+    STAGES.extend(getattr(module, attribute))
+
+
+_extend("stage_c30", "C30_STAGES")
+_extend("stage_r4", "R4_STAGES")
+
+
+def _c42_stages() -> list[Stage]:
+    from .stage_c42 import run_c42
+
+    upstream = tuple(
+        name for name in ("phase3", "fee_coverage", "c37", "r5_phase4")
+        if name in {s.name for s in STAGES}
+    )
+    return [Stage(
+        name="c42",
+        depends_on=upstream,
+        run=run_c42,
+        incremental=False,
+        description="C42 maturation-consensus composite over the C30/C36/C37 and R4/R5 ledgers",
+    )]
+
+
+STAGES.extend(_c42_stages())
+_extend("stage_c51", "C51_STAGES")
