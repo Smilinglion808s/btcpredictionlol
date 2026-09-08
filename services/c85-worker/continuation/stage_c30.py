@@ -181,6 +181,16 @@ def run_external_direction(end: pd.Timestamp, previous: dict | None) -> StageRes
     """`evaluate_external_direction_r1.py` — no standalone research-end constant
     (its fit/validation/formal windows are fixed research dates inside
     `fit_direction_model`), so it runs verbatim."""
+    ensure_workspace()
+    # The compact MULTIVENUE_R1 package ships a second copy of its shared module
+    # at the workspace root; the packaged copy is the one whose PROJECT anchor
+    # resolves correctly, so it must win the import.
+    shared = ROOT / "external_research" / "multivenue_r1"
+    if str(shared) in sys.path:
+        sys.path.remove(str(shared))
+    sys.path.insert(0, str(shared))
+    for stale in [m for m in sys.modules if m.startswith("evaluate_r4_2_multivenue_r1")]:
+        del sys.modules[stale]
     module, record = _verbatim("evaluate_external_direction_r1")
     out = ROOT / "external_direction_out"
     out.mkdir(parents=True, exist_ok=True)
