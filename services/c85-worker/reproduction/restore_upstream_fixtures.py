@@ -29,7 +29,9 @@ LEDGERS: dict[str, tuple[str, str]] = {
         "selected_shadow_ledger.csv", "c30_c70_lab_manager_r2_output"),
     "selected_shadow_ledger__t0_t5_win_containment_deep_dive_r1_output": (
         "selected_shadow_ledger.csv", "t0_t5_win_containment_deep_dive_r1_output"),
-    "t5_hot_calibration_ledger": ("t5_hot_calibration_ledger.csv", "r5_lab_manager_output"),
+    # The R5_LAB_MANAGER package itself is not part of the recovery archives;
+    # the byte-identical copy the archived C42 build consumed is used instead.
+    "t5_hot_calibration_ledger": ("t5_hot_calibration_ledger.csv", ""),
     "t5_book_day4h_r4_1_rows": ("t5_book_day4h_r4_1_rows.csv", "htf_structure_r3_output"),
 }
 
@@ -115,20 +117,38 @@ def build_c51_reference_tail() -> None:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    missing: list[str] = []
     for name, (basename, fragment) in LEDGERS.items():
-        source = find(basename, fragment)
+        try:
+            source = find(basename, fragment)
+        except FileNotFoundError:
+            # A ledger absent from the recovery archives is a real gap, not a
+            # crash: record it and let the remaining fixtures rebuild so the
+            # parity suite can still gate everything that IS recoverable.
+            missing.append(name)
+            print(f"{name}: MISSING from {UPX} (fixture not built)")
+            continue
         frame = pd.read_csv(source, parse_dates=["ts"])
         frame.to_parquet(OUT / f"{name}.parquet", index=False)
         print(f"{name}: {len(frame)} rows <- {source}")
 
     manifest = {}
     for producer in PRODUCERS:
-        path = find(producer)
+        try:
+            path = find(producer)
+        except FileNotFoundError:
+            missing.append(producer)
+            print(f"{producer}: MISSING from {UPX} (not pinned)")
+            continue
         manifest[producer] = {
             "path": str(path.relative_to(UPX)),
             "bytes": path.stat().st_size,
             "sha256": sha256(path),
         }
+    if missing:
+        (OUT / "MISSING.json").write_text(json.dumps(sorted(missing), indent=2))
+    elif (OUT / "MISSING.json").exists():
+        (OUT / "MISSING.json").unlink()
     (OUT / "UPSTREAM_RESOLVED.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     print(f"UPSTREAM_RESOLVED.json: {len(manifest)} producers pinned")
 

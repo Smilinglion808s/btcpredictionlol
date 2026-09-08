@@ -331,6 +331,7 @@ R4_STAGES = [
     ),
     Stage(
         name="r4_1",
+        frozen_end=True,
         depends_on=("structure_valid",),
         run=run_r4_1,
         incremental=False,
@@ -338,6 +339,7 @@ R4_STAGES = [
     ),
     Stage(
         name="r5_phase4",
+        frozen_end=True,
         depends_on=("r4_1",),
         run=run_r5_phase4,
         incremental=False,

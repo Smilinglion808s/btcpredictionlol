@@ -22,7 +22,7 @@ from typing import Callable, Iterable
 
 import pandas as pd
 
-from .config import CHECKPOINTS, ensure_dirs, research_end
+from .config import CHECKPOINTS, FROZEN_END, ensure_dirs, research_end
 
 BOOTSTRAP = "bootstrap"
 INCREMENTAL = "incremental"
@@ -47,6 +47,14 @@ class Stage:
     # when the cursor already matches.
     incremental: bool = True
     description: str = ""
+    # Input-bound stages read recovered capture ledgers that stop at the frozen
+    # research end. Their ceiling is FROZEN_END: asking for a later end cannot
+    # produce more rows, so the runner treats them (and their dependants)
+    # as satisfied at FROZEN_END rather than blocking the graph forever.
+    frozen_end: bool = False
+
+    def target(self, end: pd.Timestamp) -> pd.Timestamp:
+        return min(end, FROZEN_END) if self.frozen_end else end
 
 
 class Checkpoint:
@@ -118,7 +126,8 @@ class Runner:
                 "depends_on": list(stage.depends_on),
                 "cursor": cursor,
                 "rows": data.get("rows"),
-                "complete": bool(cursor) and pd.Timestamp(cursor) >= end,
+                "complete": bool(cursor) and pd.Timestamp(cursor) >= stage.target(end),
+                "ceiling": str(stage.target(end)),
                 "mode": data.get("mode"),
                 "updated_at": data.get("updated_at"),
                 "error": data.get("error"),
@@ -134,18 +143,20 @@ class Runner:
             checkpoint = Checkpoint(stage.name)
             previous = checkpoint.read()
             cursor = pd.Timestamp(previous["cursor"]) if previous and previous.get("cursor") else None
-            if cursor is not None and cursor >= end:
+            target = stage.target(end)
+            if cursor is not None and cursor >= target:
                 report.append({"stage": stage.name, "action": "skipped", "cursor": str(cursor)})
                 continue
             blocked = [d for d in stage.depends_on
-                       if (Checkpoint(d).cursor or pd.Timestamp(0, tz="UTC")) < end]
+                       if (Checkpoint(d).cursor or pd.Timestamp(0, tz="UTC"))
+                       < self.stages[d].target(end)]
             if blocked:
                 report.append({"stage": stage.name, "action": "blocked", "on": blocked})
                 continue
             mode = INCREMENTAL if (cursor is not None and stage.incremental) else BOOTSTRAP
             started = time.time()
             try:
-                result = stage.run(end, previous if mode == INCREMENTAL else None)
+                result = stage.run(target, previous if mode == INCREMENTAL else None)
             except Exception as exc:  # keep independent blockers visible
                 checkpoint.write({**(previous or {}), "error": f"{type(exc).__name__}: {exc}",
                                   "traceback": traceback.format_exc()[-4000:],
