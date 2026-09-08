@@ -9,29 +9,36 @@ frozen `END = 2026-09-01T00:00:00Z`. The recovered `upstream_packet.parquet`
 (19,487 rows, 177 columns) cannot be appended to; the chain must be re-run over
 its whole history with the end constant advanced.
 
-## Stage status (research end configurable; current run END = 2026-09-08T00:45Z)
+## Stage status (research end configurable; last run END = 2026-09-08T18:30:00Z)
 
-| Stage | Inputs | Status |
-| --- | --- | --- |
-| Binance event features | spot + UM aggTrades, 2025-12-01 -> 2026-09-07 | DONE - 26,976 rows x 389 cols, 0 intervals without trade data |
-| Kalshi KXBTC15M inventory + T+5 trades | Kalshi historical/live endpoints, 2026-02-06 -> 2026-09-07 23:45Z | DONE - 25,261 markets crawled, 20,150 in window, 526,191 eligible trades, 301 NO_MARKET intervals, 0 rejected records |
-| Live-day recovery | Binance REST aggTrades | DONE - current UTC day rebuilt in archive layout; feature parity vs published archive verified (190 cols, 0 mismatches) |
-| Binance kline directory (1m/1s/5m) | binance.vision | PARTIAL - September only; full history outstanding |
-| Reproduction workspace restore | recovery archives + C85_Lovable_Kit | DONE - /tmp/upx normalised, nested packages expanded, /tmp/c30root imports resolve, scikit-learn installed |
-| Base coverage ledgers (`continuous_coverage_ledger`, `label_stable_db1_shadow_ledger`, `t5_book_day4h_r4_1_rows`) | Kalshi inventory + T+5 trades + Binance event features | BLOCKING - absent from both recovery archives (bulk capture caches deliberately omitted); must be re-derived from cached feeds and parity-gated against `upstream_packet.parquet` (19,487 x 175) |
-| C42 ledger | `C42_MATURATION_CONSENSUS_R1` | BLOCKED on base coverage ledgers (C30 -> phase3 -> C36 -> C37 chain cannot load its frame without them) |
-| Polymarket C42 early prior/trades | `ancestor/data/c51_polymarket_preopen_1m.csv`, `c51_polymarket_outcomes.csv` recovered; live extension via data-api.polymarket.com | TODO - historical inputs present, extension keyed on C42 ledger condition_ids |
+Cursors come from `continuation/manifests/_status.json` (durable, survives cache wipes).
 
-| C51 ledger | Polymarket CLOB preopen book + outcomes + repo parquet + C42 ledger | TODO |
-| C54 ledger | C42 + C51 ledgers | TODO |
-| C57 packet | kalshi markets, binance features, kline dir, C42/C51/C54 ledgers | TODO |
-| C61 confirmed extension | C57 + C58 development ledger + market prior | TODO |
-| C63 source correction | C61 | TODO |
-| C67 trade-side / C68 quote / C69 index | C63 + Binance reference data | TODO |
-| C71 direction package | C63..C69 | TODO |
-| C85 heads (C71_DIRECTION, C85_META, auxiliary monthly) | C71 + packet | TODO |
-| Railway artifact + checkpoint deploy, restart-resume proof | completed heads | TODO |
-| Worker live start | fresh state + next valid boundary | BLOCKED on the above |
+| Stage | Cursor | Rows | Status |
+| --- | --- | --- | --- |
+| binance_events | 2026-09-08 18:30Z | 27,041 | DONE - archived prefix spliced verbatim, parity ok |
+| kalshi_t5 | 2026-09-08 19:00Z | 25,338 | DONE |
+| external_direction | 2026-09-01 | 1,027 | DONE (input-bound, frozen ceiling) |
+| fee_coverage / fixed_floor / c30 | 2026-09-01 | 19,780 | DONE, prefix parity ok |
+| phase3 | 2026-09-01 | 20,561 | DONE |
+| c36_timing / c36_frontier | 2026-09-01 | 20,343 / 22,558 | DONE |
+| c37 | 2026-09-01 | 19,780 | DONE |
+| structure_valid | 2026-09-08 18:30Z | 27,041 | DONE - 19,487-row archived prefix exact |
+| r4_1 / r5_phase4 | 2026-09-01 | 26,124 | DONE (needed r4_2 audit chain re-derived) |
+| c42 | 2026-09-01 | 19,780 | DONE - 0 cell and 0 decision mismatches vs archive |
+| polymarket_inventory / c51_target_native | 2026-09-08 18:30Z | 27,017 | DONE |
+| polymarket_early_prior | 2026-09-01 | 8,342 | DONE (6 workers; 32 hit HTTP 429) |
+| c51_rebase | 2026-09-01 | 26,304 | DONE - 0 label and 0 prediction mismatches |
+| c54 | - | 0 | BLOCKED BY DESIGN - producer hard-gates on sha256 of the frozen precommit/C51/C42 ledgers; advancing them changes those hashes. Live C54 is already ported and fixture-parity clean, so this only blocks re-running the historical router. |
+
+## Outstanding before C85 can predict live
+
+| Item | Status |
+| --- | --- |
+| C51 serving heads (`artifacts/c51/{direction,meta}/*.json`) | STALE at 2026-09-01. The frozen producer emits standardized coefficients + diagnostics only, not the per-block imputation/centre/scale the serving schema needs. Route: export them from the already-reviewed `src/experts/c51.py` transcription. No fabricated fields. |
+| C57 packet, C61/C63/C67/C68/C69, C71 direction, C85 heads | TODO |
+| Railway artifact + checkpoint deploy, restart-resume proof | TODO |
+| Live start at next valid boundary, publication by T+5 | TODO |
+| Webhooks | C85 stays out of `WEBHOOK_ALLOWED_MODELS`; T45 execution untouched |
 
 ## Resumability
 Each stage writes `evaluation-fixtures/cache/continuation/checkpoints/<stage>.json`
