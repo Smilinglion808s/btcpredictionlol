@@ -15,6 +15,7 @@ import os
 
 import pandas as pd
 
+from . import manifest
 from .config import research_end
 from .runner import Runner
 from .stages import STAGES
@@ -40,10 +41,14 @@ def main() -> None:
                    "verification": [verify_against_archive(v, day, builder, builder.RAW)
                                     for v in ("spot", "um")]}
     elif args.command == "status":
-        payload = {"research_end": str(end), "stages": runner.status(end)}
+        rows = runner.status(end)
+        manifest.snapshot(rows)
+        payload = {"research_end": str(end), "stages": rows}
     else:
-        payload = {"research_end": str(end), "report": runner.advance(end, only=args.stage),
-                   "stages": runner.status(end)}
+        report = runner.advance(end, only=args.stage)
+        rows = runner.status(end)
+        manifest.snapshot(rows)
+        payload = {"research_end": str(end), "report": report, "stages": rows}
     print(json.dumps(payload, indent=2, default=str))
 
 

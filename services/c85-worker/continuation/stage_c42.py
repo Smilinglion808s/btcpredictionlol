@@ -30,16 +30,17 @@ import pandas as pd
 
 from .config import CACHE, UPSTREAM
 from .runner import StageResult
-from .stages import SOURCES, publish, staged_producer, workspace_for
+from .stages import SOURCES, publish, staged_producer, workspace_for, writable_numpy_views
 
 C42_PRODUCER = SOURCES / "01c50b819f8e" / "build_c42_maturation_consensus_r1.py"
 
-# Upstream ledger -> the filename the producer expects inside inputs/.
+# Published cache path (relative to the continuation cache, as each producing
+# stage publishes it) -> the filename the producer expects inside inputs/.
 C42_INPUTS = {
-    "phase3_selected_shadow_ledger.csv": "phase3_selected_shadow_ledger.csv",
-    "fee_coverage_shadow_ledger.csv": "fee_coverage_shadow_ledger.csv",
+    "phase3/phase3_selected_shadow_ledger.csv": "phase3_selected_shadow_ledger.csv",
+    "fee_coverage/fee_coverage_shadow_ledger.csv": "fee_coverage_shadow_ledger.csv",
     "t5_hot_calibration_ledger.csv": "t5_hot_calibration_ledger.csv",
-    "c37_shadow_ledger.csv": "c37_shadow_ledger.csv",
+    "c37/c37_shadow_ledger.csv": "c37_shadow_ledger.csv",
 }
 
 ARCHIVED_C42 = UPSTREAM / "ancestor" / "data" / "c42_ledger.csv"
@@ -124,7 +125,8 @@ def _assert_prefix_parity(frame: pd.DataFrame) -> dict:
 
 def _publish_audit_ledger(ledger: Path) -> tuple[str, dict]:
     """Attach Polymarket condition ids by interval start; identifiers only."""
-    inventory = CACHE / "POLYMARKET_BTC15M_MARKETS.csv"
+    # The polymarket_inventory stage publishes under this name (stage_c51.py:130).
+    inventory = CACHE / "polymarket_inventory.csv"
     frame = pd.read_csv(ledger, low_memory=False)
     frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
     notes: dict = {}
@@ -160,7 +162,8 @@ def run_c42(end: pd.Timestamp, previous: dict | None) -> StageResult:
     saved = sys.argv
     sys.argv = ["build_c42_maturation_consensus_r1.py", "--package-root", str(root)]
     try:
-        module.main()
+        with writable_numpy_views():
+            module.main()
     finally:
         sys.argv = saved
 

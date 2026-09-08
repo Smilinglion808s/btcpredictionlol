@@ -1,0 +1,46 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "continuation_gap": "input-bound stage: the recovered base-capture ledgers end at 2026-08-31T23:45Z, so this stage cannot advance past FROZEN_END until the base captures are extended. No rows are synthesised to close the gap.",
+    "parity": {
+      "cell_mismatches": 0,
+      "files_checked": [
+        "cscv_pbo.csv",
+        "full_tail_grid_scorecard.csv",
+        "pre_july_fee_selected_frontier.csv",
+        "selected_frontier_robustness.csv"
+      ],
+      "reference_dir": "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/vault_work/legacy_c37/external_research/c36_fee_frontier_r3_output"
+    }
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/C36_FEE_FRONTIER_R3.json",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/cscv_pbo.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/fee08_block_deltas.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/fee08_component_ablation.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/fee08_transition_decomposition.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/fee_frontier_shadow_ledger.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/full_tail_grid_performance.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/full_tail_grid_scorecard.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/pre_july_fee_selected_frontier.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/selected_frontier_bootstrap.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/selected_frontier_fee_matrix.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/selected_frontier_monthly.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/frontier/selected_frontier_robustness.csv"
+  ],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "ca50fa5074115a1a7939ae553ea382849a0ae171d500b4f0af67459486cd33a6",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "ca50fa5074115a1a7939ae553ea382849a0ae171d500b4f0af67459486cd33a6",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/external_research/c36_fee_frontier_r3.py"
+    }
+  ],
+  "rows": 22558,
+  "seconds": 32.1,
+  "stage": "c36_frontier",
+  "updated_at": "2026-09-08T19:03:40.814852+00:00"
+}

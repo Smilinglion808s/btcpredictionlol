@@ -1,0 +1,37 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "archived_prefix_rows": 26124,
+    "columns": [
+      "ts",
+      "label",
+      "base_direction",
+      "probability_correct",
+      "directional_rank",
+      "active_threshold",
+      "trailing_coverage",
+      "prediction",
+      "frozen_t5_r2_prediction",
+      "full_r4_prediction"
+    ],
+    "parity": "ok"
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/t5_book_day4h_r4_1_rows.csv"
+  ],
+  "patches": [
+    {
+      "original_line": "END = pd.Timestamp(\"2026-09-01T00:00:00Z\")\n",
+      "original_sha256": "0362c6b134fe37a08ff51e675e186daa5eb563ea858bd18925c8e48db69692f2",
+      "patched_line": "END = pd.Timestamp(\"2026-09-01T00:00:00Z\")",
+      "patched_sha256": "aeb92e0e20c5ed22cf992a5d59c74726b960c0164025df9b2ae5c9680de87139",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root/external_research/htf_structure_r3_models.py"
+    }
+  ],
+  "rows": 26124,
+  "seconds": 464.4,
+  "stage": "r4_1",
+  "updated_at": "2026-09-08T20:34:49.667015+00:00"
+}

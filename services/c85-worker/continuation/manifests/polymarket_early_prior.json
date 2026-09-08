@@ -1,0 +1,41 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "audit_name": "POLYMARKET_C42_EARLY_PRIOR_ACQUISITION_R1",
+    "created_at_utc": "2026-09-08T21:32:20.954100+00:00",
+    "eligible_trade_records": 96864,
+    "full_window_c42_calls_with_market": 8342,
+    "no_eligible_trade_markets": 167,
+    "q1_markets": 8175,
+    "q5_markets": 6849,
+    "queried_markets": 8342,
+    "query_pages": 8342,
+    "records_received": 238619,
+    "rejected_market_records": 0,
+    "rejected_outcome_records": 0,
+    "rejected_time_records": 141755,
+    "t0_window": "[T-60s,T)",
+    "t5_window": "[T,T+5s)",
+    "trade_query_stage_end_exclusive": "2026-09-01T00:00:00+00:00"
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/POLYMARKET_C42_EARLY_PRIOR.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/POLYMARKET_C42_EARLY_TRADES.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/POLYMARKET_C42_EARLY_PRIOR_ACQUISITION_R1.json"
+  ],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "d885091547b27f6e831855444393ae158b8f637fbd9a6506ccf1d90775cec49a",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "d885091547b27f6e831855444393ae158b8f637fbd9a6506ccf1d90775cec49a",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/polymarket_early_prior/acquire_polymarket_early_prior_r1.py"
+    }
+  ],
+  "rows": 8342,
+  "seconds": 11.6,
+  "stage": "polymarket_early_prior",
+  "updated_at": "2026-09-08T21:32:21.090638+00:00"
+}

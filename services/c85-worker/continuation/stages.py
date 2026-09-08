@@ -12,6 +12,7 @@ missing market can never silently shrink or shift a training window.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -90,6 +91,34 @@ class VerbatimRecord:
 
 def cache_out(*names: str) -> list[str]:
     return [str((CACHE / name)) for name in names]
+
+
+@contextlib.contextmanager
+def writable_numpy_views():
+    """Environment-only shim for producers that write into `Series.to_numpy(...)`.
+
+    Newer pandas can return a read-only zero-copy view, which raises
+    "assignment destination is read-only" in code that was written against the
+    older copying behaviour. Handing back a writable copy restores that
+    behaviour; no value, feature or rule is changed.
+    """
+    originals = {cls: cls.to_numpy for cls in (pd.Series, pd.DataFrame)}
+
+    def wrap(original):
+        def to_numpy(self, *args, **kwargs):
+            array = original(self, *args, **kwargs)
+            if getattr(array, "flags", None) is not None and not array.flags.writeable:
+                array = array.copy()
+            return array
+        return to_numpy
+
+    for cls, original in originals.items():
+        cls.to_numpy = wrap(original)
+    try:
+        yield
+    finally:
+        for cls, original in originals.items():
+            cls.to_numpy = original
 
 
 def publish(path: Path, name: str) -> str:

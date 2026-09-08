@@ -1,0 +1,45 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "calls": 8343,
+    "directional_rows": 8343,
+    "directional_rows_without_condition_id": 1,
+    "ledger_end": "2026-08-31 23:45:00+00:00",
+    "opportunities": 19757,
+    "prefix_cell_mismatches": 0,
+    "prefix_decision_mismatches": 0,
+    "prefix_rows": 19780,
+    "staged_inputs": {
+      "c37_shadow_ledger.csv": "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_shadow_ledger.csv",
+      "fee_coverage_shadow_ledger.csv": "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/fee_coverage/fee_coverage_shadow_ledger.csv",
+      "phase3_selected_shadow_ledger.csv": "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/phase3/phase3_selected_shadow_ledger.csv",
+      "t5_hot_calibration_ledger.csv": "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/t5_hot_calibration_ledger.csv"
+    }
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c42_ledger.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/policy_performance.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/component_ablation.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/candidate_monthly.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/candidate_7d_blocks.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/paired_cluster_bootstrap.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/fee_stress.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/data_integrity.json",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c42_audit_ledger.csv"
+  ],
+  "patches": [
+    {
+      "original_line": "END = pd.Timestamp(\"2026-09-01T00:00:00Z\")\n\n",
+      "original_sha256": "795591d6ed9662e1fa218a76f6f2782cd23c8a32eea9e31aab4a2b8f93bb0a7a",
+      "patched_line": "END = pd.Timestamp(\"2026-09-01T00:00:00Z\")",
+      "patched_sha256": "b77676aedd033cb12e1c326ab708632c3af3b972dd043db3da6a50c33d2042aa",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/c42/build_c42_maturation_consensus_r1.py"
+    }
+  ],
+  "rows": 19780,
+  "seconds": 5.3,
+  "stage": "c42",
+  "updated_at": "2026-09-08T21:18:54.100807+00:00"
+}

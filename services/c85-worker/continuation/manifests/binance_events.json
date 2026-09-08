@@ -1,0 +1,50 @@
+{
+  "cursor": "2026-09-08 18:30:00+00:00",
+  "error": null,
+  "mode": "incremental",
+  "notes": {
+    "archived_prefix_rows": 26305,
+    "columns": 389,
+    "continuation_rows": 736,
+    "grid_intervals": 27050,
+    "intervals_without_trade_data": [
+      "2026-09-08 16:15:00+00:00",
+      "2026-09-08 16:30:00+00:00",
+      "2026-09-08 16:45:00+00:00",
+      "2026-09-08 17:00:00+00:00",
+      "2026-09-08 17:15:00+00:00",
+      "2026-09-08 17:30:00+00:00",
+      "2026-09-08 17:45:00+00:00",
+      "2026-09-08 18:00:00+00:00",
+      "2026-09-08 18:15:00+00:00"
+    ],
+    "intervals_without_trade_data_count": 9,
+    "live_recovered_days": [],
+    "prefix_cutoff": "2026-09-01 00:00:00+00:00",
+    "sha256": "31ecc4018d8b4cf8b92837e6a0072d13ed9217d74cb936386a925bacc462e3a2"
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/binance_event_features.csv.gz",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/binance_feature_audit.json"
+  ],
+  "patches": [
+    {
+      "original_line": "END_EXCLUSIVE = datetime(2026, 9, 1, tzinfo=timezone.utc)",
+      "original_sha256": "14e437b770ab291a155a443c8f7da0683f1515a809249d55979f6aeaf6156659",
+      "patched_line": "END_EXCLUSIVE = datetime(2026, 9, 8, 18, 30, tzinfo=timezone.utc)",
+      "patched_sha256": "136d17670536e995228034902915f715dce4d93d43678e24153f76e9ab933a9c",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/binance_events/acquire_multivenue_r1.py"
+    },
+    {
+      "original_line": "END = pd.Timestamp(\"2026-09-01T00:00:00Z\")",
+      "original_sha256": "c3acb1ea58fd77d36f49aef870ec3c0d230e949c47fb329820de752a99d2b446",
+      "patched_line": "END = pd.Timestamp(\"2026-09-08T18:30:00Z\")",
+      "patched_sha256": "0c9b6e39e15a7463aba4b553449e81aa2bf8ef0913ed236355c4537dc4e187af",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/binance_events/build_multivenue_features_r1.py"
+    }
+  ],
+  "rows": 27041,
+  "seconds": 1278.6,
+  "stage": "binance_events",
+  "updated_at": "2026-09-08T19:03:08.736541+00:00"
+}

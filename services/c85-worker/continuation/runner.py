@@ -22,6 +22,7 @@ from typing import Callable, Iterable
 
 import pandas as pd
 
+from . import manifest
 from .config import CHECKPOINTS, FROZEN_END, ensure_dirs, research_end
 
 BOOTSTRAP = "bootstrap"
@@ -72,6 +73,12 @@ class Checkpoint:
         tmp = self.path.with_suffix(".part")
         tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         tmp.replace(self.path)
+        # Mirror the small fields into the tracked manifest so a cache wipe
+        # cannot erase the record of how far each stage got.
+        try:
+            manifest.write(self.name, payload)
+        except Exception:
+            pass
 
     @property
     def cursor(self) -> pd.Timestamp | None:
