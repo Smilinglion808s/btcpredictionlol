@@ -61,8 +61,36 @@ class Worker:
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
         self.owns_lease = False
+        self.pending_bridge: list[datetime] = []
+        # Live raw-feature production is still an unmet dependency, so the
+        # orchestrator is wired to the fail-closed packet source. Swapping in a
+        # real source is the only change needed to make the boundary path live;
+        # nothing else on the path is a placeholder.
+        self.packet_source = UnavailablePacketSource(
+            reasons=self.experts.status().get("blocking_reasons") or None
+        )
+        self.ticker_resolver = KalshiTickerResolver(
+            self.settings.kalshi_series, self._fetch_market_metadata
+        )
+        self.orchestrator = BoundaryOrchestrator(
+            artifacts=self.artifacts,
+            store=self.store,
+            gateway=self.gateway,
+            packet_source=self.packet_source,
+            ticker_resolver=self.ticker_resolver,
+            allow_dispatch=self.settings.allow_live_publication,
+        )
         self.scheduler = BoundaryScheduler(self.on_boundary)
 
+    def _fetch_market_metadata(self, ticker: str) -> list[dict[str, Any]]:
+        """Real venue metadata for ticker verification (never cached across days)."""
+        import httpx
+
+        url = f"{self.settings.kalshi_api_base.rstrip('/')}/markets"
+        with httpx.Client(timeout=2.0) as client:
+            response = client.get(url, params={"event_ticker": ticker, "limit": 100})
+            response.raise_for_status()
+            return response.json().get("markets", [])
 
     # -- readiness --------------------------------------------------------------
     def evaluate_readiness(self) -> tuple[str, str | None]:
@@ -74,9 +102,37 @@ class Worker:
                 "missing: " + ", ".join(self.experts.missing)
             ]
             return "BLOCKED", "C85_EXPERTS_NOT_CONNECTED :: " + " || ".join(reasons)
+        # A planned-but-unrun bridge means the policy state does not cover every
+        # target since the checkpoint. Computing the plan is not running it, so
+        # pending work blocks readiness instead of being silently skipped.
+        if self.pending_bridge:
+            return "BLOCKED", (
+                f"C85_BRIDGE_PENDING: {len(self.pending_bridge)} targets from "
+                f"{self.pending_bridge[0].isoformat()} to "
+                f"{self.pending_bridge[-1].isoformat()} not processed"
+            )
+        missing_fit = self.missing_applicable_fit()
+        if missing_fit:
+            return "BLOCKED", missing_fit
+        if isinstance(self.packet_source, UnavailablePacketSource):
+            return "BLOCKED", "C85_RAW_PACKET_SOURCE_UNAVAILABLE :: " + "; ".join(
+                self.packet_source.reasons
+            )
         if not self.settings.allow_live_publication:
             return "BLOCKED", "C85_ALLOW_LIVE_PUBLICATION=false"
         return "READY", None
+
+    def missing_applicable_fit(self, at: datetime | None = None) -> str | None:
+        """Both heads must already be fitted for the next target's UTC day."""
+        target = at or next_boundary()
+        missing = [
+            kind
+            for kind in ("C71_DIRECTION", "C85_META")
+            if self.artifacts.head_for(kind, target) is None
+        ]
+        if missing:
+            return f"C85_NO_APPLICABLE_FIT: {', '.join(missing)} for {target.date()}"
+        return None
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -91,6 +147,7 @@ class Worker:
             "artifacts": self.artifacts.inventory(),
             "feeds": self.feeds.watermarks(),
             "experts": self.experts.status(),
+            "pending_bridge_targets": len(self.pending_bridge),
             "next_target_utc": next_boundary().isoformat(),
             "allow_live_publication": self.settings.allow_live_publication,
             "at": datetime.now(timezone.utc).isoformat(),
@@ -99,10 +156,9 @@ class Worker:
     # -- boundary ---------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> None:
         """Compute and publish one target, or record exactly why it did not."""
-        ticker = self._ticker_for(target)
         readiness, reason = self.evaluate_readiness()
         if readiness != "READY":
-            self.store.mark_missed(ticker, target, reason or "not_ready")
+            self.store.mark_missed(None, target, reason or "not_ready")
             return
 
         # Scheduler ownership: overlapping deployments must never both process
@@ -111,30 +167,17 @@ class Worker:
         self.owns_lease = bool(lease.get("granted"))
         if not self.owns_lease:
             self.store.mark_missed(
-                ticker, target, f"C85_LEASE_HELD_BY:{lease.get('owner_id', 'other')}"
+                None, target, f"C85_LEASE_HELD_BY:{lease.get('owner_id', 'other')}"
             )
             return
 
         timing.compute_started_ns = time.time_ns()
-        # Faithful packet construction is gated on the feature port and the
-        # inherited experts; both fail closed above, so this point is only
-        # reachable once they are connected.
-        raise NotImplementedError(
-            "C85_PIPELINE_INCOMPLETE: connect features.build_direction_features, "
-            "features.build_meta_features and the inherited expert registry."
-        )
+        outcome = await self.orchestrator.run_target(self.state, target, timing)
+        self.warmup.progress.last_completed_target = target.isoformat()
+        self.warmup.progress.next_target = next_boundary().isoformat()
+        if outcome.blocker:
+            self.warmup.progress.notes.append(f"{target.isoformat()}: {outcome.blocker}")
 
-    def _ticker_for(self, target: datetime) -> str:
-        """Kalshi KXBTC15M event ticker for the target's close, in US Eastern."""
-        from zoneinfo import ZoneInfo
-
-        months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-                  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-        close = target.astimezone(ZoneInfo("America/New_York"))
-        return (
-            f"{self.settings.kalshi_series}-"
-            f"{close:%y}{months[close.month - 1]}{close:%d%H%M}"
-        )
 
     # -- lifecycle --------------------------------------------------------------
     async def heartbeat_loop(self) -> None:
