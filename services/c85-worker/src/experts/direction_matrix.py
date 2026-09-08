@@ -118,8 +118,8 @@ def directional_matrix(frame: pd.DataFrame, sources: set[str], stage: str) -> pd
             "hyperliquid_t0_hourly_realized_range_4h",
             "hyperliquid_funding_rate",
             "hyperliquid_premium",
-            "hyperliquid_premium_change_1h",
             "hyperliquid_funding_change_1h",
+            "hyperliquid_premium_change_1h",
             "hyperliquid_premium_mean_8h",
         ):
             add(column, column)
