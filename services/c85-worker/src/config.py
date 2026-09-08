@@ -78,11 +78,6 @@ class Settings:
     http_port: int
     allow_live_publication: bool
     lease_ttl_seconds: int
-    # Deployment bundle (serving side of the bootstrap/serving split).
-    bundle_dir: Path
-    bundle_download: bool
-    bundle_max_age_hours: int
-
 
 
 GATEWAY_PATH = "/api/public/hooks/c85-decision"
@@ -198,9 +193,5 @@ def load_settings() -> Settings:
         allow_live_publication=os.environ.get("C85_ALLOW_LIVE_PUBLICATION", "false").lower()
         == "true",
         lease_ttl_seconds=int(os.environ.get("C85_LEASE_TTL_SECONDS", "60")),
-        bundle_dir=Path(os.environ.get("C85_BUNDLE_DIR", "/bundle")),
-        bundle_download=os.environ.get("C85_BUNDLE_DOWNLOAD", "true").lower() == "true",
-        bundle_max_age_hours=int(os.environ.get("C85_BUNDLE_MAX_AGE_HOURS", "36")),
     )
-
 

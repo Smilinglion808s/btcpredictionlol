@@ -17,10 +17,6 @@ export type Ops = z.infer<typeof opSchema>;
 
 const nsish = z.union([z.string(), z.number(), z.null()]).optional();
 
-/** Private bucket holding versioned C85 serving bundles (never public). */
-export const BUNDLE_BUCKET = "c85-bundles";
-
-
 const checkpointSchema = z.object({
   model_version: z.string().default(C85_MODEL_VERSION),
   as_of_utc: z.string().nullable().optional(),
@@ -126,45 +122,7 @@ export const opSchema = z.discriminatedUnion("op", [
     build_sha: z.string().max(120).nullable().optional(),
     timing: z.record(nsish).nullable().optional(),
   }),
-
-  // -- deployment bundles ----------------------------------------------------
-  // The offline bootstrap/refit job builds a versioned serving bundle, uploads
-  // it to private storage and registers it here. The Railway worker only ever
-  // reads the ACTIVE bundle; it never rebuilds historical ledgers at startup.
-  z.object({
-    op: z.literal("bundle.upload_url"),
-    bundle_version: z.string().min(3).max(120),
-    filename: z.string().min(3).max(200).default("bundle.tar.gz"),
-  }),
-  z.object({
-    op: z.literal("bundle.register"),
-    bundle_version: z.string().min(3).max(120),
-    storage_path: z.string().min(3).max(500),
-    bundle_sha256: z.string().min(32).max(128),
-    manifest: z.record(z.unknown()).default({}),
-    file_count: z.number().int().nonnegative().nullable().optional(),
-    byte_size: z.number().int().nonnegative().nullable().optional(),
-    checkpoint_utc: z.string().nullable().optional(),
-    last_processed_target_utc: z.string().nullable().optional(),
-    direction_fit_cutoff_utc: z.string().nullable().optional(),
-    meta_fit_cutoff_utc: z.string().nullable().optional(),
-    aux_fit_month: z.string().max(16).nullable().optional(),
-    source_watermarks: z.record(z.unknown()).default({}),
-    parity_report: z.record(z.unknown()).default({}),
-    build_sha: z.string().max(120).nullable().optional(),
-    status: z.enum(["PENDING", "VERIFIED", "REJECTED"]).default("VERIFIED"),
-    notes: z.string().max(2000).nullable().optional(),
-  }),
-  z.object({ op: z.literal("bundle.activate"), bundle_version: z.string().min(3).max(120) }),
-  z.object({
-    op: z.literal("bundle.active"),
-    // The worker asks for a short-lived signed download URL only when it needs
-    // to fetch; a plain metadata read leaves the URL out.
-    with_download_url: z.boolean().default(false),
-    ttl_seconds: z.number().int().min(60).max(3600).default(900),
-  }),
 ]);
-
 
 export function serviceClient(): SupabaseClient {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -383,60 +341,5 @@ export async function runC85Op(
       void timing;
       return ok({ beat: true });
     }
-
-    case "bundle.upload_url": {
-      const path = `${mv}/${body.bundle_version}/${body.filename}`;
-      const { data, error } = await supabase.storage
-        .from(BUNDLE_BUCKET)
-        .createSignedUploadUrl(path, { upsert: true });
-      if (error) throw new Error(error.message);
-      return ok({ bucket: BUNDLE_BUCKET, storage_path: path, upload: data });
-    }
-
-    case "bundle.register": {
-      const { op: _op, ...row } = body;
-      const { data, error } = await supabase
-        .from("c85_deployment_bundles")
-        .upsert(
-          { model_version: mv, storage_bucket: BUNDLE_BUCKET, built_by: workerId, ...row },
-          { onConflict: "model_version,bundle_version" },
-        )
-        .select("*")
-        .single();
-      if (error) throw new Error(error.message);
-      return ok({ bundle: data });
-    }
-
-    case "bundle.activate": {
-      const { data, error } = await supabase.rpc("c85_activate_bundle", {
-        p_model_version: mv,
-        p_bundle_version: body.bundle_version,
-      });
-      if (error) return { status: 400, result: { ok: false, error: error.message } };
-      return ok({ bundle: data });
-    }
-
-    case "bundle.active": {
-      const { data, error } = await supabase
-        .from("c85_deployment_bundles")
-        .select("*")
-        .eq("model_version", mv)
-        .eq("status", "ACTIVE")
-        .order("activated_at", { ascending: false })
-        .limit(1);
-      if (error) throw new Error(error.message);
-      const bundle = data?.[0] ?? null;
-      if (!bundle) return ok({ bundle: null, download_url: null });
-      let downloadUrl: string | null = null;
-      if (body.with_download_url) {
-        const signed = await supabase.storage
-          .from(bundle.storage_bucket ?? BUNDLE_BUCKET)
-          .createSignedUrl(bundle.storage_path, body.ttl_seconds);
-        if (signed.error) throw new Error(signed.error.message);
-        downloadUrl = signed.data?.signedUrl ?? null;
-      }
-      return ok({ bundle, download_url: downloadUrl });
-    }
   }
 }
-

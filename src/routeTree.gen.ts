@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedC85RouteImport } from './routes/_authenticated/c85'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
@@ -53,11 +52,6 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedC85Route = AuthenticatedC85RouteImport.update({
-  id: '/c85',
-  path: '/c85',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
@@ -247,7 +241,6 @@ const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/c85': typeof AuthenticatedC85Route
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
@@ -283,7 +276,6 @@ export interface FileRoutesByFullPath {
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesByTo {
-  '/c85': typeof AuthenticatedC85Route
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
@@ -322,7 +314,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/_authenticated/c85': typeof AuthenticatedC85Route
   '/_authenticated/daily': typeof AuthenticatedDailyRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
@@ -362,7 +353,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/c85'
     | '/daily'
     | '/history'
     | '/models'
@@ -398,7 +388,6 @@ export interface FileRouteTypes {
     | '/api/public/timing/btc-15m'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/c85'
     | '/daily'
     | '/history'
     | '/models'
@@ -436,7 +425,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
-    | '/_authenticated/c85'
     | '/_authenticated/daily'
     | '/_authenticated/history'
     | '/_authenticated/models'
@@ -520,13 +508,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/c85': {
-      id: '/_authenticated/c85'
-      path: '/c85'
-      fullPath: '/c85'
-      preLoaderRoute: typeof AuthenticatedC85RouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/daily': {
@@ -764,7 +745,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedC85Route: typeof AuthenticatedC85Route
   AuthenticatedDailyRoute: typeof AuthenticatedDailyRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
@@ -773,7 +753,6 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedC85Route: AuthenticatedC85Route,
   AuthenticatedDailyRoute: AuthenticatedDailyRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedModelsRoute: AuthenticatedModelsRoute,

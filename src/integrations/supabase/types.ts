@@ -3546,81 +3546,6 @@ export type Database = {
           },
         ]
       }
-      c85_deployment_bundles: {
-        Row: {
-          activated_at: string | null
-          aux_fit_month: string | null
-          build_sha: string | null
-          built_by: string | null
-          bundle_sha256: string
-          bundle_version: string
-          byte_size: number | null
-          checkpoint_utc: string | null
-          created_at: string
-          direction_fit_cutoff_utc: string | null
-          file_count: number | null
-          id: string
-          last_processed_target_utc: string | null
-          manifest: Json
-          meta_fit_cutoff_utc: string | null
-          model_version: string
-          notes: string | null
-          parity_report: Json
-          source_watermarks: Json
-          status: string
-          storage_bucket: string
-          storage_path: string
-        }
-        Insert: {
-          activated_at?: string | null
-          aux_fit_month?: string | null
-          build_sha?: string | null
-          built_by?: string | null
-          bundle_sha256: string
-          bundle_version: string
-          byte_size?: number | null
-          checkpoint_utc?: string | null
-          created_at?: string
-          direction_fit_cutoff_utc?: string | null
-          file_count?: number | null
-          id?: string
-          last_processed_target_utc?: string | null
-          manifest?: Json
-          meta_fit_cutoff_utc?: string | null
-          model_version: string
-          notes?: string | null
-          parity_report?: Json
-          source_watermarks?: Json
-          status?: string
-          storage_bucket?: string
-          storage_path: string
-        }
-        Update: {
-          activated_at?: string | null
-          aux_fit_month?: string | null
-          build_sha?: string | null
-          built_by?: string | null
-          bundle_sha256?: string
-          bundle_version?: string
-          byte_size?: number | null
-          checkpoint_utc?: string | null
-          created_at?: string
-          direction_fit_cutoff_utc?: string | null
-          file_count?: number | null
-          id?: string
-          last_processed_target_utc?: string | null
-          manifest?: Json
-          meta_fit_cutoff_utc?: string | null
-          model_version?: string
-          notes?: string | null
-          parity_report?: Json
-          source_watermarks?: Json
-          status?: string
-          storage_bucket?: string
-          storage_path?: string
-        }
-        Relationships: []
-      }
       c85_model_versions: {
         Row: {
           applies_from_utc: string
@@ -12143,39 +12068,6 @@ export type Database = {
       c85_acquire_lease: {
         Args: { p_lease_key: string; p_owner_id: string; p_ttl_seconds: number }
         Returns: Json
-      }
-      c85_activate_bundle: {
-        Args: { p_bundle_version: string; p_model_version: string }
-        Returns: {
-          activated_at: string | null
-          aux_fit_month: string | null
-          build_sha: string | null
-          built_by: string | null
-          bundle_sha256: string
-          bundle_version: string
-          byte_size: number | null
-          checkpoint_utc: string | null
-          created_at: string
-          direction_fit_cutoff_utc: string | null
-          file_count: number | null
-          id: string
-          last_processed_target_utc: string | null
-          manifest: Json
-          meta_fit_cutoff_utc: string | null
-          model_version: string
-          notes: string | null
-          parity_report: Json
-          source_watermarks: Json
-          status: string
-          storage_bucket: string
-          storage_path: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "c85_deployment_bundles"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       c85_append_checkpoint: { Args: { p_checkpoint: Json }; Returns: Json }
       c85_commit_decision: {

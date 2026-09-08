@@ -9,7 +9,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { buildC85Stats, loadC85Pending } from "./c85/statsQuery.server";
-import { loadC85Deployment } from "./c85/deployment.server";
 import { PENDING_TTL_MS, cachedStats } from "./statsCache.server";
 
 /** Worker readiness, decision counts and timing evidence. */
@@ -24,10 +23,4 @@ export const getC85Pending = createServerFn({ method: "GET" }).handler(
       string,
       any
     > | null,
-);
-
-/** Deployment view: active bundle, worker heartbeat and recent decisions. */
-export const getC85Deployment = createServerFn({ method: "GET" }).handler(
-  async () =>
-    (await cachedStats("c85-deployment", loadC85Deployment, 15_000)) as Record<string, any>,
 );

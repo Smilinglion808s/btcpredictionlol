@@ -1,21 +1,18 @@
-"""C85 serving worker entrypoint.
+"""C85 worker entrypoint.
 
-This process is the *serving* half of the C85 deployment split. It does not
-reconstruct history and it does not run research producers. Startup is:
+Startup sequence (all automatic; there is no manual warmup button):
 
-  1. load the ACTIVE deployment bundle (local directory, else download it
-     through the signed backend) and verify every file hash
-  2. verify the feature order against the bundle's artifacts
-  3. restore the newest durable checkpoint, else adopt the bundle's state
-  4. start the market-data collectors and advance state one target at a time
-  5. verify feeds, experts, bundle freshness and measured timing
-  6. only then flip to READY and arm the boundary scheduler
+  1. verify artifacts and the feature order
+  2. restore the newest durable checkpoint, else load the historical seed
+  3. start the market-data collectors
+  4. bridge the gap chronologically as RESEARCH_BACKFILL, checkpointing
+  5. run any applicable scheduled daily/monthly fit
+  6. verify feeds, experts and measured timing
+  7. only then flip to READY and arm the boundary scheduler
 
-The historical rebuild and the scheduled daily/monthly refits live in the
-offline bootstrap job (`bootstrap/`), which publishes a new bundle. Readiness
-fails closed: a missing feed, an unconnected inherited expert, a stale bundle or
-a measured T+5 overrun keeps the worker BLOCKED with a concrete reason, and no
-live prediction is published.
+Readiness fails closed. Any missing feed, unconnected inherited expert, absent
+applicable fit or measured T+5 overrun keeps the worker BLOCKED with a concrete
+reason, and no live prediction is published.
 """
 from __future__ import annotations
 
@@ -29,14 +26,12 @@ import uvicorn
 
 from .artifacts import ArtifactStore
 from .backend import BackendClient
-from .bundle import BundleError, DeploymentBundle, load_bundle
 from .config import DISPLAY_NAME, MODEL_VERSION, load_settings
 from .experts import ExpertRegistry, LiveExpertChain
 from .feeds import FeedRegistry
 from .gateway import GatewayClient
 from .health import create_app
 from .scheduler import BoundaryScheduler, RunTiming, next_boundary
-from .state import C85State
 from .store import C85Store
 from .warmup import Stage, WarmupCoordinator
 
@@ -44,29 +39,12 @@ from .warmup import Stage, WarmupCoordinator
 class Worker:
     def __init__(self) -> None:
         self.settings = load_settings()
+        self.artifacts = ArtifactStore(self.settings.artifact_dir)
         self.backend = BackendClient(
             self.settings.ops_url,
             self.settings.gateway_secret,
             self.settings.worker_id,
         )
-        # The bundle is the serving contract. Without it the worker has nothing
-        # legitimate to predict with, so a failure here is a blocking reason,
-        # never a fallback to whatever happens to be on disk.
-        self.bundle: DeploymentBundle | None = None
-        self.bundle_error: str | None = None
-        try:
-            self.bundle = load_bundle(
-                self.settings.bundle_dir,
-                backend=self.backend,
-                download=self.settings.bundle_download,
-            )
-        except BundleError as exc:
-            self.bundle_error = str(exc)
-        except Exception as exc:  # noqa: BLE001 — network/storage failure
-            self.bundle_error = f"C85_BUNDLE_FETCH_FAILED: {exc}"
-
-        artifact_root = self.bundle.artifact_dir if self.bundle else self.settings.artifact_dir
-        self.artifacts = ArtifactStore(artifact_root)
         self.store = C85Store(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
         self.experts = ExpertRegistry()
@@ -83,15 +61,8 @@ class Worker:
         self.scheduler = BoundaryScheduler(self.on_boundary)
 
 
-
-
     # -- readiness --------------------------------------------------------------
     def evaluate_readiness(self) -> tuple[str, str | None]:
-        if self.bundle is None:
-            return "BLOCKED", self.bundle_error or "C85_BUNDLE_MISSING"
-        stale = self.bundle.freshness_problem(self.settings.bundle_max_age_hours)
-        if stale:
-            return "BLOCKED", stale
         missing_feeds = self.feeds.missing()
         if missing_feeds:
             return "BLOCKED", f"C85_FEEDS_STALE: {', '.join(missing_feeds)}"
@@ -114,7 +85,6 @@ class Worker:
             "stage": self.warmup.progress.stage.value,
             "blocking_reason": self.blocking_reason,
             "progress": self.warmup.progress.as_dict(),
-            "bundle": self.bundle.inventory() if self.bundle else {"error": self.bundle_error},
             "artifacts": self.artifacts.inventory(),
             "feeds": self.feeds.watermarks(),
             "experts": self.experts.status(),
@@ -122,7 +92,6 @@ class Worker:
             "allow_live_publication": self.settings.allow_live_publication,
             "at": datetime.now(timezone.utc).isoformat(),
         }
-
 
     # -- boundary ---------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> None:
@@ -193,26 +162,10 @@ class Worker:
         self.warmup.progress.stage = Stage.VERIFY
         await self.feeds.start()
 
-        # Restart path: prefer the durable checkpoint; otherwise adopt the state
-        # the bundle carries. Neither branch rebuilds historical ledgers.
-        self.state, row = self.store.restore_state()
-        if row is not None:
-            self.warmup.progress.resumed = True
-            self.warmup.progress.checkpoint_seq = int(row.get("checkpoint_seq") or 0)
-            self.warmup.progress.notes.append(
-                f"resumed durable checkpoint #{self.warmup.progress.checkpoint_seq}"
-            )
-        elif self.bundle is not None:
-            self.warmup.progress.stage = Stage.SEED
-            self.state = C85State.from_dict(self.bundle.checkpoint())
-            self.warmup.progress.notes.append(
-                f"adopted bundle {self.bundle.version} state "
-                f"({self.bundle.cutoffs.last_processed_target_utc})"
-            )
-        # Only the gap since the adopted state is advanced, one target at a time.
-        self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
+        seed = self.settings.artifact_dir / "fixtures" / "historical_seed_2026-09-01.json"
+        self.state, resumed = self.warmup.restore_or_seed(seed)
+        pending = self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
         self.warmup.progress.next_target = next_boundary().isoformat()
-
 
         self.readiness, self.blocking_reason = self.evaluate_readiness()
         if self.readiness == "READY":
