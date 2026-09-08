@@ -30,7 +30,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.orchestration import (  # noqa: E402
+from src.orchestration import (
+    event_admitted,  # noqa: E402
     BoundaryOrchestrator,
     RawPacketUnavailable,
     TargetInputs,
@@ -365,21 +366,201 @@ def test_missed_publication_deadline_records_expired_and_never_dispatches():
     outcome = run_all(orchestrator, C85State(), targets)[0]
     assert gateway.sent == []                      # no late webhook, ever
     assert outcome.dispatched is False
-    assert store.commits[0]["published"] is False  # the row still exists
+    assert store.commits[0]["published_at"] is None  # the row still exists
     # a directional call that misses the ceiling is EXPIRED, not silently on time
     if outcome.decision.base_side != 0 and outcome.decision.final_side != 0:
         assert outcome.decision.status == "EXPIRED"
 
 
-def test_cutoffs_come_from_configuration_and_are_distinct():
-    from src.config import COMPUTE_BUDGET_MS, PUBLICATION_DEADLINE_MS
+def test_feature_cutoff_is_the_model_rule_not_the_deadline_minus_budget():
+    """The T+5 stage admits events in [T, T+5s). It is NOT shortened by the
+    compute budget: an earlier revision truncated inputs to T+3.8s, which
+    silently changes the model."""
+    from src.config import (
+        COMPUTE_BUDGET_MS,
+        CUTOFF_DEADLINE_CONFLICT_MS,
+        FEATURE_INPUT_CUTOFF_MS,
+        PUBLICATION_DEADLINE_MS,
+    )
 
     t = int(START.timestamp() * NS)
-    assert BoundaryOrchestrator.input_cutoff_ns(t) == t + (
+    assert FEATURE_INPUT_CUTOFF_MS == 5000
+    assert BoundaryOrchestrator.input_cutoff_ns(t) == t + FEATURE_INPUT_CUTOFF_MS * 1_000_000
+    assert BoundaryOrchestrator.input_cutoff_ns(t) != t + (
         PUBLICATION_DEADLINE_MS - COMPUTE_BUDGET_MS
     ) * 1_000_000
     assert BoundaryOrchestrator.publication_deadline_ns(t) == t + PUBLICATION_DEADLINE_MS * 1_000_000
-    assert BoundaryOrchestrator.input_cutoff_ns(t) < BoundaryOrchestrator.publication_deadline_ns(t)
+
+    # an event at T+4.2s is INSIDE the original window (the 3.8s cut dropped it)
+    assert event_admitted(t + 4_200 * 1_000_000, t)
+    assert event_admitted(t + 4_999_999_999, t)
+    # the bound is exclusive, and nothing before T is admitted
+    assert not event_admitted(t + 5_000 * 1_000_000, t)
+    assert not event_admitted(t + 6_000 * 1_000_000, t)
+    assert not event_admitted(t - 1, t)
+
+    # and the conflict is reported, not resolved by moving either clock
+    assert CUTOFF_DEADLINE_CONFLICT_MS == COMPUTE_BUDGET_MS > 0
+    assert BoundaryOrchestrator.cutoff_conflict_ms() == CUTOFF_DEADLINE_CONFLICT_MS
+
+
+def test_packet_source_receives_the_full_five_second_cutoff():
+    seen: list[int] = []
+
+    class Recording(SuppliedFeaturePacketSource):
+        def build(self, target_open, cutoff_ns):
+            seen.append(cutoff_ns)
+            return super().build(target_open, cutoff_ns)
+
+    store = FakeStore()
+    orchestrator = BoundaryOrchestrator(
+        artifacts=FakeArtifacts(),
+        store=store,
+        gateway=None,
+        packet_source=Recording({START.isoformat(): inputs_for(0)}),
+        ticker_resolver=StaticTickerResolver({START.isoformat(): "KXBTC15M-0"}),
+        clock_ns=lambda: int(START.timestamp() * NS),
+    )
+    run_all(orchestrator, C85State(), [START])
+    assert seen == [int(START.timestamp() * NS) + 5_000 * 1_000_000]
+
+
+# --- transaction semantics ---------------------------------------------------
+def test_failed_commit_leaves_authoritative_state_untouched():
+    targets, orchestrator, store = build_case(2)
+    state = C85State()
+    run_all(orchestrator, state, targets[:1])
+    before = state.sha256()
+    before_last = state.last_processed_target_utc
+
+    store.fail_commit = "reject"
+    outcome = run_all(orchestrator, state, targets[1:2])[0]
+    assert outcome.status == "COMMIT_FAILED"
+    assert outcome.committed is False and outcome.state_promoted is False
+    assert state.sha256() == before
+    assert state.last_processed_target_utc == before_last
+
+    # the retry is NOT suppressed, and now succeeds
+    store.fail_commit = None
+    retry = run_all(orchestrator, state, targets[1:2])[0]
+    assert retry.committed is True
+    assert state.last_processed_target_utc == targets[1].isoformat()
+
+
+def test_committed_but_response_lost_is_reconciled_not_re_evaluated():
+    targets, orchestrator, store = build_case(2)
+    state = C85State()
+    run_all(orchestrator, state, targets[:1])
+
+    store.lose_response = True
+    outcome = run_all(orchestrator, state, targets[1:2])[0]
+    # the write landed; reconciliation reads committed identity and promotes
+    assert outcome.committed is True
+    assert state.last_processed_target_utc == targets[1].isoformat()
+    assert len(store.commits) == 2  # not written twice
+
+    store.lose_response = False
+    again = run_all(orchestrator, state, targets[1:2])[0]
+    assert again.status == "DUPLICATE"
+    assert len(store.commits) == 2
+
+
+def test_unconfirmable_commit_does_not_promote_state():
+    targets, orchestrator, store = build_case(1)
+    state = C85State()
+    store.fail_commit = "raise"
+    outcome = run_all(orchestrator, state, targets)[0]
+    assert outcome.status == "COMMIT_FAILED"
+    assert "C85_COMMIT_UNCONFIRMED" in outcome.blocker
+    assert state.last_processed_target_utc is None
+    assert store.commits == []
+
+
+def test_restart_after_failed_commit_continues_from_last_durable_state():
+    targets, orchestrator, store = build_case(6)
+    state = C85State()
+    run_all(orchestrator, state, targets[:3])
+    store.fail_commit = "raise"
+    run_all(orchestrator, state, targets[3:4])
+    store.fail_commit = None
+
+    restored = C85State.from_dict(store.checkpoints[-1])
+    tail = run_all(orchestrator, restored, targets[3:])
+    assert [o.committed for o in tail] == [True] * 3
+    assert restored.last_processed_target_utc == targets[-1].isoformat()
+
+
+def test_lease_loss_before_commit_blocks_the_write():
+    targets, orchestrator, store = build_case(1)
+    store.lease_ok = False
+    state = C85State()
+    outcome = run_all(orchestrator, state, targets)[0]
+    assert outcome.status == "LEASE_LOST"
+    assert store.commits == []
+    assert state.last_processed_target_utc is None
+
+
+# --- outbox / publication lifecycle -----------------------------------------
+def _directional_case(clock_ns):
+    """A forced directional decision, so the lifecycle is observable."""
+    store, gateway = FakeStore(), FakeGateway()
+    state = C85State()
+    for side in (1, -1):
+        for _ in range(200):
+            state.admission_ranks.queues[side].append(0.0)
+            state.filter_ranks.queues[side].append(0.0)
+    orchestrator = BoundaryOrchestrator(
+        artifacts=FakeArtifacts(),
+        store=store,
+        gateway=gateway,
+        packet_source=SuppliedFeaturePacketSource({START.isoformat(): inputs_for(0)}),
+        ticker_resolver=StaticTickerResolver({START.isoformat(): "KXBTC15M-0"}),
+        allow_dispatch=True,
+        clock_ns=clock_ns,
+    )
+    return orchestrator, store, gateway, state
+
+
+def test_outbox_matches_the_signed_ops_contract_and_expires_at_the_ceiling():
+    orchestrator, store, gateway, state = _directional_case(
+        lambda: int(START.timestamp() * NS)
+    )
+    outcome = run_all(orchestrator, state, [START])[0]
+    assert outcome.decision.final_side != 0
+    outbox = store.commits[0]["outbox"]
+    assert set(outbox) == {"dedupe_key", "payload", "expires_at"}
+    assert outbox["expires_at"] == (START + timedelta(milliseconds=5000)).isoformat()
+    # published only after acceptance, and only in the second write
+    assert store.commits[0]["published_at"] is None
+    assert store.dispatch_commits[-1]["published_at"] is not None
+    assert outcome.status == "PUBLISHED" and outcome.accepted is True
+    assert gateway.sent and gateway.sent[0]["side"] == outcome.decision.final_side
+
+
+def test_rejected_dispatch_is_not_marked_published():
+    orchestrator, store, gateway, state = _directional_case(
+        lambda: int(START.timestamp() * NS)
+    )
+
+    async def reject(payload):
+        gateway.sent.append(payload)
+        return {"ok": False, "status": 503}
+
+    gateway.publish = reject
+    outcome = run_all(orchestrator, state, [START])[0]
+    assert outcome.status == "DISPATCH_FAILED"
+    assert outcome.dispatched is True and outcome.accepted is False
+    assert store.dispatch_commits[-1]["published_at"] is None
+
+
+def test_commit_that_crosses_the_deadline_leaves_no_dispatchable_outbox():
+    late = int(START.timestamp() * NS) + 9 * NS
+    orchestrator, store, gateway, state = _directional_case(lambda: late)
+    outcome = run_all(orchestrator, state, [START])[0]
+    assert outcome.status == "EXPIRED"
+    assert store.commits[0]["outbox"] is None   # nothing to dispatch later
+    assert gateway.sent == []
+    assert store.commits[0]["published_at"] is None
 
 
 # --- ticker resolution ------------------------------------------------------
