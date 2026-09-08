@@ -59,11 +59,14 @@ copy_module long_context_model.py "$ROOT/external_research/"
 
 # 4. upstream stage outputs the producers read back
 mkdir -p "$ROOT/t5_precision_output"
-cp -n "$SRC/T0_T5_FEE_COVERAGE_FRONTIER_R1_PACKAGE.zip__expanded/t5_precision_output/." \
+cp -rn "$SRC/T0_T5_FEE_COVERAGE_FRONTIER_R1_PACKAGE.zip__expanded/t5_precision_output/." \
       "$ROOT/t5_precision_output/" 2>/dev/null || true
 
 TEXP="$SRC/T0_T5_TECHNICAL_EXPANSION_R2_PACKAGE.zip__expanded/T0_T5_TECHNICAL_EXPANSION_R2"
 cp -rn "$TEXP/t5_precision_output/." "$ROOT/t5_precision_output/" 2>/dev/null || true
+# Every python module the R2 package shipped: the R3/R4 refine chain imports
+# several of them transitively (e.g. technical_expansion_r2_audit).
+cp -n "$TEXP/external_research/"*.py "$ROOT/external_research/" 2>/dev/null || true
 cp -n "$TEXP/external_research/build_technical_expansion_r2.py" \
       "$TEXP/external_research/build_long_context_features.py" \
       "$TEXP/external_research/download_binance_context_2026.py" \
@@ -71,6 +74,26 @@ cp -n "$TEXP/external_research/build_technical_expansion_r2.py" \
       "$TEXP/external_research/technical_expansion_r2_feature_audit.json" \
       "$TEXP/external_research/metrics_timestamp_daily_audit.csv" \
       "$ROOT/external_research/" 2>/dev/null || true
+
+# T0 external-resource modules: build_long_context_features imports
+# build_t0_external_features from this package.
+T0EXT="$SRC/T0_EXTERNAL_RESOURCE_HUNT_R1_PACKAGE.zip__expanded/T0_EXTERNAL_RESOURCE_HUNT_R1/external_research"
+cp -n "$T0EXT/"*.py "$ROOT/external_research/" 2>/dev/null || true
+
+# lab_t5 inputs the R2 technical-expansion build reads (t45_features.csv lives
+# in the R2 reliability package's own bundled T45 balanced lab package).
+mkdir -p "$ROOT/lab_t5"
+T45LAB="$SRC/T5_RELIABILITY_R2_LAB_PACKAGE.zip__expanded/T5_R2_PACKAGE/source_packages/R2_T45_BALANCED_R1_LAB_PACKAGE.zip__expanded"
+cp -n "$T45LAB/"*.csv "$ROOT/lab_t5/" 2>/dev/null || true
+
+# uploaded forward inputs the R2 build reads from ROOT/upload
+mkdir -p "$ROOT/upload"
+cp -n "$SRC/"*.csv "$ROOT/upload/" 2>/dev/null || true
+
+# T0 prior-candle R2 results the R4 refine chain joins against
+mkdir -p "$ROOT/t0_prior_candle_output"
+cp -n "$SRC/T0_PRIOR_CANDLE_R2_RESEARCH_PACKAGE.zip__expanded/T0_PRIOR_CANDLE_R2_PACKAGE/results/"* \
+      "$ROOT/t0_prior_candle_output/" 2>/dev/null || true
 
 cp "$REPO/reproduction/compare.py" "$ROOT/"
 cp "$REPO/reproduction/sitecustomize.py" "$ROOT/external_research/" 2>/dev/null || true

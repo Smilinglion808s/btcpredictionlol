@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -252,12 +253,24 @@ def _prepare_pinned_repo(work: Path) -> Path:
         raise RuntimeError(
             f"pinned repo parquet parity failure: expected {expected_sha}, got {actual_sha}"
         )
-    if not (repo_dir / ".git").exists():
-        subprocess.run(["git", "init", "-q"], cwd=repo_dir, check=True)
-        subprocess.run(["git", "config", "user.email", "c85-continuation@example.com"], cwd=repo_dir, check=True)
-        subprocess.run(["git", "config", "user.name", "c85-continuation"], cwd=repo_dir, check=True)
-        subprocess.run(["git", "add", "-A"], cwd=repo_dir, check=True)
-        subprocess.run(["git", "commit", "-q", "-m", "pinned snapshot (archived, sha-verified)"], cwd=repo_dir, check=True)
+    # The producer reads the snapshot's identity with `git rev-parse HEAD` and
+    # records it as provenance. A fresh local commit would stamp a synthetic
+    # hash, so the bare .git below is pinned to the *archived* commit instead:
+    # rev-parse resolves a detached HEAD written as a raw object name, giving
+    # the producer the true upstream commit it originally recorded.
+    git_dir = repo_dir / ".git"
+    commit = audit["sources"]["repo_commit"]
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError(f"archived repo_commit is not a commit id: {commit!r}")
+    if not git_dir.exists():
+        (git_dir / "objects").mkdir(parents=True, exist_ok=True)
+        (git_dir / "refs").mkdir(parents=True, exist_ok=True)
+        (git_dir / "config").write_text("[core]\n\trepositoryformatversion = 0\n")
+        (git_dir / "HEAD").write_text(commit + "\n")
+    resolved = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo_dir, text=True).strip()
+    if resolved != commit:
+        raise RuntimeError(f"pinned repo HEAD is {resolved}, expected {commit}")
     return repo_dir
 
 

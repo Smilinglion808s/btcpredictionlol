@@ -34,6 +34,8 @@ from .stages import CACHE, VerbatimRecord, load_verbatim, publish, workspace_for
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "evaluation-fixtures" / "upstream"
+# The reference packet sits one level above the per-ledger upstream fixtures.
+PACKET = REPO / "evaluation-fixtures" / "upstream_packet.parquet"
 
 SOURCES = UPSTREAM / "ancestor" / "source"
 LAB_C81 = UPSTREAM / "upstream" / "lab" / "c81" / "lab"
@@ -83,6 +85,37 @@ def _parity_check(new: pd.DataFrame, ref: pd.DataFrame, key: str, name: str) -> 
 # --------------------------------------------------------------------------- #
 # Stage: structure_valid  (C75 -> C76 -> C79)
 # --------------------------------------------------------------------------- #
+def _normalise_kline_units(frame: pd.DataFrame, stamp: str) -> pd.DataFrame:
+    """Put a daily klines file on the millisecond epoch the producers assume.
+
+    data.binance.vision switched its kline open/close columns to microseconds
+    partway through the archive, so a straight concatenation mixes two epochs
+    and silently drops every microsecond day at the research-end filter. This
+    only rescales the timestamp representation -- no bar, price or size value
+    is touched -- and it refuses to guess: a day must be wholly in one unit and
+    must land on the calendar date the file is named for.
+    """
+    frame = frame.copy()
+    # A bar opens exactly on the minute and closes at its final representable
+    # instant, so in microseconds those are ...000 and ...999999 respectively.
+    for column, remainder in (("open_ms", 0), ("close_ms", 999_999)):
+        values = frame[column].astype("int64")
+        micro = values > 10 ** 15
+        if micro.all():
+            if (values % 1_000_000 != remainder).any():
+                raise RuntimeError(f"{stamp}: {column} is not on a microsecond bar boundary")
+            values = values // 1000
+        elif micro.any():
+            raise RuntimeError(f"{stamp}: {column} mixes millisecond and microsecond epochs")
+        frame[column] = values
+    opened = pd.to_datetime(frame["open_ms"], unit="ms", utc=True)
+    if not (opened.dt.strftime("%Y-%m-%d") == stamp).all():
+        raise RuntimeError(f"{stamp}: normalised open_ms does not fall on the archived day")
+    if not frame["close_ms"].sub(frame["open_ms"]).eq(59_999).all():
+        raise RuntimeError(f"{stamp}: normalised bars are not 1-minute wide")
+    return frame
+
+
 def _binance_minutes_frame(end: pd.Timestamp) -> pd.DataFrame:
     """Binance SPOT BTCUSDT 1m ledger from RESEARCH_START to `end`.
 
@@ -128,7 +161,7 @@ def _binance_minutes_frame(end: pd.Timestamp) -> pd.DataFrame:
                     continue
             frame = frame[columns[:11]]
             frame.to_parquet(cached, index=False)
-        frames.append(pd.read_parquet(cached))
+        frames.append(_normalise_kline_units(pd.read_parquet(cached), stamp))
         day += pd.Timedelta(days=1)
     if not frames:
         raise RuntimeError("no Binance spot 1m data recovered for the requested window")
@@ -167,7 +200,16 @@ def _fetch_live_minutes(start: pd.Timestamp, stop: pd.Timestamp) -> pd.DataFrame
         time.sleep(0.1)
     columns = ["open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
                "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote"]
-    return pd.DataFrame(rows, columns=columns)
+    frame = pd.DataFrame(rows, columns=columns)
+    # The REST endpoint returns every price/size as a decimal *string*, while the
+    # daily archive CSVs parse as numbers. Same values, different representation:
+    # cast to the archive's exact dtypes so a live-recovered day is byte-equal in
+    # meaning to an archived one and downstream numeric ufuncs behave identically.
+    integer = ["open_ms", "close_ms", "trade_count"]
+    for column in columns:
+        frame[column] = pd.to_numeric(frame[column])
+        frame[column] = frame[column].astype("int64" if column in integer else "float64")
+    return frame
 
 
 def run_structure_valid(end: pd.Timestamp, previous: dict | None) -> StageResult:
@@ -215,8 +257,12 @@ def run_structure_valid(end: pd.Timestamp, previous: dict | None) -> StageResult
     if unrecoverable:
         notes["unrecoverable_minute_days"] = unrecoverable
 
-    ref_path = FIXTURES / "upstream_packet.parquet"
-    if ref_path.exists():
+    ref_path = PACKET
+    if not ref_path.exists():
+        raise FileNotFoundError(
+            f"{ref_path}: historical-prefix parity reference is missing; refusing to "
+            "publish structure_valid unverified")
+    if True:
         ref = pd.read_parquet(ref_path)[["ts", "structure_valid"]]
         notes.update(_parity_check(result, ref, "ts", "structure_valid"))
     else:
@@ -242,9 +288,14 @@ def _ensure_c85root() -> None:
 
 
 def _load_patched_htf_models(end: pd.Timestamp, work: Path):
-    target = work / "htf_structure_r3_models.py"
-    if not target.exists() or target.read_bytes() != HTF_MODELS.read_bytes():
-        shutil.copy2(HTF_MODELS, target)
+    staged = work / "htf_structure_r3_models.py"
+    if not staged.exists() or staged.read_bytes() != HTF_MODELS.read_bytes():
+        shutil.copy2(HTF_MODELS, staged)
+    # The producer derives its data ROOT from `Path(__file__).parents[1]`, so it
+    # has to be loaded from inside the c85root workspace or it looks for the
+    # recovered pickles next to the staging directory instead.
+    target = C85ROOT / "external_research" / staged.name
+    shutil.copy2(staged, target)
     module, record = load_producer(target, end, name="external_research.htf_structure_r3_models")
     import external_research  # noqa: E402  (package root lives in ROOT, already on sys.path)
     external_research.htf_structure_r3_models = module
@@ -253,6 +304,15 @@ def _load_patched_htf_models(end: pd.Timestamp, work: Path):
 
 def run_r4_1(end: pd.Timestamp, previous: dict | None) -> StageResult:
     _ensure_c85root()
+    # Earlier stages in the same process import their own `external_research`
+    # package from a different recovered workspace. Left cached, that shadows
+    # this producer's package and its modules go missing. Drop the cached
+    # package (never the producers themselves) and put this root first.
+    for name in [n for n in sys.modules
+                 if n == "external_research" or n.startswith("external_research.")]:
+        del sys.modules[name]
+    for stale in [p for p in sys.path if p.endswith("external_research")]:
+        sys.path.remove(stale)
     sys.path.insert(0, str(C85ROOT))
     sys.path.insert(0, str(C85ROOT / "external_research"))
     work = workspace_for("r4_1")
