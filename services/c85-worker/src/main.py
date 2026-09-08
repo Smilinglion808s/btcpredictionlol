@@ -1,18 +1,21 @@
-"""C85 worker entrypoint.
+"""C85 serving worker entrypoint.
 
-Startup sequence (all automatic; there is no manual warmup button):
+This process is the *serving* half of the C85 deployment split. It does not
+reconstruct history and it does not run research producers. Startup is:
 
-  1. verify artifacts and the feature order
-  2. restore the newest durable checkpoint, else load the historical seed
-  3. start the market-data collectors
-  4. bridge the gap chronologically as RESEARCH_BACKFILL, checkpointing
-  5. run any applicable scheduled daily/monthly fit
-  6. verify feeds, experts and measured timing
-  7. only then flip to READY and arm the boundary scheduler
+  1. load the ACTIVE deployment bundle (local directory, else download it
+     through the signed backend) and verify every file hash
+  2. verify the feature order against the bundle's artifacts
+  3. restore the newest durable checkpoint, else adopt the bundle's state
+  4. start the market-data collectors and advance state one target at a time
+  5. verify feeds, experts, bundle freshness and measured timing
+  6. only then flip to READY and arm the boundary scheduler
 
-Readiness fails closed. Any missing feed, unconnected inherited expert, absent
-applicable fit or measured T+5 overrun keeps the worker BLOCKED with a concrete
-reason, and no live prediction is published.
+The historical rebuild and the scheduled daily/monthly refits live in the
+offline bootstrap job (`bootstrap/`), which publishes a new bundle. Readiness
+fails closed: a missing feed, an unconnected inherited expert, a stale bundle or
+a measured T+5 overrun keeps the worker BLOCKED with a concrete reason, and no
+live prediction is published.
 """
 from __future__ import annotations
 
@@ -26,12 +29,14 @@ import uvicorn
 
 from .artifacts import ArtifactStore
 from .backend import BackendClient
+from .bundle import BundleError, DeploymentBundle, load_bundle
 from .config import DISPLAY_NAME, MODEL_VERSION, load_settings
 from .experts import ExpertRegistry, LiveExpertChain
 from .feeds import FeedRegistry
 from .gateway import GatewayClient
 from .health import create_app
 from .scheduler import BoundaryScheduler, RunTiming, next_boundary
+from .state import C85State
 from .store import C85Store
 from .warmup import Stage, WarmupCoordinator
 
@@ -39,12 +44,29 @@ from .warmup import Stage, WarmupCoordinator
 class Worker:
     def __init__(self) -> None:
         self.settings = load_settings()
-        self.artifacts = ArtifactStore(self.settings.artifact_dir)
         self.backend = BackendClient(
             self.settings.ops_url,
             self.settings.gateway_secret,
             self.settings.worker_id,
         )
+        # The bundle is the serving contract. Without it the worker has nothing
+        # legitimate to predict with, so a failure here is a blocking reason,
+        # never a fallback to whatever happens to be on disk.
+        self.bundle: DeploymentBundle | None = None
+        self.bundle_error: str | None = None
+        try:
+            self.bundle = load_bundle(
+                self.settings.bundle_dir,
+                backend=self.backend,
+                download=self.settings.bundle_download,
+            )
+        except BundleError as exc:
+            self.bundle_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 — network/storage failure
+            self.bundle_error = f"C85_BUNDLE_FETCH_FAILED: {exc}"
+
+        artifact_root = self.bundle.artifact_dir if self.bundle else self.settings.artifact_dir
+        self.artifacts = ArtifactStore(artifact_root)
         self.store = C85Store(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
         self.experts = ExpertRegistry()
@@ -59,6 +81,8 @@ class Worker:
         self.blocking_reason: str | None = None
         self.owns_lease = False
         self.scheduler = BoundaryScheduler(self.on_boundary)
+
+
 
 
     # -- readiness --------------------------------------------------------------
