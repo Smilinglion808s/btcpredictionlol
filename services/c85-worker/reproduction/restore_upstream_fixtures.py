@@ -115,20 +115,38 @@ def build_c51_reference_tail() -> None:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    missing: list[str] = []
     for name, (basename, fragment) in LEDGERS.items():
-        source = find(basename, fragment)
+        try:
+            source = find(basename, fragment)
+        except FileNotFoundError:
+            # A ledger absent from the recovery archives is a real gap, not a
+            # crash: record it and let the remaining fixtures rebuild so the
+            # parity suite can still gate everything that IS recoverable.
+            missing.append(name)
+            print(f"{name}: MISSING from {UPX} (fixture not built)")
+            continue
         frame = pd.read_csv(source, parse_dates=["ts"])
         frame.to_parquet(OUT / f"{name}.parquet", index=False)
         print(f"{name}: {len(frame)} rows <- {source}")
 
     manifest = {}
     for producer in PRODUCERS:
-        path = find(producer)
+        try:
+            path = find(producer)
+        except FileNotFoundError:
+            missing.append(producer)
+            print(f"{producer}: MISSING from {UPX} (not pinned)")
+            continue
         manifest[producer] = {
             "path": str(path.relative_to(UPX)),
             "bytes": path.stat().st_size,
             "sha256": sha256(path),
         }
+    if missing:
+        (OUT / "MISSING.json").write_text(json.dumps(sorted(missing), indent=2))
+    elif (OUT / "MISSING.json").exists():
+        (OUT / "MISSING.json").unlink()
     (OUT / "UPSTREAM_RESOLVED.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     print(f"UPSTREAM_RESOLVED.json: {len(manifest)} producers pinned")
 
