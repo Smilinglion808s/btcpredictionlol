@@ -305,16 +305,28 @@ def _load_patched_htf_models(end: pd.Timestamp, work: Path):
 def run_r4_1(end: pd.Timestamp, previous: dict | None) -> StageResult:
     _ensure_c85root()
     # Earlier stages in the same process import their own `external_research`
-    # package from a different recovered workspace. Left cached, that shadows
-    # this producer's package and its modules go missing. Drop the cached
-    # package (never the producers themselves) and put this root first.
+    # package from a *different* recovered workspace. Left in place, those
+    # sys.modules entries and sys.path roots make `external_research` resolve to
+    # the wrong portion and this producer's modules appear to be missing. Drop
+    # the cached package (never the producers themselves), and while this stage
+    # runs let only the c85root workspace answer for it.
     for name in [n for n in sys.modules
                  if n == "external_research" or n.startswith("external_research.")]:
         del sys.modules[name]
-    for stale in [p for p in sys.path if p.endswith("external_research")]:
-        sys.path.remove(stale)
+    other_roots = str(CACHE) if "CACHE" in globals() else str(C85ROOT.parent)
+    saved_path = list(sys.path)
+    sys.path[:] = [p for p in sys.path
+                   if not (p.startswith(other_roots) and not p.startswith(str(C85ROOT)))]
     sys.path.insert(0, str(C85ROOT))
     sys.path.insert(0, str(C85ROOT / "external_research"))
+    importlib.invalidate_caches()
+    try:
+        return _run_r4_1_inner(end, previous)
+    finally:
+        sys.path[:] = saved_path
+
+
+def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
     work = workspace_for("r4_1")
     _, models_patch = _load_patched_htf_models(end, work)
 
