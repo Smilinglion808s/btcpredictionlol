@@ -1,12 +1,12 @@
 import sys, pathlib, pandas as pd
-sys.path.insert(0,'/tmp/c30root')
+sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root')
 from external_research import c37_balanced_maturation_r1 as c37
-out = pathlib.Path('/tmp/c30root/c37_repro_out'); out.mkdir(parents=True, exist_ok=True)
+out = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/c37_repro_out'); out.mkdir(parents=True, exist_ok=True)
 c37.OUT = out
-c37.PHASE3_OUT = pathlib.Path('/tmp/c30root/phase3_repro_out')  # connected: consume the newly ported upstream ledger
-c37.TIMING_OUT = pathlib.Path('/tmp/c30root/c36t_repro_out')     # connected: reproduced timing ledger
+c37.PHASE3_OUT = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/phase3_repro_out')  # connected: consume the newly ported upstream ledger
+c37.TIMING_OUT = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/c36t_repro_out')     # connected: reproduced timing ledger
 c37.main()
-ref = pd.read_csv('/tmp/c30root/external_research/c37_balanced_maturation_r1_output/c37_shadow_ledger.csv', parse_dates=['ts'])
+ref = pd.read_csv('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/external_research/c37_balanced_maturation_r1_output/c37_shadow_ledger.csv', parse_dates=['ts'])
 new = pd.read_csv(out/'c37_shadow_ledger.csv', parse_dates=['ts'])
 import numpy as np
 print("rows", len(ref), len(new))

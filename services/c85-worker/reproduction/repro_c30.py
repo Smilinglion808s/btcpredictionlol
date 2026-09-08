@@ -1,7 +1,7 @@
 import sys, pathlib, pandas as pd
-sys.path.insert(0,'/tmp/c30root')
+sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root')
 from external_research import c30_c70_lab_manager_r2 as c30
-out = pathlib.Path('/tmp/c30root/c30_repro_out'); out.mkdir(parents=True, exist_ok=True)
+out = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/c30_repro_out'); out.mkdir(parents=True, exist_ok=True)
 c30.OUT = out
 c30.main()
 from compare import compare

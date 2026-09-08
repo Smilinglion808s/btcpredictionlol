@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild the ephemeral reproduction workspace (/tmp/c85root) from the
+# Rebuild the ephemeral reproduction workspace (/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root) from the
 # persistent recovery archives. The sandbox /tmp is wiped periodically, so this
 # script is idempotent and cheap to re-run. Heavy derived inputs are cached in
 # the persistent (gitignored) evaluation-fixtures/cache directory and symlinked
@@ -7,8 +7,8 @@
 set -euo pipefail
 
 UPLOADS=${UPLOADS:-/mnt/user-uploads}
-UPX=${UPX:-/tmp/upx}
-ROOT=${ROOT:-/tmp/c85root}
+UPX=${UPX:-/dev-server/services/c85-worker/evaluation-fixtures/cache/upx}
+ROOT=${ROOT:-/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root}
 REPO=${REPO:-/dev-server/services/c85-worker}
 CACHE="$REPO/evaluation-fixtures/cache"
 mkdir -p "$CACHE"

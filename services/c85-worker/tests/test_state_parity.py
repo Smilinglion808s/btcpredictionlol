@@ -32,7 +32,10 @@ from src.engine import confirmed_extension_side  # noqa: E402
 from src.state import C85State, DeteriorationState, RankFamily  # noqa: E402
 
 REPO_FIXTURES = Path(__file__).resolve().parents[1] / "evaluation-fixtures"
-ARTIFACTS = Path(os.environ.get("C85_ARTIFACT_DIR", "/artifacts"))
+ARTIFACTS = Path(os.environ.get(
+    "C85_ARTIFACT_DIR",
+    str(Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "cache" / "kit"),
+))
 FIXTURES = ARTIFACTS / "fixtures"
 if not (FIXTURES / "policy_frame.parquet").exists():
     # Installed, in-repo copy of the kit fixtures (default, so these parity

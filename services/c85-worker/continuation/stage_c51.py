@@ -2,7 +2,7 @@
 acquisition + rebase, and the C54 error-complementarity router.
 
 Every stage below runs a *recovered producer* copied verbatim into a durable
-workspace under /tmp/c85work, exactly as stages.py does for the earlier
+workspace under the persistent continuation cache, exactly as stages.py does for the earlier
 stages. Nothing here re-implements a feature, a fitting schedule, a source
 venue or a model rule; the only adjustable knob is a producer's own research
 END constant, patched through the existing `endpatch.load_producer` helper.
@@ -46,7 +46,7 @@ C51_PRODUCERS = {
     "c54_router": SOURCES / "e18d8b2842ab" / "build_c54_error_complementarity_router_r1.py",
 }
 
-ARCHIVE_DATA = Path("/tmp/upx/ancestor/data")
+ARCHIVE_DATA = Path("/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/ancestor/data")
 C42_LEDGER_CACHE_NAME = "c42_ledger.csv"
 
 
@@ -445,7 +445,7 @@ def run_c51_rebase(end: pd.Timestamp, previous: dict | None) -> StageResult:
     # Historical-prefix parity: labels/predictions on the overlapping prefix
     # must match the archived ledger exactly.
     archived_ledger = pd.read_csv(
-        "/tmp/upx/ancestor/data/C51_TARGET_NATIVE_REBASE_R1_LEDGER.csv.gz",
+        "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/ancestor/data/C51_TARGET_NATIVE_REBASE_R1_LEDGER.csv.gz",
         usecols=["ts", "label", "primary_prediction"],
     )
     fresh_ledger = pd.read_csv(ledger_path, usecols=["ts", "label", "primary_prediction"])

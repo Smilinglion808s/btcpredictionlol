@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Build /tmp/c30root: the workspace the C30 -> phase3 -> C36 -> C37 producers
+# Build /dev-server/services/c85-worker/evaluation-fixtures/cache/c30root: the workspace the C30 -> phase3 -> C36 -> C37 producers
 # need in order to be re-executed from source.
 #
-# Sources are the recovered archives already expanded at /tmp/upx by
+# Sources are the recovered archives already expanded at /dev-server/services/c85-worker/evaluation-fixtures/cache/upx by
 # setup_workspace.sh. Nothing here is transcribed or synthesised: every module
 # and every input ledger is copied verbatim out of the archive.
 set -euo pipefail
 
-UPX=${UPX:-/tmp/upx}
-ROOT=${ROOT:-/tmp/c30root}
+UPX=${UPX:-/dev-server/services/c85-worker/evaluation-fixtures/cache/upx}
+ROOT=${ROOT:-/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root}
 ER="$ROOT/external_research"
 mkdir -p "$ER"
 
@@ -65,6 +65,17 @@ mv_src=$(find "$UPX" -type d -name multivenue_r1 | head -1 || true)
 # root; the lab manager expects them under external_research/multivenue_r1/.
 mvc="$UPX/upstream/vault_work/legacy_lab2/sources/T0_T5_MULTIVENUE_LAB_R1_COMPACT.zip__expanded"
 [ -d "$mvc" ] && cp -rn "$mvc/." "$ER/multivenue_r1/" 2>/dev/null || true
+
+# t0_prior_candle_output/: evaluate_external_direction_r1 reads the recovered
+# T0 prior-candle rows back from the lab root. The only surviving copy lives in
+# the T0_PRIOR_CANDLE_R2 research package's results/ directory.
+mkdir -p "$ROOT/t0_prior_candle_output"
+t0pc="$UPX/upstream/vault_work/legacy_lab2/sources/T0_PRIOR_CANDLE_R2_RESEARCH_PACKAGE.zip__expanded/T0_PRIOR_CANDLE_R2_PACKAGE/results"
+for f in t0_prior_candle_r2_rows.csv t0_selected_forward_rows.csv \
+         t0_selected_pre_forward_rows.csv T0_PRIOR_CANDLE_R2_FREEZE.json \
+         T0_PRIOR_CANDLE_R1_FREEZE.json; do
+  [ -f "$t0pc/$f" ] && cp -n "$t0pc/$f" "$ROOT/t0_prior_candle_output/" || true
+done
 
 cp -f "$(dirname "$0")/compare.py" "$ROOT/" 2>/dev/null || true
 

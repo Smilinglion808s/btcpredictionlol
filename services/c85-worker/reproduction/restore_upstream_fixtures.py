@@ -4,7 +4,7 @@ The parity fixtures under ``evaluation-fixtures/upstream/`` are large historical
 intermediates that are never committed. This script regenerates them from the
 expanded upstream archive so a fresh workspace can run the test suite:
 
-    UPX=/tmp/upx python3 restore_upstream_fixtures.py
+    UPX=/dev-server/services/c85-worker/evaluation-fixtures/cache/upx python3 restore_upstream_fixtures.py
 
 It writes one parquet per recovered ledger plus ``UPSTREAM_RESOLVED.json``,
 which pins every named producer module by path, byte size and SHA-256.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-UPX = Path(os.environ.get("UPX", "/tmp/upx"))
+UPX = Path(os.environ.get("UPX", str(Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "cache" / "upx")))
 OUT = Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "upstream"
 
 # fixture name -> (basename of the recovered CSV, optional path fragment filter)
@@ -61,7 +61,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-KIT = Path(os.environ.get("C85_ARTIFACT_DIR", "/tmp/c85/kit"))
+KIT = Path(os.environ.get("C85_ARTIFACT_DIR", str(Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "cache" / "kit")))
 C42_INPUTS = "vault_work/legacy_c42/C42_MATURATION_CONSENSUS_R1/inputs"
 ANCESTOR = UPX / "ancestor" / "data"
 REF_COLUMNS = (

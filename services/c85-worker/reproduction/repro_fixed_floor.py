@@ -1,5 +1,5 @@
 import sys, numpy as np, pandas as pd
-sys.path.insert(0,'/tmp/c30root')
+sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root')
 from external_research import t0_t5_fee_coverage_frontier_r1 as control
 from external_research import t0_t5_fixed_floor_containment_r1 as ff
 from external_research.t0_t5_branch_budget_stress_r1 import add_containment, evaluate

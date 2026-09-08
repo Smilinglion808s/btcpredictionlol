@@ -36,9 +36,9 @@ import sys
 import numpy as np
 import pandas as pd
 
-LAB = os.environ.get("LAB", "/tmp/upx/upstream/lab/c81/lab")
-MINUTES = os.environ.get("MINUTES", "/tmp/c79/btc_minutes_spot.parquet")
-PACKET = os.environ.get("PACKET", "/tmp/c85/kit/fixtures/upstream_packet.parquet")
+LAB = os.environ.get("LAB", "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/lab/c81/lab")
+MINUTES = os.environ.get("MINUTES", "/dev-server/services/c85-worker/evaluation-fixtures/cache/c79/btc_minutes_spot.parquet")
+PACKET = os.environ.get("PACKET", "/dev-server/services/c85-worker/evaluation-fixtures/cache/kit/fixtures/upstream_packet.parquet")
 
 sys.path.insert(0, LAB)
 from research_c75 import source as c75  # noqa: E402

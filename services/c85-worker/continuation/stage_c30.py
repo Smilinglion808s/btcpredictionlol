@@ -41,7 +41,8 @@ from .stages import VerbatimRecord, publish
 
 REPO = Path(__file__).resolve().parents[1]
 SETUP = REPO / "reproduction" / "setup_c30_workspace.sh"
-ROOT = Path(os.environ.get("C85_C30_ROOT", "/tmp/c30root"))
+ROOT = Path(os.environ.get(
+    "C85_C30_ROOT", str(REPO / "evaluation-fixtures" / "cache" / "c30root")))
 
 LEGACY_C37 = UPSTREAM / "upstream" / "vault_work" / "legacy_c37" / "external_research"
 
@@ -65,7 +66,7 @@ class WorkspaceMissing(RuntimeError):
 # workspace
 # --------------------------------------------------------------------------- #
 def ensure_workspace() -> Path:
-    """Idempotently (re)build /tmp/c30root from the expanded recovery archives."""
+    """Idempotently (re)build /dev-server/services/c85-worker/evaluation-fixtures/cache/c30root from the expanded recovery archives."""
     marker = ROOT / "external_research" / "c30_c70_lab_manager_r2.py"
     if not marker.exists():
         result = subprocess.run(["bash", str(SETUP)], capture_output=True, text=True)
@@ -192,9 +193,10 @@ def run_external_direction(end: pd.Timestamp, previous: dict | None) -> StageRes
     for stale in [m for m in sys.modules if m.startswith("evaluate_r4_2_multivenue_r1")]:
         del sys.modules[stale]
     module, record = _verbatim("evaluate_external_direction_r1")
-    out = ROOT / "external_direction_out"
+    # The producer records every emitted path relative to its own ROOT anchor,
+    # so its OUTPUT directory must stay where the original build put it.
+    out = Path(module.OUTPUT)
     out.mkdir(parents=True, exist_ok=True)
-    module.OUTPUT = out
     module.main()
     ledger = pd.read_csv(out / "r4_2_external_direction_ledger.csv.gz")
     return _result(FROZEN_END, len(ledger), _publish_dir(out, "external_direction"), [record],
