@@ -32,6 +32,8 @@ PRODUCERS = {
     "kalshi_early_prior": SOURCES / "ed5425956069" / "acquire_kalshi_early_prior_r1.py",
     "polymarket_early_prior": SOURCES / "030451994e65" / "acquire_polymarket_early_prior_r1.py",
     "c51_target_native": SOURCES / "fa4df3e821b2" / "acquire_c51_target_native_data_r1.py",
+    "c51_rebase": SOURCES / "06cf04da3fa1" / "build_c51_target_native_rebase_r1.py",
+    "c42": SOURCES / "01c50b819f8e" / "build_c42_maturation_consensus_r1.py",
 }
 
 
