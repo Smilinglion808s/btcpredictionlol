@@ -210,8 +210,13 @@ class Worker:
 
         seed = self.settings.artifact_dir / "fixtures" / "historical_seed_2026-09-01.json"
         self.state, resumed = self.warmup.restore_or_seed(seed)
-        pending = self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
+        # Planning the bridge is not running it. The plan is kept so readiness
+        # can refuse to arm the scheduler while catch-up work is outstanding;
+        # catch-up itself is off the live deadline path and runs as a separate
+        # RESEARCH_BACKFILL pass, never inside on_boundary.
+        self.pending_bridge = self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
         self.warmup.progress.next_target = next_boundary().isoformat()
+
 
         self.readiness, self.blocking_reason = self.evaluate_readiness()
         if self.readiness == "READY":
