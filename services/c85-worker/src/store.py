@@ -180,27 +180,84 @@ class C85Store:
             raise
         return res.get("lease", {"granted": False})
 
+    def verify_lease(self, ttl_seconds: int = 60, lease_key: str = "c85:boundary") -> dict[str, Any]:
+        """Re-assert ownership immediately before a commit.
+
+        LIMITATION, stated rather than hidden: `c85_commit_decision` takes no
+        lease token and performs no fence check (see the migration body), so the
+        backend cannot reject a write from a superseded worker. The strongest
+        available guard is this fresh round-trip — `c85_acquire_lease` renews for
+        the same owner and hands the lease to a different owner with a strictly
+        higher fence — checked against the fence this worker last held. A
+        competing worker therefore invalidates us before we write, but the race
+        window between this call and the commit is NOT closed by the database.
+        """
+        lease = self.acquire_lease(ttl_seconds=ttl_seconds, lease_key=lease_key)
+        owner = lease.get("owner_id")
+        fence = lease.get("fence")
+        held = self._lease_fence
+        ok = bool(lease.get("granted")) and owner == self.worker_id and (
+            held is None or (fence is not None and int(fence) == int(held))
+        )
+        if ok and fence is not None:
+            self._lease_fence = int(fence)
+        return {"ok": ok, "lease": lease, "held_fence": held}
+
+    def note_lease(self, lease: dict[str, Any]) -> None:
+        fence = lease.get("fence")
+        if lease.get("granted") and fence is not None:
+            self._lease_fence = int(fence)
+
     # -- targets ---------------------------------------------------------------
     def commit_decision(
         self,
         decision: Decision,
         *,
-        published: bool,
+        published_at: str | None = None,
         state: C85State | None = None,
         stage: str = "READY",
         outbox: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Atomic: decision row + checkpoint advancement + outbox, or nothing."""
+        """Atomic: decision row + checkpoint advancement + outbox, or nothing.
+
+        `outbox` must match the signed contract in src/lib/c85/ops.server.ts:
+        {dedupe_key, payload, expires_at}. Anything else is rejected by Zod.
+        """
         return self.backend.call(
             "decision.commit",
-            target=target_row(decision, published=published),
+            target=target_row(decision, published_at=published_at),
             checkpoint=None if state is None else self.checkpoint_payload(state, stage),
             outbox=outbox,
         )
 
-    def upsert_target(self, decision: Decision, *, published: bool) -> dict[str, Any]:
-        res = self.commit_decision(decision, published=published)
+    def commit_dispatch_result(
+        self,
+        decision: Decision,
+        *,
+        published_at: str | None,
+    ) -> dict[str, Any]:
+        """Second, prediction-preserving write recording the dispatch outcome.
+
+        The immutability trigger (`c85_targets_guard_immutable`) blocks changes
+        to final_side / probabilities / features / identity on a published live
+        row and allows exactly this: timing, status and published_at. No new ops
+        contract is invented — this is the same `decision.commit` op.
+        """
+        return self.backend.call(
+            "decision.commit",
+            target=target_row(decision, published_at=published_at),
+            checkpoint=None,
+            outbox=None,
+        )
+
+    def committed_identity(self) -> dict[str, Any] | None:
+        """Read back the durable checkpoint to resolve an ambiguous commit."""
+        return self.latest_checkpoint()
+
+    def upsert_target(self, decision: Decision, *, published_at: str | None = None) -> dict[str, Any]:
+        res = self.commit_decision(decision, published_at=published_at)
         return {"id": res.get("target_id")}
+
 
     def mark_missed(self, ticker: str, target_open: datetime, reason: str) -> None:
         """An expired target becomes an explicit row and never a catch-up webhook."""
