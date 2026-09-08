@@ -17,6 +17,10 @@ export type Ops = z.infer<typeof opSchema>;
 
 const nsish = z.union([z.string(), z.number(), z.null()]).optional();
 
+/** Private bucket holding versioned C85 serving bundles (never public). */
+export const BUNDLE_BUCKET = "c85-bundles";
+
+
 const checkpointSchema = z.object({
   model_version: z.string().default(C85_MODEL_VERSION),
   as_of_utc: z.string().nullable().optional(),
