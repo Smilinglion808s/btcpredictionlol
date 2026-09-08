@@ -87,6 +87,11 @@ class Worker:
 
     # -- readiness --------------------------------------------------------------
     def evaluate_readiness(self) -> tuple[str, str | None]:
+        if self.bundle is None:
+            return "BLOCKED", self.bundle_error or "C85_BUNDLE_MISSING"
+        stale = self.bundle.freshness_problem(self.settings.bundle_max_age_hours)
+        if stale:
+            return "BLOCKED", stale
         missing_feeds = self.feeds.missing()
         if missing_feeds:
             return "BLOCKED", f"C85_FEEDS_STALE: {', '.join(missing_feeds)}"
@@ -109,6 +114,7 @@ class Worker:
             "stage": self.warmup.progress.stage.value,
             "blocking_reason": self.blocking_reason,
             "progress": self.warmup.progress.as_dict(),
+            "bundle": self.bundle.inventory() if self.bundle else {"error": self.bundle_error},
             "artifacts": self.artifacts.inventory(),
             "feeds": self.feeds.watermarks(),
             "experts": self.experts.status(),
@@ -116,6 +122,7 @@ class Worker:
             "allow_live_publication": self.settings.allow_live_publication,
             "at": datetime.now(timezone.utc).isoformat(),
         }
+
 
     # -- boundary ---------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> None:
