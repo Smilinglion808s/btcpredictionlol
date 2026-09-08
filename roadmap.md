@@ -46,9 +46,12 @@ Cursors come from `continuation/manifests/_status.json` (durable, survives cache
 | --- | --- |
 | C51 serving heads (`artifacts/c51/{direction,meta}/*.json`) | STALE at 2026-09-01. The frozen producer emits standardized coefficients + diagnostics only, not the per-block imputation/centre/scale the serving schema needs. Route: export them from the already-reviewed `src/experts/c51.py` transcription. No fabricated fields. |
 | C57 packet, C61/C63/C67/C68/C69, C71 direction, C85 heads | TODO |
+| `Worker.on_boundary` live compute body | NOT IMPLEMENTED - raises `C85_PIPELINE_INCOMPLETE` (src/main.py:119). This is the next bounded step. |
+| Durable store the Railway worker can read (volume or private bucket) | BLOCKED - needs a decision/credentials; `/mnt/documents` is Lovable-side only |
 | Railway artifact + checkpoint deploy, restart-resume proof | TODO |
 | Live start at next valid boundary, publication by T+5 | TODO |
 | Webhooks | C85 stays out of `WEBHOOK_ALLOWED_MODELS`; T45 execution untouched |
+
 
 ## Resumability
 Each stage writes `evaluation-fixtures/cache/continuation/checkpoints/<stage>.json`
