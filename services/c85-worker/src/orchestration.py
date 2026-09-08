@@ -214,9 +214,16 @@ class BoundaryOrchestrator:
         try:
             ticker = self.ticker_resolver.resolve(target_open)
         except Exception as exc:  # noqa: BLE001
-            reason = f"C85_TICKER_UNRESOLVED: {exc}"
-            self.store.mark_missed(None, target_open, reason)
-            return BoundaryOutcome(None, target_open, "MISSED", blocker=reason)
+            # `target.missed` requires a ticker string (see
+            # src/lib/c85/ops.server.ts), so the row carries the UNVERIFIED
+            # candidate label the resolver would have tried, never a claim that
+            # this contract exists. The reason states it plainly.
+            label = getattr(self.ticker_resolver, "unverified_label", lambda t: "UNVERIFIED")(
+                target_open
+            )
+            reason = f"C85_TICKER_UNRESOLVED (unverified candidate {label}): {exc}"
+            self.store.mark_missed(label, target_open, reason)
+            return BoundaryOutcome(label, target_open, "MISSED", blocker=reason)
 
         # 2. raw packet. Explicit dependency: no fixture, no fabrication.
         freeze_ns = timing.packet_freeze_ns or self.input_cutoff_ns(target_ns)

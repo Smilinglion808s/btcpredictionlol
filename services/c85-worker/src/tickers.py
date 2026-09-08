@@ -79,6 +79,10 @@ class StaticTickerResolver:
             raise TickerResolutionError(f"no contract supplied for {key}")
         return self.mapping[key]
 
+    @staticmethod
+    def unverified_label(target_open: datetime) -> str:
+        return "UNVERIFIED-NO-MAPPING"
+
 
 class KalshiTickerResolver:
     """Resolve and verify with the venue. `fetch` returns market metadata dicts."""
@@ -94,6 +98,13 @@ class KalshiTickerResolver:
         self.fetch = fetch
         self.cache_size = cache_size
         self._cache: dict[str, str] = {}
+
+    def unverified_label(self, target_open: datetime) -> str:
+        """A label for the MISSED row when nothing could be verified.
+
+        Prefixed so it can never be mistaken for a confirmed listed contract.
+        """
+        return "UNVERIFIED-" + candidates(self.series, target_open)["close"]
 
     def resolve(self, target_open: datetime) -> str:
         target_open = target_open.astimezone(timezone.utc)
