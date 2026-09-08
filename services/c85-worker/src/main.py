@@ -158,7 +158,7 @@ class Worker:
         """Compute and publish one target, or record exactly why it did not."""
         readiness, reason = self.evaluate_readiness()
         if readiness != "READY":
-            self.store.mark_missed(None, target, reason or "not_ready")
+            self.store.mark_missed(self.ticker_resolver.unverified_label(target), target, reason or "not_ready")
             return
 
         # Scheduler ownership: overlapping deployments must never both process
@@ -167,7 +167,9 @@ class Worker:
         self.owns_lease = bool(lease.get("granted"))
         if not self.owns_lease:
             self.store.mark_missed(
-                None, target, f"C85_LEASE_HELD_BY:{lease.get('owner_id', 'other')}"
+                self.ticker_resolver.unverified_label(target),
+                target,
+                f"C85_LEASE_HELD_BY:{lease.get('owner_id', 'other')}",
             )
             return
 
