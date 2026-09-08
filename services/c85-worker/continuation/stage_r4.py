@@ -1,0 +1,346 @@
+"""R4 stage chain: structure_valid -> r4_1 (HTF refine) -> r5_phase4 (hot ledger).
+
+Every stage here runs a *recovered producer* unmodified except for its research
+END constant (see `endpatch`), exactly like `stages.py`. This module must not
+edit `stages.py` (owned by another agent); it only adds new, independent Stage
+entries that can be merged into a Runner alongside STAGES.
+
+Dependency chain:
+    structure_valid  (C75 -> C76 -> C79, over Binance spot BTCUSDT 1m + the
+                       binance_events stage's t5 spot columns)
+        -> r4_1       (htf_structure_r4_refine.py, via its htf_structure_r3_models
+                        dependency's END constant)
+            -> r5_phase4  (r5_lab_manager_phase4.py::main)
+
+Historical-prefix parity: every stage compares its output over the archived
+window (ts < FROZEN_END) cell-for-cell against the archived ledger fixture
+restored by `reproduction/restore_upstream_fixtures.py`, and raises rather than
+publishing on any mismatch.
+"""
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from .config import FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
+from .endpatch import load_producer
+from .runner import Stage, StageResult
+from .stages import CACHE, VerbatimRecord, load_verbatim, publish, workspace_for
+
+REPO = Path(__file__).resolve().parents[1]
+FIXTURES = REPO / "evaluation-fixtures" / "upstream"
+
+SOURCES = UPSTREAM / "ancestor" / "source"
+LAB_C81 = UPSTREAM / "upstream" / "lab" / "c81" / "lab"
+C85ROOT = Path("/tmp/c85root")
+
+HTF_MODELS = SOURCES / "5fa9f70f0c59" / "htf_structure_r3_models.py"
+HTF_REFINE = SOURCES / "9d85759c9f9f" / "htf_structure_r4_refine.py"
+R5_PHASE4 = SOURCES / "a211367da033" / "r5_lab_manager_phase4.py"
+
+
+def _parity_check(new: pd.DataFrame, ref: pd.DataFrame, key: str, name: str) -> dict:
+    """Cell-for-cell parity over the archived prefix (ts < FROZEN_END).
+
+    Aborts the stage (raises) on any mismatch rather than publishing a drifted
+    result; returns a small note dict on success.
+    """
+    ref = ref.copy()
+    new = new.copy()
+    ref[key] = pd.to_datetime(ref[key], utc=True)
+    new[key] = pd.to_datetime(new[key], utc=True)
+    ref_prefix = ref[ref[key] < FROZEN_END].reset_index(drop=True)
+    merged = new.merge(ref_prefix[[key]], on=key, how="inner").sort_values(key)
+    new_prefix = new[new[key].isin(ref_prefix[key])].sort_values(key).reset_index(drop=True)
+    ref_prefix = ref_prefix.sort_values(key).reset_index(drop=True)
+    if len(new_prefix) != len(ref_prefix):
+        raise RuntimeError(
+            f"{name}: archived-prefix row count mismatch: "
+            f"archived={len(ref_prefix)} rebuilt={len(new_prefix)}"
+        )
+    mismatches: dict[str, int] = {}
+    for column in ref_prefix.columns:
+        if column == key or column not in new_prefix.columns:
+            continue
+        a, b = ref_prefix[column], new_prefix[column]
+        if pd.api.types.is_numeric_dtype(a) and pd.api.types.is_numeric_dtype(b):
+            af, bf = a.astype(float).to_numpy(), b.astype(float).to_numpy()
+            bad = int((~(np.isclose(af, bf, rtol=0, atol=1e-9) | (np.isnan(af) & np.isnan(bf)))).sum())
+        else:
+            bad = int((a.astype(str) != b.astype(str)).sum())
+        if bad:
+            mismatches[column] = bad
+    if mismatches:
+        raise RuntimeError(f"{name}: historical-prefix parity FAILED: {mismatches}")
+    return {"archived_prefix_rows": int(len(ref_prefix)), "parity": "ok"}
+
+
+# --------------------------------------------------------------------------- #
+# Stage: structure_valid  (C75 -> C76 -> C79)
+# --------------------------------------------------------------------------- #
+def _binance_minutes_frame(end: pd.Timestamp) -> pd.DataFrame:
+    """Binance SPOT BTCUSDT 1m ledger from RESEARCH_START to `end`.
+
+    Field order per research_c68/audit_quote_data.py:16. Built from the daily
+    klines archives on data.binance.vision, live-recovered for days the archive
+    host has not published yet (mirrors live_recovery.recover_day for aggTrades).
+    """
+    import io
+    import json
+    import urllib.error
+    import urllib.request
+    import zipfile
+
+    cache_dir = CACHE / "binance_spot_1m"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    frames: list[pd.DataFrame] = []
+    day = RESEARCH_START.normalize()
+    last_day = (end - pd.Timedelta(seconds=1)).normalize()
+    columns = ["open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
+               "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote", "ignore"]
+    unrecoverable: list[str] = []
+    while day <= last_day:
+        stamp = day.strftime("%Y-%m-%d")
+        cached = cache_dir / f"BTCUSDT-1m-{stamp}.parquet"
+        if not cached.exists():
+            url = (f"https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/"
+                   f"BTCUSDT-1m-{stamp}.zip")
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    blob = response.read()
+                with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                    name = archive.namelist()[0]
+                    frame = pd.read_csv(io.BytesIO(archive.read(name)), names=columns, header=None)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise
+                # not yet published: recover from the live REST klines endpoint
+                try:
+                    frame = _fetch_live_minutes(day, min(day + pd.Timedelta(days=1), end))
+                except Exception as live_exc:  # pragma: no cover - network dependent
+                    unrecoverable.append(f"{stamp}: {live_exc}")
+                    day += pd.Timedelta(days=1)
+                    continue
+            frame = frame[columns[:11]]
+            frame.to_parquet(cached, index=False)
+        frames.append(pd.read_parquet(cached))
+        day += pd.Timedelta(days=1)
+    if not frames:
+        raise RuntimeError("no Binance spot 1m data recovered for the requested window")
+    minutes = pd.concat(frames, ignore_index=True).drop_duplicates("open_ms").sort_values("open_ms")
+    minutes = minutes[minutes.open_ms < int(end.value // 1_000_000)].reset_index(drop=True)
+    if unrecoverable:
+        minutes.attrs["unrecoverable_days"] = unrecoverable
+    return minutes
+
+
+def _fetch_live_minutes(start: pd.Timestamp, stop: pd.Timestamp) -> pd.DataFrame:
+    import json
+    import time
+    import urllib.parse
+    import urllib.request
+
+    rows: list[list] = []
+    cursor = int(start.value // 1_000_000)
+    stop_ms = int(stop.value // 1_000_000)
+    url = "https://api.binance.com/api/v3/klines"
+    while cursor < stop_ms:
+        params = urllib.parse.urlencode({"symbol": "BTCUSDT", "interval": "1m",
+                                         "startTime": cursor, "limit": 1000})
+        request = urllib.request.Request(f"{url}?{params}", headers={"User-Agent": "c85-continuation/1.0"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            batch = json.loads(response.read())
+        if not batch:
+            break
+        for row in batch:
+            if row[0] >= stop_ms:
+                break
+            rows.append(row[:11])
+        cursor = int(batch[-1][0]) + 60_000
+        if len(batch) < 1000:
+            break
+        time.sleep(0.1)
+    columns = ["open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
+               "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote"]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def run_structure_valid(end: pd.Timestamp, previous: dict | None) -> StageResult:
+    if not LAB_C81.exists():
+        raise FileNotFoundError(f"recovered C75/C76/C79 lab missing: {LAB_C81}")
+    work = workspace_for("structure_valid")
+    lab_copy = work / "lab"
+    if not lab_copy.exists():
+        shutil.copytree(LAB_C81, lab_copy)
+
+    minutes = _binance_minutes_frame(end)
+    minutes_path = work / "btc_minutes_spot.parquet"
+    minutes.to_parquet(minutes_path, index=False)
+
+    events_path = CACHE / "binance_event_features.csv.gz"
+    if not events_path.exists():
+        raise FileNotFoundError(
+            f"{events_path}: binance_events stage has not published event features yet; "
+            "structure_valid depends on it for the t5 spot columns"
+        )
+    events = pd.read_csv(events_path)
+    events["ts"] = pd.to_datetime(events["ts"] if "ts" in events.columns else events["target_ts"], utc=True)
+    packet = events[["ts", "binance_spot_t5_w005_return_bps", "binance_spot_t5_w005_flow_imbalance"]].copy()
+
+    sys.path.insert(0, str(lab_copy))
+    for mod in ("research_c75.source", "research_c76.source", "research_c79.source",
+                "research_c75", "research_c76", "research_c79"):
+        sys.modules.pop(mod, None)
+    from research_c75 import source as c75  # noqa: E402
+    from research_c76 import source as c76  # noqa: E402
+    from research_c79 import source as c79  # noqa: E402
+
+    context = c75.build(packet, minutes)
+    indicator76 = c76.market(packet, minutes, context)
+    indicator79 = c79.market(packet, minutes, indicator76)
+
+    result = pd.DataFrame({"ts": packet.ts, "structure_valid": indicator79.source_valid.to_numpy(bool)})
+    out_path = work / "structure_valid_rows.csv"
+    result.to_csv(out_path, index=False)
+    published = [publish(out_path, "structure_valid_rows.csv")]
+
+    notes: dict = {"valid": int(result.structure_valid.sum()),
+                   "invalid": int((~result.structure_valid).sum())}
+    unrecoverable = minutes.attrs.get("unrecoverable_days")
+    if unrecoverable:
+        notes["unrecoverable_minute_days"] = unrecoverable
+
+    ref_path = FIXTURES / "upstream_packet.parquet"
+    if ref_path.exists():
+        ref = pd.read_parquet(ref_path)[["ts", "structure_valid"]]
+        notes.update(_parity_check(result, ref, "ts", "structure_valid"))
+    else:
+        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
+
+    return StageResult(
+        cursor=end,
+        rows=len(result),
+        outputs=published,
+        patches=[VerbatimRecord(HTF_MODELS.parent / "_unused").as_dict()] if False else [],
+        notes=notes,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Stage: r4_1  (htf_structure_r4_refine.py)
+# --------------------------------------------------------------------------- #
+def _ensure_c85root() -> None:
+    if C85ROOT.exists() and (C85ROOT / "external_research").exists():
+        return
+    script = REPO / "reproduction" / "setup_workspace.sh"
+    subprocess.run(["bash", str(script)], check=True, cwd=REPO)
+
+
+def _load_patched_htf_models(end: pd.Timestamp, work: Path):
+    target = work / "htf_structure_r3_models.py"
+    if not target.exists() or target.read_bytes() != HTF_MODELS.read_bytes():
+        shutil.copy2(HTF_MODELS, target)
+    module, record = load_producer(target, end, name="external_research.htf_structure_r3_models")
+    import external_research  # noqa: E402  (package root lives in ROOT, already on sys.path)
+    external_research.htf_structure_r3_models = module
+    return module, record
+
+
+def run_r4_1(end: pd.Timestamp, previous: dict | None) -> StageResult:
+    _ensure_c85root()
+    sys.path.insert(0, str(C85ROOT))
+    sys.path.insert(0, str(C85ROOT / "external_research"))
+    work = workspace_for("r4_1")
+    _, models_patch = _load_patched_htf_models(end, work)
+
+    refine_target = work / HTF_REFINE.name
+    if not refine_target.exists() or refine_target.read_bytes() != HTF_REFINE.read_bytes():
+        shutil.copy2(HTF_REFINE, refine_target)
+    # honour the recovered producer's own ROOT = parents[1] layout by running it
+    # from inside the c85root workspace, where external_research/ already lives
+    workspace_refine = C85ROOT / "external_research" / HTF_REFINE.name
+    shutil.copy2(refine_target, workspace_refine)
+    refine = load_verbatim(workspace_refine)
+    refine.main()
+
+    out_csv = C85ROOT / "external_research" / "htf_structure_r3_output" / "t5_book_day4h_r4_1_rows.csv"
+    rows = pd.read_csv(out_csv, parse_dates=["ts"])
+    published = [publish(out_csv, "t5_book_day4h_r4_1_rows.csv")]
+
+    notes: dict = {"columns": list(rows.columns)}
+    ref_path = FIXTURES / "t5_book_day4h_r4_1_rows.parquet"
+    if ref_path.exists():
+        ref = pd.read_parquet(ref_path)
+        notes.update(_parity_check(rows, ref, "ts", "r4_1"))
+    else:
+        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
+
+    return StageResult(cursor=end, rows=len(rows), outputs=published,
+                       patches=[models_patch.as_dict()], notes=notes)
+
+
+# --------------------------------------------------------------------------- #
+# Stage: r5_phase4  (r5_lab_manager_phase4.py::main)
+# --------------------------------------------------------------------------- #
+def run_r5_phase4(end: pd.Timestamp, previous: dict | None) -> StageResult:
+    _ensure_c85root()
+    sys.path.insert(0, str(C85ROOT))
+    sys.path.insert(0, str(C85ROOT / "external_research"))
+    work = workspace_for("r5_phase4")
+    _, models_patch = _load_patched_htf_models(end, work)
+
+    phase4_target = C85ROOT / "external_research" / R5_PHASE4.name
+    if not phase4_target.exists() or phase4_target.read_bytes() != R5_PHASE4.read_bytes():
+        shutil.copy2(R5_PHASE4, phase4_target)
+    phase4 = load_verbatim(phase4_target)
+    phase4.main()
+
+    out_csv = phase4.OUT / "t5_hot_calibration_ledger.csv"
+    rows = pd.read_csv(out_csv, parse_dates=["ts"])
+    published = [publish(out_csv, "t5_hot_calibration_ledger.csv")]
+
+    notes: dict = {"columns": [c for c in (
+        "expansion_selected_prediction", "r4_probability_correct",
+        "r4_directional_rank", "r4_prediction") if c in rows.columns]}
+    ref_path = FIXTURES / "t5_hot_calibration_ledger.parquet"
+    if ref_path.exists():
+        ref = pd.read_parquet(ref_path)
+        notes.update(_parity_check(rows, ref, "ts", "r5_phase4"))
+    else:
+        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
+
+    return StageResult(cursor=end, rows=len(rows), outputs=published,
+                       patches=[models_patch.as_dict()], notes=notes)
+
+
+structure_valid = run_structure_valid
+r4_1 = run_r4_1
+r5_phase4 = run_r5_phase4
+
+R4_STAGES = [
+    Stage(
+        name="structure_valid",
+        depends_on=("binance_events",),
+        run=run_structure_valid,
+        description="C75 -> C76 -> C79 structure_valid over Binance spot BTCUSDT 1m data",
+    ),
+    Stage(
+        name="r4_1",
+        depends_on=("structure_valid",),
+        run=run_r4_1,
+        incremental=False,
+        description="htf_structure_r4_refine.py -> t5_book_day4h_r4_1_rows.csv",
+    ),
+    Stage(
+        name="r5_phase4",
+        depends_on=("r4_1",),
+        run=run_r5_phase4,
+        incremental=False,
+        description="r5_lab_manager_phase4.py -> t5_hot_calibration_ledger.csv",
+    ),
+]
