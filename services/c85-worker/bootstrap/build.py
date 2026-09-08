@@ -125,7 +125,9 @@ def build(
             "bundle_version": version,
             "model_version": "c85-multi-meta-r1",
             "built_at_utc": now.isoformat(),
-            "checkpoint_utc": state.get("as_of_utc") or now.isoformat(),
+            # No fallback to build time: a bundle without real state must read as having
+            # no checkpoint so the serving worker blocks instead of serving blind.
+            "checkpoint_utc": state.get("as_of_utc"),
             "last_processed_target_utc": state.get("last_processed_target_utc"),
             "fits": {
                 "direction": {"cutoff_utc": f"{direction[-1].stem}T00:00:00+00:00" if direction else None,
