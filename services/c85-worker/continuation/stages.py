@@ -299,6 +299,7 @@ def _c42_stages() -> list[Stage]:
     )
     return [Stage(
         name="c42",
+        frozen_end=True,
         depends_on=upstream,
         run=run_c42,
         incremental=False,

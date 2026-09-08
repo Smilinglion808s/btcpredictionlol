@@ -607,6 +607,7 @@ C51_STAGES = [
     ),
     Stage(
         name="polymarket_early_prior",
+        frozen_end=True,
         depends_on=("c42",),
         run=run_polymarket_early_prior,
         description="Polymarket trades inside each C42 T0/T5 decision window",
@@ -619,12 +620,14 @@ C51_STAGES = [
     ),
     Stage(
         name="c51_rebase",
+        frozen_end=True,
         depends_on=("c51_target_native", "polymarket_early_prior"),
         run=run_c51_rebase,
         description="C51 target-native rebase ledger + direction/meta walk-forward fits",
     ),
     Stage(
         name="c54",
+        frozen_end=True,
         depends_on=("c51_rebase", "c42"),
         run=run_c54,
         description="C54 error-complementarity router (frozen hash-gated backtest)",
