@@ -164,6 +164,7 @@ class Worker:
         # Scheduler ownership: overlapping deployments must never both process
         # the same target. The lease is short-lived and fenced in the backend.
         lease = self.store.acquire_lease(self.settings.lease_ttl_seconds)
+        self.store.note_lease(lease)
         self.owns_lease = bool(lease.get("granted"))
         if not self.owns_lease:
             self.store.mark_missed(

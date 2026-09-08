@@ -22,7 +22,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
-from .config import COMPUTE_BUDGET_MS, PUBLICATION_DEADLINE_MS
+from .config import (
+    CUTOFF_DEADLINE_CONFLICT_MS,
+    FEATURE_INPUT_CUTOFF_MS,
+    PUBLICATION_DEADLINE_MS,
+)
 
 NS = 1_000_000_000
 INTERVAL = timedelta(minutes=15)
@@ -103,10 +107,16 @@ class BoundaryScheduler:
             await sleep_until_ns(target_ns - int(self.prepare_lead_s * NS))
 
             timing = RunTiming(target_open_ns=target_ns)
-            # Freeze the packet with the compute budget still in hand.
-            freeze_ns = target_ns + (PUBLICATION_DEADLINE_MS - COMPUTE_BUDGET_MS) * 1_000_000
+            # The model's own input window is [T, T+5s) (FEATURE_INPUT_CUTOFF_MS,
+            # transcribed from the original causal contract). The packet cannot
+            # be frozen earlier without changing the model, so the handler wakes
+            # at the cutoff even though publication is also due at T+5s; that
+            # unavoidable overrun is CUTOFF_DEADLINE_CONFLICT_MS and is reported
+            # by the orchestrator rather than hidden by an early freeze.
+            freeze_ns = target_ns + FEATURE_INPUT_CUTOFF_MS * 1_000_000
             await sleep_until_ns(freeze_ns)
             timing.packet_freeze_ns = time.time_ns()
+
             try:
                 await self.handler(target, timing)
             except asyncio.CancelledError:

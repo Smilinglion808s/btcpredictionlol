@@ -153,3 +153,56 @@ Implement `LivePacketSource.build` for the **direction head only**, from the
 already-running Binance collectors via `src/features.py`, and assert it against
 an archived boundary row. That is the first slice of the raw-input live parity
 that today's supplied-feature tests deliberately do not cover.
+
+## 2026-09-08 — boundary contract repair + first raw producer
+
+### Three clocks, separated (config.py)
+| clock | value | source |
+| --- | --- | --- |
+| feature input cutoff | T+5000 ms, half-open `[T, T+5s)` | `build_multivenue_features_r1.py` line 272 causal contract, verbatim |
+| compute budget | 1200 ms | operational |
+| publication deadline | T+5000 ms | existing spec, unchanged |
+
+`CUTOFF_DEADLINE_CONFLICT_MS = 1200`. **The exact conflict:** the last legal
+input may arrive at T+4999.999 ms while publication is already due at
+T+5000 ms, so any compute at all overruns. The previous code hid this by
+truncating inputs to T+3800 ms, which silently changes the model. The cutoff is
+now the model rule; the deadline is unchanged; a directional call that crosses
+the ceiling is recorded `EXPIRED`, enqueues no outbox row and is never
+dispatched. Neither clock was moved.
+
+### Transaction semantics
+* Evaluation runs on `state.clone()`; `state.adopt(candidate)` only after a
+  confirmed commit. A failed commit no longer advances `last_processed`, the
+  rank queues or the deterioration EWMAs, so the retry is not suppressed.
+* An ambiguous (response-lost) commit is resolved by reading committed identity
+  back from `checkpoint.latest` and comparing `state_sha256`, never by blind
+  re-evaluation. The committed `checkpoint_seq` is propagated into state.
+* Outbox now matches the signed schema exactly — `{dedupe_key, payload,
+  expires_at}` — and `expires_at` is the publication ceiling itself.
+* Lifecycle is explicit: `COMPUTED` → `LOGGED` (suppressed) / `EXPIRED` /
+  `DISPATCH_FAILED` / `PUBLISHED`. `published_at` is written only in the
+  second, prediction-preserving `decision.commit` after gateway acceptance
+  (permitted by `c85_targets_guard_immutable`, which freezes only side,
+  probabilities, features and identity).
+
+### Lease fencing — open backend gap
+`c85_commit_decision` accepts no lease token and performs no fence check.
+`C85Store.verify_lease()` re-asserts ownership immediately before the commit and
+compares the fence against the one this worker last held (takeover increments
+it), and the orchestrator returns `LEASE_LOST` without writing. The race window
+between that check and the write is **not** closed by the database.
+
+### First live raw producer
+`src/experts/direction_matrix.py` — verbatim transcription of
+`evaluate_external_direction_r1.py::directional_matrix` (lines 69-152). Pure and
+stateless; nothing to serialise. Parity: the original function, executed from
+its own source text, vs the transcription over 1,500 archived multivenue
+observations, stages T0 and T5 — every cell exact (`atol=0`), and one-target-at-
+a-time equals the batch pass. This is raw-observation parity for the design
+matrix only.
+
+**Next missing producer:** `build_multivenue_features_r1.py` — the raw-tape
+producer for the `*_t0_*` / `*_t5_*` Binance/Deribit/Hyperliquid columns this
+transform consumes. Until it is live, the direction leaf is still fed archived
+observations, which is a fixture harness and not live inference.

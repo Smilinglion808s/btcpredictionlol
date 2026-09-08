@@ -240,3 +240,26 @@ class C85State:
         payload.pop("parent_sha256", None)
         blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(blob.encode()).hexdigest()
+
+    # -- candidate evaluation --------------------------------------------------
+    def clone(self) -> "C85State":
+        """A deep, independent copy for speculative evaluation.
+
+        A target is scored against a clone so that a failed durable commit
+        cannot leave `last_processed_target_utc`, the rank queues or the
+        deterioration EWMAs advanced. Only `adopt()` promotes it.
+        """
+        return C85State.from_dict(json.loads(json.dumps(self.to_dict(), default=str)))
+
+    def adopt(self, other: "C85State") -> None:
+        """Promote a candidate in place, after the commit is confirmed."""
+        self.admission_ranks = other.admission_ranks
+        self.filter_ranks = other.filter_ranks
+        self.deterioration = other.deterioration
+        self.expert_state = other.expert_state
+        self.source_watermarks = other.source_watermarks
+        self.applicable_fits = other.applicable_fits
+        self.last_processed_target_utc = other.last_processed_target_utc
+        self.next_target_utc = other.next_target_utc
+        self.checkpoint_seq = other.checkpoint_seq
+        self.parent_sha256 = other.parent_sha256
