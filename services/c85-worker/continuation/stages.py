@@ -151,7 +151,7 @@ def recover_unpublished_days(acquire, end: pd.Timestamp) -> list[dict]:
 ARCHIVED_BINANCE_FEATURES = UPSTREAM / "ancestor" / "data" / "binance_event_features.csv.gz"
 
 
-def _splice_archived_prefix(frame: pd.DataFrame, features: Path) -> dict:
+def _splice_archived_prefix(frame: pd.DataFrame, features: Path) -> tuple[dict, pd.DataFrame]:
     """Take the frozen prefix verbatim from the archived ledger.
 
     The recovered builder aggregates each daily archive independently and then
