@@ -11,7 +11,17 @@ its whole history with the end constant advanced.
 
 ## Stage status (research end configurable; last run END = 2026-09-08T18:30:00Z)
 
+WARNING (2026-09-08 22:45Z): the table below is a *historical record of runs*,
+not a statement about data on disk. The sandbox was replaced again and every
+derived stage output named by these manifests is gone — verified per path in
+`services/c85-worker/docs/c85-serving-inventory.json`
+(`cache_outputs_present: []` for all 14 stages). Treat every DONE below as
+"ran once and reproduced parity", never as "output currently available".
+See `services/c85-worker/docs/c85-recovery-status.md` for the proven inventory,
+durable-storage evidence and the boundary-path gap.
+
 Cursors come from `continuation/manifests/_status.json` (durable, survives cache wipes).
+
 
 | Stage | Cursor | Rows | Status |
 | --- | --- | --- | --- |
