@@ -129,14 +129,22 @@ CONTINUATION_GAP = (
 
 LEAF_DEPENDENCIES: tuple[Dependency, ...] = (
     Dependency(
-        "external_direction", REPRODUCED,
+        "external_direction", UNPORTED,
         ("vault_work/legacy_lab2/sources/T0_T5_MULTIVENUE_LAB_R1_COMPACT.zip"
          "/evaluate_external_direction_r1.py::directional_matrix (sha256 e88f9c00e9b0...)",),
         (),
-        "Reproduced inside c30/phase3 with zero mismatches; not yet vendored. Historical values available as the "
-        "`external_direction` column of fee_coverage_shadow_ledger.csv. Live value needs "
-        "the directional_matrix venue feature build to be transcribed. " + CONTINUATION_GAP,
+        "PARTIAL: the design-matrix half is now live. "
+        "src/experts/direction_matrix.py transcribes directional_matrix verbatim "
+        "(lines 69-152) and matches the original function executed from its own source "
+        "over 1,500 archived multivenue observations, T0 and T5, every cell exact "
+        "(atol=0) and row-wise == batch (tests/test_direction_matrix_parity.py). It is "
+        "pure and stateless, so there is no rolling buffer to serialise. STILL BLOCKED: "
+        "(a) the raw-tape producer build_multivenue_features_r1.py, which turns Binance/"
+        "Deribit/Hyperliquid events into the *_t0_*/*_t5_* columns this transform reads "
+        "-- it is the next missing producer; (b) the fitted direction pipeline selection "
+        "for the live venue set. " + CONTINUATION_GAP,
     ),
+
     Dependency(
         "external_rank", REPRODUCED,
         ("vault_work/legacy_c30/external_research/c30_c70_lab_manager_r2.py::map_external_scores"
