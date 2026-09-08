@@ -78,6 +78,11 @@ class Settings:
     http_port: int
     allow_live_publication: bool
     lease_ttl_seconds: int
+    # Deployment bundle (serving side of the bootstrap/serving split).
+    bundle_dir: Path
+    bundle_download: bool
+    bundle_max_age_hours: int
+
 
 
 GATEWAY_PATH = "/api/public/hooks/c85-decision"
