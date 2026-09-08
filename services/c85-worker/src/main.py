@@ -193,10 +193,26 @@ class Worker:
         self.warmup.progress.stage = Stage.VERIFY
         await self.feeds.start()
 
-        seed = self.settings.artifact_dir / "fixtures" / "historical_seed_2026-09-01.json"
-        self.state, resumed = self.warmup.restore_or_seed(seed)
-        pending = self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
+        # Restart path: prefer the durable checkpoint; otherwise adopt the state
+        # the bundle carries. Neither branch rebuilds historical ledgers.
+        self.state, row = self.store.restore_state()
+        if row is not None:
+            self.warmup.progress.resumed = True
+            self.warmup.progress.checkpoint_seq = int(row.get("checkpoint_seq") or 0)
+            self.warmup.progress.notes.append(
+                f"resumed durable checkpoint #{self.warmup.progress.checkpoint_seq}"
+            )
+        elif self.bundle is not None:
+            self.warmup.progress.stage = Stage.SEED
+            self.state = C85State.from_dict(self.bundle.checkpoint())
+            self.warmup.progress.notes.append(
+                f"adopted bundle {self.bundle.version} state "
+                f"({self.bundle.cutoffs.last_processed_target_utc})"
+            )
+        # Only the gap since the adopted state is advanced, one target at a time.
+        self.warmup.plan_bridge(self.state, datetime.now(timezone.utc))
         self.warmup.progress.next_target = next_boundary().isoformat()
+
 
         self.readiness, self.blocking_reason = self.evaluate_readiness()
         if self.readiness == "READY":
