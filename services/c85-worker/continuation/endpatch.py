@@ -21,10 +21,13 @@ from types import ModuleType
 
 import pandas as pd
 
+END_NAMES = r"END|END_EXCLUSIVE|FORMAL_END_EXCLUSIVE"
+
 PATTERNS = {
-    "pd": re.compile(r'^(?P<name>END|END_EXCLUSIVE)\s*=\s*pd\.Timestamp\(\s*"[^"]+"\s*\)\s*$', re.M),
+    "pd": re.compile(
+        rf'^(?P<name>{END_NAMES})\s*=\s*pd\.Timestamp\(\s*"[^"]+"\s*\)\s*$', re.M),
     "datetime": re.compile(
-        r'^(?P<name>END|END_EXCLUSIVE)\s*=\s*datetime\([^)\n]*\)\s*$', re.M),
+        rf'^(?P<name>{END_NAMES})\s*=\s*datetime\([^)\n]*\)\s*$', re.M),
 }
 
 

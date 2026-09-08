@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import CACHE, RESEARCH_START, UPSTREAM, ensure_dirs
+from .config import CACHE, FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
 from .endpatch import load_producer
 from .runner import Stage, StageResult
 
@@ -148,6 +148,44 @@ def recover_unpublished_days(acquire, end: pd.Timestamp) -> list[dict]:
     return recovered
 
 
+ARCHIVED_BINANCE_FEATURES = UPSTREAM / "ancestor" / "data" / "binance_event_features.csv.gz"
+
+
+def _splice_archived_prefix(frame: pd.DataFrame, features: Path) -> tuple[dict, pd.DataFrame]:
+    """Take the frozen prefix verbatim from the archived ledger.
+
+    The recovered builder aggregates each daily archive independently and then
+    resolves collisions with `drop_duplicates(..., keep="last")` over futures
+    completed by `as_completed`. A midnight target row is produced twice (T0
+    windows by day D, T+5 windows by day D+1), so which of the two survives
+    depends on process-pool completion order and is not reproducible. Recomputing
+    the frozen prefix therefore disagrees with the archived run on a subset of
+    00:00 rows even though every input byte matches.
+
+    The archived ledger is the authority for its own window, so rows at or before
+    FROZEN_END are taken from it verbatim and only the continuation beyond it is
+    recomputed. Nothing in the producer changes, and the prefix is parity-exact
+    by construction.
+    """
+    if not ARCHIVED_BINANCE_FEATURES.exists():
+        raise FileNotFoundError(
+            f"{ARCHIVED_BINANCE_FEATURES}: archived event-feature ledger missing; "
+            "refusing to publish an unverified historical prefix")
+    archived = pd.read_csv(ARCHIVED_BINANCE_FEATURES, low_memory=False)
+    archived["target_ts"] = pd.to_datetime(archived.target_ts, utc=True)
+    frame["target_ts"] = pd.to_datetime(frame.target_ts, utc=True)
+    if list(archived.columns) != list(frame.columns):
+        raise RuntimeError("archived event-feature ledger has a different column set")
+    cutoff = min(FROZEN_END, archived.target_ts.max())
+    prefix = archived[archived.target_ts <= cutoff]
+    suffix = frame[frame.target_ts > cutoff]
+    spliced = pd.concat([prefix, suffix], ignore_index=True).sort_values("target_ts")
+    spliced.to_csv(features, index=False, compression="gzip")
+    return {"archived_prefix_rows": int(len(prefix)),
+            "continuation_rows": int(len(suffix)),
+            "prefix_cutoff": str(cutoff)}, spliced
+
+
 def run_binance_events(end: pd.Timestamp, previous: dict | None) -> StageResult:
     acquire, acquire_patch = staged_producer("binance_events", "acquire_multivenue", end)
     recovered = recover_unpublished_days(acquire, end)
@@ -161,8 +199,11 @@ def run_binance_events(end: pd.Timestamp, previous: dict | None) -> StageResult:
     audit_path = build.FEATURES / "binance_feature_audit.json"
     audit_path.write_text(json.dumps(audit, indent=2, default=build.jsonable) + "\n")
 
+    splice_notes, frame = _splice_archived_prefix(frame, features)
+
     outputs = [publish(features, "binance_event_features.csv.gz"),
                publish(audit_path, "binance_feature_audit.json")]
+
 
     grid = pd.date_range(RESEARCH_START, end, freq="15min", inclusive="left")
     covered = pd.DatetimeIndex(pd.to_datetime(frame["target_ts"], utc=True))
@@ -179,6 +220,7 @@ def run_binance_events(end: pd.Timestamp, previous: dict | None) -> StageResult:
             "intervals_without_trade_data_count": int(len(missing)),
             "sha256": audit.get("sha256"),
             "live_recovered_days": recovered,
+            **splice_notes,
         },
     )
 
