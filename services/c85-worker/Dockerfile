@@ -10,7 +10,8 @@ ENV PYTHONUNBUFFERED=1 \
     OPENBLAS_NUM_THREADS=1 \
     OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
-    C85_ARTIFACT_DIR=/artifacts
+    C85_ARTIFACT_DIR=/artifacts \
+    C85_BUNDLE_DIR=/bundle
 
 WORKDIR /app
 
@@ -26,6 +27,9 @@ RUN pip install --no-cache-dir -r requirements.lock.txt
 # mount a private artifact volume at /artifacts at runtime. These are NEVER
 # shipped in the frontend bundle.
 COPY artifacts/ /artifacts/
+
+RUN mkdir -p /bundle
+VOLUME ["/bundle"]
 
 COPY src/ ./src/
 
