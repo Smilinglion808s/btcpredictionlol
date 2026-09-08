@@ -1,0 +1,195 @@
+{
+  "generated_at": "2026-09-08T22:41:45.923470+00:00",
+  "groups": {
+    "recovery_archives": [
+      {
+        "path": "/mnt/user-uploads/C85_Ancestor_Recovery.zip",
+        "bytes": 83221269,
+        "sha256": "664775d4697fddb48b2eb69a54c932dd927de6c14aad3ec7d6340d5e552c56c9"
+      },
+      {
+        "path": "/mnt/user-uploads/C85_Expanded_Handoff.md",
+        "bytes": 7557,
+        "sha256": "b3a90a9d35c590b84bc74b28b1d7007dff62b450388239c18e9b78fed62ebf94"
+      },
+      {
+        "path": "/mnt/user-uploads/C85_Lovable_Kit-2.zip",
+        "bytes": 58794380,
+        "sha256": "436f1dc88c8c7c6a15c1d5ae485ca654bc2efd4564253452ad0345f09c8f22d3"
+      },
+      {
+        "path": "/mnt/user-uploads/C85_Lovable_Kit.zip",
+        "bytes": 58794380,
+        "sha256": "436f1dc88c8c7c6a15c1d5ae485ca654bc2efd4564253452ad0345f09c8f22d3"
+      },
+      {
+        "path": "/mnt/user-uploads/C85_Upstream_Recovery.zip",
+        "bytes": 242999109,
+        "sha256": "006ada710a24521b9053620a19a0d0f703b155de85f3dffb0aeafeaf24dadd31"
+      },
+      {
+        "path": "/mnt/user-uploads/HTF_STRUCTURE_R3_PACKAGE.zip",
+        "bytes": 17447323,
+        "sha256": "4ee509fd80e4a90d6085e5bb9a56af30d396d95e58b30ad0a24d7f0dd8d75149"
+      },
+      {
+        "path": "/mnt/user-uploads/T5_BASELINE_R4_1_FREEZE_PACKAGE.zip",
+        "bytes": 15998206,
+        "sha256": "b2b6a072b302a99cefbe753d977b881f09024ef843aae273c83d5ba4de65f2d6"
+      }
+    ],
+    "durable_cache": [
+      {
+        "path": "/mnt/documents/.lovable/c85-cache/binance_spot_1s_archives",
+        "files": 243,
+        "bytes": 580110588
+      },
+      {
+        "path": "/mnt/documents/.lovable/c85-cache/c85root",
+        "files": 116,
+        "bytes": 159146683
+      },
+      {
+        "path": "/mnt/documents/.lovable/c85-cache/upx",
+        "files": 1751,
+        "bytes": 984031078
+      }
+    ],
+    "fitted_artifacts": [
+      {
+        "dir": "models/C71_DIRECTION",
+        "count": 198,
+        "first": "2026-02-15",
+        "last": "2026-08-31"
+      },
+      {
+        "dir": "models/C85_META",
+        "count": 190,
+        "first": "2026-02-23",
+        "last": "2026-08-31"
+      },
+      {
+        "dir": "c51/direction",
+        "count": 245,
+        "first": "2025-12-30",
+        "last": "2026-08-31"
+      },
+      {
+        "dir": "c51/meta",
+        "count": 216,
+        "first": "2026-01-28",
+        "last": "2026-08-31"
+      },
+      {
+        "dir": "models/auxiliary",
+        "count": 36,
+        "first": "202503_LONG",
+        "last": "202608_RECENT"
+      },
+      {
+        "file": "feature_order.json",
+        "sha256": "3a47d8dc142f1c4fb35f4f9c9d3a62a3ee1e415e48e9545532dfc5e6d2c81add"
+      }
+    ],
+    "stage_manifests_claim_only": [
+      {
+        "stage": "binance_events",
+        "cursor": "2026-09-08 18:30:00+00:00",
+        "rows": 27041,
+        "updated_at": "2026-09-08T19:03:08.736541+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c36_frontier",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 22558,
+        "updated_at": "2026-09-08T19:03:40.814852+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c36_timing",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 20343,
+        "updated_at": "2026-09-08T18:32:36.170870+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c37",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 19780,
+        "updated_at": "2026-09-08T19:44:25.632526+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c42",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 19780,
+        "updated_at": "2026-09-08T21:18:54.100807+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c51_rebase",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 26304,
+        "updated_at": "2026-09-08T21:39:50.346000+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c51_target_native",
+        "cursor": "2026-09-08 18:30:00+00:00",
+        "rows": 27017,
+        "updated_at": "2026-09-08T19:58:13.672042+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "c54",
+        "cursor": "2025-12-01 00:00:00+00:00",
+        "rows": 0,
+        "updated_at": "2026-09-08T21:39:52.854526+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "kalshi_t5",
+        "cursor": "2026-09-08 19:00:00+00:00",
+        "rows": 25338,
+        "updated_at": "2026-09-08T19:37:45.472290+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "polymarket_early_prior",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 8342,
+        "updated_at": "2026-09-08T21:32:21.090638+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "polymarket_inventory",
+        "cursor": "2026-09-08 18:30:00+00:00",
+        "rows": 27017,
+        "updated_at": "2026-09-08T19:48:08.006905+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "r4_1",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 26124,
+        "updated_at": "2026-09-08T20:34:49.667015+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "r5_phase4",
+        "cursor": "2026-09-01 00:00:00+00:00",
+        "rows": 26124,
+        "updated_at": "2026-09-08T20:58:50.658019+00:00",
+        "cache_outputs_present": []
+      },
+      {
+        "stage": "structure_valid",
+        "cursor": "2026-09-08 18:30:00+00:00",
+        "rows": 27041,
+        "updated_at": "2026-09-08T20:27:01.934800+00:00",
+        "cache_outputs_present": []
+      }
+    ]
+  }
+}

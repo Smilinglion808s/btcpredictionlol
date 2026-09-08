@@ -11,7 +11,17 @@ its whole history with the end constant advanced.
 
 ## Stage status (research end configurable; last run END = 2026-09-08T18:30:00Z)
 
+WARNING (2026-09-08 22:45Z): the table below is a *historical record of runs*,
+not a statement about data on disk. The sandbox was replaced again and every
+derived stage output named by these manifests is gone — verified per path in
+`services/c85-worker/docs/c85-serving-inventory.json`
+(`cache_outputs_present: []` for all 14 stages). Treat every DONE below as
+"ran once and reproduced parity", never as "output currently available".
+See `services/c85-worker/docs/c85-recovery-status.md` for the proven inventory,
+durable-storage evidence and the boundary-path gap.
+
 Cursors come from `continuation/manifests/_status.json` (durable, survives cache wipes).
+
 
 | Stage | Cursor | Rows | Status |
 | --- | --- | --- | --- |
@@ -36,9 +46,12 @@ Cursors come from `continuation/manifests/_status.json` (durable, survives cache
 | --- | --- |
 | C51 serving heads (`artifacts/c51/{direction,meta}/*.json`) | STALE at 2026-09-01. The frozen producer emits standardized coefficients + diagnostics only, not the per-block imputation/centre/scale the serving schema needs. Route: export them from the already-reviewed `src/experts/c51.py` transcription. No fabricated fields. |
 | C57 packet, C61/C63/C67/C68/C69, C71 direction, C85 heads | TODO |
+| `Worker.on_boundary` live compute body | NOT IMPLEMENTED - raises `C85_PIPELINE_INCOMPLETE` (src/main.py:119). This is the next bounded step. |
+| Durable store the Railway worker can read (volume or private bucket) | BLOCKED - needs a decision/credentials; `/mnt/documents` is Lovable-side only |
 | Railway artifact + checkpoint deploy, restart-resume proof | TODO |
 | Live start at next valid boundary, publication by T+5 | TODO |
 | Webhooks | C85 stays out of `WEBHOOK_ALLOWED_MODELS`; T45 execution untouched |
+
 
 ## Resumability
 Each stage writes `evaluation-fixtures/cache/continuation/checkpoints/<stage>.json`
