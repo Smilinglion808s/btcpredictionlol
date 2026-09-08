@@ -1,0 +1,69 @@
+{
+  "cursor": "2026-09-08 18:30:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "audit": {
+      "chronology": {
+        "end_exclusive": "2026-09-08T18:30:00+00:00",
+        "scheduled_rows": 27050,
+        "start": "2025-12-01T00:00:00+00:00"
+      },
+      "frozen_precommit": "C51_TARGET_NATIVE_REBASE_R1_PRECOMMIT.md",
+      "hard_checks": {
+        "extension_failures_zero": true,
+        "post_open_points_zero": true,
+        "repo_vs_gamma_label_conflicts_zero": true
+      },
+      "identity": "C51_TARGET_NATIVE_DATA_R1",
+      "official_outcomes": {
+        "resolved": 27017,
+        "rows": 27017,
+        "scheduled_coverage_pct": 99.87800369685768
+      },
+      "preopen_book": {
+        "combined_rows": 27017,
+        "extension_failures": 0,
+        "extension_requested": 5986,
+        "extension_rows": 5986,
+        "post_open_up_points": 0,
+        "repo_rows": 21031,
+        "scheduled_row_coverage_pct": 99.87800369685768,
+        "scheduled_valid_coverage_pct": 99.63031423290202,
+        "valid_rows": 26950
+      },
+      "repo_outcome_overlap": {
+        "label_conflicts": 0,
+        "rows": 21031
+      },
+      "sources": {
+        "clob_history": "https://clob.polymarket.com/prices-history",
+        "gamma": "https://gamma-api.polymarket.com/events/keyset",
+        "repo": "https://github.com/supervik/polymarket-btc-preopen",
+        "repo_commit": "653e9ca0fd80ee2523880aadee183b32078e12e4",
+        "repo_parquet_sha256": "7bc1886236a841a82df414f3ee15ac7df106fdcb0e2b2bb52783de34390e7164"
+      }
+    },
+    "exit_code": 0,
+    "parity_mismatches": 0,
+    "parity_rows_compared": 26271
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c51_polymarket_outcomes.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c51_polymarket_preopen_1m.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/C51_TARGET_NATIVE_DATA_R1_AUDIT.json"
+  ],
+  "patches": [
+    {
+      "original_line": "FORMAL_END_EXCLUSIVE = pd.Timestamp(\"2026-09-01T00:00:00Z\")",
+      "original_sha256": "d220d8ba106f948777380e30220f310ac154d3844c39e2164d5757c8982afd23",
+      "patched_line": "FORMAL_END_EXCLUSIVE = pd.Timestamp(\"2026-09-08T18:30:00Z\")",
+      "patched_sha256": "a62336c952136f91ff4fa520f11a27322e328f3d06bb362fe8b636ce5ec53296",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/c51_target_native/research_c51/acquire_c51_target_native_data_r1.py"
+    }
+  ],
+  "rows": 27017,
+  "seconds": 605.7,
+  "stage": "c51_target_native",
+  "updated_at": "2026-09-08T19:58:13.672042+00:00"
+}

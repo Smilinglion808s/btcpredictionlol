@@ -34,6 +34,7 @@ from .stages import (
     publish,
     staged_producer,
     workspace_for,
+    writable_numpy_views,
 )
 
 # Additional recovered producers this module drives. Never mutated beyond the
@@ -74,8 +75,8 @@ def _c51_producer(key: str, stage: str, end: pd.Timestamp | None, patch_end: boo
     return load_producer(target, end)
 
 
-def _c42_ledger_path() -> Path:
-    path = CACHE / C42_LEDGER_CACHE_NAME
+def _c42_ledger_path(name: str = C42_LEDGER_CACHE_NAME) -> Path:
+    path = CACHE / name
     if not path.exists():
         raise FileNotFoundError(
             "C42 ledger not yet published by the (separately owned) 'c42' stage; "
@@ -173,14 +174,18 @@ def run_polymarket_early_prior(end: pd.Timestamp, previous: dict | None) -> Stag
     cache_dir.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    ledger_path = _c42_ledger_path()
+    # The acquisition CLI needs the Polymarket `condition_id` column, which only
+    # the audit ledger carries (c42_ledger.csv is the untouched producer output).
+    ledger_path = _c42_ledger_path("c42_audit_ledger.csv")
     module, record = _c51_producer("polymarket_early_prior", "polymarket_early_prior", None, patch_end=False)
 
     argv = [
         "--audit-ledger", str(ledger_path),
         "--out-dir", str(out_dir),
         "--cache-dir", str(cache_dir),
-        "--workers", "32",
+        # Polymarket rate-limits 32-way fetching (HTTP 429). Per-market pages are
+        # cached on condition_id, so a slower fetch never repeats finished work.
+        "--workers", "6",
         "--trade-end", end.isoformat(),
     ]
     saved = sys.argv
@@ -442,7 +447,8 @@ def run_c51_rebase(end: pd.Timestamp, previous: dict | None) -> StageResult:
     saved = sys.argv
     sys.argv = [producer_dst.name, *argv]
     try:
-        exit_code = module.main()
+        with writable_numpy_views():
+            exit_code = module.main()
     finally:
         sys.argv = saved
 

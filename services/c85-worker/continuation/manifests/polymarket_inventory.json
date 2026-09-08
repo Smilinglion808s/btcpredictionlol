@@ -1,0 +1,68 @@
+{
+  "cursor": "2026-09-08 18:30:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "caveat": "unsettled_or_missing includes both not-yet-closed Gamma events and confirmed unlisted intervals; only c51_target_native's scheduled-grid check can separate the two (NO_MARKET vs pending settlement).",
+    "fetch_error": null,
+    "fetch_window": [
+      "2025-12-01 00:00:00+00:00",
+      "2026-09-08 18:30:00+00:00"
+    ],
+    "grid_intervals": 27050,
+    "new_rows_this_advance": 27017,
+    "unsettled_or_missing_examples": [
+      "2025-12-04 21:45:00+00:00",
+      "2025-12-04 22:00:00+00:00",
+      "2025-12-05 02:00:00+00:00",
+      "2025-12-12 16:45:00+00:00",
+      "2025-12-13 08:15:00+00:00",
+      "2025-12-13 08:30:00+00:00",
+      "2025-12-13 08:45:00+00:00",
+      "2025-12-17 00:45:00+00:00",
+      "2025-12-17 01:00:00+00:00",
+      "2025-12-18 18:30:00+00:00",
+      "2025-12-18 18:45:00+00:00",
+      "2025-12-28 00:00:00+00:00",
+      "2026-01-06 16:30:00+00:00",
+      "2026-01-06 16:45:00+00:00",
+      "2026-01-09 09:00:00+00:00",
+      "2026-01-09 09:15:00+00:00",
+      "2026-01-09 09:30:00+00:00",
+      "2026-01-09 09:45:00+00:00",
+      "2026-01-13 23:30:00+00:00",
+      "2026-01-13 23:45:00+00:00",
+      "2026-01-14 00:00:00+00:00",
+      "2026-01-14 00:15:00+00:00",
+      "2026-01-20 20:30:00+00:00",
+      "2026-01-20 20:45:00+00:00",
+      "2026-01-20 21:00:00+00:00",
+      "2026-01-20 21:15:00+00:00",
+      "2026-01-20 21:30:00+00:00",
+      "2026-01-21 12:15:00+00:00",
+      "2026-01-21 12:30:00+00:00",
+      "2026-01-21 12:45:00+00:00",
+      "2026-01-24 17:30:00+00:00",
+      "2026-01-24 17:45:00+00:00",
+      "2026-06-17 20:15:00+00:00"
+    ],
+    "unsettled_or_missing_intervals_count": 33
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/polymarket_inventory.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/polymarket_inventory_page_manifest.csv"
+  ],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "a5ea4df17aba93c61ac26eafaf5c3ddc379b048ae5539e8ee90996a72319d91d",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "a5ea4df17aba93c61ac26eafaf5c3ddc379b048ae5539e8ee90996a72319d91d",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/polymarket_inventory/e0_polymarket_settlement_audit.py"
+    }
+  ],
+  "rows": 27017,
+  "seconds": 10.9,
+  "stage": "polymarket_inventory",
+  "updated_at": "2026-09-08T19:48:08.006905+00:00"
+}

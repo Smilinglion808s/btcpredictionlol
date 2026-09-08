@@ -56,6 +56,9 @@ copy_module() {
 copy_module t0_prior_candle_lab.py "$ROOT/"
 copy_module t5_preopen_technical_challenger.py "$ROOT/"
 copy_module long_context_model.py "$ROOT/external_research/"
+# r5_lab_manager_phase4.py imports this audit module by package name; the two
+# recovered copies are byte-identical (sha256 44da6573...d6e8).
+copy_module r4_2_hot_momentum_audit.py "$ROOT/external_research/"
 
 # 4. upstream stage outputs the producers read back
 mkdir -p "$ROOT/t5_precision_output"

@@ -1,0 +1,39 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "continuation_gap": "input-bound stage: the recovered base-capture ledgers end at 2026-08-31T23:45Z, so this stage cannot advance past FROZEN_END until the base captures are extended. No rows are synthesised to close the gap.",
+    "parity": {
+      "cell_mismatches": 0,
+      "reference": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/external_research/c37_balanced_maturation_r1_output/c37_shadow_ledger.csv",
+      "rows": 19780
+    }
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/C37_BALANCED_MATURATION_R1.json",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_blocks.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_component_ablation.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_external_feed_outage_stress.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_fee_matrix.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_monthly.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_paired_day_bootstrap.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_policy_performance.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_rank_lookback_sensitivity.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_shadow_ledger.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c37/c37_vs_c36_transition.csv"
+  ],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "5eb0ff87d554ef32bd9d45d532bdbbac0c2f9b38dad1272d3d6d4021668d171d",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "5eb0ff87d554ef32bd9d45d532bdbbac0c2f9b38dad1272d3d6d4021668d171d",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/external_research/c37_balanced_maturation_r1.py"
+    }
+  ],
+  "rows": 19780,
+  "seconds": 2444.8,
+  "stage": "c37",
+  "updated_at": "2026-09-08T19:44:25.632526+00:00"
+}

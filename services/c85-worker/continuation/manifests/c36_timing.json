@@ -1,0 +1,48 @@
+{
+  "cursor": "2026-09-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "continuation_gap": "input-bound stage: the recovered base-capture ledgers end at 2026-08-31T23:45Z, so this stage cannot advance past FROZEN_END until the base captures are extended. No rows are synthesised to close the gap.",
+    "parity": {
+      "cell_mismatches": 0,
+      "files_checked": [
+        "early_waterfall_grid.csv",
+        "paired_day_bootstrap.csv",
+        "timing_direction_diagnostics.csv",
+        "timing_selector_scorecard.csv",
+        "venue_ablation_performance.csv"
+      ],
+      "reference_dir": "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/vault_work/legacy_c37/external_research/c36_timing_robustness_r1_output"
+    }
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/C36_TIMING_ROBUSTNESS_R1.json",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/c36_maturation_filters.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/c70_timing_selector_performance.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/c70_timing_selector_scorecard.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/early_waterfall_grid.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/external_feed_outage_stress.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/paired_day_bootstrap.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/selected_policy_fee_matrix.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/selected_policy_monthly.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/timing_direction_diagnostics.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/timing_robustness_shadow_ledger.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/timing_selector_performance.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/timing_selector_scorecard.csv",
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/c36/timing/venue_ablation_performance.csv"
+  ],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "e0dfafc193be207fabc1619f712611ccd57b46dd1716dfab4a646aa5de2455dc",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "e0dfafc193be207fabc1619f712611ccd57b46dd1716dfab4a646aa5de2455dc",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/external_research/c36_timing_robustness_r1.py"
+    }
+  ],
+  "rows": 20343,
+  "seconds": 1245.8,
+  "stage": "c36_timing",
+  "updated_at": "2026-09-08T18:32:36.170870+00:00"
+}

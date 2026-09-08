@@ -233,6 +233,12 @@ def run_structure_valid(end: pd.Timestamp, previous: dict | None) -> StageResult
         )
     events = pd.read_csv(events_path)
     events["ts"] = pd.to_datetime(events["ts"] if "ts" in events.columns else events["target_ts"], utc=True)
+    # Representation only: C79 converts the target stamp with `astype('int64') //
+    # 1_000_000`, which is a millisecond epoch only when the column is nanosecond
+    # resolution. Newer pandas can parse the same instants as microseconds, which
+    # would silently turn every stamp into seconds and invalidate every row. No
+    # instant is changed here, only its unit.
+    events["ts"] = events["ts"].dt.as_unit("ns")
     packet = events[["ts", "binance_spot_t5_w005_return_bps", "binance_spot_t5_w005_flow_imbalance"]].copy()
 
     sys.path.insert(0, str(lab_copy))

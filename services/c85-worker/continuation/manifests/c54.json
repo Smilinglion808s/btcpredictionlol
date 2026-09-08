@@ -1,0 +1,33 @@
+{
+  "cursor": "2025-12-01 00:00:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "actual_hashes": {
+      "c42": "deb4b469324b32138fbcd7bae315d87e868db4ee07bd4883fc01ed41ef647b85",
+      "c51": "e897f5adbe0c73d0ee27ce723295df0b61e6bb128a4ae8b7b04aaf6d0d255dc6",
+      "precommit": "6a2ecbc63ab667697002d7533618f102ae9b57b7bd08e28ff79e29339484f222"
+    },
+    "expected_hashes": {
+      "c42": "deb4b469324b32138fbcd7bae315d87e868db4ee07bd4883fc01ed41ef647b85",
+      "c51": "d593aeb58d30f51b10632f911ff3c87839bc27a27b70c0a3d3bb02829b4145f9",
+      "precommit": "95d9217a16fc6a72d34bc4549f901099449bdbb02fc7acf743a56e78c40f16b4"
+    },
+    "reason": "build_c54_error_complementarity_router_r1.py hard-fails unless its precommit/C51/C42 inputs match the exact frozen hashes baked into the script. Advancing the C51/C42 ledgers past the frozen archive changes these hashes by design, so the router cannot run on continuation data without a producer edit (forbidden) or a fabricated precommit (forbidden). Left blocked and unmodified.",
+    "status": "BLOCKED_HASH_GATE"
+  },
+  "outputs": [],
+  "patches": [
+    {
+      "original_line": null,
+      "original_sha256": "8da383872a6ef4f9695ee87ef8ff025cf939d55c2ea85468de7597fcff80abac",
+      "patched_line": "unpatched (window supplied by inputs/CLI)",
+      "patched_sha256": "8da383872a6ef4f9695ee87ef8ff025cf939d55c2ea85468de7597fcff80abac",
+      "producer": "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85work/c54/build_c54_error_complementarity_router_r1.py"
+    }
+  ],
+  "rows": 0,
+  "seconds": 0.0,
+  "stage": "c54",
+  "updated_at": "2026-09-08T21:39:52.854526+00:00"
+}

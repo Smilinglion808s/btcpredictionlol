@@ -1,0 +1,19 @@
+{
+  "cursor": "2026-09-08 18:30:00+00:00",
+  "error": null,
+  "mode": "bootstrap",
+  "notes": {
+    "archived_prefix_rows": 19487,
+    "invalid": 130,
+    "parity": "ok",
+    "valid": 26911
+  },
+  "outputs": [
+    "/dev-server/services/c85-worker/evaluation-fixtures/cache/continuation/structure_valid_rows.csv"
+  ],
+  "patches": [],
+  "rows": 27041,
+  "seconds": 19.2,
+  "stage": "structure_valid",
+  "updated_at": "2026-09-08T20:27:01.934800+00:00"
+}
