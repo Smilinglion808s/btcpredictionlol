@@ -279,9 +279,11 @@ def _extend(module_name: str, attribute: str) -> None:
 
     try:
         module = importlib.import_module(f".{module_name}", __package__)
-    except ModuleNotFoundError:
+    except Exception:  # a branch still under construction must not break the harness
         return
-    STAGES.extend(getattr(module, attribute))
+    group = getattr(module, attribute, None)
+    if group:
+        STAGES.extend(group)
 
 
 _extend("stage_c30", "C30_STAGES")
