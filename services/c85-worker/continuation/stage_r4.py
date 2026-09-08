@@ -263,11 +263,8 @@ def run_structure_valid(end: pd.Timestamp, previous: dict | None) -> StageResult
         raise FileNotFoundError(
             f"{ref_path}: historical-prefix parity reference is missing; refusing to "
             "publish structure_valid unverified")
-    if True:
-        ref = pd.read_parquet(ref_path)[["ts", "structure_valid"]]
-        notes.update(_parity_check(result, ref, "ts", "structure_valid"))
-    else:
-        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
+    ref = pd.read_parquet(ref_path)[["ts", "structure_valid"]]
+    notes.update(_parity_check(result, ref, "ts", "structure_valid"))
 
     return StageResult(
         cursor=end,
