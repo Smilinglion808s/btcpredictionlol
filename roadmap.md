@@ -122,3 +122,34 @@ OPEN DESIGN ITEMS (not blockers)
 
 C85 IS NOT LIVE. T45 execution unchanged; C85 excluded from
 WEBHOOK_ALLOWED_MODELS.
+
+## 2026-09-08 (late) — boundary path wired, cache-link made safe
+
+DONE this turn (code only; no rebuild, no publish, betting still suppressed)
+- [x] `reproduction/link_durable_cache.sh` rewritten: real write/read/delete
+      probe of the durable root, same-filesystem refusal, per-file hash-verified
+      migration, conflicting files preserved as `<name>.local-<stamp>` (never
+      overwritten), source cache renamed to `<cache>.migrated-<stamp>` instead of
+      `rm -rf`. Tests: `reproduction/test_link_durable_cache.sh` (24 checks).
+- [x] `src/orchestration.py` — shared one-target inference orchestration;
+      `Worker.on_boundary` delegates to it (`C85_PIPELINE_INCOMPLETE` removed).
+      Raw packet production stays an explicit fail-closed dependency.
+- [x] `src/tickers.py` — ticker verified against market metadata; unlisted
+      interval fails closed instead of inventing a contract.
+- [x] startup audit: a pending bridge or a missing applicable fit now BLOCKS
+      readiness instead of being computed and ignored.
+- [x] backend queried directly: 0 checkpoints / 0 targets / 0 settlements /
+      0 outbox; Railway worker `c85-worker-amsterdam-1` heartbeats, BLOCKED on
+      stale feeds.
+
+OPEN LIVE-COMPUTATION BLOCKER
+- [ ] No live producer for the nine leaf outputs. `src/experts/leaf.py`
+      `evaluate()` is pass-through only; `directional_matrix` and live fitted
+      inference are unimplemented. Historical REPRODUCED status is not a live
+      producer. Next step: `LivePacketSource.build` for the direction head only,
+      from the running Binance collectors, asserted against an archived boundary.
+
+ACCESS GAP
+- [ ] No Railway token/config in this sandbox: service settings and volume state
+      could not be inspected. Runtime state reuses the existing checkpoint
+      backend; no new paid resource provisioned.
