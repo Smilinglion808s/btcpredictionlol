@@ -88,26 +88,62 @@ class FakeStore:
     def __init__(self, settlements: list[dict[str, Any]] | None = None) -> None:
         self.settlements = settlements or []
         self.commits: list[dict[str, Any]] = []
+        self.dispatch_commits: list[dict[str, Any]] = []
         self.missed: list[tuple[Any, str, str]] = []
         self.consumed: list[list[str]] = []
         self.checkpoints: list[dict[str, Any]] = []
+        self.seq = 0
+        # failure injection
+        self.fail_commit: str | None = None       # None | "reject" | "raise"
+        self.lose_response = False                # commit lands, response lost
+        self.lease_ok = True
 
     def unconsumed_settlements(self, since: Any = None) -> list[dict[str, Any]]:
         return list(self.settlements)
 
-    def commit_decision(self, decision, *, published, state=None, stage="READY", outbox=None):
+    def verify_lease(self, **_: Any) -> dict[str, Any]:
+        return {"ok": self.lease_ok, "lease": {"owner_id": "w1", "fence": 1}}
+
+    def committed_identity(self) -> dict[str, Any] | None:
+        return self.checkpoints[-1] if self.checkpoints else None
+
+    def _record(self, decision, state, outbox):
+        self.seq += 1
         self.commits.append(
             {
                 "identity": decision.identity,
                 "status": decision.status,
                 "final_side": decision.final_side,
-                "published": published,
+                "published_at": None,
                 "outbox": outbox,
             }
         )
         if state is not None:
-            self.checkpoints.append(copy.deepcopy(state.to_dict()))
-        return {"target_id": f"tid-{len(self.commits)}"}
+            snapshot = copy.deepcopy(state.to_dict())
+            snapshot["checkpoint_seq"] = self.seq
+            snapshot["state_sha256"] = state.sha256()
+            self.checkpoints.append(snapshot)
+        return {"ok": True, "target_id": f"tid-{len(self.commits)}",
+                "checkpoint": {"checkpoint_seq": self.seq}}
+
+    def commit_decision(self, decision, *, published_at=None, state=None,
+                        stage="READY", outbox=None):
+        if self.fail_commit == "reject":
+            return {"ok": False, "error": "immutable_published_decision"}
+        if self.fail_commit == "raise":
+            raise RuntimeError("connection reset")
+        result = self._record(decision, state, outbox)
+        self.commits[-1]["published_at"] = published_at
+        if self.lose_response:
+            raise RuntimeError("response lost after commit")
+        return result
+
+    def commit_dispatch_result(self, decision, *, published_at=None):
+        self.dispatch_commits.append(
+            {"identity": decision.identity, "status": decision.status,
+             "published_at": published_at}
+        )
+        return {"ok": True}
 
     def consume_settlements(self, ids, state=None, stage="READY"):
         self.consumed.append(list(ids))
@@ -115,6 +151,7 @@ class FakeStore:
 
     def mark_missed(self, ticker, target_open, reason):
         self.missed.append((ticker, target_open.isoformat(), reason))
+
 
 
 class FakeGateway:
