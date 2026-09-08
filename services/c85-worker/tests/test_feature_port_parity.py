@@ -2,7 +2,7 @@
 import sys, json
 from pathlib import Path
 import numpy as np, pandas as pd
-K=Path('/tmp/c85/kit')
+K=Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/kit')
 sys.path.insert(0,str(K/'reference')); sys.path.insert(0,'/dev-server/services/c85-worker')
 from reliability import portable_probability, policy
 from src import features as F

@@ -12,7 +12,7 @@ reconstructed T+5 frame plus the R4.1 rows reproduced by ``repro_r4.py``.
 (8fed5535...), so a drifted upstream aborts instead of silently passing.
 
 Usage:
-    ROOT=/tmp/c85root REF=<archived t5_hot_calibration_ledger.csv> \
+    ROOT=/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root REF=<archived t5_hot_calibration_ledger.csv> \
     python3 repro_r5_phase4.py
 """
 from __future__ import annotations
@@ -21,11 +21,11 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(os.environ.get("ROOT", "/tmp/c85root"))
+ROOT = Path(os.environ.get("ROOT", "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root"))
 REF = Path(
     os.environ.get(
         "REF",
-        "/tmp/upx/upstream/vault_work/legacy_lab2/sources/"
+        "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/vault_work/legacy_lab2/sources/"
         "R5_Lab_Manager_Research_Checkpoint_2026-09-02.zip__expanded/"
         "external_research/r5_lab_manager_output/t5_hot_calibration_ledger.csv",
     )

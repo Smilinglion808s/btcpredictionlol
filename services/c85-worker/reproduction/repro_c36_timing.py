@@ -1,8 +1,8 @@
 import sys, pathlib, numpy as np, pandas as pd
-sys.path.insert(0,'/tmp/c30root')
+sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root')
 from external_research import c36_timing_robustness_r1 as timing
-out = pathlib.Path('/tmp/c30root/c36t_repro_out'); out.mkdir(parents=True, exist_ok=True)
-ref_dir = pathlib.Path('/tmp/upx/upstream/vault_work/legacy_c37/external_research/c36_timing_robustness_r1_output')
+out = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root/c36t_repro_out'); out.mkdir(parents=True, exist_ok=True)
+ref_dir = pathlib.Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/vault_work/legacy_c37/external_research/c36_timing_robustness_r1_output')
 timing.OUT = out
 timing.main()
 total=0

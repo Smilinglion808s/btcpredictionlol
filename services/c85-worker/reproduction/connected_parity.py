@@ -21,7 +21,7 @@ Leaf sources (all produced in this same session by the chained reproductions):
       the ported experts, evaluated on the substituted packet
 
 Usage:
-    C85_ARTIFACT_DIR=/tmp/c85/kit python3 connected_parity.py
+    C85_ARTIFACT_DIR=/dev-server/services/c85-worker/evaluation-fixtures/cache/kit python3 connected_parity.py
 """
 from __future__ import annotations
 
@@ -33,12 +33,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-KIT = Path(os.environ.get("C85_ARTIFACT_DIR", "/tmp/c85/kit"))
+KIT = Path(os.environ.get("C85_ARTIFACT_DIR", "/dev-server/services/c85-worker/evaluation-fixtures/cache/kit"))
 REPO = Path(__file__).resolve().parents[1]
-C30ROOT = Path(os.environ.get("C30ROOT", "/tmp/c30root"))
-C85ROOT = Path(os.environ.get("C85ROOT", "/tmp/c85root"))
-LAB = Path(os.environ.get("LAB", "/tmp/upx/upstream/lab/c81/lab"))
-MINUTES = Path(os.environ.get("MINUTES", "/tmp/c79/btc_minutes_spot.parquet"))
+C30ROOT = Path(os.environ.get("C30ROOT", "/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root"))
+C85ROOT = Path(os.environ.get("C85ROOT", "/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root"))
+LAB = Path(os.environ.get("LAB", "/dev-server/services/c85-worker/evaluation-fixtures/cache/upx/upstream/lab/c81/lab"))
+MINUTES = Path(os.environ.get("MINUTES", "/dev-server/services/c85-worker/evaluation-fixtures/cache/c79/btc_minutes_spot.parquet"))
 
 sys.path.insert(0, str(KIT / "reference"))
 sys.path.insert(0, str(REPO))

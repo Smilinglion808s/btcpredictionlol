@@ -37,7 +37,7 @@ FIXTURES = REPO / "evaluation-fixtures" / "upstream"
 
 SOURCES = UPSTREAM / "ancestor" / "source"
 LAB_C81 = UPSTREAM / "upstream" / "lab" / "c81" / "lab"
-C85ROOT = Path("/tmp/c85root")
+C85ROOT = Path("/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root")
 
 HTF_MODELS = SOURCES / "5fa9f70f0c59" / "htf_structure_r3_models.py"
 HTF_REFINE = SOURCES / "9d85759c9f9f" / "htf_structure_r4_refine.py"

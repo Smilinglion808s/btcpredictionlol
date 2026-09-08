@@ -2,7 +2,7 @@ import sys, numpy as np, pandas as pd
 sys.path.insert(0,'/dev-server/services/c85-worker')
 from src import features as F
 
-K='/tmp/c85/kit/fixtures/'
+K='/dev-server/services/c85-worker/evaluation-fixtures/cache/kit/fixtures/'
 up=pd.read_parquet(K+'upstream_packet.parquet')
 d60=pd.read_parquet(K+'direction60.parquet')
 m55=pd.read_parquet(K+'meta55.parquet')

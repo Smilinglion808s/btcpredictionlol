@@ -1,11 +1,11 @@
 import sys, numpy as np, pandas as pd
-sys.path.insert(0,'/tmp/c85root/external_research'); sys.path.insert(0,'/tmp/c30root'); sys.path.insert(0,'/tmp/c85root')
+sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root/external_research'); sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c30root'); sys.path.insert(0,'/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root')
 import htf_structure_r3_models as htf
 import htf_structure_r4_stress as stress
 import technical_expansion_r2_models as r2
 from pathlib import Path
 from compare import compare
-OUT = Path('/tmp/c85root/external_research/htf_structure_r3_output')
+OUT = Path('/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root/external_research/htf_structure_r3_output')
 
 frame = htf.load_t5()
 masks = stress.split_masks(frame)
@@ -35,7 +35,7 @@ ledger = pd.DataFrame({
     "prediction": candidate, "frozen_t5_r2_prediction": control,
     "full_r4_prediction": np.concatenate([full_r4, np.zeros(max(0,len(frame)-len(full_r4)), np.int8)])[:len(frame)],
 })
-ledger.to_csv('/tmp/c85root/r4_repro_rows.csv', index=False)
+ledger.to_csv('/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root/r4_repro_rows.csv', index=False)
 ref = pd.read_parquet('/dev-server/services/c85-worker/evaluation-fixtures/upstream/t5_book_day4h_r4_1_rows.parquet')
 ref['ts'] = pd.to_datetime(ref.ts, utc=True)
 led = ledger.copy(); led['ts'] = pd.to_datetime(led.ts, utc=True)

@@ -13,6 +13,7 @@ missing market can never silently shrink or shift a training window.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -22,9 +23,11 @@ from .config import CACHE, RESEARCH_START, UPSTREAM, ensure_dirs
 from .endpatch import load_producer
 from .runner import Stage, StageResult
 
-WORKSPACE = Path("/tmp/c85work")
+WORKSPACE = Path(os.environ.get(
+    "C85_WORKSPACE",
+    str(Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "cache" / "c85work")))
 
-SOURCES = UPSTREAM / "C85_Ancestor_Recovery" / "source"
+SOURCES = UPSTREAM / "ancestor" / "source"
 PRODUCERS = {
     "acquire_multivenue": SOURCES / "ab3b71fdc142" / "acquire_multivenue_r1.py",
     "build_multivenue": SOURCES / "94b5df6d53fe" / "build_multivenue_features_r1.py",

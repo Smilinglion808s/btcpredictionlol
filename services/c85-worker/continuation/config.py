@@ -14,10 +14,10 @@ from pathlib import Path
 import pandas as pd
 
 WORKER_ROOT = Path(__file__).resolve().parents[1]
-CACHE = Path(os.environ.get("C85_CONTINUATION_CACHE",
-                            WORKER_ROOT / "evaluation-fixtures" / "cache" / "continuation"))
+CACHE_ROOT = WORKER_ROOT / "evaluation-fixtures" / "cache"
+CACHE = Path(os.environ.get("C85_CONTINUATION_CACHE", CACHE_ROOT / "continuation"))
 CHECKPOINTS = CACHE / "checkpoints"
-UPSTREAM = Path(os.environ.get("C85_UPSTREAM_ROOT", "/tmp/upx"))
+UPSTREAM = Path(os.environ.get("C85_UPSTREAM_ROOT", str(CACHE_ROOT / "upx")))
 
 # Frozen research start of the whole ancestry. Never moves.
 RESEARCH_START = pd.Timestamp("2025-12-01T00:00:00Z")
