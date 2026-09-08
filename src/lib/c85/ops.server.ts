@@ -379,5 +379,60 @@ export async function runC85Op(
       void timing;
       return ok({ beat: true });
     }
+
+    case "bundle.upload_url": {
+      const path = `${mv}/${body.bundle_version}/${body.filename}`;
+      const { data, error } = await supabase.storage
+        .from(BUNDLE_BUCKET)
+        .createSignedUploadUrl(path, { upsert: true });
+      if (error) throw new Error(error.message);
+      return ok({ bucket: BUNDLE_BUCKET, storage_path: path, upload: data });
+    }
+
+    case "bundle.register": {
+      const { op: _op, ...row } = body;
+      const { data, error } = await supabase
+        .from("c85_deployment_bundles")
+        .upsert(
+          { model_version: mv, storage_bucket: BUNDLE_BUCKET, built_by: workerId, ...row },
+          { onConflict: "model_version,bundle_version" },
+        )
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      return ok({ bundle: data });
+    }
+
+    case "bundle.activate": {
+      const { data, error } = await supabase.rpc("c85_activate_bundle", {
+        p_model_version: mv,
+        p_bundle_version: body.bundle_version,
+      });
+      if (error) return { status: 400, result: { ok: false, error: error.message } };
+      return ok({ bundle: data });
+    }
+
+    case "bundle.active": {
+      const { data, error } = await supabase
+        .from("c85_deployment_bundles")
+        .select("*")
+        .eq("model_version", mv)
+        .eq("status", "ACTIVE")
+        .order("activated_at", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(error.message);
+      const bundle = data?.[0] ?? null;
+      if (!bundle) return ok({ bundle: null, download_url: null });
+      let downloadUrl: string | null = null;
+      if (body.with_download_url) {
+        const signed = await supabase.storage
+          .from(bundle.storage_bucket ?? BUNDLE_BUCKET)
+          .createSignedUrl(bundle.storage_path, body.ttl_seconds);
+        if (signed.error) throw new Error(signed.error.message);
+        downloadUrl = signed.data?.signedUrl ?? null;
+      }
+      return ok({ bundle, download_url: downloadUrl });
+    }
   }
 }
+
