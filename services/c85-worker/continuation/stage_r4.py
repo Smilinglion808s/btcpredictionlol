@@ -19,6 +19,7 @@ publishing on any mismatch.
 """
 from __future__ import annotations
 
+import importlib
 import shutil
 import subprocess
 import sys
