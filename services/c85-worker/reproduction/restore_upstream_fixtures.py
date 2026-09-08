@@ -29,7 +29,9 @@ LEDGERS: dict[str, tuple[str, str]] = {
         "selected_shadow_ledger.csv", "c30_c70_lab_manager_r2_output"),
     "selected_shadow_ledger__t0_t5_win_containment_deep_dive_r1_output": (
         "selected_shadow_ledger.csv", "t0_t5_win_containment_deep_dive_r1_output"),
-    "t5_hot_calibration_ledger": ("t5_hot_calibration_ledger.csv", "r5_lab_manager_output"),
+    # The R5_LAB_MANAGER package itself is not part of the recovery archives;
+    # the byte-identical copy the archived C42 build consumed is used instead.
+    "t5_hot_calibration_ledger": ("t5_hot_calibration_ledger.csv", ""),
     "t5_book_day4h_r4_1_rows": ("t5_book_day4h_r4_1_rows.csv", "htf_structure_r3_output"),
 }
 
