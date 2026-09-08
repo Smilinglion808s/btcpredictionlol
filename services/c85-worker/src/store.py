@@ -119,6 +119,8 @@ class C85Store:
         self.backend = backend
         self.worker_id = worker_id
         self._last_seq: int = 0
+        self._lease_fence: int | None = None
+
 
     # -- checkpoints -----------------------------------------------------------
     def latest_checkpoint(self) -> dict[str, Any] | None:
