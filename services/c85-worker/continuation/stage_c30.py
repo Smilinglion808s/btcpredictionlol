@@ -420,7 +420,7 @@ def run_c37(end: pd.Timestamp, previous: dict | None) -> StageResult:
 
 C30_STAGES = [
     Stage(name="external_direction", depends_on=(), run=run_external_direction,
-          incremental=False, frozen_end=True, frozen_end=True,
+          incremental=False, frozen_end=True,
           description="evaluate_external_direction_r1 directional matrix + causal frontier"),
     Stage(name="fee_coverage", depends_on=(), run=run_fee_coverage, incremental=False, frozen_end=True,
           description="t0_t5_fee_coverage_frontier_r1 adaptive coverage frontier ledger"),
