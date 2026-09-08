@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import CACHE, RESEARCH_START, UPSTREAM, ensure_dirs
+from .config import CACHE, FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
 from .endpatch import load_producer
 from .runner import Stage, StageResult
 
@@ -220,6 +220,7 @@ def run_binance_events(end: pd.Timestamp, previous: dict | None) -> StageResult:
             "intervals_without_trade_data_count": int(len(missing)),
             "sha256": audit.get("sha256"),
             "live_recovered_days": recovered,
+            **splice_notes,
         },
     )
 
