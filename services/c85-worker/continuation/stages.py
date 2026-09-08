@@ -32,6 +32,8 @@ PRODUCERS = {
     "kalshi_early_prior": SOURCES / "ed5425956069" / "acquire_kalshi_early_prior_r1.py",
     "polymarket_early_prior": SOURCES / "030451994e65" / "acquire_polymarket_early_prior_r1.py",
     "c51_target_native": SOURCES / "fa4df3e821b2" / "acquire_c51_target_native_data_r1.py",
+    "c51_rebase": SOURCES / "06cf04da3fa1" / "build_c51_target_native_rebase_r1.py",
+    "c42": SOURCES / "01c50b819f8e" / "build_c42_maturation_consensus_r1.py",
 }
 
 
@@ -264,3 +266,45 @@ STAGES = [
         description="Kalshi KXBTC15M market inventory and [T,T+5s) trades",
     ),
 ]
+
+
+def _extend(module_name: str, attribute: str) -> None:
+    """Attach a downstream stage group when its module is present.
+
+    The groups live in separate modules so each ancestry branch can be built and
+    reviewed independently. A branch that is not present yet simply does not
+    register stages; it never silently degrades an existing one.
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(f".{module_name}", __package__)
+    except Exception:  # a branch still under construction must not break the harness
+        return
+    group = getattr(module, attribute, None)
+    if group:
+        STAGES.extend(group)
+
+
+_extend("stage_c30", "C30_STAGES")
+_extend("stage_r4", "R4_STAGES")
+
+
+def _c42_stages() -> list[Stage]:
+    from .stage_c42 import run_c42
+
+    upstream = tuple(
+        name for name in ("phase3", "fee_coverage", "c37", "r5_phase4")
+        if name in {s.name for s in STAGES}
+    )
+    return [Stage(
+        name="c42",
+        depends_on=upstream,
+        run=run_c42,
+        incremental=False,
+        description="C42 maturation-consensus composite over the C30/C36/C37 and R4/R5 ledgers",
+    )]
+
+
+STAGES.extend(_c42_stages())
+_extend("stage_c51", "C51_STAGES")
