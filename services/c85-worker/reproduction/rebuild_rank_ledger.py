@@ -211,7 +211,7 @@ def main() -> int:
 
     manifest = {
         "identity": "c85-reconstruction-r1",
-        "head_id": head.head_id,
+        "head_id": lc.HEAD_ID,
         "generation": generation,
         "fit_id": head.fit_id,
         "fit_count": head.fit_count,
