@@ -695,7 +695,7 @@ class LongContextHead:
         activate: StagedFit | None = None
         model = self.model
         if self.position >= MINIMUM and self.position % REFIT_EVERY == 0:
-            snapshot = self.training_snapshot(self.position)
+            snapshot = self.training_snapshot(self.position, copy=False)
             staged = self._staged_fit
             usable = (
                 staged is not None
@@ -772,7 +772,8 @@ class LongContextHead:
         return update.commit()
 
     # -- fitting (off the serving path) -------------------------------------
-    def _capture(self, position: int) -> tuple[tuple[_Row, ...], TrainingSnapshot]:
+    def _capture(self, position: int, *, copy: bool = True
+                 ) -> tuple[tuple[_Row, ...], TrainingSnapshot]:
         """Capture the boundary's rows ONCE and describe exactly those rows.
 
         The returned rows are immutable copies. The fit is produced from this
@@ -786,7 +787,7 @@ class LongContextHead:
         captured = tuple(
             _Row(r.ts, np.array(r.values, dtype=float, copy=True), r.complete, r.label, r.pos)
             for r in self.buffer
-        )
+        ) if copy else tuple(self.buffer)
         window_first = max(0, position - WINDOW)
         window_last = position - 1
         expected = max(0, position - window_first)
@@ -864,7 +865,7 @@ class LongContextHead:
         """
 
         position = self.refit_due_at() if position is None else int(position)
-        _rows, snapshot = self._capture(position)
+        _rows, snapshot = self._capture(position, copy=False)
         last = self.buffer[-1].ts if self.buffer else None
         return {
             "position": position,
@@ -878,10 +879,15 @@ class LongContextHead:
                      "cannot start earlier without shortening the original window"),
         }
 
-    def training_snapshot(self, position: int) -> TrainingSnapshot:
-        """The immutable description of what a fit for ``position`` may use."""
+    def training_snapshot(self, position: int, *, copy: bool = True) -> TrainingSnapshot:
+        """The immutable description of what a fit for ``position`` may use.
 
-        return self._capture(position)[1]
+        ``copy=False`` only describes the current rows (used on the serving path,
+        where cloning the whole trailing window would cost real milliseconds);
+        the digest is identical either way. ``train_ahead`` always captures.
+        """
+
+        return self._capture(position, copy=copy)[1]
 
     def train_ahead(self, *, position: int | None = None) -> StagedFit | None:
         """Fit the model that the next scheduled refit position will activate.
@@ -1019,6 +1025,7 @@ class LongContextHead:
             "pending_labels": {k.isoformat(): v for k, v in self._labels_by_ts.items()},
             "label_availability": {k.isoformat(): v
                                    for k, v in self._label_available_at.items()},
+            "missing_labels": {k.isoformat(): v for k, v in self._missing_labels.items()},
             "fitted": self.model is not None,
             # A restart immediately before a scheduled refit must not lose the
             # fit that was already produced off the timed path, nor the
@@ -1031,6 +1038,7 @@ class LongContextHead:
                 "snapshot": None if staged.snapshot is None else {
                     **staged.snapshot.__dict__,
                     "grid_origin": list(staged.snapshot.grid_origin),
+                    "unresolved_positions": list(staged.snapshot.unresolved_positions),
                 },
             },
             "no_fit_positions": {str(p): d for p, d in self._no_fit_positions.items()},
@@ -1160,6 +1168,8 @@ class LongContextHead:
                               for k, v in meta["pending_labels"].items()}
         head._label_available_at = {pd.Timestamp(k): str(v)
                                     for k, v in (meta.get("label_availability") or {}).items()}
+        head._missing_labels = {pd.Timestamp(k): str(v)
+                                for k, v in (meta.get("missing_labels") or {}).items()}
         head._no_fit_positions = {int(p): str(d)
                                   for p, d in (meta.get("no_fit_positions") or {}).items()}
         staged_meta = meta.get("staged_fit")
@@ -1177,7 +1187,9 @@ class LongContextHead:
                 training_rows=int(staged_meta["training_rows"]),
                 cutoff_ts=staged_meta.get("cutoff_ts"),
                 snapshot=None if snap is None else TrainingSnapshot(
-                    **{**snap, "grid_origin": tuple(snap["grid_origin"])}
+                    **{**snap,
+                       "grid_origin": tuple(snap["grid_origin"]),
+                       "unresolved_positions": tuple(snap.get("unresolved_positions", ()))}
                 ),
             )
         if meta.get("fitted"):
