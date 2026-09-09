@@ -894,6 +894,13 @@ class LongContextHead:
         boundary defines, and a fit made early would silently miss the labels
         that settle in between.
 
+        It also requires the boundary's entitled window to be RESOLVED, not
+        merely present: every position in ``[position-WINDOW, position)`` must
+        be retained and must carry either a settled in-domain label or evidenced
+        original source gap. A label that has not arrived yet is not the
+        original's NaN, so it fails closed here (``LongContextTrainingRequired``)
+        rather than producing a shortened fit or a bogus "no fit" verdict.
+
         Uses exactly the rows the original would have used at that boundary:
         the retained trailing window, restricted to feature-complete rows with a
         finite non-zero settled label.
@@ -908,14 +915,21 @@ class LongContextHead:
                 f"a fit for position {position} is not yet eligible: the head is at "
                 f"{self.position} and the rows before {position} do not all exist yet"
             )
-        snapshot = self.training_snapshot(position)
+        rows, snapshot = self._capture(position)
         staged = self._staged_fit
         if (staged is not None and staged.position == position
                 and staged.snapshot is not None
                 and staged.snapshot.digest == snapshot.digest):
             return staged
-        rows = [r for r in self.buffer
-                if r.complete and np.isfinite(r.label) and r.label != 0]
+        if not snapshot.complete:
+            missing = list(snapshot.unresolved_positions)
+            raise LongContextTrainingRequired(
+                f"the training window for position {position} is not resolved: "
+                f"{len(missing)} of {snapshot.expected_positions} entitled positions "
+                f"have no settled label and no evidenced source gap "
+                f"(first {missing[:5]}). Waiting for the original required inputs; "
+                "a pending label is not an original NaN"
+            )
         if len(rows) < MINIMUM:
             self._no_fit_positions[position] = snapshot.digest
             return None
