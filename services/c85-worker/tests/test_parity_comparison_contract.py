@@ -38,6 +38,9 @@ def world(tmp_path, monkeypatch):
     values = rng.normal(size=(ROWS, FEATURES))
     frame = pd.DataFrame(values, columns=names)
     frame["target_ts"] = pd.date_range("2026-01-01", periods=ROWS, freq="15min", tz="UTC")
+    # the recovered producer nulls stale book columns and appends
+    # book_fresh_within_60s; a fresh book keeps every row eligible.
+    frame["book_final_age_seconds"] = 1.0
     frame["binance_label"] = np.sign(values[:, 0])
     frame_path = tmp_path / "frame.pkl"
     frame.to_pickle(frame_path)
@@ -173,6 +176,7 @@ def ranked_world(tmp_path, monkeypatch):
     frame = pd.DataFrame({names[0]: rng.normal(size=BIG_ROWS)})
     frame["target_ts"] = pd.date_range("2026-01-01", periods=BIG_ROWS,
                                        freq="15min", tz="UTC")
+    frame["book_final_age_seconds"] = 1.0
     frame["binance_label"] = np.sign(frame[names[0]].to_numpy())
     frame_path = tmp_path / "frame.pkl"
     frame.to_pickle(frame_path)
