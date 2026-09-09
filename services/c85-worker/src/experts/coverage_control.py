@@ -387,11 +387,13 @@ class CoverageControlProducer:
         label = _float(row["label"])
         candidate_prediction = _direction(row["candidate_prediction"])
         opportunity = (
-            _truthy(row["t5_input_complete"])
+            _truthy(row.get("in_live_window", True))
+            and _truthy(row["t5_input_complete"])
             and candidate_prediction != 0
             and math.isfinite(label)
             and label != 0
         )
+
 
         t5_rank = ranks["R2_R4_BLEND"]
         external_rank = _float(row["external_rank"])
