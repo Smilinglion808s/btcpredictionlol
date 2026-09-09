@@ -110,7 +110,8 @@ def test_scores_match_the_fitted_pipeline_applied_to_the_original_matrix(model, 
         result = model.score(stage, row["ts"], observation)
         assert result["p_up"] == pytest.approx(float(expected[i][up]), abs=1e-12)
         assert result["fit_id"] == f"external_direction_{stage}_{fit.phase}"
-        assert result["direction"] == (1 if result["p_up"] >= 0.5 else 0)
+        assert result["class_index"] == (1 if result["p_green"] >= 0.5 else 0)
+        assert result["signed_direction"] == (1 if result["p_green"] >= 0.5 else -1)
 
 
 def test_the_design_row_keeps_the_artifacts_feature_order_and_its_nans(model, observations):
