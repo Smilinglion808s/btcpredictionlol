@@ -35,7 +35,9 @@ Three corrections to earlier worker code are encoded here.
    ledger happens to contain no exact-0.5 row, so this is taken from the source
    expression, not inferred from data.
 3. ``external_rank`` is the **global** ``rolling_rank`` of ``|p - 0.5|`` over
-   the trailing 2,880 finite observations (minimum 960), NOT the per-direction
+   the trailing 2,880 **rows** - a positional window, from which the non-finite
+   entries are dropped only after slicing, so rows without a probability still
+   consume a slot - with a 960-row minimum. It is NOT the per-direction
    ``directional_past_rank``. ``directional_past_rank`` (lookback 768, minimum
    96) belongs to the c30/c70 ``map_external_scores`` ranks, a different pair
    of columns.
@@ -93,8 +95,11 @@ def rolling_rank(
     """Verbatim `t5_precision_lab.rolling_rank` lines 100-110.
 
     Strictly past-only percentile of ``value`` within the trailing ``lookback``
-    *finite* prior observations; ties count half; NaN until ``minimum`` prior
-    finite observations exist. Non-finite values are neither ranked nor stored.
+    **rows** (``values[index - lookback:index]``), from which the non-finite
+    entries are dropped after slicing - so a row without a value still occupies
+    a slot in the window. Ties count half; the result is NaN until ``minimum``
+    finite values exist inside that positional window. Non-finite values are
+    neither ranked nor counted.
     """
 
     values = np.asarray(values, dtype=float)
@@ -123,8 +128,79 @@ def external_prediction(
     ).astype(np.int8)
 
 
+# Explicit per-target status. `MODEL_NO_PROBABILITY` is a real row of the
+# original series (2,935 of them in the archived ledger); `ACQUISITION_FAILED`
+# is not a row at all and must never advance the positional window.
+MODEL_SCORED = "MODEL_SCORED"
+MODEL_NO_PROBABILITY = "MODEL_NO_PROBABILITY"
+ACQUISITION_FAILED = "ACQUISITION_FAILED"
+
+
 class RankStateError(RuntimeError):
     """Raised when an incremental rank update would break chronological order."""
+
+
+class RetryConflict(RuntimeError):
+    """Raised when a target is re-submitted with a *different* input.
+
+    The committed output of a target is immutable. A retry that carries the
+    same input is idempotent and returns the original output; a retry that
+    carries a different input is a real inconsistency (two different beliefs
+    about one target) and is surfaced rather than silently applied, because
+    applying it would mix a new direction with an already-committed rank.
+    """
+
+    def __init__(self, message: str, *, original: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.original = original
+
+
+class AcquisitionFailure(RuntimeError):
+    """Raised when a target could not be processed at all.
+
+    This is *not* the same as the model returning no probability. In the
+    original series a row exists - with a NaN probability - whenever the model
+    ran and produced nothing; that row consumes a slot in the positional
+    window. A target we never managed to process is not such a row: we do not
+    know what the original would have contained, so advancing the window for it
+    would silently shift every later rank. Fail closed instead.
+    """
+
+
+def _same_value(left: float, right: float) -> bool:
+    """NaN-aware equality, so a retry of a missing value is still idempotent."""
+
+    if np.isnan(left) and np.isnan(right):
+        return True
+    return bool(left == right)
+
+
+@dataclass
+class RankUpdate:
+    """A *prepared*, not yet applied, rank for one target.
+
+    Two-phase on purpose. Leaf evaluation can fail after the rank is computed
+    (another required key is missing, the packet is rejected downstream), and a
+    rank that was applied by a failed evaluation would corrupt every later row
+    while the target itself was never emitted. So ``prepare`` mutates nothing
+    and ``commit`` is called only once the whole evaluation has succeeded and
+    the orchestrator is ready to persist.
+    """
+
+    state: "RollingRankState"
+    key: int
+    value: float
+    rank: float
+    duplicate: bool = False
+    committed: bool = False
+
+    def commit(self) -> float:
+        if self.committed:
+            return self.rank
+        self.committed = True
+        if not self.duplicate:
+            self.state._apply(self.key, self.value, self.rank)
+        return self.rank
 
 
 @dataclass
@@ -138,19 +214,21 @@ class RollingRankState:
     is a different (and wrong) quantity whenever the series contains gaps - on
     the archived ledger, which has 2,935 rows without a probability, the two
     disagree on 64.7% of rows. So this state keeps ``(position, value)`` pairs
-    and prunes by position.
+    and prunes by row position.
 
-    Consequence for callers: ``observe`` must be called for **every** target in
-    the series, including targets whose probability is missing (pass ``nan``).
-    Skipping them shifts the window.
+    Consequence for callers: a target must be submitted for **every** row of
+    the series, including rows where the model produced no probability (submit
+    ``nan``). Skipping such a row shifts the window. A row that was never
+    processed at all is a different case - see :class:`AcquisitionFailure`.
 
     Semantics preserved: strictly past-only, ties count half, NaN until
-    ``minimum`` finite observations exist inside the positional window,
-    non-finite values are neither ranked nor stored.
+    ``minimum`` finite values exist inside the positional window, non-finite
+    values are neither ranked nor stored (but their row still advances the
+    position).
 
-    Idempotence: re-submitting the same ``key`` (the target timestamp) returns
-    the previously computed rank and does not advance the window. Submitting an
-    older key raises rather than silently corrupting the window.
+    Idempotence: re-submitting the same ``key`` with the same value returns the
+    committed rank and applies nothing. Re-submitting it with a different value
+    raises :class:`RetryConflict`. An older key raises :class:`RankStateError`.
     """
 
     lookback: int = RANK_LOOKBACK
@@ -158,6 +236,7 @@ class RollingRankState:
     window: deque[tuple[int, float]] | None = None
     position: int = 0
     last_key: int | None = None
+    last_value: float | None = None
     last_rank: float | None = None
 
     def __post_init__(self) -> None:
@@ -171,13 +250,24 @@ class RollingRankState:
         while self.window and self.window[0][0] < oldest:
             self.window.popleft()
 
-    def observe(self, key: int, value: float) -> float:
-        """Rank ``value`` for ``key`` against the prior positional window."""
+    # -- two-phase update ---------------------------------------------------
+    def prepare(self, key: int, value: float) -> RankUpdate:
+        """Compute the rank for ``key`` without mutating any state."""
 
         key = int(key)
+        value = float(value)
         if self.last_key is not None:
             if key == self.last_key:
-                return float("nan") if self.last_rank is None else self.last_rank
+                if not _same_value(float(self.last_value), value):
+                    raise RetryConflict(
+                        f"target {key} was already committed with value "
+                        f"{self.last_value!r}; retry carries {value!r}"
+                    )
+                return RankUpdate(
+                    self, key, value,
+                    float("nan") if self.last_rank is None else self.last_rank,
+                    duplicate=True,
+                )
             if key < self.last_key:
                 raise RankStateError(
                     f"out-of-order rank update: {key} <= last committed {self.last_key}"
@@ -192,11 +282,22 @@ class RollingRankState:
                     (np.sum(observed < value) + 0.5 * np.sum(observed == value))
                     / len(observed)
                 )
+        return RankUpdate(self, key, value, rank)
+
+    def _apply(self, key: int, value: float, rank: float) -> None:
+        index = self.position
+        self._prune(index)
+        if np.isfinite(value):
             self.window.append((index, float(value)))
         self.position = index + 1
         self.last_key = key
+        self.last_value = value
         self.last_rank = rank
-        return rank
+
+    def observe(self, key: int, value: float) -> float:
+        """``prepare`` + ``commit``, for callers with nothing to roll back."""
+
+        return self.prepare(key, value).commit()
 
     # -- serialisation ------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
@@ -206,6 +307,10 @@ class RollingRankState:
             "window": [[int(i), float(v)] for i, v in self.window],
             "position": int(self.position),
             "last_key": self.last_key,
+            # NaN is written as null and restored as NaN when `last_key` is
+            # set, so the payload stays strict JSON.
+            "last_value": None if self.last_value is None or not np.isfinite(self.last_value)
+            else float(self.last_value),
             "last_rank": None if self.last_rank is None or not np.isfinite(self.last_rank)
             else float(self.last_rank),
         }
@@ -223,8 +328,11 @@ class RollingRankState:
         )
         raw = payload.get("last_rank")
         state.last_rank = float("nan") if raw is None else float(raw)
+        raw_value = payload.get("last_value")
+        state.last_value = float("nan") if raw_value is None else float(raw_value)
         if payload.get("last_key") is None:
             state.last_rank = None
+            state.last_value = None
         return state
 
 
@@ -286,30 +394,131 @@ class LongContextLeafProducer:
     * ``external_rank``      = the strictly past-only positional rolling rank of
       ``abs(p - 0.5)`` over 2,880 rows with a 960-row minimum, ties half.
 
-    It does *not* own the head. ``observe`` must be called once per target in
-    chronological order - including targets whose probability is missing, which
-    is why the probability is passed explicitly as ``nan`` rather than skipped:
-    the original window is positional, so skipping a row shifts it.
+    It does *not* own the head. A target must be submitted for every row in
+    chronological order - including rows where the head produced no
+    probability, submitted as ``status=MODEL_NO_PROBABILITY``, because the
+    original window is positional and skipping a row shifts it. A row that
+    could not be processed at all is submitted as ``status=ACQUISITION_FAILED``
+    and is *rejected*: it is not a row of the original series, and advancing
+    the window for it would shift every later rank.
+
+    Updates are two-phase (:meth:`prepare` then :meth:`commit`) so a leaf
+    evaluation that fails after this point leaves no state behind. The
+    committed output for a target is immutable: an identical retry returns it
+    unchanged, a conflicting retry raises :class:`RetryConflict` carrying the
+    original.
     """
 
     rank_state: RollingRankState | None = None
+    last_key: int | None = None
+    last_output: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.rank_state is None:
             self.rank_state = RollingRankState()
 
-    def observe(self, key: int, probability: float | None) -> dict[str, Any]:
-        value = float("nan") if probability is None else float(probability)
-        rank = self.rank_state.observe(key, abs(value - 0.5) if np.isfinite(value) else float("nan"))
-        return {
+    def prepare(self, key: int, probability: float | None,
+                *, status: str = MODEL_SCORED) -> "LeafUpdate":
+        """Compute the leaf pair for one target without mutating state."""
+
+        key = int(key)
+        if status == ACQUISITION_FAILED:
+            raise AcquisitionFailure(
+                f"target {key} was never processed (status={status!r}); refusing to "
+                "advance the positional rank window for a row that is not part of "
+                "the original series"
+            )
+        if status not in (MODEL_SCORED, MODEL_NO_PROBABILITY):
+            raise ValueError(f"unknown long-context status {status!r}")
+        if status == MODEL_NO_PROBABILITY:
+            value = float("nan")
+        else:
+            if probability is None:
+                raise ValueError(
+                    "status=MODEL_SCORED requires a probability; use "
+                    "MODEL_NO_PROBABILITY for a row the head could not score"
+                )
+            value = float(probability)
+
+        if self.last_key is not None and key == self.last_key:
+            previous = float(self.last_output["external_probability_green"])
+            if not _same_value(previous, value):
+                raise RetryConflict(
+                    f"target {key} already produced probability {previous!r}; retry "
+                    f"carries {value!r}. The committed output is immutable.",
+                    original=dict(self.last_output),
+                )
+            return LeafUpdate(self, key, dict(self.last_output), None, duplicate=True)
+
+        rank_update = self.rank_state.prepare(
+            key, abs(value - 0.5) if np.isfinite(value) else float("nan")
+        )
+        output = {
             "external_probability_green": value,
             "external_direction": int(signed_direction(value)),
-            "external_rank": rank,
+            "external_rank": rank_update.rank,
+            "external_status": status,
         }
+        return LeafUpdate(self, key, output, rank_update)
+
+    def observe(self, key: int, probability: float | None,
+                *, status: str = MODEL_SCORED) -> dict[str, Any]:
+        """``prepare`` + ``commit``, for callers with nothing to roll back."""
+
+        if probability is None and status == MODEL_SCORED:
+            status = MODEL_NO_PROBABILITY
+        return self.prepare(key, probability, status=status).commit()
+
+    def _apply(self, key: int, output: dict[str, Any]) -> None:
+        self.last_key = key
+        self.last_output = dict(output)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"rank_state": self.rank_state.to_dict()}
+        output = None
+        if self.last_output is not None:
+            output = {
+                k: (None if isinstance(v, float) and not np.isfinite(v) else v)
+                for k, v in self.last_output.items()
+            }
+        return {
+            "rank_state": self.rank_state.to_dict(),
+            "last_key": self.last_key,
+            "last_output": output,
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "LongContextLeafProducer":
-        return cls(rank_state=RollingRankState.from_dict(payload["rank_state"]))
+        output = payload.get("last_output")
+        if output is not None:
+            output = dict(output)
+            for field_name in ("external_probability_green", "external_rank"):
+                if output.get(field_name) is None:
+                    output[field_name] = float("nan")
+        last_key = payload.get("last_key")
+        return cls(
+            rank_state=RollingRankState.from_dict(payload["rank_state"]),
+            last_key=None if last_key is None else int(last_key),
+            last_output=output,
+        )
+
+
+@dataclass
+class LeafUpdate:
+    """A prepared external leaf pair, applied only on :meth:`commit`."""
+
+    producer: LongContextLeafProducer
+    key: int
+    output: dict[str, Any]
+    rank_update: RankUpdate | None
+    duplicate: bool = False
+    committed: bool = False
+
+    def commit(self) -> dict[str, Any]:
+        if self.committed:
+            return dict(self.output)
+        self.committed = True
+        if not self.duplicate:
+            if self.rank_update is not None:
+                self.rank_update.commit()
+            self.producer._apply(self.key, self.output)
+        return dict(self.output)
