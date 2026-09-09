@@ -67,7 +67,14 @@ class LedgerError(RuntimeError):
 
 
 def read_scores(path: Path) -> dict[int, tuple[pd.Timestamp, float]]:
-    """Parse the append-only score file, refusing duplicate or unordered keys."""
+    """Parse the append-only score file, refusing duplicate or unordered keys.
+
+    Accepts both the original scored-rows-only file and the corrected
+    full-grid file (which carries a `status` column and an empty probability
+    for `MODEL_NO_PROBABILITY` slots). Only scored rows are returned; the
+    unscored slots are re-derived from the grid so that a truncated or older
+    file cannot silently drop one.
+    """
 
     scores: dict[int, tuple[pd.Timestamp, float]] = {}
     previous: int | None = None
@@ -84,11 +91,19 @@ def read_scores(path: Path) -> dict[int, tuple[pd.Timestamp, float]]:
                     f"position {position} follows {previous}: the ledger is not "
                     "chronological and cannot seed a positional window"
                 )
-            value = float(row["probability"])
+            previous = position
+            raw = (row.get("probability") or "").strip()
+            status = (row.get("status") or MODEL_SCORED).strip()
+            if status == MODEL_NO_PROBABILITY or not raw:
+                if raw:
+                    raise LedgerError(
+                        f"position {position} is {status} but carries a score"
+                    )
+                continue
+            value = float(raw)
             if not np.isfinite(value):
                 raise LedgerError(f"position {position} carries a non-finite score")
             scores[position] = (pd.Timestamp(row["ts"]), value)
-            previous = position
     return scores
 
 
