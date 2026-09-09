@@ -377,13 +377,19 @@ class LivePacketSource:
         #    C54 output.
         chain = getattr(self.experts, "chain", None)
         leaf_outputs: dict[str, Any] = {}
+        pending_update: Any = None
         if chain is None:
             reasons.append("C85_EXPERT_CHAIN_NOT_INSTANTIATED")
         else:
             try:
-                leaf_outputs = chain.evaluate({**row, "ts": target_open})
+                # PREPARE, do not commit: the head and the rank window advance
+                # only once the decision itself is durable. The orchestrator
+                # owns that transaction and calls commit/rollback on the
+                # returned update.
+                leaf_outputs, pending_update = chain.prepare({**row, "ts": target_open})
             except Exception as exc:  # noqa: BLE001 - fail-closed message is the payload
                 reasons.append(f"C85_ANCESTOR_CHAIN_UNAVAILABLE: {exc}")
+
 
         c54_prediction = leaf_outputs.get("c54_prediction") if leaf_outputs else None
         meta_features: dict[str, float] | None = None
@@ -414,6 +420,9 @@ class LivePacketSource:
             )
 
         if reasons:
+            # The target is not being processed, so nothing may advance.
+            if pending_update is not None:
+                pending_update.rollback()
             raise RawPacketUnavailable(" || ".join(reasons))
 
         return TargetInputs(
@@ -426,7 +435,9 @@ class LivePacketSource:
             last_yes_price=last_yes_price,
             aux_fit_month=aux_fit_month,
             source=self._source_metadata(target_ns, cutoff_ns, freeze_ns),
+            pending_update=pending_update,
         )
+
 
     # ------------------------------------------------------- meta / auxiliary
     def _meta_and_auxiliary(
