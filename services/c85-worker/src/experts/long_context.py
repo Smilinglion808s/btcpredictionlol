@@ -104,6 +104,30 @@ class LongContextOrderError(RuntimeError):
     """Raised on an out-of-order target or a conflicting label re-settlement."""
 
 
+class LongContextConflict(RuntimeError):
+    """Raised when the same target is re-presented with a different payload."""
+
+    def __init__(self, message: str, *, original: float | None = None) -> None:
+        super().__init__(message)
+        self.original = original
+
+
+class LongContextFenceError(RuntimeError):
+    """Raised when a staged head update no longer matches the head version."""
+
+
+class LongContextTrainingRequired(RuntimeError):
+    """Raised when a refit is due on the serving path and no fit was staged.
+
+    The original schedule is preserved exactly: the fit that becomes effective
+    at a refit position must exist *before* that position is served. Training
+    is performed by :meth:`LongContextHead.train_ahead`, off the timed path.
+    """
+
+
+
+
+
 
 
 def feature_sets(columns: Sequence[str]) -> dict[str, list[str]]:
@@ -276,6 +300,79 @@ class _Row:
     label: float
 
 
+# A label that has not settled yet is *pending*: bounded, never unbounded.
+MAX_PENDING_LABELS = REFIT_EVERY * 4
+
+
+def _payload_digest(values: np.ndarray) -> str:
+    import hashlib
+
+    return hashlib.sha256(np.ascontiguousarray(values, dtype=float).tobytes()).hexdigest()
+
+
+def _sha256_file(path: Path, chunk: int = 1 << 20) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            block = handle.read(chunk)
+            if not block:
+                break
+            digest.update(block)
+    return digest.hexdigest()
+
+
+@dataclass
+class StagedFit:
+    """A fit produced off the serving path for one specific refit position."""
+
+    position: int
+    model: Any
+    fit_id: str
+    training_rows: int
+    cutoff_ts: str | None
+
+
+@dataclass
+class HeadUpdate:
+    """A fully staged head advance. Nothing is mutated until :meth:`commit`."""
+
+    head: "LongContextHead"
+    ts: pd.Timestamp
+    values: np.ndarray
+    complete: bool
+    probability: float | None
+    expected_version: int
+    activate: StagedFit | None = None
+    replay: bool = False
+    committed: bool = False
+    digest: str = ""
+
+    def validate(self) -> None:
+        if self.head.version != self.expected_version:
+            raise LongContextFenceError(
+                f"head moved from version {self.expected_version} to {self.head.version}"
+            )
+
+    def commit(self) -> float | None:
+        if self.committed:
+            raise LongContextFenceError("this head update was already committed")
+        self.validate()
+        if self.replay:
+            self.committed = True
+            return self.probability
+        self.head._apply(self)
+        self.committed = True
+        return self.probability
+
+    def rollback(self) -> None:
+        """Explicitly discard a staged update. Present for call-site clarity;
+        preparation never mutated anything, so this only marks it spent."""
+
+        self.committed = True
+
+
 @dataclass
 class LongContextHead:
     """The same walk-forward head, advanced one target at a time.
@@ -285,16 +382,23 @@ class LongContextHead:
     * the label of target ``T`` is the Spot candle that *begins* at ``T``, so it
       only exists at ``T+15m``. Every training row a refit can use is at least
       one target old, so the schedule is unaffected - but the caller must call
-      :meth:`settle_label` for each target once its candle closes, and a row
-      whose label never settled is simply not trainable (identical to the
-      original's ``isfinite(label)`` filter).
+      :meth:`settle_label` for each target once its candle closes *and* the
+      original source has actually published it, and a row whose label never
+      settled is simply not trainable (identical to the original's
+      ``isfinite(label)`` filter).
     * a refit happens on the target whose position is a multiple of
       ``REFIT_EVERY`` counted from the series start, once ``MINIMUM`` positions
       have passed - exactly the ``range(MINIMUM, n, REFIT_EVERY)`` grid.
 
-    ``probability(...)`` returns ``None`` (not 0.5, not a guess) whenever the
-    original would have written NaN: no fit yet, or the row is not
-    feature-complete.
+    Serving uses :meth:`prepare` / :meth:`HeadUpdate.commit`: the probability is
+    computed against a staged fit and a staged row, and the head only moves once
+    the downstream decision/checkpoint transaction succeeds. Training itself is
+    :meth:`train_ahead`, which runs off the timed path and produces the fit that
+    the *next* scheduled refit position will activate - the original schedule and
+    effective cutoffs are unchanged, nothing is frozen and nothing is delayed.
+
+    ``probability`` is ``None`` (not 0.5, not a guess) whenever the original
+    would have written NaN: no fit yet, or the row is not feature-complete.
     """
 
     features: list[str]
@@ -303,9 +407,15 @@ class LongContextHead:
     fit_count: int = 0
     first_fit_ts: str | None = None
     model: Any = None
+    fit_id: str | None = None
+    version: int = 0
     _labels_by_ts: dict[pd.Timestamp, float] = field(default_factory=dict)
+    _label_available_at: dict[pd.Timestamp, str] = field(default_factory=dict)
     _last_ts: pd.Timestamp | None = None
     _last_probability: float | None = None
+    _last_digest: str | None = None
+    _staged_fit: StagedFit | None = None
+    _no_fit_positions: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.features = list(self.features)
@@ -322,26 +432,56 @@ class LongContextHead:
         return np.asarray([float(row[f]) if row[f] is not None else np.nan
                            for f in self.features], dtype=float)
 
-    def settle_label(self, ts: pd.Timestamp, label: float) -> None:
-        """Record the realised Spot-candle sign for an already-observed target.
+    def settle_label(
+        self,
+        ts: pd.Timestamp,
+        label: float,
+        *,
+        available_at: pd.Timestamp,
+        as_of: pd.Timestamp | None = None,
+        source: str = "binance_spot_1m",
+    ) -> None:
+        """Record a realised Spot-candle sign that the source has published.
 
-        Idempotent by timestamp. A *conflicting* re-settlement is refused rather
+        ``available_at`` is when the original source made the settling candle
+        observable; ``as_of`` is the clock the caller is settling at. A label
+        that is not yet available, or that belongs to a target this head has not
+        observed, is refused - the walk-forward loop never sees such a row.
+        Idempotent by timestamp; a *conflicting* re-settlement is refused rather
         than silently changing training data underneath an already-issued fit.
         """
 
         ts = pd.Timestamp(ts)
+        available_at = pd.Timestamp(available_at)
+        as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        if available_at > as_of:
+            raise LongContextOrderError(
+                f"label for {ts.isoformat()} is not available until "
+                f"{available_at.isoformat()} (as_of {as_of.isoformat()})"
+            )
+        if self._last_ts is None or ts > self._last_ts:
+            raise LongContextOrderError(
+                f"label for {ts.isoformat()} precedes any observed target; "
+                "the original never trains on unobserved rows"
+            )
         label = float(label)
+        if not np.isfinite(label):
+            raise LongContextOrderError(f"non-finite label for {ts.isoformat()}")
         previous = self._labels_by_ts.get(ts)
         if previous is not None and np.isfinite(previous) and previous != label:
             raise LongContextOrderError(
                 f"conflicting label for {ts.isoformat()}: {previous} then {label}"
             )
+        if previous is None and len(self._labels_by_ts) >= MAX_PENDING_LABELS + WINDOW:
+            raise LongContextOrderError("pending label map exceeded its bound")
         self._labels_by_ts[ts] = label
+        self._label_available_at[ts] = f"{available_at.isoformat()}|{source}"
         for row in self.buffer:
             if row.ts == ts:
                 row.label = label
                 break
         self._prune_labels()
+        self.version += 1
 
     def _prune_labels(self) -> None:
         """Keep the label map bounded by the retained window, not by history."""
@@ -351,68 +491,138 @@ class LongContextHead:
         oldest = self.buffer[0].ts
         for key in [k for k in self._labels_by_ts if k < oldest]:
             del self._labels_by_ts[key]
+            self._label_available_at.pop(key, None)
 
-    def observe(self, ts: pd.Timestamp, row: dict[str, Any]) -> float | None:
-        """Advance one target: refit when due, then score this row.
+    # -- serving path (no training, no mutation) ----------------------------
+    def refit_due_at(self) -> int | None:
+        """The next positional refit boundary of the original grid."""
 
-        Returns the probability, or ``None`` where the original writes NaN.
+        if self.position < MINIMUM:
+            return MINIMUM
+        remainder = self.position % REFIT_EVERY
+        return self.position if remainder == 0 else self.position + (REFIT_EVERY - remainder)
 
-        Ordering is enforced, because the walk-forward grid is positional: an
-        out-of-order target would silently shift every future refit boundary. A
-        repeat of the current target is treated as a retry and replays the
-        recorded probability without advancing the grid or duplicating the row.
-        """
+    def prepare(self, ts: pd.Timestamp, row: dict[str, Any]) -> HeadUpdate:
+        """Stage one target advance without touching any head state."""
 
         ts = pd.Timestamp(ts)
+        values = self._vector(row)
+        digest = _payload_digest(values)
         if self._last_ts is not None:
             if ts == self._last_ts:
-                return self._last_probability
+                if self._last_digest is not None and digest != self._last_digest:
+                    raise LongContextConflict(
+                        f"target {ts.isoformat()} was re-presented with a different "
+                        "feature payload; refusing to reuse the recorded probability",
+                        original=self._last_probability,
+                    )
+                return HeadUpdate(
+                    head=self, ts=ts, values=values, complete=bool(np.isfinite(values).all()),
+                    probability=self._last_probability, expected_version=self.version,
+                    replay=True, digest=digest,
+                )
             if ts < self._last_ts:
                 raise LongContextOrderError(
                     f"target {ts.isoformat()} precedes the last observed "
                     f"{self._last_ts.isoformat()}; the refit grid is positional"
                 )
-        values = self._vector(row)
         complete = bool(np.isfinite(values).all())
 
+        activate: StagedFit | None = None
+        model = self.model
         if self.position >= MINIMUM and self.position % REFIT_EVERY == 0:
-            self._refit(ts)
+            staged = self._staged_fit
+            if (staged is None or staged.position != self.position) \
+                    and self.position not in self._no_fit_positions:
+                raise LongContextTrainingRequired(
+                    f"refit is due at position {self.position} and no fit was staged; "
+                    "call train_ahead() off the serving path"
+                )
+            if staged is not None and staged.position == self.position:
+                activate = staged
+                model = staged.model
 
+        probability: float | None = None
+        if model is not None and complete:
+            probability = float(model.predict_proba(values.reshape(1, -1))[0, 1])
+        return HeadUpdate(
+            head=self, ts=ts, values=values, complete=complete, probability=probability,
+            expected_version=self.version, activate=activate, digest=digest,
+        )
+
+    def _apply(self, update: HeadUpdate) -> None:
+        if update.activate is not None:
+            staged = update.activate
+            self.model = staged.model
+            self.fit_id = staged.fit_id
+            self.fit_count += 1
+            if self.first_fit_ts is None:
+                self.first_fit_ts = update.ts.isoformat()
+            self._staged_fit = None
         self.buffer.append(
-            _Row(ts, values, complete, float(self._labels_by_ts.get(ts, np.nan)))
+            _Row(update.ts, update.values, update.complete,
+                 float(self._labels_by_ts.get(update.ts, np.nan)))
         )
         while len(self.buffer) > WINDOW:
             self.buffer.popleft()
         self._prune_labels()
         self.position += 1
-        self._last_ts = ts
+        self._no_fit_positions = {p for p in self._no_fit_positions if p >= self.position}
+        self._last_ts = update.ts
+        self._last_probability = update.probability
+        self._last_digest = update.digest
+        self.version += 1
 
-        if self.model is None or not complete:
-            self._last_probability = None
+    def observe(self, ts: pd.Timestamp, row: dict[str, Any],
+                *, allow_inline_training: bool = True) -> float | None:
+        """Batch/replay convenience: stage, train inline if the grid demands a
+        fit, and commit. The live worker uses :meth:`prepare` instead so that no
+        training ever happens inside the timed boundary."""
+
+        try:
+            update = self.prepare(ts, row)
+        except LongContextTrainingRequired:
+            if not allow_inline_training:
+                raise
+            self.train_ahead()
+            update = self.prepare(ts, row)
+        return update.commit()
+
+    # -- fitting (off the serving path) -------------------------------------
+    def train_ahead(self) -> StagedFit | None:
+        """Fit the model that the next scheduled refit position will activate.
+
+        Uses exactly the rows the original would have used at that boundary:
+        the retained trailing window, restricted to feature-complete rows with a
+        finite non-zero settled label.
+        """
+
+        position = self.refit_due_at()
+        if position is None or position < MINIMUM:
             return None
-        self._last_probability = float(self.model.predict_proba(values.reshape(1, -1))[0, 1])
-        return self._last_probability
-
-
-    # -- fitting ------------------------------------------------------------
-    def _refit(self, ts: pd.Timestamp) -> None:
-        rows = [
-            r for r in self.buffer
-            if r.complete and np.isfinite(r.label) and r.label != 0
-        ]
+        if self._staged_fit is not None and self._staged_fit.position == position:
+            return self._staged_fit
+        rows = [r for r in self.buffer if r.complete and np.isfinite(r.label) and r.label != 0]
         if len(rows) < MINIMUM:
-            return
+            self._no_fit_positions.add(position)
+            return None
         target = np.asarray([1 if r.label > 0 else 0 for r in rows], dtype=np.int8)
         if np.unique(target).size != 2:
-            return
+            self._no_fit_positions.add(position)
+            return None
         x = np.vstack([r.values for r in rows])
         weights = day_balanced_weights(pd.Series([r.ts for r in rows]))
         model = _new_model()
         model.fit(x, target, sample_weight=weights)
-        self.model = model
-        self.fit_count += 1
-        if self.first_fit_ts is None:
-            self.first_fit_ts = ts.isoformat()
+        staged = StagedFit(
+            position=position,
+            model=model,
+            fit_id=f"{HEAD_ID}:{position}:{rows[-1].ts.isoformat()}",
+            training_rows=len(rows),
+            cutoff_ts=rows[-1].ts.isoformat(),
+        )
+        self._staged_fit = staged
+        return staged
 
     # -- serialisation ------------------------------------------------------
     def state_summary(self) -> dict[str, Any]:
@@ -426,27 +636,33 @@ class LongContextHead:
             "position": self.position,
             "buffered_rows": len(self.buffer),
             "fit_count": self.fit_count,
+            "fit_id": self.fit_id,
             "first_fit_ts": self.first_fit_ts,
             "fitted": self.model is not None,
+            "version": self.version,
+            "staged_fit_position": self._staged_fit.position if self._staged_fit else None,
             "last_ts": self.buffer[-1].ts.isoformat() if self.buffer else None,
         }
 
     def export_state(self, directory: Path | str) -> dict[str, Any]:
-        """Write the *complete* restart state: buffer, grid, labels and fit.
+        """Write the complete restart state as an immutable generation.
 
-        Written to a staging directory and renamed into place, so a crash
-        mid-export leaves the previous state intact rather than a half-written
-        one. Float values are stored at full float64 precision because the
-        refit consumes them directly.
+        ``directory`` becomes a small root holding ``generations/<name>/`` and a
+        ``CURRENT`` pointer. Each export writes a fresh generation with its own
+        ``MANIFEST.json`` of SHA-256 digests, then activates it by atomically
+        replacing the pointer. There is no window in which the active state is
+        missing: an interruption before the pointer swap leaves the previous
+        generation active, and an interruption after it leaves the new one
+        active and complete. The previous known-good generation is retained.
         """
 
         import joblib
+        import uuid
 
-        directory = Path(directory)
-        directory.parent.mkdir(parents=True, exist_ok=True)
-        staging = directory.with_name(directory.name + ".staging")
-        if staging.exists():
-            shutil.rmtree(staging)
+        root = Path(directory)
+        generations = root / "generations"
+        generations.mkdir(parents=True, exist_ok=True)
+        staging = generations / f".staging-{uuid.uuid4().hex}"
         staging.mkdir(parents=True)
 
         values = (np.vstack([r.values for r in self.buffer]) if self.buffer
@@ -458,57 +674,137 @@ class LongContextHead:
             "head_id": HEAD_ID,
             "spec": SPEC_NAME,
             "features": self.features,
+            "feature_count": len(self.features),
             "position": self.position,
             "fit_count": self.fit_count,
+            "fit_id": self.fit_id,
             "first_fit_ts": self.first_fit_ts,
+            "version": self.version,
             "last_ts": self._last_ts.isoformat() if self._last_ts is not None else None,
             "last_probability": self._last_probability,
+            "last_digest": self._last_digest,
+            "buffer_rows": len(self.buffer),
             "buffer_ts": [r.ts.isoformat() for r in self.buffer],
             "pending_labels": {k.isoformat(): v for k, v in self._labels_by_ts.items()},
+            "label_availability": {k.isoformat(): v
+                                   for k, v in self._label_available_at.items()},
             "fitted": self.model is not None,
         }
         (staging / "state.json").write_text(json.dumps(meta, indent=1))
         if self.model is not None:
             joblib.dump(self.model, staging / "model.joblib")
 
-        previous = directory.with_name(directory.name + ".previous")
-        if directory.exists():
-            if previous.exists():
-                shutil.rmtree(previous)
-            os.replace(directory, previous)
-        os.replace(staging, directory)
-        if previous.exists():
-            shutil.rmtree(previous, ignore_errors=True)
+        manifest = {
+            "head_id": HEAD_ID,
+            "files": {p.name: {"sha256": _sha256_file(p), "bytes": p.stat().st_size}
+                      for p in sorted(staging.iterdir())},
+        }
+        (staging / "MANIFEST.json").write_text(json.dumps(manifest, indent=1))
+
+        name = f"gen-{self.position:012d}-{uuid.uuid4().hex[:12]}"
+        generation = generations / name
+        os.replace(staging, generation)
+
+        pointer = root / "CURRENT"
+        pointer_tmp = root / f".CURRENT-{uuid.uuid4().hex}"
+        previous = pointer.read_text().strip() if pointer.exists() else None
+        pointer_tmp.write_text(name)
+        os.replace(pointer_tmp, pointer)
+
+        keep = {name} | ({previous} if previous else set())
+        for candidate in generations.iterdir():
+            if candidate.name not in keep and candidate.is_dir():
+                shutil.rmtree(candidate, ignore_errors=True)
+        meta["generation"] = name
         return meta
 
     @classmethod
     def restore_state(cls, directory: Path | str) -> "LongContextHead":
-        """Rebuild an identical head. A restart must not restart the grid."""
+        """Rebuild an identical head. A restart must not restart the grid.
+
+        The manifest is verified in full *before* anything is deserialised, and
+        the recovered arrays are checked against the recorded row counts,
+        feature count and fit identity.
+        """
 
         import joblib
 
-        directory = Path(directory)
-        meta = json.loads((directory / "state.json").read_text())
+        root = Path(directory)
+        pointer = root / "CURRENT"
+        if pointer.exists():
+            generation = root / "generations" / pointer.read_text().strip()
+            if not generation.is_dir():
+                raise LongContextSchemaError(
+                    f"CURRENT points at a missing generation: {pointer.read_text().strip()!r}"
+                )
+        else:
+            generation = root
+
+        manifest_path = generation / "MANIFEST.json"
+        if not manifest_path.exists():
+            raise LongContextSchemaError("state generation has no MANIFEST.json; refusing to load")
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get("head_id") != HEAD_ID:
+            raise LongContextSchemaError(
+                f"manifest belongs to {manifest.get('head_id')!r}, not {HEAD_ID!r}"
+            )
+        files = manifest.get("files") or {}
+        for required in ("state.json", "buffer.npz"):
+            if required not in files:
+                raise LongContextSchemaError(f"manifest does not cover {required}")
+        for filename, entry in files.items():
+            if filename == "MANIFEST.json":
+                continue
+            path = generation / filename
+            if not path.exists():
+                raise LongContextSchemaError(f"manifest lists a missing file: {filename}")
+            if _sha256_file(path) != entry["sha256"]:
+                raise LongContextSchemaError(f"digest mismatch for {filename}; refusing to load")
+
+        meta = json.loads((generation / "state.json").read_text())
         if meta.get("head_id") != HEAD_ID:
             raise LongContextSchemaError(
                 f"state belongs to {meta.get('head_id')!r}, not {HEAD_ID!r}"
             )
-        blob = np.load(directory / "buffer.npz")
-        head = cls(features=list(meta["features"]))
-        for ts, row, complete, label in zip(
-            meta["buffer_ts"], blob["values"], blob["complete"], blob["labels"]
-        ):
+        blob = np.load(generation / "buffer.npz")
+        features = list(meta["features"])
+        values, labels, complete = blob["values"], blob["labels"], blob["complete"]
+        stamps = list(meta["buffer_ts"])
+        rows = int(meta.get("buffer_rows", len(stamps)))
+        if not (len(stamps) == len(values) == len(labels) == len(complete) == rows):
+            raise LongContextSchemaError(
+                f"buffer is inconsistent: {len(stamps)} timestamps, {len(values)} rows, "
+                f"{len(labels)} labels, {len(complete)} flags, {rows} recorded"
+            )
+        if values.size and values.shape[1] != len(features):
+            raise LongContextSchemaError(
+                f"buffer has {values.shape[1]} columns, state declares {len(features)} features"
+            )
+        if int(meta.get("feature_count", len(features))) != len(features):
+            raise LongContextSchemaError("feature_count disagrees with the feature list")
+
+        head = cls(features=features)
+        for ts, row, flag, label in zip(stamps, values, complete, labels, strict=True):
             head.buffer.append(_Row(pd.Timestamp(ts), np.asarray(row, dtype=float),
-                                    bool(complete), float(label)))
+                                    bool(flag), float(label)))
         head.position = int(meta["position"])
         head.fit_count = int(meta["fit_count"])
+        head.fit_id = meta.get("fit_id")
         head.first_fit_ts = meta["first_fit_ts"]
+        head.version = int(meta.get("version", 0))
         head._last_ts = pd.Timestamp(meta["last_ts"]) if meta["last_ts"] else None
         head._last_probability = meta["last_probability"]
+        head._last_digest = meta.get("last_digest")
         head._labels_by_ts = {pd.Timestamp(k): float(v)
                               for k, v in meta["pending_labels"].items()}
+        head._label_available_at = {pd.Timestamp(k): str(v)
+                                    for k, v in (meta.get("label_availability") or {}).items()}
         if meta.get("fitted"):
-            model_path = directory / "model.joblib"
+            if "model.joblib" not in files:
+                raise LongContextSchemaError(
+                    "state claims a fitted head but the manifest does not cover model.joblib"
+                )
+            model_path = generation / "model.joblib"
             if not model_path.exists():
                 raise LongContextSchemaError(
                     "state claims a fitted head but model.joblib is absent; refusing "
@@ -534,7 +830,12 @@ def replay(head: LongContextHead, frame: pd.DataFrame) -> np.ndarray:
     for index, record in enumerate(records):
         if index >= 1:
             previous = records[index - 1]
-            head.settle_label(previous["ts"], previous["label"])
+            if np.isfinite(float(previous["label"])):
+                head.settle_label(
+                    previous["ts"], previous["label"],
+                    available_at=pd.Timestamp(previous["ts"]) + pd.Timedelta(minutes=15),
+                    as_of=pd.Timestamp(record["ts"]),
+                )
         value = head.observe(record["ts"], record)
         if value is not None:
             out[index] = value
