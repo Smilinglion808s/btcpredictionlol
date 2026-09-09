@@ -189,48 +189,149 @@ def test_rows_with_unknown_availability_are_excluded_in_live_mode():
     ] == pytest.approx(500.0)
 
 
+def ns(ms: int) -> int:
+    """Receipt instants are real epoch nanoseconds, as the collector records them."""
+    return int(ms) * 1_000_000
+
+
+CLOSE = T + FIFTEEN          # the bar opening at T closes here
+
+
 def test_a_poll_that_arrived_after_the_freeze_is_not_used():
     acc = HyperliquidContextAccumulator()
-    acc.ingest_candles("15m", [candle(T)], available_ns=1_000)
-    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=999)[
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE + 1_000))
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 999))[
         "hyperliquid_t0_return_bps_15m"
     ] is None
-    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=1_000)[
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 1_000))[
         "hyperliquid_t0_return_bps_15m"
     ] == pytest.approx(500.0)
 
 
-def test_a_revised_bar_cannot_back_date_its_availability():
+def test_a_partial_bar_seen_before_its_close_is_not_used_as_final():
+    """A snapshot taken mid-bar is not a completed candle, whatever its close ts."""
     acc = HyperliquidContextAccumulator()
-    acc.ingest_candles("15m", [candle(T)], available_ns=500)
-    acc.ingest_candles("15m", [candle(T, c=120.0)], available_ns=900)
-    assert acc.candles_15m.available_ns[T] == 500
-    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=500)[
+    acc.ingest_candles("15m", [candle(T, c=101.0)], available_ns=ns(CLOSE - 60_000))
+    report = acc.input_coverage(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE - 1))
+    assert report["excluded_not_confirmed_final"] == 1
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE - 1))[
+        "hyperliquid_t0_return_bps_15m"
+    ] is None
+    # The source's own confirmation is honoured when it is supplied.
+    acc2 = HyperliquidContextAccumulator()
+    acc2.ingest_candles("15m", [candle(T, c=101.0)],
+                        available_ns=ns(CLOSE - 60_000), final=True)
+    assert acc2.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE - 1))[
+        "hyperliquid_t0_return_bps_15m"
+    ] == pytest.approx(100.0)
+
+
+def test_a_correction_after_the_freeze_cannot_reach_back_before_it():
+    """The defect this replaces: a revision inheriting the partial's timestamp."""
+    acc = HyperliquidContextAccumulator()
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE), final=True)
+    acc.ingest_candles("15m", [candle(T, c=120.0)], available_ns=ns(CLOSE + 60_000))
+    # Frozen between the two: the version that had actually arrived, unrevised.
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 1_000))[
+        "hyperliquid_t0_return_bps_15m"
+    ] == pytest.approx(500.0)
+    # Frozen after: the correction.
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 60_000))[
         "hyperliquid_t0_return_bps_15m"
     ] == pytest.approx(2000.0)
 
 
-def test_live_mode_requires_a_freeze_instant():
-    with pytest.raises(ValueError, match="freeze"):
-        HyperliquidContextAccumulator().features_for(T, mode=LIVE)
-
-
-def test_validity_reports_missing_columns_and_fails_closed():
+def test_an_identical_repeated_payload_keeps_the_earliest_receipt():
     acc = HyperliquidContextAccumulator()
-    report = acc.validity(T)
-    assert report["valid"] is False
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE), final=True)
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE + 600_000), final=True)
+    assert len(acc.candles_15m.versions[T]) == 1
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE))[
+        "hyperliquid_t0_return_bps_15m"
+    ] == pytest.approx(500.0)
+
+
+def test_an_unknown_availability_revision_cannot_take_a_known_versions_timestamp():
+    acc = HyperliquidContextAccumulator()
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE), final=True)
+    acc.ingest_candles("15m", [candle(T, c=120.0)], available_ns=None)
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 10**6))[
+        "hyperliquid_t0_return_bps_15m"
+    ] == pytest.approx(500.0)
+
+
+def test_an_out_of_order_poll_response_cannot_displace_a_newer_version():
+    """A slow response carrying the older snapshot lands last but is still older."""
+    acc = HyperliquidContextAccumulator()
+    acc.ingest_candles("15m", [candle(T, c=120.0)],
+                       available_ns=ns(CLOSE + 60_000), final=True)
+    acc.ingest_candles("15m", [candle(T)], available_ns=ns(CLOSE), final=True)
+    assert acc.features_for(T + FIFTEEN, mode=LIVE, freeze_ns=ns(CLOSE + 10**6))[
+        "hyperliquid_t0_return_bps_15m"
+    ] == pytest.approx(2000.0)
+
+
+def test_a_funding_revision_is_versioned_the_same_way():
+    acc = HyperliquidContextAccumulator()
+    ts = T - 60_000
+    acc.ingest_funding([{"time": ts, "fundingRate": "0.0001", "premium": "0.0002"}],
+                       available_ns=ns(ts + 1_000))
+    acc.ingest_funding([{"time": ts, "fundingRate": "0.0009", "premium": "0.0002"}],
+                       available_ns=ns(ts + 60_000))
+    early = acc.features_for(T, mode=LIVE, freeze_ns=ns(ts + 2_000))
+    late = acc.features_for(T, mode=LIVE, freeze_ns=ns(ts + 60_000))
+    assert early["hyperliquid_funding_rate"] == pytest.approx(0.0001)
+    assert late["hyperliquid_funding_rate"] == pytest.approx(0.0009)
+
+
+def test_input_coverage_reports_missing_columns_without_vetoing_the_target():
+    """Missing inputs are reported; the imputing pipeline decides, not this."""
+    acc = HyperliquidContextAccumulator()
+    report = acc.input_coverage(T)
     assert set(report["missing_columns"]) == set(FEATURE_COLUMNS)
+    assert "valid" not in report
+
+
+def test_retention_keeps_the_shift_anchor_a_target_still_needs():
+    """At 12:15 the last completed hourly bar is 11:00 and shift(3) needs 08:00.
+
+    Four hours of wall-clock retention deletes 08:00 and silently changes the
+    4h return; count-based retention keeps it.
+    """
+    acc = HyperliquidContextAccumulator()
+    hour = 60 * 60_000
+    target = T + FIFTEEN                      # 12:15
+    bars = [candle(target - FIFTEEN - k * hour) for k in range(0, 8)]
+    acc.ingest_candles("1h", bars, available_ns=ns(target), final=True)
+    before = acc.features_for(target)
+    acc.prune(target)
+    assert acc.features_for(target) == before
+    assert (target - FIFTEEN - 3 * hour) in acc.candles_1h.versions
+
+
+def test_retention_survives_a_feed_gap_and_delayed_bars():
+    """Across an outage the needed row sits further back than any fixed window."""
+    acc = HyperliquidContextAccumulator()
+    hour = 60 * 60_000
+    target = T + FIFTEEN
+    # Only four hourly bars exist at all, the newest 9 hours before the target.
+    bars = [candle(target - 9 * hour - k * hour) for k in range(0, 4)]
+    acc.ingest_candles("1h", bars, available_ns=ns(target), final=True)
+    before = acc.features_for(target)
+    acc.prune(target)
+    assert acc.features_for(target) == before
+    assert len(acc.candles_1h.versions) == 4
 
 
 def test_pruning_never_drops_a_pending_targets_inputs():
     acc = HyperliquidContextAccumulator()
-    acc.ingest_candles("15m", [candle(T - 90 * FIFTEEN)], available_ns=1)
+    acc.ingest_candles("15m", [candle(T - 90 * FIFTEEN)], available_ns=ns(T))
     acc.open_target(T)
     acc.prune(T + 200 * FIFTEEN)
-    assert len(acc.candles_15m.rows) == 1
+    assert len(acc.candles_15m.versions) == 1
     acc.close_target(T)
     acc.prune(T + 200 * FIFTEEN)
-    assert len(acc.candles_15m.rows) == 0
+    assert len(acc.candles_15m.versions) == 0
 
 
 def test_state_round_trips_and_restart_resumes_identically(sample):
