@@ -108,9 +108,12 @@ def test_scores_match_the_fitted_pipeline_applied_to_the_original_matrix(model, 
         observation = {c: (None if pd.isna(row[c]) else float(row[c]))
                        for c in feature_columns}
         result = model.score(stage, row["ts"], observation)
-        assert result["p_up"] == pytest.approx(float(expected[i][up]), abs=1e-12)
-        assert result["fit_id"] == f"external_direction_{stage}_{fit.phase}"
-        assert result["direction"] == (1 if result["p_up"] >= 0.5 else 0)
+        assert result["p_green"] == pytest.approx(float(expected[i][up]), abs=1e-12)
+        assert result["fit_id"] == f"c30_c70_direction_{stage}_{fit.phase}"
+        # `class_index` is the position of the green class in `classes_`; it is
+        # bookkeeping, constant across rows, and must never be read as a call.
+        assert result["class_index"] == list(fit.pipeline.classes_).index(1)
+        assert result["signed_direction"] == (1 if result["p_green"] >= 0.5 else -1)
 
 
 def test_the_design_row_keeps_the_artifacts_feature_order_and_its_nans(model, observations):
@@ -138,7 +141,7 @@ def test_a_missing_input_stays_nan_for_the_imputer_and_is_still_scored(model, ob
     assert design.iloc[0][hyper_columns].isna().all()
     result = model.score("T0", row["ts"], dropped)
     assert result["scored"] is True if "scored" in result else True
-    assert 0.0 < result["p_up"] < 1.0
+    assert 0.0 < result["p_green"] < 1.0
     assert set(result["features_missing"]) >= set(hyper_columns)
 
 
@@ -191,7 +194,7 @@ def test_single_target_chronological_and_restarted_state_agree(model):
     cold_b, cold_h = _accumulators()
     cold_h.ingest_candles("15m", rows, available_ns=target_ms * 1_000_000, final=True)
     cold = ExternalDirectionExpert(model, cold_b, cold_h).evaluate(
-        target_ms, "T0", mode="HISTORICAL")["p_up"]
+        target_ms, "T0", mode="HISTORICAL")["p_green"]
 
     walk_b, walk_h = _accumulators()
     walk_h.ingest_candles("15m", rows, available_ns=target_ms * 1_000_000, final=True)
@@ -203,11 +206,11 @@ def test_single_target_chronological_and_restarted_state_agree(model):
         walk_h.close_target(step)
         walk_h.prune(step)
     walk_h.open_target(target_ms)
-    walked = expert.evaluate(target_ms, "T0", mode="HISTORICAL")["p_up"]
+    walked = expert.evaluate(target_ms, "T0", mode="HISTORICAL")["p_green"]
 
     restored_h = HyperliquidContextAccumulator.loads(walk_h.dumps())
     restarted = ExternalDirectionExpert(model, walk_b, restored_h).evaluate(
-        target_ms, "T0", mode="HISTORICAL")["p_up"]
+        target_ms, "T0", mode="HISTORICAL")["p_green"]
 
     assert walked == pytest.approx(cold, abs=1e-12)
     assert restarted == pytest.approx(cold, abs=1e-12)

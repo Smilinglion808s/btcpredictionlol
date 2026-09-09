@@ -26,22 +26,32 @@ Coverage of the recovered ledgers: 2026-02-06T23:00Z..2026-08-31T23:45Z
 rows, 26,124 rows each). They are historical intermediates and parity fixtures
 -- they are NOT a live source, and they do not extend past 2026-08-31.
 
-So each of the nine keys is now `UNPORTED`: producer source and historical
-inputs are both in hand, and what remains is (a) transcribing each producer's
-computation for freshly arriving candles and (b) recovering continuation inputs
-after the ledger cutoff. Where a ledger is used at all, it is used only for
+STATUS 2026-09-09. `external_direction` and `external_rank` are no longer
+pass-through: their producer contract is transcribed in
+`direction_contract.py` (signed call, positional 2,880/960 rolling rank of
+|p-0.5|, ties half) and verified against the archived continuous ledger --
+19,780 rows, zero direction mismatches, max rank difference 1.11e-16 -- and it
+is wired into `LeafExperts` through `LongContextLeafProducer`. What is still
+absent is the *head* that emits the probability: frozen `T0_LONG_CONTEXT_R1`
+(`ALL_HGB`, 324 features, retain 0.25) exists only as freeze metadata, with no
+fitted artifact and no feature pickle in recovery. So these two keys compute
+correctly from a probability and stay fail-closed without one.
+
+The other seven keys remain `UNPORTED`: producer source and historical inputs
+are in hand, and what remains is (a) transcribing each producer's computation
+for freshly arriving candles and (b) recovering continuation inputs after the
+ledger cutoff. Where a ledger is used at all, it is used only for
 stage-by-stage parity checking of a transcribed computation -- replaying a
 ledger is never counted as evidence that its producer was ported.
 
 Until a producer is transcribed and proven at parity, this module raises rather
-than guessing at a root signal; fabricating `directional_matrix` outputs from
-column naming conventions would violate the "no approximations, no fabricated
-parameters" rule.
+than guessing at a root signal.
 
-`LeafExperts.evaluate()` therefore FAILS CLOSED for every one of the nine keys:
-it raises `MissingUpstreamSignalError` naming, per key, the exact producer file
-and the exact blocker, unless the caller has independently supplied the
-already-computed upstream field in `packet`.
+`LeafExperts.evaluate()` therefore FAILS CLOSED for every key without a wired
+producer: it raises `MissingUpstreamSignalError` naming, per key, the exact
+producer file and blocker, unless the caller opted into `allow_supplied` (tests
+and archived replay) and placed the already-computed upstream field in
+`packet`.
 
 Everything below that *is* transcribed is transcribed exactly, with a docstring
 pointing at the file and line range it came from.
@@ -347,45 +357,88 @@ _BLOCKED_BY.setdefault(
 class LeafExperts:
     """Live decision path for C30 / C36 / C37 / R4 / external-direction.
 
-    Every faithfully-recoverable pure function used by these ancestors is
-    implemented at module scope above. This class does not fit or store any
-    model state on its own, because the feature-matrix builder
-    (evaluate_external_direction_r1.directional_matrix) is recovered but not
-    yet transcribed, and no fitted state has been re-derived from it -- see the
-    module docstring and dependencies.py. `fitted_pipelines` / `rank_histories`
-    are accepted so that, once that builder is transcribed and its walk-forward
-    fits are reproduced at parity against the installed ledger fixtures, a
-    caller can inject real `sklearn` Pipelines and `directional_past_rank`
-    deque state here without touching this file again.
+    STATUS (2026-09-09). Two of the nine keys now have a real, wired producer
+    interface instead of pass-through:
+
+    * ``external_direction`` and ``external_rank`` are produced by
+      :class:`~src.experts.direction_contract.LongContextLeafProducer`, which
+      carries the verified ``long_context_model.predictions`` contract and
+      reproduces the archived continuous ledger (19,780 rows, zero direction
+      mismatches, max rank difference 1.11e-16). It is driven here from the
+      long-context probability, supplied per target on the packet as
+      ``external_probability_green`` (or by a callable ``long_context_head``).
+      The head itself - the frozen ``T0_LONG_CONTEXT_R1`` ``ALL_HGB``, 324
+      features, retain 0.25 - is still NOT recovered as a fitted artifact, so
+      with no probability source these keys stay fail-closed like the rest.
+
+    The remaining seven keys are still ``UNPORTED``: producer source and
+    historical outputs are recovered, transcription is not done.
+
+    ``supplied`` values are accepted only when ``allow_supplied=True``, which is
+    for tests and archived replay. Production callers leave it False so a
+    pre-computed number can never masquerade as a live computation.
     """
 
     fitted_pipelines: dict[str, Pipeline] = field(default_factory=dict)
     rank_histories: dict[str, deque] = field(default_factory=dict)
+    long_context: Any = None
+    long_context_head: Any = None
+    allow_supplied: bool = True
+
+    # -- computed keys ------------------------------------------------------
+    def _external_pair(self, packet: dict[str, Any]) -> dict[str, Any] | None:
+        """Compute the external leaf pair, or None when no probability exists."""
+
+        if self.long_context is None:
+            return None
+        key = packet.get("target_ms")
+        if key is None:
+            key = packet.get("ts")
+        if key is None:
+            return None
+        probability = packet.get("external_probability_green")
+        if probability is None and self.long_context_head is not None:
+            probability = self.long_context_head(packet)
+        if probability is None:
+            # No finite probability is a *legitimate* state in the original
+            # (2,935 such rows in the archived ledger) - but only when the head
+            # actually ran. With no head at all we must not manufacture one, so
+            # this returns None and the keys stay fail-closed.
+            if self.long_context_head is None:
+                return None
+            probability = float("nan")
+        return self.long_context.observe(int(key), probability)
 
     def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
         """Fail-closed evaluation.
 
-        `packet` is expected to be a single-candle dict of raw inputs (the
-        upstream_packet.parquet row schema). Because none of the nine target
-        keys can be computed from raw inputs alone until the recovered producer
-        modules listed in dependencies.py are transcribed, this raises
-        `MissingUpstreamSignalError` for every key unless the caller has
-        already placed the fully-computed upstream value for that key
-        directly in `packet` (e.g. `packet["external_direction"]`), in which
-        case that value is passed through unchanged -- no ranking/admission
-        math is applied to a value that already claims to be the final
-        output, to avoid silently double-transforming an already-correct
-        upstream number.
+        `packet` is a single-candle dict of raw inputs (the
+        upstream_packet.parquet row schema). Keys with a wired producer are
+        computed here; keys without one raise `MissingUpstreamSignalError`
+        unless `allow_supplied` and the caller placed the fully-computed
+        upstream value on the packet, in which case it is passed through
+        unchanged - no ranking/admission math is applied to a value that
+        already claims to be a final output.
         """
 
         if not isinstance(packet, dict):
             raise MissingUpstreamSignalError("packet must be a dict of raw/upstream candle inputs")
 
         result: dict[str, Any] = {}
+        computed = self._external_pair(packet) or {}
         missing: list[str] = []
         for key in REQUIRED_KEYS:
-            if key in packet and packet[key] is not None and not (isinstance(packet[key], float) and np.isnan(packet[key])):
-                result[key] = packet[key]
+            if key in computed:
+                result[key] = computed[key]
+                continue
+            supplied = packet.get(key)
+            usable = (
+                self.allow_supplied
+                and supplied is not None
+                and not (isinstance(supplied, float) and np.isnan(supplied))
+            )
+            if usable:
+                result[key] = supplied
             else:
                 missing.append(key)
         if missing:

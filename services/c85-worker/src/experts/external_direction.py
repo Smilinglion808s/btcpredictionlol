@@ -1,12 +1,29 @@
-"""External direction: raw producers -> directional matrix -> fitted head.
+"""C30/C70 multivenue direction head: producers -> directional matrix -> fit.
 
-This is the seam between the live producers and the *original* fitted external
-direction model. Nothing here re-derives, re-tunes or re-orders anything: the
-pipelines are the artifacts produced by ``tools/refit_external_direction.py``,
-which re-executed the original schedule from
-``c30_c70_lab_manager_r2.py`` and reproduced its recorded selection
-(``BINANCE_HYPERLIQUID``, ``C=0.03`` for both stages), its validation and
-challenge metrics, and its retained feature lists exactly.
+NAMING CORRECTION (2026-09-09). This module is *not* the producer of the leaf
+key ``external_direction``. Tracing the recovered sources end to end:
+
+  long_context_model.predictions()            -> external_direction / external_rank
+    -> t0_long_context_full_predictions.csv
+    -> t0_t5_coverage_bridge_audit_r1.py      -> continuous_coverage_ledger.csv
+    -> t0_t5_fee_coverage_frontier_r1.py      -> fee_coverage_shadow_ledger.csv
+    -> build_c42_maturation_consensus_r1.py   -> C42 -> C85
+
+``external_direction`` is therefore the signed call of the frozen
+``T0_LONG_CONTEXT_R1`` head (``ALL_HGB``, retain 0.25) - see
+``src/experts/direction_contract.py``, which carries that contract and matches
+the archived ledger exactly. What *this* module holds is the
+``c30_c70_lab_manager_r2.py`` head, whose outputs are ``p_t0_green`` /
+``p_t5_green`` in ``map_external_scores`` (lines 368-390), consumed there via
+``directional_past_rank`` of ``p_correct`` - a different rank family (lookback
+768, minimum 96) from ``external_rank``. Nothing computed here may be written
+into the ``external_direction`` / ``external_rank`` leaf fields.
+
+The pipelines are the artifacts produced by ``tools/refit_external_direction.py``,
+which re-executed the original schedule from ``c30_c70_lab_manager_r2.py`` and
+reproduced its recorded selection (``BINANCE_HYPERLIQUID``, ``C=0.03`` for both
+stages), its validation and challenge metrics, and its retained feature lists
+exactly.
 
 The three things this module is careful about, because getting any of them
 wrong would quietly change the model:
@@ -45,6 +62,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from .direction_contract import signed_direction
 from .direction_matrix import SOURCE_SETS, directional_matrix
 
 DEFAULT_FITS_DIR = Path(
@@ -127,6 +145,114 @@ class ExternalDirectionModel:
                 ))
         return cls(fits, report=report)
 
+    @classmethod
+    def load_release(cls, root: Path | str) -> "ExternalDirectionModel":
+        """Load a *relocatable* release directory, hashing bytes before unpickling.
+
+        Differences from :meth:`load`, all of them safety properties:
+
+        * every artifact path in ``manifest.json`` is **relative to the release
+          root**, so the release can be moved to any path, on any host, with
+          the original mount absent;
+        * the SHA-256 of the file on disk is computed and compared to the
+          manifest **before** ``joblib.load`` ever sees the bytes - the earlier
+          loader copied the expected digest into the result without hashing;
+        * after loading, the artifact's own metadata (stage, phase, source set,
+          C, feature count, class labels, scheduled window) is validated
+          against the manifest, and the phase windows are checked to be sorted
+          and non-overlapping.
+        """
+
+        import hashlib
+
+        import joblib
+
+        # Do not resolve(): the durable cache is reached through a symlinked
+        # mount, and resolving would point at a path that may not exist on the
+        # restore host. Containment is checked with normpath instead.
+        root = Path(os.path.normpath(Path(root).expanduser()))
+        manifest_path = root / "manifest.json"
+        if not manifest_path.exists():
+            raise ExternalDirectionUnavailable(f"no release manifest at {manifest_path}")
+        manifest = json.loads(manifest_path.read_text())
+
+        fits: dict[str, list[PhaseFit]] = {}
+        for stage in STAGES:
+            entries = manifest["stages"][stage]["phases"]
+            for phase, entry in entries.items():
+                relative = Path(entry["path"])
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ExternalDirectionUnavailable(
+                        f"release manifest path escapes the release root: {relative}"
+                    )
+                path = Path(os.path.normpath(root / relative))
+                if root not in path.parents:
+                    raise ExternalDirectionUnavailable(
+                        f"release manifest path escapes the release root: {relative}"
+                    )
+                if not path.exists():
+                    raise ExternalDirectionUnavailable(f"release artifact missing: {relative}")
+                digest = hashlib.sha256()
+                with path.open("rb") as handle:
+                    for block in iter(lambda: handle.read(1 << 20), b""):
+                        digest.update(block)
+                actual = digest.hexdigest()
+                if actual != entry["sha256"]:
+                    raise ExternalDirectionUnavailable(
+                        f"release artifact {relative} failed its digest: manifest "
+                        f"{entry['sha256']}, on disk {actual} - refusing to deserialise"
+                    )
+                blob = joblib.load(path)
+                problems = []
+                if blob.get("stage", stage) != stage or entry.get("stage", stage) != stage:
+                    problems.append("stage mismatch")
+                if blob["source_set"] != entry["source_set"]:
+                    problems.append("source_set mismatch")
+                if float(blob["c_value"]) != float(entry["c_value"]):
+                    problems.append("c_value mismatch")
+                if len(blob["features"]) != int(entry["feature_count"]):
+                    problems.append("feature count mismatch")
+                classes = [int(c) for c in blob["pipeline"].classes_]
+                if classes != [int(c) for c in entry["classes"]]:
+                    problems.append(f"class labels {classes} != manifest {entry['classes']}")
+                model = blob["pipeline"].named_steps["model"]
+                if int(model.coef_.shape[1]) != int(model.n_features_in_):
+                    problems.append("coefficient width does not match the fitted input width")
+                if int(model.n_features_in_) < len(blob["features"]):
+                    problems.append(
+                        f"fitted input width {model.n_features_in_} is smaller than the "
+                        f"{len(blob['features'])} retained features"
+                    )
+                for field in ("train_end", "scores_from", "scores_until"):
+                    if pd.Timestamp(blob[field]) != pd.Timestamp(entry[field]):
+                        problems.append(f"{field} mismatch")
+                if problems:
+                    raise ExternalDirectionUnavailable(
+                        f"release artifact {relative} failed validation: " + "; ".join(problems)
+                    )
+                fits.setdefault(stage, []).append(PhaseFit(
+                    stage=stage,
+                    phase=phase,
+                    source_set=blob["source_set"],
+                    c_value=float(blob["c_value"]),
+                    features=tuple(blob["features"]),
+                    train_end=pd.Timestamp(blob["train_end"]),
+                    scores_from=pd.Timestamp(blob["scores_from"]),
+                    scores_until=pd.Timestamp(blob["scores_until"]),
+                    sha256=actual,
+                    pipeline=blob["pipeline"],
+                ))
+
+        for stage, stage_fits in fits.items():
+            ordered = sorted(stage_fits, key=lambda f: f.scores_from)
+            for earlier, later in zip(ordered, ordered[1:]):
+                if later.scores_from < earlier.scores_until:
+                    raise ExternalDirectionUnavailable(
+                        f"{stage} phases {earlier.phase} and {later.phase} have "
+                        "overlapping scoring windows"
+                    )
+        return cls(fits, report=manifest)
+
     # -- causal selection ---------------------------------------------------
     def phase_for(self, stage: str, target_ts: pd.Timestamp) -> PhaseFit:
         target_ts = pd.Timestamp(target_ts)
@@ -185,18 +311,28 @@ class ExternalDirectionModel:
         design = self.design_row(stage, target_ts, observation)
         proba = fit.pipeline.predict_proba(design)
         classes = list(fit.pipeline.classes_)
-        p_up = float(proba[0][classes.index(1)])
+        green_index = classes.index(1)
+        p_green = float(proba[0][green_index])
         present = [c for c in fit.features if not pd.isna(design.iloc[0][c])]
         return {
             "stage": stage,
             "target_ts": pd.Timestamp(target_ts).isoformat(),
             "phase": fit.phase,
-            "fit_id": f"external_direction_{stage}_{fit.phase}",
+            "fit_id": f"c30_c70_direction_{stage}_{fit.phase}",
             "fit_sha256": fit.sha256,
             "train_end": fit.train_end.isoformat(),
             "source_set": fit.source_set,
-            "p_up": p_up,
-            "direction": 1 if p_up >= 0.5 else 0,
+            # `p_t0_green` / `p_t5_green` in c30_c70_lab_manager_r2.map_external_scores.
+            "p_green": p_green,
+            # The positive class *index* in `pipeline.classes_`. This is a
+            # bookkeeping value, NOT a call, and is deliberately named apart
+            # from any `direction` field: the C85 leaf direction contract is
+            # signed {-1,+1} with 0 for "no probability" (direction_contract).
+            "class_index": int(green_index),
+            # Signed under the same contract as the rest of the chain, so this
+            # value can never be confused with a 1/0 class index. It is the
+            # sign of *this* head only, not `external_direction`.
+            "signed_direction": signed_direction(p_green),
             "features_present": len(present),
             "features_expected": len(fit.features),
             "features_missing": [c for c in fit.features if c not in present],
