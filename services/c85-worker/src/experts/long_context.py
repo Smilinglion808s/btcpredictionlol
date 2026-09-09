@@ -293,6 +293,8 @@ class LongContextHead:
     first_fit_ts: str | None = None
     model: Any = None
     _labels_by_ts: dict[pd.Timestamp, float] = field(default_factory=dict)
+    _last_ts: pd.Timestamp | None = None
+    _last_probability: float | None = None
 
     def __post_init__(self) -> None:
         self.features = list(self.features)
@@ -310,22 +312,55 @@ class LongContextHead:
                            for f in self.features], dtype=float)
 
     def settle_label(self, ts: pd.Timestamp, label: float) -> None:
-        """Record the realised Spot-candle sign for an already-observed target."""
+        """Record the realised Spot-candle sign for an already-observed target.
+
+        Idempotent by timestamp. A *conflicting* re-settlement is refused rather
+        than silently changing training data underneath an already-issued fit.
+        """
 
         ts = pd.Timestamp(ts)
-        self._labels_by_ts[ts] = float(label)
+        label = float(label)
+        previous = self._labels_by_ts.get(ts)
+        if previous is not None and np.isfinite(previous) and previous != label:
+            raise LongContextOrderError(
+                f"conflicting label for {ts.isoformat()}: {previous} then {label}"
+            )
+        self._labels_by_ts[ts] = label
         for row in self.buffer:
             if row.ts == ts:
-                row.label = float(label)
-                return
+                row.label = label
+                break
+        self._prune_labels()
+
+    def _prune_labels(self) -> None:
+        """Keep the label map bounded by the retained window, not by history."""
+
+        if not self.buffer:
+            return
+        oldest = self.buffer[0].ts
+        for key in [k for k in self._labels_by_ts if k < oldest]:
+            del self._labels_by_ts[key]
 
     def observe(self, ts: pd.Timestamp, row: dict[str, Any]) -> float | None:
         """Advance one target: refit when due, then score this row.
 
         Returns the probability, or ``None`` where the original writes NaN.
+
+        Ordering is enforced, because the walk-forward grid is positional: an
+        out-of-order target would silently shift every future refit boundary. A
+        repeat of the current target is treated as a retry and replays the
+        recorded probability without advancing the grid or duplicating the row.
         """
 
         ts = pd.Timestamp(ts)
+        if self._last_ts is not None:
+            if ts == self._last_ts:
+                return self._last_probability
+            if ts < self._last_ts:
+                raise LongContextOrderError(
+                    f"target {ts.isoformat()} precedes the last observed "
+                    f"{self._last_ts.isoformat()}; the refit grid is positional"
+                )
         values = self._vector(row)
         complete = bool(np.isfinite(values).all())
 
@@ -337,11 +372,16 @@ class LongContextHead:
         )
         while len(self.buffer) > WINDOW:
             self.buffer.popleft()
+        self._prune_labels()
         self.position += 1
+        self._last_ts = ts
 
         if self.model is None or not complete:
+            self._last_probability = None
             return None
-        return float(self.model.predict_proba(values.reshape(1, -1))[0, 1])
+        self._last_probability = float(self.model.predict_proba(values.reshape(1, -1))[0, 1])
+        return self._last_probability
+
 
     # -- fitting ------------------------------------------------------------
     def _refit(self, ts: pd.Timestamp) -> None:
