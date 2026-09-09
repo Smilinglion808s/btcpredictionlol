@@ -323,15 +323,20 @@ def test_retention_survives_a_feed_gap_and_delayed_bars():
     assert len(acc.candles_1h.versions) == 4
 
 
-def test_pruning_never_drops_a_pending_targets_inputs():
+def test_pruning_never_drops_a_pending_targets_inputs_and_stays_bounded():
     acc = HyperliquidContextAccumulator()
-    acc.ingest_candles("15m", [candle(T - 90 * FIFTEEN)], available_ns=ns(T))
+    acc.ingest_candles("15m", [candle(T - k * FIFTEEN) for k in range(300)],
+                       available_ns=ns(T + 300 * FIFTEEN))
     acc.open_target(T)
-    acc.prune(T + 200 * FIFTEEN)
-    assert len(acc.candles_15m.versions) == 1
+    later = T + 200 * FIFTEEN
+    acc.prune(later)
+    # The oldest pending target still anchors retention, so ITS 96-row window
+    # survives even though the newer target alone would have evicted it.
+    assert (T - 95 * FIFTEEN) in acc.candles_15m.versions
     acc.close_target(T)
-    acc.prune(T + 200 * FIFTEEN)
-    assert len(acc.candles_15m.versions) == 0
+    acc.prune(later)
+    assert (T - 95 * FIFTEEN) not in acc.candles_15m.versions
+    assert len(acc.candles_15m.versions) <= 96
 
 
 def test_state_round_trips_and_restart_resumes_identically(sample):
