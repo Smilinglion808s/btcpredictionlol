@@ -165,12 +165,18 @@ class Worker:
 
 
     def snapshot(self) -> dict[str, Any]:
+        logging_status, logging_reason = self.evaluate_logging_readiness()
         return {
-            "model_version": MODEL_VERSION,
+            "model_version": logging_model_version(),
+            "archived_model_version": MODEL_VERSION,
+            "reconstruction": reconstruction_identity(),
             "display_name": DISPLAY_NAME,
             "worker_id": self.settings.worker_id,
             "build_sha": self.settings.build_sha,
             "readiness": self.readiness,
+            "logging_readiness": logging_status,
+            "logging_blocking_reason": logging_reason,
+            "dispatch": self.dispatch_status(),
             "stage": self.warmup.progress.stage.value,
             "blocking_reason": self.blocking_reason,
             "progress": self.warmup.progress.as_dict(),
@@ -185,11 +191,12 @@ class Worker:
 
     # -- boundary ---------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> None:
-        """Compute and publish one target, or record exactly why it did not."""
-        readiness, reason = self.evaluate_readiness()
-        if readiness != "READY":
+        """Compute and log one target, dispatching only when dispatch is enabled."""
+        logging_status, reason = self.evaluate_logging_readiness()
+        if logging_status != "LOGGING_READY":
             self.store.mark_missed(self.ticker_resolver.unverified_label(target), target, reason or "not_ready")
             return
+
 
         # Scheduler ownership: overlapping deployments must never both process
         # the same target. The lease is short-lived and fenced in the backend.
