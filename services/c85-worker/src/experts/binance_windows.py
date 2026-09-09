@@ -241,75 +241,281 @@ def build_binance_features(spot: pd.DataFrame | None, um: pd.DataFrame | None) -
 
 
 # --------------------------------------------------------------------------
+# transport adapters
+# --------------------------------------------------------------------------
+# Timestamp units are a property of the TRANSPORT, not of the venue. Observed,
+# not assumed (probe saved at
+# /mnt/documents/.lovable/c85-cache/transport_probes/binance_timestamp_units.json):
+#
+#   spot daily aggTrades CSV   transact_time = MICROseconds  (archive parity)
+#   um   daily aggTrades CSV   transact_time = MILLIseconds  (archive parity)
+#   spot REST /api/v3/aggTrades          T = MILLIseconds (13 digits, observed)
+#   um   REST /fapi/v1/aggTrades         T = MILLIseconds (13 digits, observed)
+#   spot WS  btcusdt@aggTrade            T = MILLIseconds (13 digits, observed)
+#   um   WS  btcusdt@aggTrade            NOT observed from this sandbox
+#            (egress timeout). Declared ms on the strength of the UM REST
+#            observation and the shared payload schema; the adapter's range
+#            check rejects the value outright if that is ever wrong, and this
+#            gap is reported rather than hidden.
+#
+# `spot_archive_csv` and `spot_ws_aggTrade` therefore differ in unit for the
+# SAME venue, which is exactly what the previous venue-keyed conversion got
+# wrong. Nothing here derives a unit from the venue name.
+
+#: Plausible event-time band, used to catch a mis-declared unit instead of
+#: silently producing a 1970 or year-58000 timestamp. 2020-01-01 .. 2035-01-01.
+_MIN_TS_US = 1_577_836_800_000_000
+_MAX_TS_US = 2_051_222_400_000_000
+
+
+class TransportError(ValueError):
+    """A payload that does not satisfy its declared schema. Never coerced."""
+
+
+def _as_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool) or value is None:
+        raise TransportError(f"{field_name}: expected an integer, got {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    raise TransportError(f"{field_name}: expected an integer, got {value!r}")
+
+
+def _as_float(value: Any, field_name: str) -> float:
+    if isinstance(value, bool) or value is None:
+        raise TransportError(f"{field_name}: expected a number, got {value!r}")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TransportError(f"{field_name}: expected a number, got {value!r}") from exc
+    if not np.isfinite(number):
+        raise TransportError(f"{field_name}: expected a finite number, got {value!r}")
+    return number
+
+
+def _as_bool(value: Any, field_name: str) -> bool:
+    """Strict. `bool('false')` is True in Python; that must never decide a side."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise TransportError(f"{field_name}: expected a boolean, got {value!r}")
+
+
+_UNIT_MULTIPLIER = {"us": 1, "ms": 1000}
+
+
+@dataclass(frozen=True)
+class Transport:
+    """Schema + unit metadata for one concrete source of aggregate trades."""
+
+    name: str
+    venue: str
+    time_unit: str            # "us" | "ms"
+    fields: dict[str, str]    # canonical name -> payload key
+    provenance: str           # "live" | "archive" | "bootstrap"
+    receipt_available: bool
+
+    def to_us(self, raw_time: Any) -> int:
+        ts_us = _as_int(raw_time, f"{self.name}.{self.fields['transact_time']}")
+        ts_us *= _UNIT_MULTIPLIER[self.time_unit]
+        if not _MIN_TS_US <= ts_us <= _MAX_TS_US:
+            raise TransportError(
+                f"{self.name}: event time {ts_us} us is outside the plausible band - "
+                f"the declared unit '{self.time_unit}' does not match the payload"
+            )
+        return ts_us
+
+    def parse(self, payload: dict[str, Any], *, receipt_ns: int | None = None) -> dict[str, Any]:
+        keys = self.fields
+        first = _as_int(payload[keys["first_trade_id"]], "first_trade_id")
+        last = _as_int(payload[keys["last_trade_id"]], "last_trade_id")
+        if last < first:
+            raise TransportError(f"{self.name}: last_trade_id {last} < first_trade_id {first}")
+        price = _as_float(payload[keys["price"]], "price")
+        quantity = _as_float(payload[keys["quantity"]], "quantity")
+        maker = _as_bool(payload[keys["is_buyer_maker"]], "is_buyer_maker")
+        if self.receipt_available and receipt_ns is None:
+            raise TransportError(f"{self.name}: a live transport must supply receipt_ns")
+        return {
+            "agg_trade_id": _as_int(payload[keys["agg_trade_id"]], "agg_trade_id"),
+            "ts_us": self.to_us(payload[keys["transact_time"]]),
+            "price": price,
+            "quantity": quantity,
+            "underlying_n": last - first + 1,
+            "signed": -1.0 if maker else 1.0,
+            "quote": price * quantity,
+            "receipt_ns": -1 if receipt_ns is None else _as_int(receipt_ns, "receipt_ns"),
+            "provenance": self.provenance,
+        }
+
+
+_WS_FIELDS = {
+    "agg_trade_id": "a", "price": "p", "quantity": "q", "first_trade_id": "f",
+    "last_trade_id": "l", "transact_time": "T", "is_buyer_maker": "m",
+}
+_ARCHIVE_FIELDS = {
+    "agg_trade_id": "agg_trade_id", "price": "price", "quantity": "quantity",
+    "first_trade_id": "first_trade_id", "last_trade_id": "last_trade_id",
+    "transact_time": "transact_time", "is_buyer_maker": "is_buyer_maker",
+}
+
+TRANSPORTS: dict[str, Transport] = {
+    t.name: t
+    for t in (
+        Transport("spot_ws_aggTrade", "spot", "ms", _WS_FIELDS, "live", True),
+        Transport("um_ws_aggTrade", "um", "ms", _WS_FIELDS, "live", True),
+        Transport("spot_rest_aggTrades", "spot", "ms", _WS_FIELDS, "live", True),
+        Transport("um_rest_aggTrades", "um", "ms", _WS_FIELDS, "live", True),
+        # Bootstrap: a REST back-fill replayed at start-up. Real ids, real event
+        # times, and an explicitly recorded availability instant supplied by the
+        # caller - never an invented per-event receipt time.
+        Transport("spot_rest_bootstrap", "spot", "ms", _WS_FIELDS, "bootstrap", False),
+        Transport("um_rest_bootstrap", "um", "ms", _WS_FIELDS, "bootstrap", False),
+        Transport("spot_archive_csv", "spot", "us", _ARCHIVE_FIELDS, "archive", False),
+        Transport("um_archive_csv", "um", "ms", _ARCHIVE_FIELDS, "archive", False),
+    )
+}
+
+
+# --------------------------------------------------------------------------
 # live accumulator
 # --------------------------------------------------------------------------
+HISTORICAL = "HISTORICAL"   # event-time replay; no availability filter exists
+LIVE = "LIVE"               # only observations provably available by the freeze
+
+
 @dataclass
 class VenueBuffer:
-    """Bounded raw-event buffer for one venue, keyed by agg_trade_id.
+    """Bounded raw-event buffer for one venue, keyed by the AUTHENTIC agg_trade_id.
 
-    * De-duplication is by `agg_trade_id`; a repeated delivery of the same
-      aggregate trade is dropped, never double-counted.
-    * Out-of-order receipt is fine: membership is decided by EVENT time, and
-      the buffer is sorted by event time before aggregation, exactly as the
-      archive path is.
-    * Retention is the longest window (900s) plus the current T+5 tail, so a
-      restart that reloads this buffer reproduces the same features.
+    * De-duplication is by exchange `agg_trade_id`, so the same aggregate trade
+      delivered twice - by a repeat websocket frame, by a REST back-fill that
+      overlaps the live stream, or by re-ingesting a daily archive - is stored
+      once and counted once.
+    * Ordering is `(ts_us, agg_trade_id)`, not insertion order. Aggregate trade
+      ids are monotonic per venue, so this reproduces the archive's own row
+      order exactly (verified against the publisher file) and makes first/last
+      price independent of the order in which frames were received.
+    * Availability: every event carries `receipt_ns` (-1 = unknown) and a
+      provenance tag. In LIVE mode an event with unknown availability is
+      EXCLUDED and counted, never quietly admitted.
     """
 
     venue: str
-    events: dict[int, dict[str, float]] = field(default_factory=dict)
+    events: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: Half-open [start_ns, end_ns) intervals of receipt-clock time during which
+    #: this feed was known to be down. Recorded by the collector, never guessed.
+    gaps: list[tuple[int, int]] = field(default_factory=list)
+    #: Oldest event time this buffer can legitimately claim to cover.
+    coverage_start_us: int | None = None
+    excluded_unknown_availability: int = 0
 
-    def add(self, *, agg_trade_id: int, price: float, quantity: float,
-            first_trade_id: int, last_trade_id: int, transact_time: int,
-            is_buyer_maker: bool, receipt_ns: int | None = None) -> bool:
-        """Raw exchange fields only — the same seven the archive exposes.
-
-        `transact_time` is in the venue's native unit (spot microseconds, UM
-        milliseconds), converted here exactly as `read_binance_archive` does.
-        Returns False when the event was a duplicate.
-        """
-        if agg_trade_id in self.events:
+    # -- ingestion ----------------------------------------------------------
+    def add_event(self, event: dict[str, Any]) -> bool:
+        key = int(event["agg_trade_id"])
+        if key in self.events:
             return False
-        ts_us = int(transact_time) if self.venue == "spot" else int(transact_time) * 1000
-        price = float(price)
-        quantity = float(quantity)
-        self.events[int(agg_trade_id)] = {
-            "ts_us": ts_us,
-            "price": price,
-            "quantity": quantity,
-            "underlying_n": int(last_trade_id) - int(first_trade_id) + 1,
-            "signed": -1.0 if bool(is_buyer_maker) else 1.0,
-            "quote": price * quantity,
-            "receipt_ns": -1 if receipt_ns is None else int(receipt_ns),
-        }
+        stored = dict(event)
+        stored.pop("agg_trade_id", None)
+        self.events[key] = stored
+        ts_us = int(event["ts_us"])
+        if self.coverage_start_us is None or ts_us < self.coverage_start_us:
+            self.coverage_start_us = ts_us
         return True
 
+    def add_payload(self, transport: Transport, payload: dict[str, Any],
+                    *, receipt_ns: int | None = None) -> bool:
+        if transport.venue != self.venue:
+            raise TransportError(f"{transport.name} is not a {self.venue} transport")
+        return self.add_event(transport.parse(payload, receipt_ns=receipt_ns))
+
+    def mark_gap(self, start_ns: int, end_ns: int) -> None:
+        """Record a known outage on the receipt clock (disconnect .. reconnect)."""
+        if end_ns > start_ns:
+            self.gaps.append((int(start_ns), int(end_ns)))
+
+    # -- retention ----------------------------------------------------------
     def prune(self, keep_from_us: int) -> None:
         for key in [k for k, e in self.events.items() if e["ts_us"] < keep_from_us]:
             del self.events[key]
+        if self.coverage_start_us is not None:
+            self.coverage_start_us = max(self.coverage_start_us, keep_from_us)
 
-    def frame(self, *, freeze_ns: int | None = None) -> pd.DataFrame:
-        rows = [
-            e for e in self.events.values()
-            # Availability, kept separate from the model's window rule: in LIVE
-            # mode an event that had not been RECEIVED by the freeze instant did
-            # not legitimately exist for this decision, whatever its event time.
-            if freeze_ns is None or e["receipt_ns"] < 0 or e["receipt_ns"] <= freeze_ns
-        ]
+    # -- reading ------------------------------------------------------------
+    def frame(self, *, mode: str = HISTORICAL, freeze_ns: int | None = None) -> pd.DataFrame:
+        if mode not in (HISTORICAL, LIVE):
+            raise ValueError(f"unknown availability mode {mode!r}")
+        if mode == LIVE and freeze_ns is None:
+            raise ValueError("LIVE mode requires the packet freeze instant")
+        rows: list[dict[str, Any]] = []
+        unknown = 0
+        for key, event in self.events.items():
+            if mode == LIVE:
+                receipt = int(event["receipt_ns"])
+                if receipt < 0:
+                    unknown += 1
+                    continue
+                if receipt > int(freeze_ns):  # type: ignore[arg-type]
+                    continue
+            rows.append({**event, "agg_trade_id": key})
+        self.excluded_unknown_availability = unknown
         if not rows:
             return pd.DataFrame(columns=list(RAW_COLUMNS))
-        frame = pd.DataFrame(rows).sort_values(["ts_us"], kind="stable").reset_index(drop=True)
+        frame = (
+            pd.DataFrame(rows)
+            .sort_values(["ts_us", "agg_trade_id"], kind="stable")
+            .reset_index(drop=True)
+        )
         return frame[list(RAW_COLUMNS)]
 
+    def gap_overlaps(self, start_ns: int, end_ns: int) -> list[tuple[int, int]]:
+        return [(a, b) for a, b in self.gaps if b > start_ns and a < end_ns]
+
+    # -- state --------------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
-        return {"venue": self.venue, "events": {str(k): v for k, v in self.events.items()}}
+        return {
+            "venue": self.venue,
+            "events": {str(k): v for k, v in self.events.items()},
+            "gaps": [[a, b] for a, b in self.gaps],
+            "coverage_start_us": self.coverage_start_us,
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "VenueBuffer":
         return cls(
             venue=payload["venue"],
             events={int(k): dict(v) for k, v in (payload.get("events") or {}).items()},
+            gaps=[(int(a), int(b)) for a, b in (payload.get("gaps") or [])],
+            coverage_start_us=payload.get("coverage_start_us"),
         )
+
+
+def read_binance_archive_raw(path: Path, venue: str) -> pd.DataFrame:
+    """`read_binance_archive` plus the authentic `agg_trade_id`.
+
+    The feature columns are untouched - the id is carried alongside them purely
+    so buffer ingestion can de-duplicate against the live stream.
+    """
+    columns = [
+        "agg_trade_id", "price", "quantity", "first_trade_id",
+        "last_trade_id", "transact_time", "is_buyer_maker",
+    ]
+    dtype = {
+        "agg_trade_id": "int64", "price": "float64", "quantity": "float64",
+        "first_trade_id": "int64", "last_trade_id": "int64", "transact_time": "int64",
+    }
+    if venue == "spot":
+        frame = pd.read_csv(path, compression="zip", header=None,
+                            names=columns + ["is_best_match"], usecols=columns,
+                            dtype=dtype, low_memory=False)
+    else:
+        frame = pd.read_csv(path, compression="zip", header=0, usecols=columns,
+                            dtype=dtype, low_memory=False)
+    features = read_binance_archive(path, venue)
+    features["agg_trade_id"] = frame["agg_trade_id"].to_numpy(np.int64)
+    return features
 
 
 class BinanceWindowAccumulator:
@@ -321,46 +527,140 @@ class BinanceWindowAccumulator:
 
     def __init__(self) -> None:
         self.buffers = {venue: VenueBuffer(venue) for venue in ("spot", "um")}
+        #: Targets whose packet has not been produced yet. Retention never drops
+        #: an input any pending target still needs.
+        self.pending_targets: set[int] = set()
 
-    def add(self, venue: str, **event: Any) -> bool:
-        return self.buffers[venue].add(**event)
+    # -- ingestion ----------------------------------------------------------
+    def ingest(self, transport_name: str, payload: dict[str, Any],
+               *, receipt_ns: int | None = None) -> bool:
+        transport = TRANSPORTS[transport_name]
+        return self.buffers[transport.venue].add_payload(
+            transport, payload, receipt_ns=receipt_ns
+        )
+
+    def ingest_many(self, transport_name: str, payloads: Iterable[dict[str, Any]],
+                    *, receipt_ns: int | None = None) -> int:
+        return sum(
+            1 for p in payloads
+            if self.ingest(transport_name, p, receipt_ns=receipt_ns)
+        )
 
     def ingest_archive(self, venue: str, path: Path) -> int:
-        """Seed the buffer from a publisher archive (historical/bootstrap only).
+        """Seed the buffer from a publisher daily archive.
 
-        `read_binance_archive` drops `agg_trade_id`, so archive rows are keyed by
-        a local sequence. They carry no receipt timestamp — the archives expose
-        exchange timestamps only — so `receipt_ns` stays -1 (unknown), and LIVE
-        availability filtering does not silently pretend otherwise.
+        The archive's authentic `agg_trade_id` is preserved, so re-ingesting the
+        same file, or ingesting a file that overlaps the live stream, adds
+        nothing the second time. The archives carry exchange timestamps only -
+        there is no collector clock in them - so `receipt_ns` stays -1 (unknown)
+        and provenance is `archive`; LIVE mode then excludes these rows instead
+        of pretending they were available.
+
+        Returns the number of NEW events stored.
         """
-        raw = read_binance_archive(Path(path), venue)
+        raw = read_binance_archive_raw(Path(path), venue)
         buffer = self.buffers[venue]
-        base = min(buffer.events, default=0)
-        for offset, row in enumerate(raw.itertuples(index=False), start=1):
-            buffer.events[base - offset] = {
-                "ts_us": int(row.ts_us), "price": float(row.price),
-                "quantity": float(row.quantity), "underlying_n": int(row.underlying_n),
-                "signed": float(row.signed), "quote": float(row.quote), "receipt_ns": -1,
-            }
-        return len(raw)
+        added = 0
+        for row in raw.itertuples(index=False):
+            added += buffer.add_event({
+                "agg_trade_id": int(row.agg_trade_id), "ts_us": int(row.ts_us),
+                "price": float(row.price), "quantity": float(row.quantity),
+                "underlying_n": int(row.underlying_n), "signed": float(row.signed),
+                "quote": float(row.quote), "receipt_ns": -1, "provenance": "archive",
+            })
+        return added
+
+    def ingest_bootstrap(self, transport_name: str, payloads: Iterable[dict[str, Any]],
+                         *, available_at_ns: int) -> int:
+        """A REST back-fill whose availability instant is KNOWN and explicit.
+
+        `available_at_ns` is when the back-fill response was received, so these
+        rows are legitimately usable by any freeze at or after that instant and
+        by none before it. No per-event receipt time is invented.
+        """
+        transport = TRANSPORTS[transport_name]
+        if transport.provenance != "bootstrap":
+            raise TransportError(f"{transport_name} is not a bootstrap transport")
+        buffer = self.buffers[transport.venue]
+        added = 0
+        for payload in payloads:
+            event = transport.parse(payload)
+            event["receipt_ns"] = int(available_at_ns)
+            event["provenance"] = "bootstrap"
+            added += buffer.add_event(event)
+        return added
+
+    def mark_gap(self, venue: str, start_ns: int, end_ns: int) -> None:
+        self.buffers[venue].mark_gap(start_ns, end_ns)
+
+    # -- lifecycle ----------------------------------------------------------
+    def open_target(self, target_us: int) -> None:
+        self.pending_targets.add(int(target_us))
+
+    def close_target(self, target_us: int) -> None:
+        self.pending_targets.discard(int(target_us))
+
+    def retention_floor_us(self, target_us: int) -> int:
+        """Oldest event time still needed, honouring every pending target."""
+        oldest = min(self.pending_targets | {int(target_us)})
+        return oldest - RETENTION_US
 
     def prune(self, target_us: int) -> None:
-        """Drop anything older than the longest window needs for this target."""
+        """Bound retained state without dropping any pending target's inputs."""
+        floor = self.retention_floor_us(target_us)
         for buffer in self.buffers.values():
-            buffer.prune(target_us - RETENTION_US)
+            buffer.prune(floor)
 
+    # -- validity -----------------------------------------------------------
     def has_history(self, target_us: int, venue: str = "spot") -> bool:
-        """False when the buffer cannot cover the 900s T0 window for this target."""
-        events = self.buffers[venue].events
-        if not events:
-            return False
-        return min(e["ts_us"] for e in events.values()) <= target_us - RETENTION_US
+        """True only when coverage begins at or before the 900s T0 window start.
 
-    def features_for(self, target_us: int, *, freeze_ns: int | None = None) -> dict[str, float | None]:
+        This uses the buffer's recorded coverage start rather than the oldest
+        surviving event: an empty first minute is not evidence of absence, and a
+        pruned buffer must not look like a covered one.
+        """
+        start = self.buffers[venue].coverage_start_us
+        return start is not None and start <= target_us - RETENTION_US
+
+    def validity(self, target_us: int, *, mode: str = HISTORICAL,
+                 freeze_ns: int | None = None) -> dict[str, Any]:
+        """Feed continuity / warm-up status for exactly one target.
+
+        No silence threshold is invented here: a feed with no trades in a window
+        is reported as such and the original no-imputation rule still applies.
+        What IS enforced is that the packet may only be called valid when the
+        source window is warm and unbroken, and when nothing needed was excluded
+        for unknown availability.
+        """
+        window_start_us = target_us - RETENTION_US
+        window_end_us = target_us + max(T5_WINDOW_SECONDS) * ONE_SECOND_US
+        report: dict[str, Any] = {"target_us": target_us, "mode": mode, "venues": {}}
+        valid = True
+        for venue, buffer in self.buffers.items():
+            frame = buffer.frame(mode=mode, freeze_ns=freeze_ns)
+            gaps = buffer.gap_overlaps(window_start_us * 1000, window_end_us * 1000)
+            warm = self.has_history(target_us, venue)
+            unknown = buffer.excluded_unknown_availability
+            venue_ok = warm and not gaps and (mode == HISTORICAL or unknown == 0)
+            valid = valid and venue_ok
+            report["venues"][venue] = {
+                "warm": warm,
+                "coverage_start_us": buffer.coverage_start_us,
+                "events_available": int(len(frame)),
+                "receipt_gaps": [[a, b] for a, b in gaps],
+                "excluded_unknown_availability": unknown,
+                "valid": venue_ok,
+            }
+        report["valid"] = valid
+        return report
+
+    # -- features -----------------------------------------------------------
+    def features_for(self, target_us: int, *, mode: str = HISTORICAL,
+                     freeze_ns: int | None = None) -> dict[str, float | None]:
         """The Binance columns for exactly one target. Missing => absent, not zero."""
         built = build_binance_features(
-            self.buffers["spot"].frame(freeze_ns=freeze_ns),
-            self.buffers["um"].frame(freeze_ns=freeze_ns),
+            self.buffers["spot"].frame(mode=mode, freeze_ns=freeze_ns),
+            self.buffers["um"].frame(mode=mode, freeze_ns=freeze_ns),
         )
         if built.empty or "target_ts" not in built:
             return {}
@@ -371,14 +671,25 @@ class BinanceWindowAccumulator:
         row = rows.iloc[0].drop(labels=["target_ts"])
         return {name: (None if pd.isna(value) else float(value)) for name, value in row.items()}
 
+    def build_target(self, target_us: int, *, mode: str = HISTORICAL,
+                     freeze_ns: int | None = None) -> tuple[dict[str, float | None], dict[str, Any]]:
+        """Features plus the validity report a packet must fail closed on."""
+        features = self.features_for(target_us, mode=mode, freeze_ns=freeze_ns)
+        return features, self.validity(target_us, mode=mode, freeze_ns=freeze_ns)
+
     # -- rolling state ------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
-        return {venue: buffer.to_dict() for venue, buffer in self.buffers.items()}
+        payload: dict[str, Any] = {v: b.to_dict() for v, b in self.buffers.items()}
+        payload["pending_targets"] = sorted(self.pending_targets)
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "BinanceWindowAccumulator":
         self = cls()
         for venue, buffer in (payload or {}).items():
+            if venue == "pending_targets":
+                self.pending_targets = {int(t) for t in buffer}
+                continue
             self.buffers[venue] = VenueBuffer.from_dict(buffer)
         return self
 

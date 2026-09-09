@@ -28,7 +28,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.experts.binance_windows import (  # noqa: E402
+from src.experts.binance_windows import (
+    LIVE,  # noqa: E402
     FIFTEEN_MIN_US,
     ONE_SECOND_US,
     BinanceWindowAccumulator,
@@ -173,12 +174,27 @@ def test_restart_reload_reproduces_identical_features():
 
 # -- synthetic edge cases (supplemental; NOT archived raw parity) -------------
 def _event(accumulator, venue, agg_id, ts_us, price, qty, maker=False, receipt_ns=None):
-    accumulator.add(
-        venue, agg_trade_id=agg_id,
-        transact_time=ts_us if venue == "spot" else ts_us // 1000,
-        price=price, quantity=qty, first_trade_id=agg_id, last_trade_id=agg_id,
-        is_buyer_maker=maker, receipt_ns=receipt_ns,
-    )
+    """Feed one event through a real transport adapter.
+
+    With a receipt time this uses the websocket transport (milliseconds, the
+    observed live unit); without one it uses the archive transport, whose
+    availability is legitimately unknown.
+    """
+    if receipt_ns is None:
+        name = f"{venue}_archive_csv"
+        stamp = ts_us if venue == "spot" else ts_us // 1000
+        payload = {
+            "agg_trade_id": agg_id, "price": price, "quantity": qty,
+            "first_trade_id": agg_id, "last_trade_id": agg_id,
+            "transact_time": stamp, "is_buyer_maker": maker,
+        }
+    else:
+        name = f"{venue}_ws_aggTrade"
+        payload = {
+            "a": agg_id, "p": price, "q": qty, "f": agg_id, "l": agg_id,
+            "T": ts_us // 1000, "m": maker,
+        }
+    return accumulator.ingest(name, payload, receipt_ns=receipt_ns)
 
 
 def test_synthetic_half_open_boundary_endpoints():
@@ -204,10 +220,7 @@ def test_synthetic_duplicates_and_out_of_order_receipt():
     target_us = 1_767_312_000_000_000
     _event(accumulator, "spot", 10, target_us + 2 * ONE_SECOND_US, 102.0, 1.0)
     _event(accumulator, "spot", 11, target_us + 1 * ONE_SECOND_US, 101.0, 1.0)  # arrives late
-    assert accumulator.add(
-        "spot", agg_trade_id=10, transact_time=target_us + 2 * ONE_SECOND_US,
-        price=102.0, quantity=1.0, first_trade_id=10, last_trade_id=10, is_buyer_maker=False,
-    ) is False
+    assert _event(accumulator, "spot", 10, target_us + 2 * ONE_SECOND_US, 102.0, 1.0) is False
     features = accumulator.features_for(target_us)
     assert features["binance_spot_t5_w005_event_count"] == 2
     # first/last price follow EVENT time, not arrival order
@@ -223,7 +236,7 @@ def test_synthetic_receipt_after_freeze_is_not_available():
     freeze_ns = (target_us + 5 * ONE_SECOND_US) * 1000
     _event(accumulator, "spot", 20, target_us + ONE_SECOND_US, 100.0, 1.0, receipt_ns=freeze_ns - 10)
     _event(accumulator, "spot", 21, target_us + 2 * ONE_SECOND_US, 500.0, 1.0, receipt_ns=freeze_ns + 10)
-    live = accumulator.features_for(target_us, freeze_ns=freeze_ns)
+    live = accumulator.features_for(target_us, mode=LIVE, freeze_ns=freeze_ns)
     assert live["binance_spot_t5_w005_event_count"] == 1
     assert accumulator.features_for(target_us)["binance_spot_t5_w005_event_count"] == 2
 
