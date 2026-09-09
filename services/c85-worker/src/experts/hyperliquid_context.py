@@ -436,18 +436,27 @@ class HyperliquidContextAccumulator:
     """
 
     def __init__(self) -> None:
-        self.candles_15m = _Stream("t")
-        self.candles_1h = _Stream("t")
-        self.funding = _Stream("time")
+        self.candles_15m = _Stream("t", interval_ms=15 * 60_000)
+        self.candles_1h = _Stream("t", interval_ms=60 * 60_000)
+        self.funding = _Stream("time")          # point events, always final
         self.pending_targets: set[int] = set()
 
     # -- ingestion ----------------------------------------------------------
     def ingest_candles(self, interval: str, rows: Iterable[dict[str, Any]],
-                       *, available_ns: int | None = None) -> int:
+                       *, available_ns: int | None = None,
+                       final: bool | None = None) -> int:
+        """Ingest a candle poll response.
+
+        `final` is the source's own confirmation that the bars are complete
+        (e.g. a websocket candle frame carrying a closed flag, or a snapshot the
+        caller knows excludes the running bar). Leave it None when the source
+        does not say, and finality is then decided by receipt vs close time -
+        never by the bar's close time on its own.
+        """
         stream = self._candle_stream(interval)
         added = 0
         for row in normalize_candles(rows).to_dict("records"):
-            added += stream.add(row, available_ns=available_ns)
+            added += stream.add(row, available_ns=available_ns, final=final)
         return added
 
     def ingest_funding(self, rows: Iterable[dict[str, Any]],
@@ -471,12 +480,36 @@ class HyperliquidContextAccumulator:
     def close_target(self, target_ms: int) -> None:
         self.pending_targets.discard(int(target_ms))
 
+    def anchors(self, target_ms: int) -> dict[str, int]:
+        """The newest input row each stream may read for this target.
+
+        Straight from the source's join rules: the 15m bar attributed to T opens
+        at T-15m; the hourly backward as-of with `allow_exact_matches=True`
+        reaches the bar opening at T-1h; funding joins strictly before T.
+        """
+        target = int(target_ms)
+        return {
+            "candles_15m": target - 15 * 60_000,
+            "candles_1h": target - 60 * 60_000,
+            "funding": target - 1,
+        }
+
     def prune(self, target_ms: int) -> None:
-        """Bound retained state without dropping any pending target's inputs."""
+        """Bound retained state by OBSERVATION COUNT, honouring pending targets.
+
+        Retention is derived from what the source's own operations consume:
+        rolling(96)/shift(15) on 15m bars, shift(3)/rolling(4) on hourly bars,
+        and diff()/rolling(8) on funding - all positional. So the newest N rows
+        at or before each stream's anchor are kept, plus everything newer, and
+        every version of a retained key survives. Rows a still-pending target
+        needs are never dropped, because the anchors are computed from the
+        OLDEST pending target.
+        """
         oldest = min(self.pending_targets | {int(target_ms)})
-        self.candles_15m.prune(oldest - CANDLE_15M_LOOKBACK * 15 * 60_000)
-        self.candles_1h.prune(oldest - CANDLE_1H_LOOKBACK * 60 * 60_000)
-        self.funding.prune(oldest - FUNDING_LOOKBACK * 60 * 60_000)
+        anchors = self.anchors(oldest)
+        self.candles_15m.prune_by_count(anchors["candles_15m"], CANDLE_15M_LOOKBACK)
+        self.candles_1h.prune_by_count(anchors["candles_1h"], CANDLE_1H_LOOKBACK)
+        self.funding.prune_by_count(anchors["funding"], FUNDING_LOOKBACK)
 
     # -- reading ------------------------------------------------------------
     def features_for(self, target_ms: int, *, mode: str = HISTORICAL,
