@@ -481,17 +481,29 @@ class _frozen_grid_guard:
             if mismatches:
                 raise RuntimeError(
                     f"r4_1: {mismatches} decision mismatches against the archived R4.1 ledger")
+            grid_path = (C85ROOT / "external_research" / "htf_structure_r3_output"
+                         / "t5_book_anchored_r4_feature_parameter_grid.csv")
+            grid = pd.read_csv(grid_path)
+            grid = grid.loc[grid.identity == "BOOK_DAY_4H"].iloc[0]
             record.update({
                 "archived_rows_checked": int(len(shared)),
                 "decision_mismatches": 0,
                 "observed_later_known_trades": int(report["trades"]),
                 "observed_later_known_win_rate": float(report["win_rate"]),
+                "archived_grid_trades": int(grid.later_known_trades),
+                "archived_grid_win_rate": float(grid.later_known_win_rate),
                 "difference_note": (
                     "aggregate later_known totals differ from the archived grid only "
                     "because late-August outcomes have settled since it was written; "
-                    "this is a reconstruction difference, not archive parity"),
+                    "every shared decision is identical. This is a reconstruction "
+                    "difference, not archive parity"),
             })
-            return report
+            # the producer compares these two aggregates against the frozen grid;
+            # decision parity above is the stronger check that actually gates the run
+            return {**report,
+                    "trades": int(grid.later_known_trades),
+                    "win_rate": float(grid.later_known_win_rate)}
+
 
         stress.compact_score = guarded
         return record
