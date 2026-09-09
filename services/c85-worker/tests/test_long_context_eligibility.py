@@ -80,7 +80,7 @@ def test_training_a_future_boundary_early_is_refused():
 
 def test_a_fit_certified_after_more_rows_arrive_is_stale_and_rebuilt():
     head = _head()
-    rows = list(_rows(SMALL_MINIMUM))
+    rows = list(_rows(3 * SMALL_REFIT))
     _drive(head, rows)
     staged = head.train_ahead()
     assert staged is not None and staged.position == head.position
@@ -133,7 +133,7 @@ def test_a_no_fit_verdict_reopens_when_the_inputs_change():
 
 def test_restart_immediately_before_activation_keeps_the_staged_fit(tmp_path):
     head = _head()
-    rows = list(_rows(SMALL_MINIMUM))
+    rows = list(_rows(3 * SMALL_REFIT))
     _drive(head, rows)
     staged = head.train_ahead()
     assert staged is not None
