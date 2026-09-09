@@ -48,8 +48,10 @@ def sha256(path: Path) -> str:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
-    stored = pd.read_pickle(STORED)
-    rebuilt = pd.read_pickle(REBUILT)
+    read = (lambda path: pd.read_parquet(path) if path.suffix == ".parquet"
+            else pd.read_pickle(path))
+    stored = read(STORED)
+    rebuilt = read(REBUILT)
     report: dict[str, object] = {
         "stored": {"path": str(STORED), "sha256": sha256(STORED), "rows": int(len(stored))},
         "rebuilt": {"path": str(REBUILT), "sha256": sha256(REBUILT), "rows": int(len(rebuilt))},
