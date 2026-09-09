@@ -70,8 +70,43 @@ class LongContextBootstrap:
         state_dir = Path(state_dir)
         rank_dir = Path(rank_dir) if rank_dir is not None else state_dir
         head = lc.LongContextHead.restore_state(state_dir)
-        manifest_path = rank_dir / "rank_manifest.json"
-        rank_state_path = rank_dir / "rank_state.json"
+        generation = (state_dir / "CURRENT").read_text().strip()
+
+        # The PAIRED layout is the authority when it exists: `RANK/CURRENT`
+        # names the generation whose `rank_state.json` was committed together
+        # with this head. The flat `rank_state.json` at the top of the rank
+        # directory is the pre-pointer bootstrap package and is only read when
+        # no pointer exists — reading it while a pointer is present silently
+        # paired a current head with the original bootstrap's rank history.
+        pointer = rank_dir / "CURRENT"
+        manifest: dict[str, Any] = {}
+        if pointer.exists():
+            paired = pointer.read_text().strip()
+            gen_dir = rank_dir / "generations" / paired
+            rank_state_path = gen_dir / "rank_state.json"
+            if not rank_state_path.exists():
+                raise FileNotFoundError(
+                    f"rank pointer names generation {paired!r} but "
+                    f"{rank_state_path} does not exist"
+                )
+            manifest_path = gen_dir / "MANIFEST.json"
+            if manifest_path.exists():
+                manifest = json.loads(manifest_path.read_text())
+                if manifest.get("generation") != paired:
+                    raise ValueError(
+                        f"paired manifest generation {manifest.get('generation')!r} "
+                        f"does not match the pointer {paired!r}"
+                    )
+            if paired != generation:
+                raise ValueError(
+                    f"rank pointer names generation {paired!r} but the head is at "
+                    f"{generation!r}: they are not one committed pair"
+                )
+        else:
+            rank_state_path = rank_dir / "rank_state.json"
+            manifest_path = rank_dir / "rank_manifest.json"
+            if manifest_path.exists():
+                manifest = json.loads(manifest_path.read_text())
         if not rank_state_path.exists():
             raise FileNotFoundError(
                 f"rank queue missing at {rank_state_path}: rebuild it with "
@@ -81,8 +116,6 @@ class LongContextBootstrap:
         producer = LongContextLeafProducer.from_dict(
             json.loads(rank_state_path.read_text())
         )
-        manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-        generation = (state_dir / "CURRENT").read_text().strip()
 
         # The rank queue and the fitted head must describe the same series.
         last_key = producer.last_key
@@ -99,6 +132,7 @@ class LongContextBootstrap:
             )
         return cls(head=head, producer=producer, generation=generation,
                    manifest=manifest)
+
 
     # -- watermarks ---------------------------------------------------------
     @property
