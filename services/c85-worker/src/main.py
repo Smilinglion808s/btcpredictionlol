@@ -39,7 +39,9 @@ from .experts import ExpertRegistry, LiveExpertChain
 from .feeds import FeedRegistry
 from .gateway import GatewayClient
 from .health import create_app
-from .orchestration import BoundaryOrchestrator, UnavailablePacketSource
+from .packets import LivePacketSource
+from .reconstruction import identity as reconstruction_identity
+from .reconstruction import logging_model_version
 from .scheduler import BoundaryScheduler, RunTiming, next_boundary
 from .store import C85Store
 from .tickers import KalshiTickerResolver
