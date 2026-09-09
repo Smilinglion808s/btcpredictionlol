@@ -142,9 +142,25 @@ T+5 publication-deadline conflict. C85 is not live.
 
 ## 7. Next dependency
 
-Recover or reconstruct the `T0_LONG_CONTEXT_R1` fitted head and its feature
-pickle. Without it the external pair, though now correct and wired, has no live
-input. Exact files needed if they exist in the recovery kits:
-`t0_long_context_r1_model.joblib` (or the `ALL_HGB` head under
-`T0_EXTERNAL_RESOURCE_HUNT_R1/external_research/long_context_output/`) and the
-long-context feature frame pickle referenced by `long_context_model.py`.
+Recover or re-fit the `T0_LONG_CONTEXT_R1` head. Searched recovery for it:
+`long_context_output/` contains only descriptive CSVs, the robustness audit and
+`T0_LONG_CONTEXT_R1_FREEZE.json` — **no fitted head artifact and no feature
+frame pickle anywhere in the cache.**
+
+What *is* present is the producing source: `build_long_context_features.py` and
+`long_context_model.py` (three copies each, matching hashes). So the same route
+already used for the c30/c70 head is available: rebuild the long-context feature
+frame from saved sources, then execute the original fitting schedule causally
+(17,280-row window, refit every 96 targets, `ALL_HGB`, 324 features, retain
+0.25) and gate the result against the archived
+`external_probability_green` column — which gives a genuine recorded-score
+parity check, the one the c30/c70 head lacks.
+
+That is the next bounded step. It requires a feature rebuild, so it is not
+folded into this task.
+
+If a fitted artifact does exist in your kits, the exact names to transfer are
+the `ALL_HGB` head serialisation under
+`T0_EXTERNAL_RESOURCE_HUNT_R1/external_research/long_context_output/` and the
+long-context feature frame that `long_context_model.py` loads — supplying them
+would skip the rebuild entirely.
