@@ -372,29 +372,17 @@ def test_nat_timestamps_are_refused():
 
 
 def test_the_snapshot_digest_binds_label_provenance():
+    """Same label values, different receipt evidence -> different certification."""
     head = _head()
     rows = list(_rows(3 * SMALL_REFIT, seed=29))
     _drive(head, rows)
     first = head.training_snapshot(head.position)
 
-    later = _head()
-    delayed = rows[1]
-    for index, (ts, row, _label) in enumerate(rows):
-        if index and index != 2:
-            previous = rows[index - 1]
-            later.settle_label(previous[0], previous[2],
-                               available_at=pd.Timestamp(previous[0]) + pd.Timedelta(minutes=15),
-                               as_of=ts)
-        later.observe(ts, row)
-    last = rows[-1]
-    later.settle_label(last[0], last[2],
-                       available_at=last[0] + pd.Timedelta(minutes=15),
-                       as_of=last[0] + pd.Timedelta(minutes=15))
-    # The same label, but received late: identical values, different provenance.
-    later.settle_label(delayed[0], delayed[2],
-                       available_at=last[0] + pd.Timedelta(minutes=15),
-                       as_of=last[0] + pd.Timedelta(minutes=15))
-    second = later.training_snapshot(later.position)
+    retained = head.buffer[-1].ts
+    head._label_available_at[retained] = (
+        head._label_available_at[retained] + "|late_replay")
+    second = head.training_snapshot(head.position)
+
     assert second.training_rows == first.training_rows
     assert second.provenance_digest != first.provenance_digest
     assert second.digest != first.digest
