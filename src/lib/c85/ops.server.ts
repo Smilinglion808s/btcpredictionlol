@@ -11,7 +11,14 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { C85_MODEL_VERSION } from "./config";
+import { C85_MODEL_VERSION, C85_RECONSTRUCTION_VERSION, C85_WRITABLE_MODEL_VERSIONS } from "./config";
+
+// The identity a signed worker request writes under. Restricted to a closed
+// allow-list so a reconstruction worker can never overwrite archived rows and
+// an archived replay can never be relabelled as a reconstruction.
+export const modelVersionSchema = z
+  .enum(C85_WRITABLE_MODEL_VERSIONS)
+  .default(C85_MODEL_VERSION);
 
 export type Ops = z.infer<typeof opSchema>;
 
@@ -49,7 +56,7 @@ const artifactTtl = z.number().int().min(30).max(900).default(120);
 
 
 const checkpointSchema = z.object({
-  model_version: z.string().default(C85_MODEL_VERSION),
+  model_version: modelVersionSchema,
   as_of_utc: z.string().nullable().optional(),
   last_processed_target_utc: z.string().nullable().optional(),
   next_target_utc: z.string().nullable().optional(),
@@ -186,8 +193,9 @@ export async function runC85Op(
   supabase: SupabaseClient,
   workerId: string,
   body: Ops,
+  modelVersion: (typeof C85_WRITABLE_MODEL_VERSIONS)[number] = C85_MODEL_VERSION,
 ): Promise<{ status: number; result: Record<string, unknown> }> {
-  const mv = C85_MODEL_VERSION;
+  const mv = modelVersion;
   const ok = (result: Record<string, unknown>) => ({ status: 200, result: { ok: true, ...result } });
 
   switch (body.op) {
