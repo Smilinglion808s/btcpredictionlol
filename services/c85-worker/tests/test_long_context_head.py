@@ -40,25 +40,68 @@ def test_frozen_settings_match_the_recovered_source():
     assert lc.HEAD_ID == "T0_LONG_CONTEXT_R1" and lc.SPEC_NAME == "ALL_HGB"
 
 
-def test_feature_order_is_price_then_depth_then_metrics():
-    columns = [
+ORIGINAL_MODEL = Path(
+    "/mnt/documents/.lovable/c85-cache/c85root/external_research/long_context_model.py"
+)
+
+
+def _schema(extra: list[str]) -> list[str]:
+    """A column universe: every PRICE name the selector asks for, plus decoys."""
+
+    try:
+        lc.feature_sets(extra)
+    except lc.LongContextSchemaError as error:
+        required = str(error).split("Missing PRICE features: ")[1]
+        names = [n.strip(" '\"[]") for n in required.split(",")]
+    return [*names, *extra]
+
+
+def test_depth_metric_and_qlib_filters():
+    extra = [
         "target_ts", "binance_label",
-        # PRICE members present in the fixture schema
         "session_sin_external", "session_cos_external",
         "dow_sin_external", "dow_cos_external",
-        "qlib_klen_5", "qlib_beta_20", "qlib_corr_5",  # corr_* is not compact
-        # DEPTH
+        "qlib_klen_5", "qlib_beta_20", "qlib_beta_30", "qlib_corr_5",
         "book_imb_100", "book_imb_20", "book_snapshot_count", "book_log_total_500",
-        # METRICS
         "metric_log_oi", "metric_ts", "metric_age_at_target_seconds",
     ]
+    columns = _schema(extra)
     sets = lc.feature_sets(columns)
-    assert sets["PRICE"][-3:] == ["dow_cos_external", "qlib_klen_5", "qlib_beta_20"]
+    # compact qlib prefixes only, and only the 5/20/60 suffixes
+    assert sets["PRICE"][-2:] == ["qlib_klen_5", "qlib_beta_20"]
     assert "qlib_corr_5" not in sets["PRICE"], "corr_ is outside the compact prefixes"
+    assert "qlib_beta_30" not in sets["PRICE"], "only the 5/20/60 suffixes are kept"
     # 20-bps band and the descriptive book columns are excluded
     assert sets["DEPTH"] == ["book_imb_100", "book_log_total_500"]
     assert sets["METRICS"] == ["metric_log_oi"]
     assert lc.feature_columns(columns) == [*sets["PRICE"], *sets["DEPTH"], *sets["METRICS"]]
+
+
+@pytest.mark.skipif(not ORIGINAL_MODEL.exists(), reason="recovered source not mounted")
+def test_selection_matches_the_recovered_original_function():
+    """Run the *original* `feature_sets` from the recovered source and require
+    an identical selection, so this is a transcription check rather than a
+    restatement of our own code."""
+
+    import importlib.util
+
+    columns = _schema([
+        "target_ts", "binance_label", "ts", "label", "boise_date",
+        "qlib_klen_5", "qlib_beta_20", "qlib_beta_30", "qlib_corr_5",
+        "book_imb_100", "book_imb_20", "book_snapshot_count", "book_log_total_500",
+        "book_final_age_seconds", "book_fresh_within_60s",
+        "metric_log_oi", "metric_ts", "metric_age_at_target_seconds",
+    ])
+    source = ORIGINAL_MODEL.read_text()
+    namespace: dict[str, object] = {"np": np, "pd": pd, "re": __import__("re")}
+    start = source.index("def feature_sets(")
+    end = source.index("def day_weights(")
+    exec(compile(source[start:end], "original_feature_sets", "exec"), namespace)
+    frame = pd.DataFrame({c: [0.0] for c in columns})
+    original = namespace["feature_sets"](frame)
+    ours = lc.feature_sets(columns)
+    assert ours == original
+
 
 
 def test_missing_feature_column_fails_closed():
