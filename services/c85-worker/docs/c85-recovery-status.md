@@ -173,11 +173,74 @@ converts "historically reproducible" into "has a working boundary path".
 
 | Producer | Status | Evidence |
 |---|---|---|
-| Binance spot/UM raw aggTrade window aggregation | **PORTED (raw)** — `src/experts/binance_windows.py` | Transcribed from recovered `build_multivenue_features_r1.py` (sha256 `c3acb1ea58fd77d36f49aef870ec3c0d230e949c47fb329820de752a99d2b446`). Parity asserted against the ORIGINAL source executed from its own AST over authentic publisher aggTrade archives (spot 46,763 rows, UM 70,782 rows, 2026-01-02 00:00–02:00Z), for the reader, per-venue aggregates and cross-venue columns. `tests/test_binance_windows_parity.py`, 11 passed. |
+| Binance spot/UM raw aggTrade window aggregation | **PORTED (raw), now collector-safe** — `src/experts/binance_windows.py` | Transcribed from recovered `build_multivenue_features_r1.py` (sha256 `c3acb1ea58fd77d36f49aef870ec3c0d230e949c47fb329820de752a99d2b446`). Parity asserted against the ORIGINAL source executed from its own AST over authentic publisher aggTrade archives (spot 46,763 rows, UM 70,782 rows, 2026-01-02 00:00–02:00Z). `tests/test_binance_windows_parity.py` + `tests/test_binance_transport.py`: 40 passed. |
+| Hyperliquid context features | **PORTED (raw)** — `src/experts/hyperliquid_context.py` | Transcribed from `build_hyperliquid` (lines 399-477) of the same builder. Parity is against the ORIGINAL producer's own archived output using authentic API inputs — see below. `tests/test_hyperliquid_context.py`, 19 passed. |
 | `directional_matrix` | derived transform only — `src/experts/direction_matrix.py` | Consumes already-built venue columns; it is NOT raw-feed inference. |
-| Deribit / Hyperliquid raw window producers | **UNPORTED** | Required by the same builder; no live implementation. |
+| Deribit raw window producer | **NOT REQUIRED** | The recorded selection is `BINANCE_HYPERLIQUID` for both stages and no Deribit term appears in `phase3_external_feature_coefficients.csv`. Porting it would add an input the fitted model does not use. |
 | Fitted direction pipeline + venue-set selection | **UNPORTED** | Blocks a live leaf score even with complete raw windows. |
 | Remaining eight leaf producers | **UNPORTED** | `src/experts/leaf.py::LeafExperts.evaluate` still only passes upstream fields through and fails closed. |
+
+### 8.1 Binance transport safety (this task)
+
+The previous implementation inferred the timestamp unit from the *venue*, which
+is wrong for live input. Measured, not assumed (probe JSON:
+`/mnt/documents/.lovable/c85-cache/transport_probes/binance_timestamp_units.json`):
+
+| Transport | Observed unit |
+|---|---|
+| spot daily aggTrades CSV | microseconds |
+| um daily aggTrades CSV | milliseconds |
+| spot REST `/api/v3/aggTrades` | milliseconds (13 digits, observed) |
+| um REST `/fapi/v1/aggTrades` | milliseconds (13 digits, observed) |
+| spot WS `btcusdt@aggTrade` | milliseconds (13 digits, observed) |
+| um WS `btcusdt@aggTrade` | **not observed** — websocket egress to `fstream.binance.com` times out from this sandbox. Declared ms from the UM REST observation and the shared schema; the adapter's plausibility band rejects the value outright if that is ever wrong. |
+
+Fixed with explicit `Transport` adapters carrying unit + schema + provenance:
+
+- Strict parsing. `bool("false")` is `True` in Python; a malformed boolean,
+  non-finite number or reversed trade-id range now raises `TransportError`
+  instead of silently deciding a trade's side.
+- A mis-declared unit is caught by a plausibility band, not shifted into 1970.
+- Authentic `agg_trade_id` is preserved on archive ingestion
+  (`read_binance_archive_raw`), so archive/live overlap and repeat ingestion are
+  idempotent, and same-timestamp ordering is deterministic by `(ts_us, id)` —
+  proved order-invariant against shuffled receipt and restart replay.
+- Availability is explicit: `HISTORICAL` (event-time replay, no availability
+  filter) vs `LIVE` (only rows whose receipt precedes the freeze). Unknown
+  receipt is **excluded and counted** in LIVE, never admitted. REST bootstrap
+  rows carry the recorded arrival instant of their response; no per-event
+  receipt time is invented.
+- Continuity: recorded disconnect/reconnect gaps invalidate an overlapping
+  target; warm-up uses recorded coverage start, so a pruned buffer cannot look
+  warm; pruning honours `pending_targets` and never drops a pending target's
+  inputs.
+
+### 8.2 Hyperliquid parity (this task)
+
+Why this venue: `C30_C70_LAB_MANAGER_R2.json` resolves
+`external_direction_selection/T0` and `/T5` to `source_set=BINANCE_HYPERLIQUID`,
+`c_value=0.03`.
+
+Parity is real, not synthetic. Authentic `api.hyperliquid.xyz/info` responses
+(`candleSnapshot` 15m/1h, `fundingHistory`, coin BTC; 1,441 + 361 + 360 rows,
+saved with manifest at `/mnt/documents/.lovable/c85-cache/hyperliquid_samples/`)
+were fed through the transcription and compared to the original producer's own
+archived output `hyperliquid_context_features.csv.gz`:
+
+- **1,152 overlapping targets, all 19 columns, 0 missing-data-pattern
+  mismatches, max absolute difference 1.85e-13** (CSV float round-trip).
+
+The causal flags that differ between the two joins are preserved and tested:
+hourly joins backward with `allow_exact_matches=True`, funding backward with
+`allow_exact_matches=False` (strictly before T). A single pandas-version
+adjustment was needed — `to_datetime(unit="ms")` now returns `datetime64[ms]`,
+which cannot `merge_asof` against the nanosecond grid — so resolution is pinned
+to ns via `_ns()`. Instants are identical; no rule, rounding or ordering
+changed.
+
+Not obtained: historical L2 order book. The acquisition audit records
+`historical_l2_status: not_downloaded_requester_pays`. Nothing here substitutes
+for it.
 
 Archive provenance limits: publisher archives carry exchange event time only,
 no collector receipt time. `VenueBuffer` stores `receipt_ns = -1` for
@@ -185,6 +248,16 @@ archive-seeded rows and applies receipt-based availability filtering only to
 rows with a real receipt timestamp. Raw data + checksums:
 `/mnt/documents/.lovable/c85-cache/binance_aggtrades/MANIFEST.json`.
 Same-workspace readback proves bytes, not provider-level durability.
+
+### 8.3 Pre-existing failures unrelated to this task
+
+`tests/test_upstream_ledgers.py` (9 failures) and the two collection errors in
+`tests/test_feature_*_parity.py` are caused by the sandbox replacement wiping
+gitignored `evaluation-fixtures/upstream/*.parquet` and the `reliability`
+package. The CSV sources for those ledgers do survive in the durable cache
+(e.g. `upx/upstream/vault_work/legacy_c42/.../fee_coverage_shadow_ledger.csv`),
+so they are regenerable; regenerating them was out of scope for this task and
+is listed as the next step rather than reported as passing.
 
 ## 9. Persistence / timing contract (update, this task)
 
