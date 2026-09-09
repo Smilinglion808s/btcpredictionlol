@@ -168,3 +168,56 @@ single replayed historical boundary drawn from the reference window, with a
 restart in the middle showing identical output and no duplicate dispatch. That
 is code work only: it needs no September data and no new rebuild, and it
 converts "historically reproducible" into "has a working boundary path".
+
+## 8. Live raw-input producers (update, this task)
+
+| Producer | Status | Evidence |
+|---|---|---|
+| Binance spot/UM raw aggTrade window aggregation | **PORTED (raw)** — `src/experts/binance_windows.py` | Transcribed from recovered `build_multivenue_features_r1.py` (sha256 `c3acb1ea58fd77d36f49aef870ec3c0d230e949c47fb329820de752a99d2b446`). Parity asserted against the ORIGINAL source executed from its own AST over authentic publisher aggTrade archives (spot 46,763 rows, UM 70,782 rows, 2026-01-02 00:00–02:00Z), for the reader, per-venue aggregates and cross-venue columns. `tests/test_binance_windows_parity.py`, 11 passed. |
+| `directional_matrix` | derived transform only — `src/experts/direction_matrix.py` | Consumes already-built venue columns; it is NOT raw-feed inference. |
+| Deribit / Hyperliquid raw window producers | **UNPORTED** | Required by the same builder; no live implementation. |
+| Fitted direction pipeline + venue-set selection | **UNPORTED** | Blocks a live leaf score even with complete raw windows. |
+| Remaining eight leaf producers | **UNPORTED** | `src/experts/leaf.py::LeafExperts.evaluate` still only passes upstream fields through and fails closed. |
+
+Archive provenance limits: publisher archives carry exchange event time only,
+no collector receipt time. `VenueBuffer` stores `receipt_ns = -1` for
+archive-seeded rows and applies receipt-based availability filtering only to
+rows with a real receipt timestamp. Raw data + checksums:
+`/mnt/documents/.lovable/c85-cache/binance_aggtrades/MANIFEST.json`.
+Same-workspace readback proves bytes, not provider-level durability.
+
+## 9. Persistence / timing contract (update, this task)
+
+Fixed:
+
+- `C85Store` now adopts the backend-assigned `checkpoint_seq` on every write
+  that carries a checkpoint (`commit_decision`, `consume_settlements`), so the
+  next `expected_parent_seq` is never stale. Malformed / `None` / `ok:false`
+  responses, and a missing sequence when a checkpoint was sent, raise instead
+  of counting as success.
+- `_reconcile_commit` now requires an exactly matching, PRESENT `state_sha256`
+  plus a usable `checkpoint_seq`; a checkpoint row without the hash is treated
+  as unconfirmed.
+- Timing is measured, not assumed: `model_input_cutoff_ns` (the immutable T+5s
+  model rule) is stored separately from the scheduler's actual
+  `packet_freeze_ns`, and build start/complete, send start and gateway ack are
+  all recorded. `publication_offset_ms` / `deadline_met` derive from the ack.
+  `c85_targets` has no ack column and the commit function rejects unknown keys,
+  so the full measured set lives in the existing `feed_watermarks` jsonb under
+  `"measured"`. `CUTOFF_DEADLINE_CONFLICT_MS` is labelled
+  `configured_cutoff_deadline_conflict_ms` — a configured constant, never a
+  measurement.
+- An acknowledgement that lands at/after T+5s is recorded as EXPIRED and is
+  never stamped published.
+- Backend expiry enforcement: `c85_commit_decision` now inserts an outbox row
+  whose `expires_at` is already past in state `EXPIRED` (database clock), and
+  expires any still-PENDING row past its ceiling, so a slow transaction cannot
+  leave a dispatchable stale row. The dispatch hook already refuses past T+5s.
+
+Still open (unchanged):
+
+- **Atomic DB lease fencing.** `c85_commit_decision` accepts no owner/fence
+  token; `verify_lease` narrows but does not close the verify-to-commit race.
+- **T+5 cutoff vs T+5 publication.** The last legal input may arrive at
+  T+4999.999 ms while publication is due at T+5000 ms. Neither rule is changed;
+  the conflict is reported, and production stays fail-closed and suppressed.
