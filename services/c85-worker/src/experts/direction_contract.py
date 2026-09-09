@@ -299,7 +299,10 @@ class RollingRankState:
             "window": [[int(i), float(v)] for i, v in self.window],
             "position": int(self.position),
             "last_key": self.last_key,
-            "last_value": None if self.last_value is None else float(self.last_value),
+            # NaN is written as null and restored as NaN when `last_key` is
+            # set, so the payload stays strict JSON.
+            "last_value": None if self.last_value is None or not np.isfinite(self.last_value)
+            else float(self.last_value),
             "last_rank": None if self.last_rank is None or not np.isfinite(self.last_rank)
             else float(self.last_rank),
         }
