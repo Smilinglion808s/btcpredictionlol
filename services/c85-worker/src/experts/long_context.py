@@ -92,8 +92,13 @@ class LongContextNotFitted(RuntimeError):
 
 
 class LongContextSchemaError(RuntimeError):
-
     """Raised when the incoming frame/packet does not carry the exact schema."""
+
+
+class LongContextOrderError(RuntimeError):
+    """Raised on an out-of-order target or a conflicting label re-settlement."""
+
+
 
 
 def feature_sets(columns: Sequence[str]) -> dict[str, list[str]]:
