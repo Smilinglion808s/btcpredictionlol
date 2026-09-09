@@ -159,15 +159,17 @@ stores, and the Railway process must only hold the second.
    ledger. Without them the C51/C71/C85 daily refits from 2026-09-01 cannot be
    replayed and no September decision may be emitted.
 
-## 8. Next bounded executable step
+## 7b. Next bounded executable step (revised after this task)
 
-Implement `Worker.on_boundary` end-to-end against the already-ported components
-— packet assembly, `LiveExpertChain.evaluate`, head scoring, `C85State` policy
-step, checkpoint write, suppressed (non-betting) dispatch — and prove it on a
-single replayed historical boundary drawn from the reference window, with a
-restart in the middle showing identical output and no duplicate dispatch. That
-is code work only: it needs no September data and no new rebuild, and it
-converts "historically reproducible" into "has a working boundary path".
+Port the **fitted external-direction pipeline** (preprocessing, imputation,
+scaling, feature order and coefficients for the selected
+`BINANCE_HYPERLIQUID`, `C=0.03` T0/T5 stages) and wire the two ported raw
+producers into it, so one real external-direction score can be produced from
+raw feed input and checked against the archived stage output on the overlap.
+That is the smallest step that turns two raw producers into one genuine live
+leaf input; it needs no September data and no rebuild. Regenerating the wiped
+`evaluation-fixtures/upstream/*.parquet` from their surviving CSV sources
+(section 8.3) can ride along with it.
 
 ## 8. Live raw-input producers (update, this task)
 
