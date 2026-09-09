@@ -85,28 +85,42 @@ def boundary_report(module, frame, features, block_start: int) -> dict:
 
     deficit = max(0, module.MINIMUM - len(train))
 
-    # Smallest set of columns whose missingness explains the shortfall:
-    # greedily drop the column that recovers the most rows until >= MINIMUM.
+    # Smallest set of columns explaining the shortfall. Columns that share an
+    # identical missing-row pattern are grouped first (dropping one of them
+    # recovers nothing on its own), then groups are removed greedily.
     explanatory: list[dict] = []
+    groups: dict[bytes, list[int]] = {}
+    for i in range(len(features)):
+        if missing_per_feature[i]:
+            groups.setdefault((~sub[:, i]).tobytes(), []).append(i)
     if deficit:
         kept = np.ones(len(features), dtype=bool)
         rows_ok = sub.all(axis=1)
-        while (~rows_ok).any() and rows_ok.sum() < module.MINIMUM:
-            blocked = ~rows_ok
-            gains = (sub[blocked][:, kept] == False).sum(axis=0)  # noqa: E712
-            order = np.where(kept)[0]
-            best = order[int(np.argmax(gains))]
-            if gains.max() == 0:
+        remaining = list(groups.values())
+        while remaining and rows_ok.sum() < module.MINIMUM:
+            best, best_rows, best_mask = None, rows_ok.sum(), None
+            for indices in remaining:
+                trial = kept.copy()
+                trial[indices] = False
+                gained = int(sub[:, trial].all(axis=1).sum())
+                if gained > best_rows:
+                    best, best_rows, best_mask = indices, gained, trial
+            if best is None:
                 break
-            kept[best] = False
+            kept = best_mask
             rows_ok = sub[:, kept].all(axis=1)
+            remaining = [g for g in remaining if g is not best]
             explanatory.append(
                 {
-                    "feature": features[best],
-                    "family": family_of(features[best]),
-                    "rows_recovered_to": int(rows_ok.sum()),
+                    "columns": [features[i] for i in best],
+                    "column_count": len(best),
+                    "family": family_of(features[best[0]]),
+                    "rows_missing_this_group": int(missing_per_feature[best[0]]),
+                    "rows_recovered_to": int(best_rows),
                 }
             )
+    max_recoverable = int(len(candidate))
+
 
     fittable = len(train) >= module.MINIMUM and np.unique(target[train]).size == 2
     return {
