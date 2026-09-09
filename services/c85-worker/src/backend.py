@@ -37,12 +37,18 @@ class BackendClient:
         secret: str,
         worker_id: str,
         *,
+        model_version: str | None = None,
         timeout_s: float = 4.0,
         retries: int = 2,
     ) -> None:
         self.ops_url = ops_url
         self.secret = secret.encode()
         self.worker_id = worker_id
+        # Every signed request carries the identity its rows belong to, so a
+        # reconstruction write can never land on an archived model_version.
+        from .reconstruction import logging_model_version
+
+        self.model_version = model_version or logging_model_version()
         self.timeout_s = timeout_s
         self.retries = retries
         self._client = httpx.Client(timeout=timeout_s)
@@ -64,6 +70,7 @@ class BackendClient:
                 "op": op,
                 "worker_id": self.worker_id,
                 "nonce": uuid.uuid4().hex,
+                "model_version": self.model_version,
                 **payload,
             }
             body = json.dumps(envelope, separators=(",", ":"), allow_nan=False, default=str)

@@ -21,7 +21,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .backend import BackendClient, BackendError
-from .config import MODEL_VERSION
+from .reconstruction import identity as reconstruction_identity
+from .reconstruction import logging_model_version
 from .engine import Decision
 from .state import C85State
 
@@ -48,7 +49,7 @@ def target_row(decision: Decision, *, published_at: str | None = None) -> dict[s
     open_utc = decision.target_open.astimezone(timezone.utc)
     timing = decision.timing
     row: dict[str, Any] = {
-        "model_version": MODEL_VERSION,
+        "model_version": logging_model_version(),
         "ticker": decision.ticker,
         "target_open_utc": open_utc.isoformat(),
         "deadline_utc": (open_utc + timedelta(seconds=5)).isoformat(),
@@ -98,7 +99,10 @@ def target_row(decision: Decision, *, published_at: str | None = None) -> dict[s
         "packet_freeze_ns": timing.get("packet_freeze_ns"),
         "last_event_ns": timing.get("last_event_ns"),
         "last_receipt_ns": timing.get("last_receipt_ns"),
-        "feed_watermarks": timing.get("feed_watermarks"),
+        "feed_watermarks": {
+            **(timing.get("feed_watermarks") or {}),
+            "reconstruction": reconstruction_identity(),
+        },
         "compute_started_ns": timing.get("compute_started_ns"),
         "compute_complete_ns": timing.get("compute_complete_ns"),
         "decision_durable_ns": timing.get("decision_durable_ns"),
@@ -140,7 +144,7 @@ class C85Store:
     def checkpoint_payload(self, state: C85State, stage: str) -> dict[str, Any]:
         payload = state.to_dict()
         return {
-            "model_version": MODEL_VERSION,
+            "model_version": logging_model_version(),
             "as_of_utc": datetime.now(timezone.utc).isoformat(),
             "last_processed_target_utc": state.last_processed_target_utc,
             "next_target_utc": state.next_target_utc,
@@ -150,7 +154,7 @@ class C85Store:
             "deterioration_state": payload["deterioration_state"],
             "pending_base_calls": list(state.deterioration.pending.keys()),
             "consumed_settlements": state.deterioration.consumed[-5000:],
-            "expert_state": state.expert_state,
+            "expert_state": {**(state.expert_state or {}), "reconstruction": reconstruction_identity()},
             "applicable_fits": state.applicable_fits,
             "source_watermarks": state.source_watermarks,
             "state_sha256": state.sha256(),
