@@ -132,6 +132,69 @@ class RankStateError(RuntimeError):
     """Raised when an incremental rank update would break chronological order."""
 
 
+class RetryConflict(RuntimeError):
+    """Raised when a target is re-submitted with a *different* input.
+
+    The committed output of a target is immutable. A retry that carries the
+    same input is idempotent and returns the original output; a retry that
+    carries a different input is a real inconsistency (two different beliefs
+    about one target) and is surfaced rather than silently applied, because
+    applying it would mix a new direction with an already-committed rank.
+    """
+
+    def __init__(self, message: str, *, original: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.original = original
+
+
+class AcquisitionFailure(RuntimeError):
+    """Raised when a target could not be processed at all.
+
+    This is *not* the same as the model returning no probability. In the
+    original series a row exists - with a NaN probability - whenever the model
+    ran and produced nothing; that row consumes a slot in the positional
+    window. A target we never managed to process is not such a row: we do not
+    know what the original would have contained, so advancing the window for it
+    would silently shift every later rank. Fail closed instead.
+    """
+
+
+def _same_value(left: float, right: float) -> bool:
+    """NaN-aware equality, so a retry of a missing value is still idempotent."""
+
+    if np.isnan(left) and np.isnan(right):
+        return True
+    return bool(left == right)
+
+
+@dataclass
+class RankUpdate:
+    """A *prepared*, not yet applied, rank for one target.
+
+    Two-phase on purpose. Leaf evaluation can fail after the rank is computed
+    (another required key is missing, the packet is rejected downstream), and a
+    rank that was applied by a failed evaluation would corrupt every later row
+    while the target itself was never emitted. So ``prepare`` mutates nothing
+    and ``commit`` is called only once the whole evaluation has succeeded and
+    the orchestrator is ready to persist.
+    """
+
+    state: "RollingRankState"
+    key: int
+    value: float
+    rank: float
+    duplicate: bool = False
+    committed: bool = False
+
+    def commit(self) -> float:
+        if self.committed:
+            return self.rank
+        self.committed = True
+        if not self.duplicate:
+            self.state._apply(self.key, self.value, self.rank)
+        return self.rank
+
+
 @dataclass
 class RollingRankState:
     """Incremental, serialisable, idempotent form of :func:`rolling_rank`.
@@ -143,19 +206,21 @@ class RollingRankState:
     is a different (and wrong) quantity whenever the series contains gaps - on
     the archived ledger, which has 2,935 rows without a probability, the two
     disagree on 64.7% of rows. So this state keeps ``(position, value)`` pairs
-    and prunes by position.
+    and prunes by row position.
 
-    Consequence for callers: ``observe`` must be called for **every** target in
-    the series, including targets whose probability is missing (pass ``nan``).
-    Skipping them shifts the window.
+    Consequence for callers: a target must be submitted for **every** row of
+    the series, including rows where the model produced no probability (submit
+    ``nan``). Skipping such a row shifts the window. A row that was never
+    processed at all is a different case - see :class:`AcquisitionFailure`.
 
     Semantics preserved: strictly past-only, ties count half, NaN until
-    ``minimum`` finite observations exist inside the positional window,
-    non-finite values are neither ranked nor stored.
+    ``minimum`` finite values exist inside the positional window, non-finite
+    values are neither ranked nor stored (but their row still advances the
+    position).
 
-    Idempotence: re-submitting the same ``key`` (the target timestamp) returns
-    the previously computed rank and does not advance the window. Submitting an
-    older key raises rather than silently corrupting the window.
+    Idempotence: re-submitting the same ``key`` with the same value returns the
+    committed rank and applies nothing. Re-submitting it with a different value
+    raises :class:`RetryConflict`. An older key raises :class:`RankStateError`.
     """
 
     lookback: int = RANK_LOOKBACK
@@ -163,6 +228,7 @@ class RollingRankState:
     window: deque[tuple[int, float]] | None = None
     position: int = 0
     last_key: int | None = None
+    last_value: float | None = None
     last_rank: float | None = None
 
     def __post_init__(self) -> None:
@@ -176,13 +242,24 @@ class RollingRankState:
         while self.window and self.window[0][0] < oldest:
             self.window.popleft()
 
-    def observe(self, key: int, value: float) -> float:
-        """Rank ``value`` for ``key`` against the prior positional window."""
+    # -- two-phase update ---------------------------------------------------
+    def prepare(self, key: int, value: float) -> RankUpdate:
+        """Compute the rank for ``key`` without mutating any state."""
 
         key = int(key)
+        value = float(value)
         if self.last_key is not None:
             if key == self.last_key:
-                return float("nan") if self.last_rank is None else self.last_rank
+                if not _same_value(float(self.last_value), value):
+                    raise RetryConflict(
+                        f"target {key} was already committed with value "
+                        f"{self.last_value!r}; retry carries {value!r}"
+                    )
+                return RankUpdate(
+                    self, key, value,
+                    float("nan") if self.last_rank is None else self.last_rank,
+                    duplicate=True,
+                )
             if key < self.last_key:
                 raise RankStateError(
                     f"out-of-order rank update: {key} <= last committed {self.last_key}"
@@ -197,11 +274,22 @@ class RollingRankState:
                     (np.sum(observed < value) + 0.5 * np.sum(observed == value))
                     / len(observed)
                 )
+        return RankUpdate(self, key, value, rank)
+
+    def _apply(self, key: int, value: float, rank: float) -> None:
+        index = self.position
+        self._prune(index)
+        if np.isfinite(value):
             self.window.append((index, float(value)))
         self.position = index + 1
         self.last_key = key
+        self.last_value = value
         self.last_rank = rank
-        return rank
+
+    def observe(self, key: int, value: float) -> float:
+        """``prepare`` + ``commit``, for callers with nothing to roll back."""
+
+        return self.prepare(key, value).commit()
 
     # -- serialisation ------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
@@ -211,6 +299,7 @@ class RollingRankState:
             "window": [[int(i), float(v)] for i, v in self.window],
             "position": int(self.position),
             "last_key": self.last_key,
+            "last_value": None if self.last_value is None else float(self.last_value),
             "last_rank": None if self.last_rank is None or not np.isfinite(self.last_rank)
             else float(self.last_rank),
         }
@@ -228,8 +317,11 @@ class RollingRankState:
         )
         raw = payload.get("last_rank")
         state.last_rank = float("nan") if raw is None else float(raw)
+        raw_value = payload.get("last_value")
+        state.last_value = float("nan") if raw_value is None else float(raw_value)
         if payload.get("last_key") is None:
             state.last_rank = None
+            state.last_value = None
         return state
 
 
