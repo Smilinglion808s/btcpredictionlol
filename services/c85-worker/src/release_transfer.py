@@ -167,7 +167,11 @@ class ArtifactTransfer:
             staging = tmp_path / "staging"
             staging.mkdir()
             with tarfile.open(tarball, "r:gz") as archive:
-                archive.extractall(staging, members=_safe_members(archive, staging))
+                # Our own member filter runs first; `filter="data"` is the
+                # stdlib's belt-and-braces pass over metadata.
+                archive.extractall(staging, members=_safe_members(archive, staging),
+                                   filter="data")
+
 
             entries = [p for p in staging.iterdir()]
             payload = entries[0] if len(entries) == 1 and entries[0].is_dir() else staging
