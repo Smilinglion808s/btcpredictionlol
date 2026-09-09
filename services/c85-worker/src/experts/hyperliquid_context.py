@@ -172,6 +172,8 @@ def build_hyperliquid_features(
     `target_ts` and stands in for the source's
     `date_range(START, END, freq='15min', inclusive='left')`.
     """
+    grid = grid.copy()
+    grid["target_ts"] = _ns(grid["target_ts"])
     candles = candles_15m.copy()
     candles["bar_ts"] = _ns(pd.to_datetime(candles["t"], unit="ms", utc=True))
     candles = candles.sort_values("bar_ts").drop_duplicates("bar_ts", keep="last")
@@ -249,7 +251,7 @@ def build_hyperliquid_features(
 def build_grid(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     """The source's grid: `date_range(START, END, '15min', inclusive='left')`."""
     return pd.DataFrame(
-        {"target_ts": pd.date_range(start, end, freq="15min", inclusive="left")}
+        {"target_ts": _ns(pd.Series(pd.date_range(start, end, freq="15min", inclusive="left")))}
     )
 
 
