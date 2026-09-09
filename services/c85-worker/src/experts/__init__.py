@@ -217,4 +217,10 @@ class ExpertRegistry:
             # under test-only sys.path hacks that insert `src/`.
             "dependencies": _dependency_report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
+            "long_context": (
+                self.chain.long_context_readiness()
+                if self.chain is not None
+                else {"installed": False, "ready": False,
+                      "blocking_reasons": ["C85_CHAIN_NOT_CONSTRUCTED"]}
+            ),
         }
