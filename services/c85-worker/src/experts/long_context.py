@@ -124,10 +124,41 @@ class LongContextTrainingRequired(RuntimeError):
     is performed by :meth:`LongContextHead.train_ahead`, off the timed path.
     """
 
+STALE_BOOK_SECONDS = 60
 
 
+def prepare_external_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """`long_context_model.load_external` lines 53-67, verbatim behaviour.
 
+    The derived feature frame is NOT the model's input frame. Before any
+    selection or fitting the original applies three steps that were previously
+    missing from this transcription, and that materially change both which rows
+    are feature-complete and what the model sees:
 
+    1. every ``book_*`` column is set to NaN on a row whose depth snapshot is
+       older than 60 seconds or missing its age entirely (a stale book is not
+       evidence about the target),
+    2. ``book_fresh_within_60s`` is appended as the indicator of that decision -
+       it is the 324th feature of ``T0_LONG_CONTEXT_R1_FREEZE`` and the last
+       ``DEPTH`` column, and
+    3. infinities become NaN.
+
+    The frame is returned sorted by ``ts`` with a fresh positional index, and
+    the input is not mutated.
+    """
+
+    frame = frame.rename(columns={"target_ts": "ts"}).copy()
+    frame["ts"] = pd.to_datetime(frame.ts, utc=True)
+    frame = frame.sort_values("ts").reset_index(drop=True)
+    age = frame["book_final_age_seconds"]
+    stale_book = age.gt(STALE_BOOK_SECONDS) | age.isna()
+    book_columns = [column for column in frame.columns if column.startswith("book_")]
+    frame.loc[stale_book, book_columns] = np.nan
+    frame["book_fresh_within_60s"] = (~stale_book).astype(float)
+    if "binance_label" in frame.columns:
+        frame["label"] = pd.to_numeric(frame.binance_label, errors="coerce")
+    frame = frame.replace([np.inf, -np.inf], np.nan)
+    return frame
 
 
 def feature_sets(columns: Sequence[str]) -> dict[str, list[str]]:
