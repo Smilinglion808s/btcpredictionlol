@@ -102,7 +102,18 @@ def main() -> int:
     canonical = canonical.sort_values("target_ts").reset_index(drop=True)
     joined = tail.merge(canonical, on="target_ts", how="inner", suffixes=("", "_canon"))
     metric_columns = [c for c in tail.columns
-                      if c.startswith("metric_") and f"{c}_canon" in joined.columns]
+                      if c.startswith("metric_") and f"{c}_canon" in joined.columns
+                      and not pd.api.types.is_datetime64_any_dtype(tail[c])]
+    # `metric_ts` is a timestamp and is excluded from the model inputs; it is
+    # compared as an instant, never as a number.
+    datetime_columns = [c for c in tail.columns
+                        if c.startswith("metric_") and f"{c}_canon" in joined.columns
+                        and pd.api.types.is_datetime64_any_dtype(tail[c])]
+    datetime_equal = {
+        c: bool(pd.to_datetime(joined[c], utc=True)
+                .equals(pd.to_datetime(joined[f"{c}_canon"], utc=True)))
+        for c in datetime_columns
+    }
     checks = []
     worst = 0.0
     for column in metric_columns:
@@ -119,6 +130,7 @@ def main() -> int:
         "max_abs_diff": worst,
         "nan_mask_mismatches": [c["column"] for c in checks if not c["nan_masks_equal"]],
         "worst_columns": sorted(checks, key=lambda c: -c["max_abs_diff"])[:5],
+        "timestamp_columns_equal": datetime_equal,
     }
 
     combined = pd.concat([stored, tail], ignore_index=True)
