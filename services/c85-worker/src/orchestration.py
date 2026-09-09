@@ -92,6 +92,12 @@ class TargetInputs:
     last_yes_price: float | None
     aux_fit_month: str | None = None
     source: dict[str, Any] = field(default_factory=dict)
+    #: Prepared-but-uncommitted advance of the expert chain (fitted
+    #: long-context head + positional rank window). The orchestrator commits it
+    #: only after the decision is durable, and rolls it back on every other
+    #: exit, so head and rank can never end up on different targets.
+    pending_update: Any = None
+
 
 
 class PacketSource(Protocol):
@@ -420,11 +426,14 @@ class BoundaryOrchestrator:
             except Exception as exc:  # noqa: BLE001
                 verdict = {"ok": False, "lease": {"error": str(exc)}}
             if not verdict.get("ok"):
+                if inputs.pending_update is not None:
+                    inputs.pending_update.rollback()
                 return BoundaryOutcome(
                     ticker, target_open, "LEASE_LOST",
                     decision=decision,
                     blocker="C85_LEASE_LOST_BEFORE_COMMIT",
                 )
+
 
         outbox = None
         if dispatchable:
@@ -452,6 +461,8 @@ class BoundaryOrchestrator:
                 decision, published_at=None, state=candidate, stage="READY", outbox=outbox
             )
             if not isinstance(commit, dict) or commit.get("ok") is False:
+                if inputs.pending_update is not None:
+                    inputs.pending_update.rollback()
                 return BoundaryOutcome(
                     ticker, target_open, "COMMIT_FAILED", decision=decision,
                     blocker=(
@@ -463,6 +474,8 @@ class BoundaryOrchestrator:
         except Exception as exc:  # noqa: BLE001 - ambiguous: may or may not have landed
             reconciled = self._reconcile_commit(candidate, target_open)
             if reconciled is None:
+                if inputs.pending_update is not None:
+                    inputs.pending_update.rollback()
                 return BoundaryOutcome(
                     ticker, target_open, "COMMIT_FAILED", decision=decision,
                     blocker=f"C85_COMMIT_UNCONFIRMED:{type(exc).__name__}: {exc}",
@@ -474,6 +487,15 @@ class BoundaryOrchestrator:
                 "checkpoint": {"checkpoint_seq": reconciled.get("checkpoint_seq")},
                 "reconciled": True,
             }
+
+        # The decision is durable: the expert chain may now advance, exactly
+        # once, head and rank window together.
+        if inputs.pending_update is not None:
+            try:
+                inputs.pending_update.commit()
+            except Exception as exc:  # noqa: BLE001 - recorded, never silently dropped
+                candidate.expert_state["chain_commit_error"] = f"{type(exc).__name__}: {exc}"
+
 
         # 6. only now is the candidate authoritative.
         state.adopt(candidate)

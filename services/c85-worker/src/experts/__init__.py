@@ -54,6 +54,68 @@ class ExpertCall:
     detail: dict[str, Any] | None = None
 
 
+class ChainCommitError(RuntimeError):
+    """The head advanced but the rank window did not; state is inconsistent.
+
+    Raised only when a validated rank commit still fails, which cannot be
+    undone in place. The caller must stop and restore the last checkpoint,
+    where head and rank are one verified generation, rather than continue on a
+    half-advanced pair.
+    """
+
+
+@dataclass
+class ChainUpdate:
+    """The pending state advance of one target, applied exactly once.
+
+    Holds the prepared external leaf pair (which owns the positional rank
+    window) and the long-context bootstrap (which owns the fitted head's staged
+    advance). Both sides are VALIDATED first — version fences, replays,
+    out-of-order keys — so the ordinary failure modes abort before anything
+    moves. Only then does the head commit, then the rank window.
+    """
+
+    leaf_update: Any = None
+    long_context: Any = None
+    committed: bool = False
+    rolled_back: bool = False
+
+    def commit(self) -> None:
+        if self.committed:
+            return
+        if self.rolled_back:
+            raise RuntimeError("this chain update was rolled back and cannot commit")
+        staged = None
+        if self.long_context is not None:
+            staged = getattr(self.long_context, "_staged", None)
+            if staged is not None:
+                staged.validate()
+        if self.leaf_update is not None:
+            self.leaf_update.validate()
+        if self.long_context is not None:
+            self.long_context.commit()
+        if self.leaf_update is not None:
+            try:
+                self.leaf_update.commit()
+            except Exception as exc:  # noqa: BLE001
+                raise ChainCommitError(
+                    "the long-context head advanced but the positional rank window "
+                    f"refused ({type(exc).__name__}: {exc}); restore the last "
+                    "checkpoint before processing another target"
+                ) from exc
+        self.committed = True
+
+    def rollback(self) -> None:
+        if self.committed:
+            return
+        if self.long_context is not None:
+            self.long_context.rollback()
+        self.leaf_update = None
+        self.rolled_back = True
+
+
+
+
 class LiveExpertChain:
     """The transcribed ancestor chain: leaves -> C42 -> C51 -> C54.
 
@@ -132,14 +194,23 @@ class LiveExpertChain:
 
 
 
+    def prepare(self, packet: dict[str, Any]) -> tuple[dict[str, Any], "ChainUpdate"]:
+        """Evaluate the chain WITHOUT advancing any persistent state.
 
-    def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
-        """Produce every ancestor column the C85 feature frame consumes.
+        Two pieces of state move when a target is processed: the fitted
+        long-context head (its trailing window, label map and fit schedule) and
+        the positional rank window that turns the head's probability into
+        `external_rank`. They describe the same series, so they must advance
+        together or not at all. `evaluate` used to commit the rank window while
+        the head advance stayed staged inside the bootstrap, which meant a
+        boundary that failed after packet assembly left the two on different
+        targets and the next restart could not tell which was authoritative.
 
-        Raises the first stage's fail-closed error unchanged, so the caller
-        can surface the exact unrecovered dependency as the blocker.
+        The caller therefore prepares here and commits the returned
+        `ChainUpdate` in the same transaction that persists the decision.
         """
-        leaves = self.leaf.evaluate(packet)  # c30/c36/c37/r4/external + ranks
+
+        leaves, leaf_update = self.leaf.prepare(packet)
         c42 = self.c42.evaluate(packet, leaves)
         c51_packet = dict(packet)
         c51_packet["fitted_state"] = self.c51_fitted_state
@@ -151,7 +222,20 @@ class LiveExpertChain:
                 "c51_prediction": c51["c51_prediction"],
             },
         )
-        return {**leaves, **c42, **c51, **c54}
+        update = ChainUpdate(leaf_update=leaf_update, long_context=self.long_context)
+        return {**leaves, **c42, **c51, **c54}, update
+
+    def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
+        """Produce every ancestor column the C85 feature frame consumes.
+
+        Commits immediately; used by callers with nothing to roll back. The
+        orchestrated boundary path uses :meth:`prepare` instead.
+        """
+
+        outputs, update = self.prepare(packet)
+        update.commit()
+        return outputs
+
 
     @staticmethod
     def blocking_reasons() -> list[str]:
