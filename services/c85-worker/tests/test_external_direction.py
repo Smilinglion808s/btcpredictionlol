@@ -110,7 +110,9 @@ def test_scores_match_the_fitted_pipeline_applied_to_the_original_matrix(model, 
         result = model.score(stage, row["ts"], observation)
         assert result["p_green"] == pytest.approx(float(expected[i][up]), abs=1e-12)
         assert result["fit_id"] == f"c30_c70_direction_{stage}_{fit.phase}"
-        assert result["class_index"] == (1 if result["p_green"] >= 0.5 else 0)
+        # `class_index` is the position of the green class in `classes_`; it is
+        # bookkeeping, constant across rows, and must never be read as a call.
+        assert result["class_index"] == list(fit.pipeline.classes_).index(1)
         assert result["signed_direction"] == (1 if result["p_green"] >= 0.5 else -1)
 
 
