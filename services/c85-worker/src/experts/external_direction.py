@@ -167,7 +167,10 @@ class ExternalDirectionModel:
 
         import joblib
 
-        root = Path(root).resolve()
+        # Do not resolve(): the durable cache is reached through a symlinked
+        # mount, and resolving would point at a path that may not exist on the
+        # restore host. Containment is checked with normpath instead.
+        root = Path(os.path.normpath(Path(root).expanduser()))
         manifest_path = root / "manifest.json"
         if not manifest_path.exists():
             raise ExternalDirectionUnavailable(f"no release manifest at {manifest_path}")
@@ -182,8 +185,8 @@ class ExternalDirectionModel:
                     raise ExternalDirectionUnavailable(
                         f"release manifest path escapes the release root: {relative}"
                     )
-                path = (root / relative).resolve()
-                if not str(path).startswith(str(root)):
+                path = Path(os.path.normpath(root / relative))
+                if root not in path.parents:
                     raise ExternalDirectionUnavailable(
                         f"release manifest path escapes the release root: {relative}"
                     )
