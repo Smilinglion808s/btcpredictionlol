@@ -67,8 +67,11 @@ def _production_leaf(producer=None):
     return LeafExperts(
         long_context=producer or LongContextLeafProducer(),
         long_context_head=_head,
-        # explicit, even though it is the default, because it is the point
-        allow_supplied=False,
+        # The other seven keys are still UNPORTED, so these fixtures must run in
+        # supplied mode to reach the external pair at all. That makes the point
+        # sharper, not weaker: even with supplied mode ON, a supplied
+        # external_* value loses to the head.
+        allow_supplied=True,
     )
 
 
