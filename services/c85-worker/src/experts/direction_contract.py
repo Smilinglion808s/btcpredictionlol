@@ -128,6 +128,14 @@ def external_prediction(
     ).astype(np.int8)
 
 
+# Explicit per-target status. `MODEL_NO_PROBABILITY` is a real row of the
+# original series (2,935 of them in the archived ledger); `ACQUISITION_FAILED`
+# is not a row at all and must never advance the positional window.
+MODEL_SCORED = "MODEL_SCORED"
+MODEL_NO_PROBABILITY = "MODEL_NO_PROBABILITY"
+ACQUISITION_FAILED = "ACQUISITION_FAILED"
+
+
 class RankStateError(RuntimeError):
     """Raised when an incremental rank update would break chronological order."""
 
