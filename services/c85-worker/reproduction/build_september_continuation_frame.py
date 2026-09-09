@@ -40,9 +40,14 @@ def load_builder():
     spec = importlib.util.spec_from_file_location(
         "build_long_context_features", BUILDER / "build_long_context_features.py")
     module = importlib.util.module_from_spec(spec)
+    # Registered before execution so the book-depth ProcessPoolExecutor can
+    # pickle `process_book_file` by qualified name, exactly as the original
+    # `python build_long_context_features.py` invocation does.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     module.SOURCE = SOURCE  # the only substitution: where the archives live
     return module
+
 
 
 def sha256(path: Path) -> str:
