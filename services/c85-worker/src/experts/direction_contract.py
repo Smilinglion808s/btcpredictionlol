@@ -175,6 +175,16 @@ def _same_value(left: float, right: float) -> bool:
     return bool(left == right)
 
 
+class StateFenceError(RuntimeError):
+    """Raised when a prepared update is committed against a changed state.
+
+    A prepared update is only valid for the exact state it was prepared
+    against. If any other update committed in between (a competing update for
+    the same target, or a later target), the prepared rank was computed from a
+    window that no longer exists and applying it would corrupt the series.
+    """
+
+
 @dataclass
 class RankUpdate:
     """A *prepared*, not yet applied, rank for one target.
@@ -185,6 +195,9 @@ class RankUpdate:
     while the target itself was never emitted. So ``prepare`` mutates nothing
     and ``commit`` is called only once the whole evaluation has succeeded and
     the orchestrator is ready to persist.
+
+    ``expected_version`` fences the commit: preparation records the state
+    version it saw, and commit refuses to apply against any other version.
     """
 
     state: "RollingRankState"
@@ -193,14 +206,25 @@ class RankUpdate:
     rank: float
     duplicate: bool = False
     committed: bool = False
+    expected_version: int = -1
+
+    def validate(self) -> None:
+        if self.expected_version != self.state.version:
+            raise StateFenceError(
+                f"rank update for target {self.key} was prepared against version "
+                f"{self.expected_version} but the state is now at version "
+                f"{self.state.version}"
+            )
 
     def commit(self) -> float:
         if self.committed:
             return self.rank
-        self.committed = True
+        self.validate()
         if not self.duplicate:
             self.state._apply(self.key, self.value, self.rank)
+        self.committed = True
         return self.rank
+
 
 
 @dataclass
@@ -238,6 +262,7 @@ class RollingRankState:
     last_key: int | None = None
     last_value: float | None = None
     last_rank: float | None = None
+    version: int = 0
 
     def __post_init__(self) -> None:
         if self.window is None:
@@ -246,9 +271,20 @@ class RollingRankState:
             self.window = deque(tuple(entry) for entry in self.window)
 
     def _prune(self, index: int) -> None:
+        """Drop expired entries. Only ever called from :meth:`_apply`."""
+
         oldest = index - self.lookback
         while self.window and self.window[0][0] < oldest:
             self.window.popleft()
+
+    def _live_values(self, index: int) -> np.ndarray:
+        """Non-mutating view of the positional window as of row ``index``."""
+
+        oldest = index - self.lookback
+        return np.fromiter(
+            (value for position, value in self.window if position >= oldest),
+            dtype=float,
+        )
 
     # -- two-phase update ---------------------------------------------------
     def prepare(self, key: int, value: float) -> RankUpdate:
@@ -267,22 +303,21 @@ class RollingRankState:
                     self, key, value,
                     float("nan") if self.last_rank is None else self.last_rank,
                     duplicate=True,
+                    expected_version=self.version,
                 )
             if key < self.last_key:
                 raise RankStateError(
                     f"out-of-order rank update: {key} <= last committed {self.last_key}"
                 )
         index = self.position
-        self._prune(index)
+        observed = self._live_values(index)
         rank = float("nan")
-        if np.isfinite(value):
-            if len(self.window) >= self.minimum:
-                observed = np.fromiter((v for _, v in self.window), dtype=float)
-                rank = float(
-                    (np.sum(observed < value) + 0.5 * np.sum(observed == value))
-                    / len(observed)
-                )
-        return RankUpdate(self, key, value, rank)
+        if np.isfinite(value) and len(observed) >= self.minimum:
+            rank = float(
+                (np.sum(observed < value) + 0.5 * np.sum(observed == value))
+                / len(observed)
+            )
+        return RankUpdate(self, key, value, rank, expected_version=self.version)
 
     def _apply(self, key: int, value: float, rank: float) -> None:
         index = self.position
@@ -293,6 +328,7 @@ class RollingRankState:
         self.last_key = key
         self.last_value = value
         self.last_rank = rank
+        self.version += 1
 
     def observe(self, key: int, value: float) -> float:
         """``prepare`` + ``commit``, for callers with nothing to roll back."""
@@ -307,6 +343,7 @@ class RollingRankState:
             "window": [[int(i), float(v)] for i, v in self.window],
             "position": int(self.position),
             "last_key": self.last_key,
+            "version": int(self.version),
             # NaN is written as null and restored as NaN when `last_key` is
             # set, so the payload stays strict JSON.
             "last_value": None if self.last_value is None or not np.isfinite(self.last_value)
@@ -325,7 +362,9 @@ class RollingRankState:
             ),
             position=int(payload.get("position", 0)),
             last_key=None if payload.get("last_key") is None else int(payload["last_key"]),
+            version=int(payload.get("version", 0)),
         )
+
         raw = payload.get("last_rank")
         state.last_rank = float("nan") if raw is None else float(raw)
         raw_value = payload.get("last_value")
@@ -412,6 +451,8 @@ class LongContextLeafProducer:
     rank_state: RollingRankState | None = None
     last_key: int | None = None
     last_output: dict[str, Any] | None = None
+    version: int = 0
+
 
     def __post_init__(self) -> None:
         if self.rank_state is None:
@@ -448,7 +489,10 @@ class LongContextLeafProducer:
                     f"carries {value!r}. The committed output is immutable.",
                     original=dict(self.last_output),
                 )
-            return LeafUpdate(self, key, dict(self.last_output), None, duplicate=True)
+            return LeafUpdate(
+                self, key, dict(self.last_output), None,
+                duplicate=True, expected_version=self.version,
+            )
 
         rank_update = self.rank_state.prepare(
             key, abs(value - 0.5) if np.isfinite(value) else float("nan")
@@ -459,7 +503,9 @@ class LongContextLeafProducer:
             "external_rank": rank_update.rank,
             "external_status": status,
         }
-        return LeafUpdate(self, key, output, rank_update)
+        return LeafUpdate(
+            self, key, output, rank_update, expected_version=self.version
+        )
 
     def observe(self, key: int, probability: float | None,
                 *, status: str = MODEL_SCORED) -> dict[str, Any]:
@@ -472,6 +518,7 @@ class LongContextLeafProducer:
     def _apply(self, key: int, output: dict[str, Any]) -> None:
         self.last_key = key
         self.last_output = dict(output)
+        self.version += 1
 
     def to_dict(self) -> dict[str, Any]:
         output = None
@@ -484,6 +531,7 @@ class LongContextLeafProducer:
             "rank_state": self.rank_state.to_dict(),
             "last_key": self.last_key,
             "last_output": output,
+            "version": int(self.version),
         }
 
     @classmethod
@@ -499,12 +547,20 @@ class LongContextLeafProducer:
             rank_state=RollingRankState.from_dict(payload["rank_state"]),
             last_key=None if last_key is None else int(last_key),
             last_output=output,
+            version=int(payload.get("version", 0)),
         )
+
 
 
 @dataclass
 class LeafUpdate:
-    """A prepared external leaf pair, applied only on :meth:`commit`."""
+    """A prepared external leaf pair, applied only on :meth:`commit`.
+
+    Fenced the same way as :class:`RankUpdate`: the producer version seen at
+    preparation must still hold at commit, so a competing update for the same
+    target (or any later commit) invalidates this one instead of layering a
+    stale direction on top of an already-advanced rank window.
+    """
 
     producer: LongContextLeafProducer
     key: int
@@ -512,13 +568,26 @@ class LeafUpdate:
     rank_update: RankUpdate | None
     duplicate: bool = False
     committed: bool = False
+    expected_version: int = -1
+
+    def validate(self) -> None:
+        if self.expected_version != self.producer.version:
+            raise StateFenceError(
+                f"leaf update for target {self.key} was prepared against version "
+                f"{self.expected_version} but the producer is now at version "
+                f"{self.producer.version}"
+            )
+        if self.rank_update is not None:
+            self.rank_update.validate()
 
     def commit(self) -> dict[str, Any]:
         if self.committed:
             return dict(self.output)
-        self.committed = True
+        self.validate()
         if not self.duplicate:
             if self.rank_update is not None:
                 self.rank_update.commit()
             self.producer._apply(self.key, self.output)
+        self.committed = True
         return dict(self.output)
+

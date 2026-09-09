@@ -29,6 +29,7 @@ import os
 import shutil
 import tarfile
 import tempfile
+import uuid
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,25 +178,57 @@ class ArtifactTransfer:
             payload = entries[0] if len(entries) == 1 and entries[0].is_dir() else staging
             verified = verify_manifest(payload, manifest_name=manifest_name)
 
-            # Atomic install: stage aside, rename in, drop the old copy.
-            previous = install_root.with_name(install_root.name + f".superseded-{int(time.time())}")
-            if install_root.exists():
-                os.replace(install_root, previous)
+            # Install as an immutable generation and activate by pointer swap.
+            # There is no moment at which the active release is missing or
+            # partially written: the generation is fully materialised and
+            # manifest-verified before CURRENT is replaced, and the previous
+            # known-good generation is kept until activation succeeded.
+            generations = install_root / "generations"
+            generations.mkdir(parents=True, exist_ok=True)
+            name = f"rel-{int(time.time())}-{digest[:12]}"
+            staged_generation = generations / f".staging-{uuid.uuid4().hex}"
             try:
-                os.replace(payload, install_root)
+                os.replace(payload, staged_generation)
             except OSError:
-                shutil.copytree(payload, install_root)
-            if previous.exists():
-                shutil.rmtree(previous, ignore_errors=True)
+                shutil.copytree(payload, staged_generation)
+            verify_manifest(staged_generation, manifest_name=manifest_name)
+            generation = generations / name
+            if generation.exists():
+                shutil.rmtree(generation, ignore_errors=True)
+            os.replace(staged_generation, generation)
+
+            pointer = install_root / "CURRENT"
+            previous_name = pointer.read_text().strip() if pointer.exists() else None
+            pointer_tmp = install_root / f".CURRENT-{uuid.uuid4().hex}"
+            pointer_tmp.write_text(name)
+            os.replace(pointer_tmp, pointer)
+
+            keep = {name} | ({previous_name} if previous_name else set())
+            for candidate in generations.iterdir():
+                if candidate.is_dir() and candidate.name not in keep:
+                    shutil.rmtree(candidate, ignore_errors=True)
 
         return RestoreResult(
             key=key,
-            root=install_root,
+            root=generation,
             object_sha256=digest,
             bytes=size,
             verified_files=verified,
             elapsed_s=time.monotonic() - started,
         )
+
+
+def active_release(install_root: Path) -> Path:
+    """The currently activated release generation under ``install_root``."""
+
+    install_root = Path(install_root)
+    pointer = install_root / "CURRENT"
+    if not pointer.exists():
+        raise TransferError(f"no activated release under {install_root}")
+    generation = install_root / "generations" / pointer.read_text().strip()
+    if not generation.is_dir():
+        raise TransferError(f"CURRENT points at a missing generation: {generation.name}")
+    return generation
 
 
 def verify_manifest(root: Path, *, manifest_name: str = "manifest.json") -> int:

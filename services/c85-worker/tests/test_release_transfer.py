@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.release_transfer import (  # noqa: E402
     ArtifactTransfer,
+    active_release,
     TransferError,
     verify_manifest,
 )
@@ -110,7 +111,8 @@ def test_restore_installs_and_verifies_every_manifest_entry(tmp_path):
     )
 
     assert result.verified_files == 1
-    assert (root / "artifacts" / "a.joblib").exists()
+    assert (active_release(root) / "artifacts" / "a.joblib").exists()
+    assert result.root == active_release(root)
     assert result.object_sha256 == hashlib.sha256(blob).hexdigest()
 
 
@@ -171,11 +173,32 @@ def test_repeat_restore_is_idempotent_and_keeps_no_superseded_copies(tmp_path):
     digest = hashlib.sha256(blob).hexdigest()
 
     transfer.restore_release("releases/r.tar.gz", expected_sha256=digest, install_root=root)
-    first = (root / "artifacts" / "a.joblib").read_bytes()
+    first = (active_release(root) / "artifacts" / "a.joblib").read_bytes()
+    superseded = active_release(root).name
     transfer.restore_release("releases/r.tar.gz", expected_sha256=digest, install_root=root)
 
-    assert (root / "artifacts" / "a.joblib").read_bytes() == first
+    assert (active_release(root) / "artifacts" / "a.joblib").read_bytes() == first
     assert [p.name for p in tmp_path.iterdir()] == ["installed"]
+    # exactly the new generation plus the previous known-good one
+    kept = sorted(p.name for p in (root / "generations").iterdir())
+    assert active_release(root).name in kept and len(kept) <= 2
+    assert all(not n.startswith(".staging-") for n in kept)
+
+
+def test_interrupted_activation_keeps_the_previous_generation_active(tmp_path):
+    blob = _release_bytes()
+    transfer = _transfer({"releases/r.tar.gz": blob})
+    root = tmp_path / "installed"
+    digest = hashlib.sha256(blob).hexdigest()
+    transfer.restore_release("releases/r.tar.gz", expected_sha256=digest, install_root=root)
+    good = active_release(root)
+
+    # simulate a crash after a new generation materialised but before the
+    # pointer swap, and after a staging directory was created
+    (root / "generations" / "rel-interrupted").mkdir()
+    (root / "generations" / ".staging-crashed").mkdir()
+    assert active_release(root) == good
+    assert (good / "artifacts" / "a.joblib").exists()
 
 
 def test_missing_object_reports_a_gateway_refusal(tmp_path):
