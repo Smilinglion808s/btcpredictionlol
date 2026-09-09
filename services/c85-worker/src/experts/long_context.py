@@ -298,10 +298,15 @@ class _Row:
     values: np.ndarray
     complete: bool
     label: float
+    pos: int = -1
 
 
 # A label that has not settled yet is *pending*: bounded, never unbounded.
 MAX_PENDING_LABELS = REFIT_EVERY * 4
+
+# The settling candle of target ``T`` is the Spot candle that *begins* at ``T``.
+LABEL_CANDLE = pd.Timedelta(minutes=15)
+LABEL_SOURCES = frozenset({"binance_spot_1m"})
 
 
 def _payload_digest(values: np.ndarray) -> str:
@@ -323,6 +328,28 @@ def _sha256_file(path: Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
+@dataclass(frozen=True)
+class TrainingSnapshot:
+    """The immutable set of inputs one refit boundary is entitled to use.
+
+    A fit is certified for exactly one boundary and exactly one snapshot. If any
+    relevant training input changes (a new row, a newly settled or corrected
+    label, a schema change), the digest changes and the staged fit is stale: it
+    is rejected and rebuilt off the timed path rather than silently activated.
+    """
+
+    position: int
+    grid_origin: tuple[int, int, int]        # (MINIMUM, REFIT_EVERY, WINDOW)
+    first_position: int
+    last_position: int
+    training_rows: int
+    cutoff_ts: str | None
+    label_watermark: str | None
+    unsettled_positions: int
+    schema_digest: str
+    digest: str
+
+
 @dataclass
 class StagedFit:
     """A fit produced off the serving path for one specific refit position."""
@@ -332,6 +359,8 @@ class StagedFit:
     fit_id: str
     training_rows: int
     cutoff_ts: str | None
+    snapshot: TrainingSnapshot | None = None
+
 
 
 @dataclass
