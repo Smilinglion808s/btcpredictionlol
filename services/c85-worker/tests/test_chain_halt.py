@@ -5,6 +5,13 @@ window did not. That cannot be undone in place, so the orchestrator must stop
 dead: the already-durable decision stays as written, nothing is dispatched, and
 every later boundary is refused until an operator restores a verified paired
 generation and releases the halt explicitly.
+
+COVERAGE QUALIFICATION: these tests exercise the orchestrator's halt, dispatch
+suppression and duplicate-reconciliation *decisions* with a stubbed chain. They
+do NOT prove that a real restored head+rank pair replays the already-durable
+missing target in production; that operation is exercised separately by the
+September continuation replay, which restores the real paired generation from
+private storage and compares an uninterrupted run against a mid-block restart.
 """
 from __future__ import annotations
 
