@@ -879,38 +879,9 @@ class LongContextHead:
         }
 
     def training_snapshot(self, position: int) -> TrainingSnapshot:
-        """The immutable description of what a fit for ``position`` may use.
+        """The immutable description of what a fit for ``position`` may use."""
 
-        This is the eligibility contract: the exact positional range, the grid
-        origin, the settled-label watermark, the ordered schema and a digest
-        over every training row actually admitted. Two calls agree only when
-        nothing relevant has changed.
-        """
-
-        import hashlib
-
-        rows = [r for r in self.buffer
-                if r.complete and np.isfinite(r.label) and r.label != 0]
-        unsettled = sum(1 for r in self.buffer if not np.isfinite(r.label))
-        schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
-        digest = hashlib.sha256()
-        digest.update(f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}".encode())
-        for r in rows:
-            digest.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|".encode())
-            digest.update(_payload_digest(r.values).encode())
-        settled = [r.ts for r in self.buffer if np.isfinite(r.label)]
-        return TrainingSnapshot(
-            position=position,
-            grid_origin=(MINIMUM, REFIT_EVERY, WINDOW),
-            first_position=rows[0].pos if rows else -1,
-            last_position=rows[-1].pos if rows else -1,
-            training_rows=len(rows),
-            cutoff_ts=rows[-1].ts.isoformat() if rows else None,
-            label_watermark=max(settled).isoformat() if settled else None,
-            unsettled_positions=unsettled,
-            schema_digest=schema_digest,
-            digest=digest.hexdigest(),
-        )
+        return self._capture(position)[1]
 
     def train_ahead(self, *, position: int | None = None) -> StagedFit | None:
         """Fit the model that the next scheduled refit position will activate.
