@@ -75,7 +75,7 @@ def test_matching_prefix_is_partial_agreement_never_full_parity(world):
     assert result["partial"] is True and result["walk_complete"] is False
     assert result["processed_prefix_rows_end_exclusive"] == 24
     assert result["finite_mask_mismatches"] == 0
-    assert result["max_abs_diff"] == 0.0
+    assert result["max_abs_diff"] <= pr.TOLERANCE  # CSV round-trip only
 
 
 def test_the_unprocessed_suffix_is_never_counted_as_a_mask_mismatch(world):
