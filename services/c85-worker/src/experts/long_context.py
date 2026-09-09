@@ -308,6 +308,15 @@ MAX_PENDING_LABELS = REFIT_EVERY * 4
 LABEL_CANDLE = pd.Timedelta(minutes=15)
 LABEL_SOURCES = frozenset({"binance_spot_1m"})
 
+# The recovered generator is
+#     frame["binance_label"] = np.where(contiguous, np.sign(next_close - next_open), np.nan)
+# (`build_long_context_features.py`). So the domain is exactly the sign set,
+# with 0.0 a genuine PUSH (flat candle, excluded from training by the original's
+# ``label != 0`` filter), and NaN reserved for one thing only: the original
+# source was NOT contiguous over the settling candle. A label that has simply
+# not been received yet is NOT a NaN - it is unresolved, and it blocks the fit.
+LABEL_DOMAIN = (-1.0, 0.0, 1.0)
+
 
 def _payload_digest(values: np.ndarray) -> str:
     import hashlib
