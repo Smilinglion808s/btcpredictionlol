@@ -111,20 +111,38 @@ def runtime_identity() -> dict[str, Any]:
 
 
 # -- inputs -----------------------------------------------------------------
-def load_inputs(frame_path: Path) -> dict[str, Any]:
-    """Load the derived frame exactly as the original walk consumes it."""
+def load_inputs(frame_path: Path, *, prepare: bool = True) -> dict[str, Any]:
+    """Load the derived frame exactly as the original walk consumes it.
+
+    ``prepare`` applies ``long_context.prepare_external_frame`` - the original
+    ``load_external`` stale-book mask and ``book_fresh_within_60s`` indicator.
+    It is on by default because the original model never sees the raw derived
+    frame. ``prepare=False`` exists only to re-read a historical checkpoint that
+    was produced before that step was recovered; such a checkpoint is a
+    diagnostic, not a parity candidate.
+    """
 
     frame = pd.read_pickle(frame_path)
-    frame = frame.rename(columns={"binance_label": "label", "target_ts": "ts"})
+    if prepare:
+        frame = lc.prepare_external_frame(frame)
+    if "label" in frame.columns:
+        # prepare_external_frame already derived `label` from `binance_label`;
+        # renaming again would create a duplicate column.
+        frame = frame.drop(columns=["binance_label"], errors="ignore")
+        frame = frame.rename(columns={"target_ts": "ts"})
+    else:
+        frame = frame.rename(columns={"binance_label": "label", "target_ts": "ts"})
     features = lc.feature_columns(list(frame.columns))
     x = frame[features].to_numpy(float)
     label = frame.label.to_numpy(float)
     ts = pd.to_datetime(frame.ts, utc=True)
     complete = np.isfinite(x).all(axis=1)
 
+
     identity = {
         "frame_path": str(frame_path),
         "frame_sha256": sha_file(frame_path),
+        "prepared": bool(prepare),
         "rows": int(len(frame)),
         "features": len(features),
         "schema_hash": sha_bytes("\n".join(features).encode()),
@@ -145,7 +163,7 @@ def load_inputs(frame_path: Path) -> dict[str, Any]:
 
 
 IDENTITY_FIELDS = (
-    "frame_sha256", "rows", "features", "schema_hash", "input_hash_full",
+    "frame_sha256", "prepared", "rows", "features", "schema_hash", "input_hash_full",
     "timestamp_hash", "complete_mask_hash", "label_hash", "hgb_params", "grid",
     "long_context_sha256", "runtime",
 )
@@ -271,8 +289,9 @@ def fit_at(block_start: int, inputs: dict[str, Any]):
 
 
 def run(frame_path: Path, state: Path, *, restart: bool = False,
-        max_blocks: int | None = None) -> dict[str, Any]:
-    inputs = load_inputs(frame_path)
+        max_blocks: int | None = None, prepare: bool = True) -> dict[str, Any]:
+    inputs = load_inputs(frame_path, prepare=prepare)
+
     identity = inputs["identity"]
     rows = identity["rows"]
     blocks = block_starts(rows)
@@ -421,7 +440,8 @@ def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np
 
 
 def compare(frame_path: Path, state: Path, ledger_path: Path,
-            *, tolerance: float = TOLERANCE, legacy: bool = False) -> dict[str, Any]:
+            *, tolerance: float = TOLERANCE, legacy: bool = False,
+            prepare: bool = True) -> dict[str, Any]:
     """Compare the COMPLETED probability prefix against the archived ledger.
 
     Only positions ``[0, processed_end)`` are compared, end exclusive: the
@@ -435,7 +455,7 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
     Refuses outright on an invalid checkpoint or duplicate join keys.
     """
 
-    inputs = load_inputs(frame_path)
+    inputs = load_inputs(frame_path, prepare=prepare)
     if legacy:
         probability, source = load_legacy_generation(state, inputs)
         verdict = {"resumable": None, "problems": [], **source}
@@ -454,9 +474,14 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
     complete_walk = int(verdict["next_block_index"]) >= int(verdict["of_blocks"])
 
     # Direction and rank over the ORIGINAL full prefix, before any subsetting.
+    # `external_rank` is the rolling rank of the CONFIDENCE |p - 0.5|
+    # (direction_contract module docstring / long_context_model.predictions),
+    # never of the probability itself.
     prefix = probability[:end]
     direction = dc.signed_direction(prefix)
-    rank = dc.rolling_rank(prefix)
+    confidence = np.abs(prefix - 0.5)
+    rank = dc.rolling_rank(confidence)
+
 
     rebuilt = pd.DataFrame({
         "ts": inputs["ts"][:end], "probability": prefix,
@@ -471,33 +496,58 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         raise ParityComparisonRefused(
             f"duplicate join keys: archived={dup_arch}, rebuilt={dup_reb}")
 
-    merged = archived.merge(rebuilt, on="ts", how="inner")
+    merged = archived.merge(rebuilt, on="ts", how="inner").sort_values("ts")
     a = merged.external_probability_green.to_numpy(float)
     b = merged.probability.to_numpy(float)
     both = np.isfinite(a) & np.isfinite(b)
     diff = np.abs(a[both] - b[both]) if both.any() else np.array([])
-    mask_mismatches = int((np.isfinite(a) != np.isfinite(b)).sum())
+    finite_mask_divergent = np.isfinite(a) != np.isfinite(b)
+    mask_mismatches = int(finite_mask_divergent.sum())
+
+    stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
+    blocks = block_starts(inputs["identity"]["rows"])
+
+    def locate(ts: pd.Timestamp) -> dict[str, Any]:
+        position = int(stamps.searchsorted(ts))
+        return {"ts": str(ts), "position": position,
+                "fit_block_start": max([s for s in blocks if s <= position],
+                                       default=None)}
+
+    # Earliest FINITE-MASK divergence, reported separately from the earliest
+    # jointly-finite value divergence. Mask disagreement can start earlier and
+    # must not be described as if the value divergence were the first mismatch.
+    first_mask_divergence = None
+    if mask_mismatches:
+        idx = int(np.argmax(finite_mask_divergent))
+        first_mask_divergence = {
+            **locate(pd.Timestamp(merged.ts.to_numpy()[idx])),
+            "archived_finite": bool(np.isfinite(a[idx])),
+            "rebuilt_finite": bool(np.isfinite(b[idx])),
+        }
 
     first_divergence = None
     if diff.size and diff.max() > tolerance:
-        over = np.abs(a[both] - b[both]) > tolerance
+        over = diff > tolerance
         idx = int(np.argmax(over))
-        ts = pd.Timestamp(merged.ts.to_numpy()[both][idx])
-        stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
-        position = int(stamps.searchsorted(ts))
-        blocks = block_starts(inputs["identity"]["rows"])
-        fit_block = max([s for s in blocks if s <= position], default=None)
-        first_divergence = {"ts": str(ts), "position": position,
-                            "fit_block_start": fit_block,
-                            "archived": float(a[both][idx]),
-                            "rebuilt": float(b[both][idx]),
-                            "abs_diff": float(diff[over][0])}
+        first_divergence = {
+            **locate(pd.Timestamp(merged.ts.to_numpy()[both][idx])),
+            "archived": float(a[both][idx]),
+            "rebuilt": float(b[both][idx]),
+            "abs_diff": float(diff[idx]),
+        }
 
     # Direction / rank, reported separately and never mixed into probability parity.
     arch_dir = merged.external_direction.to_numpy(float)
     dir_mask = both & np.isfinite(arch_dir)
+    direction_mismatches = int((np.sign(arch_dir[dir_mask])
+                                != merged.rebuilt_direction.to_numpy()[dir_mask]).sum())
+    direction_mask_mismatches = int((
+        (np.isfinite(arch_dir) & (arch_dir != 0))
+        != (merged.rebuilt_direction.to_numpy() != 0)).sum()) if len(merged) else 0
+
     arch_rank = merged.external_rank.to_numpy(float)
     reb_rank = merged.rebuilt_rank.to_numpy(float)
+    rank_mask_mismatches = int((np.isfinite(arch_rank) != np.isfinite(reb_rank)).sum())
     rank_both = np.isfinite(arch_rank) & np.isfinite(reb_rank)
     rank_diff = np.abs(arch_rank[rank_both] - reb_rank[rank_both]) if rank_both.any() \
         else np.array([])
@@ -506,12 +556,38 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
                       and float(diff.max()) <= tolerance)
     lo, hi = archived.ts.min(), archived.ts.max()
     window = rebuilt[(rebuilt.ts >= lo) & (rebuilt.ts <= hi)]
+    # Expected-key coverage strictly WITHIN the processed bounds: an archived
+    # timestamp inside [first processed, last processed] that is absent from the
+    # rebuilt frame is a genuinely missing row, not "outside the prefix".
+    p_lo, p_hi = rebuilt.ts.min(), rebuilt.ts.max()
+    archived_in_bounds = archived[(archived.ts >= p_lo) & (archived.ts <= p_hi)]
+    missing_expected = sorted(set(archived_in_bounds.ts) - set(rebuilt.ts))
+    extra_in_bounds = sorted(set(window.ts) - set(archived.ts))
+    coverage_ok = not missing_expected
+    direction_ok = (direction_mismatches == 0 and direction_mask_mismatches == 0)
+    rank_ok = (rank_mask_mismatches == 0 and rank_diff.size > 0
+               and float(rank_diff.max()) <= tolerance)
+    contract_ok = probability_ok and coverage_ok and direction_ok and rank_ok
+
     if not complete_walk:
         status = "PARTIAL AGREEMENT" if probability_ok else "PARTIAL MISMATCH"
+        contract_status = ("PARTIAL CONTRACT AGREEMENT" if contract_ok
+                           else "PARTIAL CONTRACT MISMATCH")
     else:
         status = "FULL PARITY" if probability_ok else "PARITY FAILED"
+        contract_status = ("FULL CONTRACT PARITY" if contract_ok
+                           else "CONTRACT PARITY FAILED")
+
     return {
         "status": status,
+        "probability_status": status,
+        "contract_status": contract_status,
+        "contract_components": {
+            "probability_ok": bool(probability_ok),
+            "expected_key_coverage_ok": bool(coverage_ok),
+            "direction_ok": bool(direction_ok),
+            "rank_ok": bool(rank_ok),
+        },
         "walk_complete": complete_walk,
         "partial": not complete_walk,
         "checkpoint": verdict,
@@ -530,6 +606,9 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         "duplicate_keys_rebuilt": dup_reb,
         "archived_rows_outside_processed_prefix": int(len(archived) - len(merged)),
         "extra_in_rebuilt": int(len(window) - len(merged)),
+        "missing_expected_keys_in_processed_bounds": len(missing_expected),
+        "missing_expected_keys_sample": [str(t) for t in missing_expected[:10]],
+        "extra_rebuilt_keys_in_archive_window": len(extra_in_bounds),
         "archived_finite": int(np.isfinite(a).sum()),
         "rebuilt_finite": int(np.isfinite(b).sum()),
         "finite_mask_mismatches": mask_mismatches,
@@ -538,24 +617,28 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         "max_abs_diff": float(diff.max()) if diff.size else None,
         "mean_abs_diff": float(diff.mean()) if diff.size else None,
         "exceed_tolerance": int((diff > tolerance).sum()) if diff.size else None,
+        "first_finite_mask_divergence": first_mask_divergence,
+        "first_probability_divergence": first_divergence,
         "first_divergence": first_divergence,
         "direction": {
             "policy": "direction_contract.signed_direction (p >= 0.5 -> +1, else -1)",
             "compared": int(dir_mask.sum()),
-            "mismatches": int((np.sign(arch_dir[dir_mask])
-                               != merged.rebuilt_direction.to_numpy()[dir_mask]).sum()),
+            "mismatches": direction_mismatches,
+            "presence_mask_mismatches": direction_mask_mismatches,
         },
         "rank": {
-            "policy": (f"direction_contract.rolling_rank (lookback {dc.RANK_LOOKBACK} "
-                       f"rows, minimum {dc.RANK_MINIMUM}, ties half, past only)"),
+            "policy": (f"direction_contract.rolling_rank of |p - 0.5| "
+                       f"(lookback {dc.RANK_LOOKBACK} rows, minimum "
+                       f"{dc.RANK_MINIMUM}, ties half, past only)"),
             "archived_finite": int(np.isfinite(arch_rank).sum()),
             "rebuilt_finite": int(np.isfinite(reb_rank).sum()),
-            "finite_mask_mismatches": int((np.isfinite(arch_rank)
-                                           != np.isfinite(reb_rank)).sum()),
+            "finite_mask_mismatches": rank_mask_mismatches,
             "compared": int(rank_both.sum()),
             "max_abs_diff": float(rank_diff.max()) if rank_diff.size else None,
+            "mean_abs_diff": float(rank_diff.mean()) if rank_diff.size else None,
         },
         "kind": "historical replay parity, not forward testing",
+
     }
 
 
@@ -569,20 +652,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--max-blocks", type=int)
+    parser.add_argument("--no-prepare", action="store_true",
+                        help="read the raw derived frame (pre-recovery diagnostic only)")
     parser.add_argument("--legacy", action="store_true",
                         help="compare a collector-format legacy generation (read-only)")
     args = parser.parse_args(argv)
 
     if args.command == "run":
         result = run(args.frame, args.state, restart=args.restart,
-                     max_blocks=args.max_blocks)
+                     max_blocks=args.max_blocks, prepare=not args.no_prepare)
     elif args.command == "validate":
-        result = validate_checkpoint(args.state, load_inputs(args.frame))
+        result = validate_checkpoint(
+            args.state, load_inputs(args.frame, prepare=not args.no_prepare))
     else:
         if args.ledger is None:
             parser.error("compare needs --ledger")
         try:
-            result = compare(args.frame, args.state, args.ledger, legacy=args.legacy)
+            result = compare(args.frame, args.state, args.ledger,
+                             legacy=args.legacy, prepare=not args.no_prepare)
         except ParityComparisonRefused as exc:
             print(json.dumps({"status": "REFUSED", "reason": str(exc)}, indent=1))
             return 2
