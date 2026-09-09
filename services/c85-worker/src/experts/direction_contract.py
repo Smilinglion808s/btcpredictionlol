@@ -271,3 +271,45 @@ def iter_incremental_ranks(
     state = state or RollingRankState()
     out = [state.observe(k, v) for k, v in zip(keys, values)]
     return np.asarray(out, dtype=float), state
+
+
+@dataclass
+class LongContextLeafProducer:
+    """Turns one long-context probability into the C85 leaf pair, incrementally.
+
+    This is the *only* sanctioned producer of the `external_direction` and
+    `external_rank` leaf keys. It carries the contract of
+    ``long_context_model.predictions`` (lines 287-291) target by target:
+
+    * ``external_direction`` = +1 / -1 by :func:`signed_direction`, 0 when the
+      head returned no finite probability;
+    * ``external_rank``      = the strictly past-only positional rolling rank of
+      ``abs(p - 0.5)`` over 2,880 rows with a 960-row minimum, ties half.
+
+    It does *not* own the head. ``observe`` must be called once per target in
+    chronological order - including targets whose probability is missing, which
+    is why the probability is passed explicitly as ``nan`` rather than skipped:
+    the original window is positional, so skipping a row shifts it.
+    """
+
+    rank_state: RollingRankState | None = None
+
+    def __post_init__(self) -> None:
+        if self.rank_state is None:
+            self.rank_state = RollingRankState()
+
+    def observe(self, key: int, probability: float | None) -> dict[str, Any]:
+        value = float("nan") if probability is None else float(probability)
+        rank = self.rank_state.observe(key, abs(value - 0.5) if np.isfinite(value) else float("nan"))
+        return {
+            "external_probability_green": value,
+            "external_direction": int(signed_direction(value)),
+            "external_rank": rank,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"rank_state": self.rank_state.to_dict()}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "LongContextLeafProducer":
+        return cls(rank_state=RollingRankState.from_dict(payload["rank_state"]))
