@@ -217,7 +217,7 @@ def main() -> int:
         "frame_last_ts": frame.ts.iloc[-1].isoformat(),
         "bootstrap_start_position": b0,
         "last_boundary": last_boundary,
-        "probability_rows": sum(1 for _ in probabilities_path.open()) - 1,
+        "ledger_grid_rows": sum(1 for _ in probabilities_path.open()) - 1,
         "elapsed_seconds": round(time.time() - started, 1),
     }
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1))
