@@ -77,12 +77,14 @@ and `c30`, `c36`, `c37`, `r4`, `external`, `c42`, `c51`, `c54` remain missing.
    need the R5 hot ledger continuation past 2026-08-31.
 2. Then C36 timing/frontier selection, then C37 balanced maturation, each of
    which consumes C30's phase3/timing ledgers.
-3. The base capture ledgers (`continuous_coverage_ledger`,
-   `t5_reliability_r2_rows`, `t5_hot_calibration_ledger`) END at
-   2026-08-31 23:45Z. Live operation needs those rows produced forward from the
-   running collectors; until they are, this producer's cursor cannot advance
-   past 2026-08-31 23:45Z with authentic inputs. Daily archive lag is an
-   archive-catchup limit, not an acceptable live feed.
+3. The base capture ledgers now run forward. `t5_reliability_r2_rows` and
+   `t5_hot_calibration_ledger` were extended to **2026-09-08 23:45Z** (26,896
+   rows, 768 September rows, 176 absent quarter-hours reported not filled,
+   archived prefix identical apart from one newly settled label at
+   2026-08-31 22:30Z). `continuous_coverage_ledger` still ends 2026-08-31 and
+   remains the next base-capture gap. Daily archive lag is an archive-catchup
+   limit, not an acceptable live feed.
+
 
 ## Recorded, unresolved: `qlib_corr_5` overlap discrepancy
 
