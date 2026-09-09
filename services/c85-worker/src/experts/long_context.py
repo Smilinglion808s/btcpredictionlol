@@ -475,16 +475,35 @@ class LongContextHead:
         """Record a realised Spot-candle sign that the source has published.
 
         ``available_at`` is when the original source made the settling candle
-        observable; ``as_of`` is the clock the caller is settling at. A label
-        that is not yet available, or that belongs to a target this head has not
-        observed, is refused - the walk-forward loop never sees such a row.
-        Idempotent by timestamp; a *conflicting* re-settlement is refused rather
-        than silently changing training data underneath an already-issued fit.
+        observable; ``as_of`` is the clock the caller is settling at. Accepted
+        only when all of the following hold, matching the original's data
+        domain rather than merely "a finite number at some timestamp":
+
+        * ``source`` is an original label source (``LABEL_SOURCES``);
+        * ``available_at`` is at or after the settling candle's close
+          (``ts + 15m``) - the candle simply does not exist before then;
+        * ``available_at <= as_of`` - the caller cannot settle from the future;
+        * ``ts`` is a target this head actually observed and still retains.
+
+        Idempotent: an *identical* re-settlement is a no-op and does not bump
+        the version, so it cannot invalidate an in-flight prepared update. A
+        *conflicting* re-settlement is refused rather than silently changing
+        training data underneath an already-issued fit.
         """
 
         ts = pd.Timestamp(ts)
         available_at = pd.Timestamp(available_at)
         as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        if source not in LABEL_SOURCES:
+            raise LongContextOrderError(
+                f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
+            )
+        if available_at < ts + LABEL_CANDLE:
+            raise LongContextOrderError(
+                f"label for {ts.isoformat()} cannot be available at "
+                f"{available_at.isoformat()}; its candle closes at "
+                f"{(ts + LABEL_CANDLE).isoformat()}"
+            )
         if available_at > as_of:
             raise LongContextOrderError(
                 f"label for {ts.isoformat()} is not available until "
@@ -495,22 +514,29 @@ class LongContextHead:
                 f"label for {ts.isoformat()} precedes any observed target; "
                 "the original never trains on unobserved rows"
             )
+        row = next((r for r in self.buffer if r.ts == ts), None)
+        if row is None:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} is not a retained observed target; "
+                "the original never labels rows outside the trailing window"
+            )
         label = float(label)
         if not np.isfinite(label):
             raise LongContextOrderError(f"non-finite label for {ts.isoformat()}")
+        stamp = f"{available_at.isoformat()}|{source}"
         previous = self._labels_by_ts.get(ts)
-        if previous is not None and np.isfinite(previous) and previous != label:
-            raise LongContextOrderError(
-                f"conflicting label for {ts.isoformat()}: {previous} then {label}"
-            )
+        if previous is not None and np.isfinite(previous):
+            if previous != label:
+                raise LongContextOrderError(
+                    f"conflicting label for {ts.isoformat()}: {previous} then {label}"
+                )
+            if self._label_available_at.get(ts) == stamp:
+                return  # identical duplicate: no state change, no version bump
         if previous is None and len(self._labels_by_ts) >= MAX_PENDING_LABELS + WINDOW:
             raise LongContextOrderError("pending label map exceeded its bound")
         self._labels_by_ts[ts] = label
-        self._label_available_at[ts] = f"{available_at.isoformat()}|{source}"
-        for row in self.buffer:
-            if row.ts == ts:
-                row.label = label
-                break
+        self._label_available_at[ts] = stamp
+        row.label = label
         self._prune_labels()
         self.version += 1
 
