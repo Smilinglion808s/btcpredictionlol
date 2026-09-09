@@ -162,26 +162,98 @@ def test_archive_ingest_cannot_be_passed_off_as_bootstrap():
         )
 
 
-# -- continuity and retention ----------------------------------------------
-def test_a_recorded_reconnect_gap_invalidates_an_overlapping_target():
+# -- coverage, duplicates and retention -------------------------------------
+def _cover(acc, target_us):
+    start, end = acc.window_us(target_us)
+    for venue in ("spot", "um"):
+        acc.declare_coverage(venue, start, end, "collector")
+
+
+def test_a_recorded_reconnect_gap_marks_an_overlapping_targets_inputs_incomplete():
     acc = BinanceWindowAccumulator()
     target_us = (SPOT_US // 900_000_000) * 900_000_000 + 900_000_000
-    for venue, transport in (("spot", "spot_ws_aggTrade"), ("um", "um_ws_aggTrade")):
-        acc.buffers[venue].coverage_start_us = target_us - 900_000_000
-    assert acc.validity(target_us)["valid"] is True
+    _cover(acc, target_us)
+    assert acc.input_coverage(target_us)["inputs_complete"] is True
     acc.mark_gap("spot", (target_us - 60_000_000) * 1000, (target_us - 30_000_000) * 1000)
-    report = acc.validity(target_us)
-    assert report["valid"] is False
+    report = acc.input_coverage(target_us)
+    assert report["inputs_complete"] is False
     assert report["venues"]["spot"]["receipt_gaps"]
 
 
-def test_a_cold_buffer_is_not_warm_enough_for_the_900s_window():
+def test_a_gap_outside_the_targets_window_is_not_counted_against_it():
     acc = BinanceWindowAccumulator()
     target_us = 1_800_000_000_000_000
-    acc.buffers["spot"].coverage_start_us = target_us - 100_000_000   # only 100s
+    _cover(acc, target_us)
+    start, _ = acc.window_us(target_us)
+    acc.mark_gap("spot", (start - 600_000_000) * 1000, (start - 300_000_000) * 1000)
+    assert acc.input_coverage(target_us)["inputs_complete"] is True
+
+
+def test_one_ancient_trade_does_not_make_a_sparse_bootstrap_covered():
+    acc = BinanceWindowAccumulator()
+    target_us = 1_800_000_000_000_000
+    acc.buffers["spot"].add_event({
+        "agg_trade_id": 1, "ts_us": target_us - 5_000_000_000, "price": 1.0,
+        "quantity": 1.0, "underlying_n": 1, "signed": 1.0, "quote": 1.0,
+        "receipt_ns": 1, "provenance": "bootstrap",
+    })
     assert acc.has_history(target_us, "spot") is False
-    acc.buffers["spot"].coverage_start_us = target_us - 900_000_000
+    start, end = acc.window_us(target_us)
+    acc.declare_coverage("spot", start, end, "rest_pagination")
     assert acc.has_history(target_us, "spot") is True
+
+
+def test_partial_coverage_of_the_window_is_not_enough():
+    acc = BinanceWindowAccumulator()
+    target_us = 1_800_000_000_000_000
+    start, end = acc.window_us(target_us)
+    acc.declare_coverage("spot", start, end - 1_000_000, "collector")
+    assert acc.has_history(target_us, "spot") is False
+
+
+def test_an_identical_duplicate_merges_the_earliest_known_receipt():
+    buffer = VenueBuffer("spot")
+    base = {"agg_trade_id": 7, "ts_us": 100, "price": 1.0, "quantity": 2.0,
+            "underlying_n": 1, "signed": 2.0, "quote": 2.0}
+    assert buffer.add_event({**base, "receipt_ns": -1, "provenance": "archive"}) is True
+    assert buffer.add_event({**base, "receipt_ns": 500, "provenance": "live"}) is False
+    stored = buffer.events[7]
+    assert stored["receipt_ns"] == 500 and stored["provenance"] == "live"
+    # A later replay must never back-date an already known receipt.
+    buffer.add_event({**base, "receipt_ns": 900, "provenance": "live"})
+    assert buffer.events[7]["receipt_ns"] == 500
+    assert buffer.merged_duplicates == 2
+    # And the merged row is now visible to a LIVE read that it was invisible to.
+    assert len(buffer.frame(mode=LIVE, freeze_ns=600)) == 1
+
+
+def test_a_conflicting_duplicate_is_quarantined_not_applied():
+    buffer = VenueBuffer("spot")
+    base = {"agg_trade_id": 7, "ts_us": 100, "price": 1.0, "quantity": 2.0,
+            "underlying_n": 1, "signed": 2.0, "quote": 2.0, "receipt_ns": 5,
+            "provenance": "live"}
+    buffer.add_event(dict(base))
+    assert buffer.add_event({**base, "price": 9.0, "receipt_ns": 6}) is False
+    assert buffer.events[7]["price"] == 1.0
+    assert len(buffer.conflicts) == 1
+    assert buffer.conflicts[0]["rejected"]["price"] == 9.0
+
+
+def test_unknown_availability_only_blocks_targets_that_read_the_event():
+    acc = BinanceWindowAccumulator()
+    target_us = 1_800_000_000_000_000
+    _cover(acc, target_us)
+    for venue in ("spot", "um"):
+        acc.buffers[venue].add_event({
+            "agg_trade_id": 1, "ts_us": target_us - 400_000_000, "price": 1.0,
+            "quantity": 1.0, "underlying_n": 1, "signed": 1.0, "quote": 1.0,
+            "receipt_ns": -1, "provenance": "archive",
+        })
+    assert acc.input_coverage(target_us, mode=LIVE, freeze_ns=10**18)[
+        "inputs_complete"] is False
+    far = target_us + 4 * 900_000_000
+    _cover(acc, far)
+    assert acc.input_coverage(far, mode=LIVE, freeze_ns=10**18)["inputs_complete"] is True
 
 
 def test_pruning_never_drops_a_pending_targets_inputs():
@@ -200,15 +272,16 @@ def test_pruning_never_drops_a_pending_targets_inputs():
     assert len(acc.buffers["spot"].events) == 0
 
 
-def test_pruning_does_not_let_a_thinned_buffer_look_warm():
+def test_pruning_trims_the_coverage_claim_with_the_events():
     acc = BinanceWindowAccumulator()
     target_us = 1_800_000_000_000_000
-    acc.buffers["spot"].coverage_start_us = target_us - 5_000_000_000
+    acc.declare_coverage("spot", target_us - 5_000_000_000, target_us + 5_000_000, "collector")
     acc.prune(target_us)
     assert acc.has_history(target_us, "spot") is True
     later = target_us + 900_000_000
     acc.prune(later)
-    assert acc.buffers["spot"].coverage_start_us == later - 900_000_000
+    assert acc.has_history(later, "spot") is False    # coverage was trimmed away
+    assert acc.buffers["spot"].coverage[0][0] == later - 900_000_000
 
 
 # -- state ------------------------------------------------------------------

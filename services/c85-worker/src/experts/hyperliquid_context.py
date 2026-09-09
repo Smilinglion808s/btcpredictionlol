@@ -263,68 +263,169 @@ LIVE = "LIVE"
 
 
 @dataclass
-class _Stream:
-    """One bounded, de-duplicated input stream, keyed by its own event time.
+class _Version:
+    """One immutable observation of one bar/event, with its OWN availability.
 
-    `available_ns[key]` is when the observation was actually received. It is
-    recorded, never inferred: a poll response stamps every row it carried with
-    the instant that response arrived, because that is the first moment any of
-    those rows could legitimately have been used.
+    `available_ns` is when THIS version was received - never inherited from an
+    earlier version of the same bar. `final` records whether the source
+    confirmed the bar complete; `None` means "not stated", and finality is then
+    inferred from the receipt instant against the bar's close time.
     """
 
-    key: str                      # "t" for candles, "time" for funding
-    rows: dict[int, dict[str, Any]] = field(default_factory=dict)
-    available_ns: dict[int, int] = field(default_factory=dict)
+    payload: dict[str, Any]
+    available_ns: int | None
+    seq: int
+    final: bool | None = None
 
-    def add(self, row: dict[str, Any], *, available_ns: int | None) -> bool:
+
+@dataclass
+class _Stream:
+    """One bounded input stream, keyed by event time, versioned by observation.
+
+    A 15-minute bar polled at +7s is a PARTIAL snapshot; the same bar polled
+    after it closes carries different OHLC. Storing one row per bar and keeping
+    the earliest availability silently back-dated the corrected values: a packet
+    frozen before the correction arrived would have read the corrected numbers
+    with the partial's timestamp. Versions fix that at the root - each observed
+    payload keeps its own arrival instant, and a read at freeze F sees the
+    latest version that had actually arrived by F.
+
+    Rules, all of them consequences of that:
+      * identical repeated payload -> no new version; the EARLIEST known receipt
+        is retained (a re-poll returning the same bytes proves it was already
+        available, it does not delay it).
+      * changed payload -> new version with its own receipt; it can never
+        inherit the earlier one.
+      * unknown-availability payload -> stored as its own version and simply
+        invisible in LIVE mode; it never overwrites a known version nor takes
+        its timestamp.
+      * out-of-order poll responses -> selection is by (available_ns, seq), not
+        by arrival order, so a late-delivered older snapshot cannot displace a
+        newer one that was already available.
+      * finality -> in LIVE mode a candle version is usable only once the source
+        confirmed it complete, or (absent that) once it was received at or after
+        the bar's own close time. A bar's close time alone proves nothing about
+        a snapshot taken before it.
+    """
+
+    key: str                          # "t" for candles, "time" for funding
+    interval_ms: int = 0              # bar length; 0 = point event, always final
+    versions: dict[int, list[_Version]] = field(default_factory=dict)
+    sequence: int = 0
+
+    # -- ingestion ----------------------------------------------------------
+    def add(self, row: dict[str, Any], *, available_ns: int | None,
+            final: bool | None = None) -> bool:
         key = int(row[self.key])
-        known = self.rows.get(key)
-        # A re-poll of an unclosed bar legitimately revises it; the source's own
-        # `drop_duplicates(keep='last')` resolves duplicates the same way. The
-        # earliest availability is kept so a revision cannot back-date access.
-        self.rows[key] = dict(row)
-        if available_ns is not None:
-            previous = self.available_ns.get(key)
-            self.available_ns[key] = (
-                available_ns if previous is None else min(previous, int(available_ns))
-            )
-        return known is None
+        payload = dict(row)
+        history = self.versions.setdefault(key, [])
+        for version in history:
+            if version.payload == payload:
+                if available_ns is not None:
+                    known = version.available_ns
+                    version.available_ns = (
+                        int(available_ns) if known is None
+                        else min(known, int(available_ns))
+                    )
+                if final is not None:
+                    version.final = bool(final) if version.final is None else (
+                        version.final or bool(final)
+                    )
+                return False
+        self.sequence += 1
+        history.append(_Version(payload, None if available_ns is None else int(available_ns),
+                                self.sequence, final))
+        return len(history) == 1
+
+    # -- selection ----------------------------------------------------------
+    def _is_final(self, key: int, version: _Version) -> bool:
+        if self.interval_ms == 0:
+            return True
+        if version.final is not None:
+            return bool(version.final)
+        if version.available_ns is None:
+            return False
+        close_ns = (key + self.interval_ms) * 1_000_000
+        return version.available_ns >= close_ns
+
+    def select(self, key: int, *, mode: str, freeze_ns: int | None
+               ) -> tuple[dict[str, Any] | None, str]:
+        history = self.versions.get(key) or []
+        if not history:
+            return None, "absent"
+        if mode == HISTORICAL:
+            return max(history, key=lambda v: v.seq).payload, "ok"
+        eligible = [v for v in history
+                    if v.available_ns is not None and v.available_ns <= int(freeze_ns)]  # type: ignore[arg-type]
+        if not eligible:
+            reason = "unknown_availability" if any(
+                v.available_ns is None for v in history) else "not_yet_available"
+            return None, reason
+        usable = [v for v in eligible if self._is_final(key, v)]
+        if not usable:
+            return None, "not_confirmed_final"
+        return max(usable, key=lambda v: (v.available_ns, v.seq)).payload, "ok"
 
     def frame(self, columns: Sequence[str], *, mode: str, freeze_ns: int | None) -> pd.DataFrame:
         records = []
         self.excluded_unknown = 0
-        for key, row in self.rows.items():
-            if mode == LIVE:
-                available = self.available_ns.get(key)
-                if available is None:
+        self.excluded_partial = 0
+        for key in self.versions:
+            payload, reason = self.select(key, mode=mode, freeze_ns=freeze_ns)
+            if payload is None:
+                if reason == "unknown_availability":
                     self.excluded_unknown += 1
-                    continue
-                if available > int(freeze_ns):  # type: ignore[arg-type]
-                    continue
-            records.append({c: row[c] for c in columns})
+                elif reason == "not_confirmed_final":
+                    self.excluded_partial += 1
+                continue
+            records.append({c: payload[c] for c in columns})
         if not records:
             return pd.DataFrame(columns=list(columns))
         return pd.DataFrame.from_records(records).sort_values(self.key).reset_index(drop=True)
 
-    def prune(self, keep_from_ms: int) -> None:
-        for key in [k for k in self.rows if k < keep_from_ms]:
-            del self.rows[key]
-            self.available_ns.pop(key, None)
+    # -- retention ----------------------------------------------------------
+    def prune_by_count(self, anchor_key: int, keep_count: int) -> None:
+        """Keep every key after `anchor_key`, plus the newest `keep_count` at or
+        before it - COUNTS of observations, exactly as the source's rolling and
+        shift operate, never wall-clock time.
 
+        Wall-clock retention was wrong for a positional rule: the source's
+        `rolling(96)` and `shift(3)` walk retained ROWS, so across a feed outage
+        or a delayed bar the row a target still needs can sit far further back
+        than any fixed duration allows. At target 12:15 the last completed hourly
+        bar is 11:00 and its `shift(3)` anchor is 08:00; a 4-hour window drops
+        08:00 and silently changes the 4h return.
+        """
+        at_or_before = sorted(k for k in self.versions if k <= int(anchor_key))
+        for key in at_or_before[:-keep_count] if keep_count > 0 else at_or_before:
+            del self.versions[key]
+
+    # -- state --------------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
-            "rows": {str(k): v for k, v in self.rows.items()},
-            "available_ns": {str(k): v for k, v in self.available_ns.items()},
+            "interval_ms": self.interval_ms,
+            "sequence": self.sequence,
+            "versions": {
+                str(k): [
+                    {"payload": v.payload, "available_ns": v.available_ns,
+                     "seq": v.seq, "final": v.final}
+                    for v in versions
+                ]
+                for k, versions in self.versions.items()
+            },
         }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "_Stream":
-        return cls(
-            key=payload["key"],
-            rows={int(k): dict(v) for k, v in (payload.get("rows") or {}).items()},
-            available_ns={int(k): int(v) for k, v in (payload.get("available_ns") or {}).items()},
-        )
+        stream = cls(key=payload["key"], interval_ms=int(payload.get("interval_ms", 0)),
+                     sequence=int(payload.get("sequence", 0)))
+        for key, versions in (payload.get("versions") or {}).items():
+            stream.versions[int(key)] = [
+                _Version(dict(v["payload"]), v["available_ns"], int(v["seq"]), v.get("final"))
+                for v in versions
+            ]
+        return stream
 
 
 class HyperliquidContextAccumulator:
@@ -335,18 +436,27 @@ class HyperliquidContextAccumulator:
     """
 
     def __init__(self) -> None:
-        self.candles_15m = _Stream("t")
-        self.candles_1h = _Stream("t")
-        self.funding = _Stream("time")
+        self.candles_15m = _Stream("t", interval_ms=15 * 60_000)
+        self.candles_1h = _Stream("t", interval_ms=60 * 60_000)
+        self.funding = _Stream("time")          # point events, always final
         self.pending_targets: set[int] = set()
 
     # -- ingestion ----------------------------------------------------------
     def ingest_candles(self, interval: str, rows: Iterable[dict[str, Any]],
-                       *, available_ns: int | None = None) -> int:
+                       *, available_ns: int | None = None,
+                       final: bool | None = None) -> int:
+        """Ingest a candle poll response.
+
+        `final` is the source's own confirmation that the bars are complete
+        (e.g. a websocket candle frame carrying a closed flag, or a snapshot the
+        caller knows excludes the running bar). Leave it None when the source
+        does not say, and finality is then decided by receipt vs close time -
+        never by the bar's close time on its own.
+        """
         stream = self._candle_stream(interval)
         added = 0
         for row in normalize_candles(rows).to_dict("records"):
-            added += stream.add(row, available_ns=available_ns)
+            added += stream.add(row, available_ns=available_ns, final=final)
         return added
 
     def ingest_funding(self, rows: Iterable[dict[str, Any]],
@@ -370,12 +480,36 @@ class HyperliquidContextAccumulator:
     def close_target(self, target_ms: int) -> None:
         self.pending_targets.discard(int(target_ms))
 
+    def anchors(self, target_ms: int) -> dict[str, int]:
+        """The newest input row each stream may read for this target.
+
+        Straight from the source's join rules: the 15m bar attributed to T opens
+        at T-15m; the hourly backward as-of with `allow_exact_matches=True`
+        reaches the bar opening at T-1h; funding joins strictly before T.
+        """
+        target = int(target_ms)
+        return {
+            "candles_15m": target - 15 * 60_000,
+            "candles_1h": target - 60 * 60_000,
+            "funding": target - 1,
+        }
+
     def prune(self, target_ms: int) -> None:
-        """Bound retained state without dropping any pending target's inputs."""
+        """Bound retained state by OBSERVATION COUNT, honouring pending targets.
+
+        Retention is derived from what the source's own operations consume:
+        rolling(96)/shift(15) on 15m bars, shift(3)/rolling(4) on hourly bars,
+        and diff()/rolling(8) on funding - all positional. So the newest N rows
+        at or before each stream's anchor are kept, plus everything newer, and
+        every version of a retained key survives. Rows a still-pending target
+        needs are never dropped, because the anchors are computed from the
+        OLDEST pending target.
+        """
         oldest = min(self.pending_targets | {int(target_ms)})
-        self.candles_15m.prune(oldest - CANDLE_15M_LOOKBACK * 15 * 60_000)
-        self.candles_1h.prune(oldest - CANDLE_1H_LOOKBACK * 60 * 60_000)
-        self.funding.prune(oldest - FUNDING_LOOKBACK * 60 * 60_000)
+        anchors = self.anchors(oldest)
+        self.candles_15m.prune_by_count(anchors["candles_15m"], CANDLE_15M_LOOKBACK)
+        self.candles_1h.prune_by_count(anchors["candles_1h"], CANDLE_1H_LOOKBACK)
+        self.funding.prune_by_count(anchors["funding"], FUNDING_LOOKBACK)
 
     # -- reading ------------------------------------------------------------
     def features_for(self, target_ms: int, *, mode: str = HISTORICAL,
@@ -400,24 +534,41 @@ class HyperliquidContextAccumulator:
             for name in FEATURE_COLUMNS
         }
 
-    def validity(self, target_ms: int, *, mode: str = HISTORICAL,
-                 freeze_ns: int | None = None) -> dict[str, Any]:
-        """Warm-up / completeness status. Nothing is imputed; NaN stays NaN."""
+    def input_coverage(self, target_ms: int, *, mode: str = HISTORICAL,
+                       freeze_ns: int | None = None) -> dict[str, Any]:
+        """ACQUISITION status for one target. Not a call/no-call verdict.
+
+        Missing columns are REPORTED, never converted into a prediction filter:
+        the fitted external-direction pipeline imputes (median + missingness
+        indicator), so refusing to score a NaN would be a new rule wearing the
+        unchanged model's name. What is flagged separately is data the collector
+        could not honestly supply at freeze - rows whose availability is unknown
+        and bars not yet confirmed complete - because those are acquisition
+        failures rather than the source's own absent values.
+        """
         features = self.features_for(target_ms, mode=mode, freeze_ns=freeze_ns)
         missing = [name for name in FEATURE_COLUMNS if features.get(name) is None]
+        streams = {"candles_15m": self.candles_15m, "candles_1h": self.candles_1h,
+                   "funding": self.funding}
         return {
             "target_ms": int(target_ms),
             "mode": mode,
+            "anchors": self.anchors(target_ms),
             "missing_columns": missing,
-            "candles_15m_retained": len(self.candles_15m.rows),
-            "candles_1h_retained": len(self.candles_1h.rows),
-            "funding_retained": len(self.funding.rows),
+            "retained": {name: len(s.versions) for name, s in streams.items()},
+            "versions_retained": {
+                name: sum(len(v) for v in s.versions.values()) for name, s in streams.items()
+            },
             "excluded_unknown_availability": sum(
-                getattr(s, "excluded_unknown", 0)
-                for s in (self.candles_15m, self.candles_1h, self.funding)
+                getattr(s, "excluded_unknown", 0) for s in streams.values()
             ),
-            "valid": not missing,
+            "excluded_not_confirmed_final": sum(
+                getattr(s, "excluded_partial", 0) for s in streams.values()
+            ),
         }
+
+    #: Retained name; the report is evidence, not a verdict.
+    validity = input_coverage
 
     def build_target(self, target_ms: int, *, mode: str = HISTORICAL,
                      freeze_ns: int | None = None) -> tuple[dict[str, float | None], dict[str, Any]]:

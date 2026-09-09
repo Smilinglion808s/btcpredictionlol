@@ -408,22 +408,65 @@ class VenueBuffer:
     #: Half-open [start_ns, end_ns) intervals of receipt-clock time during which
     #: this feed was known to be down. Recorded by the collector, never guessed.
     gaps: list[tuple[int, int]] = field(default_factory=list)
-    #: Oldest event time this buffer can legitimately claim to cover.
-    coverage_start_us: int | None = None
+    #: Half-open [start_us, end_us) EVENT-time intervals the acquisition can
+    #: PROVE it enumerated: a websocket session between connect and disconnect,
+    #: a completed REST pagination sweep, or a publisher daily archive. This is
+    #: evidence supplied by the collector, never inferred from the events on
+    #: hand — a single ancient trade says nothing about whether the tape either
+    #: side of it was captured.
+    coverage: list[tuple[int, int, str]] = field(default_factory=list)
+    #: Identical duplicates whose availability was merged, and duplicates whose
+    #: economic fields disagreed (quarantined, never overwritten).
+    merged_duplicates: int = 0
+    conflicts: list[dict[str, Any]] = field(default_factory=list)
     excluded_unknown_availability: int = 0
+
+    #: The fields that identify the trade itself. Availability and provenance
+    #: are metadata about DELIVERY and are merged; these are not.
+    ECONOMIC_FIELDS = ("ts_us", "price", "quantity", "underlying_n", "signed", "quote")
 
     # -- ingestion ----------------------------------------------------------
     def add_event(self, event: dict[str, Any]) -> bool:
+        """Store one aggregate trade. Returns True only for a genuinely NEW id.
+
+        A repeat of an id already held is not simply dropped. The same trade
+        routinely arrives twice by different roads — an archive replay with no
+        collector clock, then the live socket, or a REST back-fill overlapping
+        the stream — and dropping the second copy unconditionally left the row
+        permanently stamped "availability unknown", so LIVE mode excluded it
+        forever even though its arrival time was later proven. So:
+
+          * identical economic fields -> merge DELIVERY metadata only. The
+            availability becomes the earliest KNOWN receipt; an unknown (-1)
+            never displaces a known one and a later replay never back-dates a
+            receipt below one already recorded from a real delivery.
+          * disagreeing economic fields -> quarantine. The stored event is left
+            untouched and the conflicting payload is recorded for reporting.
+        """
         key = int(event["agg_trade_id"])
-        if key in self.events:
+        stored = self.events.get(key)
+        if stored is None:
+            fresh = dict(event)
+            fresh.pop("agg_trade_id", None)
+            self.events[key] = fresh
+            return True
+
+        if any(stored[f] != event[f] for f in self.ECONOMIC_FIELDS):
+            self.conflicts.append({
+                "agg_trade_id": key,
+                "stored": {f: stored[f] for f in self.ECONOMIC_FIELDS},
+                "rejected": {f: event[f] for f in self.ECONOMIC_FIELDS},
+                "rejected_provenance": event.get("provenance"),
+            })
             return False
-        stored = dict(event)
-        stored.pop("agg_trade_id", None)
-        self.events[key] = stored
-        ts_us = int(event["ts_us"])
-        if self.coverage_start_us is None or ts_us < self.coverage_start_us:
-            self.coverage_start_us = ts_us
-        return True
+
+        incoming = int(event.get("receipt_ns", -1))
+        current = int(stored.get("receipt_ns", -1))
+        if incoming >= 0 and (current < 0 or incoming < current):
+            stored["receipt_ns"] = incoming
+            stored["provenance"] = event.get("provenance", stored.get("provenance"))
+        self.merged_duplicates += 1
+        return False
 
     def add_payload(self, transport: Transport, payload: dict[str, Any],
                     *, receipt_ns: int | None = None) -> bool:
@@ -436,12 +479,40 @@ class VenueBuffer:
         if end_ns > start_ns:
             self.gaps.append((int(start_ns), int(end_ns)))
 
+    def declare_coverage(self, start_us: int, end_us: int, source: str) -> None:
+        """Record PROVEN enumeration of [start_us, end_us) in event time."""
+        if end_us <= start_us:
+            return
+        merged = sorted(self.coverage + [(int(start_us), int(end_us), str(source))])
+        collapsed: list[tuple[int, int, str]] = []
+        for interval in merged:
+            if collapsed and interval[0] <= collapsed[-1][1] and interval[2] == collapsed[-1][2]:
+                previous = collapsed[-1]
+                collapsed[-1] = (previous[0], max(previous[1], interval[1]), previous[2])
+            else:
+                collapsed.append(interval)
+        self.coverage = collapsed
+
+    def covers(self, start_us: int, end_us: int) -> bool:
+        """True only when declared coverage spans ALL of [start_us, end_us)."""
+        cursor = int(start_us)
+        for a, b, _ in sorted(self.coverage):
+            if a > cursor:
+                return False
+            cursor = max(cursor, b)
+            if cursor >= int(end_us):
+                return True
+        return cursor >= int(end_us)
+
     # -- retention ----------------------------------------------------------
     def prune(self, keep_from_us: int) -> None:
         for key in [k for k, e in self.events.items() if e["ts_us"] < keep_from_us]:
             del self.events[key]
-        if self.coverage_start_us is not None:
-            self.coverage_start_us = max(self.coverage_start_us, keep_from_us)
+        self.coverage = [
+            (max(a, int(keep_from_us)), b, s)
+            for a, b, s in self.coverage
+            if b > int(keep_from_us)
+        ]
 
     # -- reading ------------------------------------------------------------
     def frame(self, *, mode: str = HISTORICAL, freeze_ns: int | None = None) -> pd.DataFrame:
@@ -479,7 +550,9 @@ class VenueBuffer:
             "venue": self.venue,
             "events": {str(k): v for k, v in self.events.items()},
             "gaps": [[a, b] for a, b in self.gaps],
-            "coverage_start_us": self.coverage_start_us,
+            "coverage": [[a, b, s] for a, b, s in self.coverage],
+            "merged_duplicates": self.merged_duplicates,
+            "conflicts": self.conflicts,
         }
 
     @classmethod
@@ -488,7 +561,9 @@ class VenueBuffer:
             venue=payload["venue"],
             events={int(k): dict(v) for k, v in (payload.get("events") or {}).items()},
             gaps=[(int(a), int(b)) for a, b in (payload.get("gaps") or [])],
-            coverage_start_us=payload.get("coverage_start_us"),
+            coverage=[(int(a), int(b), str(s)) for a, b, s in (payload.get("coverage") or [])],
+            merged_duplicates=int(payload.get("merged_duplicates", 0)),
+            conflicts=list(payload.get("conflicts") or []),
         )
 
 
@@ -546,7 +621,8 @@ class BinanceWindowAccumulator:
             if self.ingest(transport_name, p, receipt_ns=receipt_ns)
         )
 
-    def ingest_archive(self, venue: str, path: Path) -> int:
+    def ingest_archive(self, venue: str, path: Path, *,
+                       covers_us: tuple[int, int] | None = None) -> int:
         """Seed the buffer from a publisher daily archive.
 
         The archive's authentic `agg_trade_id` is preserved, so re-ingesting the
@@ -555,6 +631,11 @@ class BinanceWindowAccumulator:
         there is no collector clock in them - so `receipt_ns` stays -1 (unknown)
         and provenance is `archive`; LIVE mode then excludes these rows instead
         of pretending they were available.
+
+        A publisher daily file is a complete enumeration of one UTC day, so that
+        day is declared as proven coverage. `covers_us` overrides the declared
+        span for a partial or stitched file; the interval is never inferred from
+        the events themselves.
 
         Returns the number of NEW events stored.
         """
@@ -568,15 +649,27 @@ class BinanceWindowAccumulator:
                 "underlying_n": int(row.underlying_n), "signed": float(row.signed),
                 "quote": float(row.quote), "receipt_ns": -1, "provenance": "archive",
             })
+        if covers_us is not None:
+            buffer.declare_coverage(covers_us[0], covers_us[1], "archive")
+        elif len(raw):
+            day = 86_400_000_000
+            start = (int(raw["ts_us"].min()) // day) * day
+            buffer.declare_coverage(start, start + day, "archive")
         return added
 
     def ingest_bootstrap(self, transport_name: str, payloads: Iterable[dict[str, Any]],
-                         *, available_at_ns: int) -> int:
+                         *, available_at_ns: int,
+                         covers_us: tuple[int, int] | None = None) -> int:
         """A REST back-fill whose availability instant is KNOWN and explicit.
 
         `available_at_ns` is when the back-fill response was received, so these
         rows are legitimately usable by any freeze at or after that instant and
         by none before it. No per-event receipt time is invented.
+
+        `covers_us` is the event-time span the caller PROVED it enumerated - a
+        completed pagination sweep, not "the range the returned rows happen to
+        span". Without it the back-fill adds events but no coverage claim, and
+        the target stays un-warm rather than falsely warm.
         """
         transport = TRANSPORTS[transport_name]
         if transport.provenance != "bootstrap":
@@ -588,7 +681,14 @@ class BinanceWindowAccumulator:
             event["receipt_ns"] = int(available_at_ns)
             event["provenance"] = "bootstrap"
             added += buffer.add_event(event)
+        if covers_us is not None:
+            buffer.declare_coverage(covers_us[0], covers_us[1], "rest_pagination")
         return added
+
+    def declare_coverage(self, venue: str, start_us: int, end_us: int,
+                         source: str = "collector") -> None:
+        """Record a proven capture span, e.g. one uninterrupted socket session."""
+        self.buffers[venue].declare_coverage(start_us, end_us, source)
 
     def mark_gap(self, venue: str, start_ns: int, end_ns: int) -> None:
         self.buffers[venue].mark_gap(start_ns, end_ns)
@@ -611,48 +711,73 @@ class BinanceWindowAccumulator:
         for buffer in self.buffers.values():
             buffer.prune(floor)
 
-    # -- validity -----------------------------------------------------------
+    # -- input coverage -------------------------------------------------------
+    def window_us(self, target_us: int) -> tuple[int, int]:
+        """The ONLY event-time span this target reads: [T-900s, T+5s)."""
+        return (int(target_us) - RETENTION_US,
+                int(target_us) + max(T5_WINDOW_SECONDS) * ONE_SECOND_US)
+
     def has_history(self, target_us: int, venue: str = "spot") -> bool:
-        """True only when coverage begins at or before the 900s T0 window start.
+        """True only when PROVEN coverage spans the whole window this target reads.
 
-        This uses the buffer's recorded coverage start rather than the oldest
-        surviving event: an empty first minute is not evidence of absence, and a
-        pruned buffer must not look like a covered one.
+        Declared coverage, not the oldest surviving event: one ancient trade in
+        an otherwise sparse bootstrap is not evidence that the tape around it was
+        captured, and a pruned buffer must not look like a covered one.
         """
-        start = self.buffers[venue].coverage_start_us
-        return start is not None and start <= target_us - RETENTION_US
+        start, end = self.window_us(target_us)
+        return self.buffers[venue].covers(start, end)
 
-    def validity(self, target_us: int, *, mode: str = HISTORICAL,
-                 freeze_ns: int | None = None) -> dict[str, Any]:
-        """Feed continuity / warm-up status for exactly one target.
+    def input_coverage(self, target_us: int, *, mode: str = HISTORICAL,
+                       freeze_ns: int | None = None) -> dict[str, Any]:
+        """ACQUISITION evidence for exactly one target. Not a model gate.
 
-        No silence threshold is invented here: a feed with no trades in a window
-        is reported as such and the original no-imputation rule still applies.
-        What IS enforced is that the packet may only be called valid when the
-        source window is warm and unbroken, and when nothing needed was excluded
-        for unknown availability.
+        This reports whether the inputs this target reads were actually captured
+        and actually available; it deliberately does NOT decide whether to
+        predict. The original external-direction pipeline imputes missing
+        columns (SimpleImputer median + add_indicator), so treating "a feature
+        is NaN" as a no-call would be a new filter smuggled in under the name of
+        an unchanged model. Deciding what to do with incomplete inputs belongs
+        to the policy layer, on the original rules.
+
+        Everything here is scoped to [T-900s, T+5s) - the only events the target
+        reads. A gap or an unknown-availability event outside that span is
+        irrelevant to it and is not counted against it.
         """
-        window_start_us = target_us - RETENTION_US
-        window_end_us = target_us + max(T5_WINDOW_SECONDS) * ONE_SECOND_US
-        report: dict[str, Any] = {"target_us": target_us, "mode": mode, "venues": {}}
-        valid = True
+        window_start_us, window_end_us = self.window_us(target_us)
+        report: dict[str, Any] = {"target_us": int(target_us), "mode": mode,
+                                  "window_us": [window_start_us, window_end_us],
+                                  "venues": {}}
+        complete = True
         for venue, buffer in self.buffers.items():
             frame = buffer.frame(mode=mode, freeze_ns=freeze_ns)
+            in_window = frame.loc[
+                (frame["ts_us"] >= window_start_us) & (frame["ts_us"] < window_end_us)
+            ] if len(frame) else frame
             gaps = buffer.gap_overlaps(window_start_us * 1000, window_end_us * 1000)
-            warm = self.has_history(target_us, venue)
-            unknown = buffer.excluded_unknown_availability
-            venue_ok = warm and not gaps and (mode == HISTORICAL or unknown == 0)
-            valid = valid and venue_ok
+            covered = buffer.covers(window_start_us, window_end_us)
+            # Unknown availability only matters for events this target reads.
+            unknown_in_window = sum(
+                1 for event in buffer.events.values()
+                if int(event.get("receipt_ns", -1)) < 0
+                and window_start_us <= int(event["ts_us"]) < window_end_us
+            ) if mode == LIVE else 0
+            venue_complete = covered and not gaps and unknown_in_window == 0
+            complete = complete and venue_complete
             report["venues"][venue] = {
-                "warm": warm,
-                "coverage_start_us": buffer.coverage_start_us,
-                "events_available": int(len(frame)),
+                "coverage_proven": covered,
+                "coverage_intervals": [[a, b, s] for a, b, s in buffer.coverage],
+                "events_available_in_window": int(len(in_window)),
                 "receipt_gaps": [[a, b] for a, b in gaps],
-                "excluded_unknown_availability": unknown,
-                "valid": venue_ok,
+                "excluded_unknown_availability_in_window": unknown_in_window,
+                "merged_duplicates": buffer.merged_duplicates,
+                "conflicting_duplicates": len(buffer.conflicts),
+                "inputs_complete": venue_complete,
             }
-        report["valid"] = valid
+        report["inputs_complete"] = complete
         return report
+
+    #: Retained name; the report is acquisition evidence, not a verdict.
+    validity = input_coverage
 
     # -- features -----------------------------------------------------------
     def features_for(self, target_us: int, *, mode: str = HISTORICAL,

@@ -296,3 +296,90 @@ Still open (unchanged):
 - **T+5 cutoff vs T+5 publication.** The last legal input may arrive at
   T+4999.999 ms while publication is due at T+5000 ms. Neither rule is changed;
   the conflict is reported, and production stays fail-closed and suppressed.
+
+---
+
+## Causal producer defects repaired, and the first fitted head wired
+
+### Hyperliquid: versioned observations instead of one mutable row
+
+`_Stream` previously stored one row per bar and kept `min(previous, new)`
+availability. That back-dated revisions: a bar received partial before a freeze
+and corrected after it was read, at the old freeze, with the corrected numbers
+under the partial's timestamp. Rows are now immutable **versions**, each with
+its own receipt instant:
+
+- identical repeated payload -> earliest KNOWN receipt retained, no new version;
+- changed payload -> new version, never inheriting the earlier receipt;
+- unknown-availability payload -> its own version, invisible in LIVE, never
+  overwriting a known one;
+- selection by `(available_ns, seq)`, so an out-of-order poll response carrying
+  an older snapshot cannot displace a newer version already available;
+- **finality**: a candle version is usable in LIVE only when the source
+  confirmed it complete (`final=True`), or it was received at/after the bar's
+  own close. A bar's close timestamp alone no longer implies a previously
+  received partial is final. Not-yet-final exclusions are counted separately.
+
+### Hyperliquid: retention derived from the producers, not wall time
+
+The old 4h hourly window deleted the `shift(3)` anchor a 12:15 target needs
+(08:00, via the 11:00 bar). Retention is now positional, matching the source's
+own `rolling`/`shift`: keep every key after the stream's anchor
+(15m: `T-15m`; 1h: `T-1h`; funding: strictly `< T`) plus the newest N at or
+before it, where N is the producer's own lookback. Anchors are computed from the
+OLDEST pending target, so a pending target's inputs are never evicted. Proven
+equal to unpruned features across gaps, delayed bars and restart.
+
+### Binance: duplicate merge and proven coverage
+
+- An identical duplicate now **merges delivery metadata** — earliest known
+  receipt wins, an unknown never displaces a known one, and a later replay never
+  back-dates a receipt. An archive-first row that later arrives live becomes
+  visible to LIVE reads instead of being excluded forever.
+- A duplicate whose economic fields disagree is **quarantined and reported**,
+  never applied.
+- `coverage_start_us` (minimum event timestamp) is gone. Coverage is now
+  declared intervals of PROVEN enumeration — a publisher daily archive, a
+  completed REST pagination sweep, a socket session — so one ancient trade can
+  no longer make a sparse bootstrap look complete.
+- Gap / unknown-availability checks are scoped to `[T-900s, T+5s)`, the only
+  events a target reads.
+
+### Both producers: coverage is evidence, not a veto
+
+`validity()` returned `valid = not missing`, which would have imposed a new
+all-features-present prediction filter under the unchanged model's name. The
+original external-direction pipeline **imputes** (median + missingness
+indicator). Both producers now return `input_coverage()` — missing columns,
+acquisition gaps, unknown-availability and not-yet-final exclusions — and leave
+the call/no-call to the policy layer on the original rules.
+
+### External direction head (`src/experts/external_direction.py`)
+
+Producers -> `directional_matrix` -> the refitted original pipelines.
+
+- Fits: the six joblib artifacts from `tools/refit_external_direction.py`, which
+  reproduced the recorded `c30_c70_lab_manager_r2` selection
+  (`BINANCE_HYPERLIQUID`, `C=0.03`), metrics and feature lists exactly.
+- **Causal selection**: a target is scored only by the phase whose scheduled
+  window contains it. A target after the last window raises
+  `ExternalDirectionUnavailable` — September targets are a reported blocker, not
+  a stretched July fit.
+- Preprocessing applied whole as fitted; columns reindexed to the artifact's own
+  retained feature order; missing inputs stay NaN into the imputer.
+
+**Parity scope, stated honestly.** Derived-matrix parity is proven: 200 archived
+observation rows per stage score bit-identically to the fitted pipeline's own
+batch output. The producer wiring tests are contract tests only — the authentic
+raw samples on hand (January Binance, mid-August Hyperliquid) do not both fall
+inside one scheduled fit window, so no end-to-end raw parity is claimed.
+
+### Remaining dependencies (unchanged, plus one new)
+
+- **NEW: no fit covers current targets.** The scheduled windows end
+  2026-09-01. Live scoring needs the next scheduled refit, which needs the
+  September labels and multivenue observations.
+- Remaining leaf producers, atomic DB lease fencing, Railway durable artifact +
+  checkpoint release, restart-resume and signed-logging proof, and the
+  T+5-input / T+5-publication conflict all remain open. C85 is not live, betting
+  is suppressed, T45 is untouched.
