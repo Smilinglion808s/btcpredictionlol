@@ -111,9 +111,14 @@ def _validate_candidate(rows: pd.DataFrame, ref_path: Path, name: str,
     """Validate a stage candidate BEFORE it is committed as current.
 
     Required: the archived reference fixture exists; the declared schema is
-    present; the timestamp key is unique, sorted and on the 15-minute grid; no
-    row is at or beyond the research end (causal cutoff); and the archived
-    prefix (ts < FROZEN_END) matches the reference cell-for-cell.
+    present; the timestamp key is unique, sorted and on an *absolute*
+    quarter-hour of the UTC clock; no row is at or beyond the research end
+    (causal cutoff); and the archived prefix (ts < FROZEN_END) matches the
+    reference cell-for-cell.
+
+    A quarter-hour with no row is a real absence — an unlisted market or a
+    collection gap — so it is reported explicitly in the notes instead of being
+    treated as either an error or as coverage.
     """
     if not ref_path.exists():
         raise FileNotFoundError(
@@ -129,15 +134,28 @@ def _validate_candidate(rows: pd.DataFrame, ref_path: Path, name: str,
         raise RuntimeError(f"{name}: candidate timestamps are not chronological")
     if (ts >= end).any():
         raise RuntimeError(f"{name}: candidate contains rows at/after the research end {end}")
-    gaps = ts.diff().dropna()
-    if len(gaps) and (gaps % pd.Timedelta(minutes=15) != pd.Timedelta(0)).any():
-        raise RuntimeError(f"{name}: candidate timestamps are off the 15-minute grid")
+    off_grid = (ts.dt.minute % 15 != 0) | (ts.dt.second != 0) | (ts.dt.microsecond != 0) | (ts.dt.nanosecond != 0)
+    if bool(off_grid.any()):
+        raise RuntimeError(
+            f"{name}: {int(off_grid.sum())} timestamps are not on an absolute "
+            f"quarter-hour of the UTC clock, first={ts[off_grid].iloc[0]}")
+
     ref = pd.read_parquet(ref_path)
     ref_missing = [c for c in required if c not in ref.columns]
     if ref_missing:
         raise RuntimeError(f"{name}: reference fixture lacks required columns: {ref_missing}")
     notes: dict = {"columns": list(rows.columns), "reference": str(ref_path)}
+    clock = pd.date_range(ts.min(), ts.max(), freq="15min")
+    absent = clock.difference(pd.DatetimeIndex(ts))
+    notes["clock_quarter_hours"] = int(len(clock))
+    notes["absent_quarter_hours"] = int(len(absent))
+    if len(absent):
+        notes["absent_quarter_hour_examples"] = [str(v) for v in absent[:5]]
+        notes["absent_quarter_hour_note"] = (
+            "quarter-hours with no row: unlisted market or collection gap, "
+            "reported rather than filled")
     notes.update(_parity_check(rows, ref, "ts", name))
+
     extension = ts[ts >= FROZEN_END]
     notes["extension_rows"] = int(len(extension))
     if len(extension):
@@ -397,6 +415,61 @@ def run_r4_1(end: pd.Timestamp, previous: dict | None) -> StageResult:
         sys.path[:] = saved_path
 
 
+class _frozen_window_masks:
+    """Keep the refine producer's frozen-grid guard on its frozen window.
+
+    `htf_structure_r4_refine.main()` reproduces the archived stress-grid trade
+    count and win rate over the `later_known` split before it writes anything.
+    That expectation was computed on the frozen window (ts < FROZEN_END), so on
+    a continuation run the split must not silently grow to include September —
+    otherwise a correct extension fails the guard for covering more candles
+    rather than for computing something different. Inside this context the
+    evaluation splits that end at the research end are clamped back to
+    FROZEN_END; the guard therefore still aborts on any real difference. The
+    row ledger itself is computed per candle and is unaffected by masks. A
+    parity run is not patched at all, and the patch is removed on exit.
+    """
+
+    CLAMPED = ("later_known", "all_available", "formal_native_overlap")
+
+    def __init__(self, refine, end: pd.Timestamp):
+        self.refine = refine
+        self.end = end
+        self.record: dict = {}
+        self._original = None
+
+    def __enter__(self) -> dict:
+        if self.end <= FROZEN_END:
+            self.record = {"evaluation_splits": "unmodified (parity run)"}
+            return self.record
+        stress = self.refine.stress
+        self._original = stress.split_masks
+        original = self._original
+        clamped = self.CLAMPED
+
+        def frozen_window(frame: pd.DataFrame):
+            masks = original(frame)
+            inside = (pd.to_datetime(frame.ts, utc=True) < FROZEN_END).to_numpy()
+            for key in clamped:
+                if key in masks:
+                    masks[key] = masks[key] & inside
+            return masks
+
+        stress.split_masks = frozen_window
+        self.record = {
+            "evaluation_splits": "frozen-grid guard evaluated on ts < 2026-09-01",
+            "clamped_splits": list(clamped),
+            "reason": "archived stress-grid expectation covers the frozen window only",
+        }
+        return self.record
+
+    def __exit__(self, *exc) -> bool:
+        if self._original is not None:
+            self.refine.stress.split_masks = self._original
+            self._original = None
+        return False
+
+
 def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
     work = workspace_for("r4_1")
     _, models_patch = _load_patched_htf_models(end, work)
@@ -409,7 +482,8 @@ def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
     workspace_refine = C85ROOT / "external_research" / HTF_REFINE.name
     shutil.copy2(refine_target, workspace_refine)
     refine = load_verbatim(workspace_refine)
-    refine.main()
+    with _frozen_window_masks(refine, end) as split_record:
+        refine.main()
 
     out_csv = C85ROOT / "external_research" / "htf_structure_r3_output" / "t5_book_day4h_r4_1_rows.csv"
     rows = pd.read_csv(out_csv, parse_dates=["ts"])
@@ -417,6 +491,7 @@ def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
         rows, FIXTURES / "t5_book_day4h_r4_1_rows.parquet", "r4_1", end,
         required=R4_1_REQUIRED,
     )
+    notes["frozen_grid_guard"] = split_record
     # Only a validated candidate is committed as current.
     published = [publish(out_csv, "t5_book_day4h_r4_1_rows.csv")]
 
@@ -424,51 +499,103 @@ def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
                        patches=[models_patch.as_dict()], notes=notes)
 
 
+
 FROZEN_R4_1_PREDICTION_SHA = (
     "8fed55351f098edd75e13f6021c9101be898853f37ff99e94c6ea7b8b4734eba")
 
 
-def _install_prefix_hash_adapter(phase4, end: pd.Timestamp) -> dict:
-    """Continuation adapter for the frozen R4.1 prediction hash.
+def _establish_frozen_r4_prefix(phase4, end: pd.Timestamp) -> dict:
+    """Independently establish the archived R4.1 prefix before any hashing.
 
-    `build_frame()` hashes the WHOLE r4_prediction array against a frozen
-    digest. Appending genuine post-August rows lengthens that array, so the
-    check would reject a correct continuation for being longer, not for being
-    different. The adapter keeps the frozen guarantee exactly where it applies:
-    the digest is verified over the archived timestamp prefix (ts < FROZEN_END),
-    and any prefix mismatch still aborts. A parity run (end == FROZEN_END) is
-    untouched.
+    The frozen digest belongs to the archived timestamp keys, not to a row
+    count, so the prefix is established from the timestamps themselves: the
+    R4.1 rows the producer is about to read are matched key-for-key against the
+    archived ledger's `ts < FROZEN_END` keys, and the digest is then taken over
+    exactly that slice of the producer's own `r4_prediction` source column
+    (`prediction` in the R4.1 ledger). Any key difference, or any digest
+    difference, aborts before the stage runs.
     """
-    if end <= FROZEN_END:
-        return {"frozen_hash": "unmodified (parity run)"}
     reference = FIXTURES / "t5_hot_calibration_ledger.parquet"
     if not reference.exists():
-        raise FileNotFoundError(f"{reference}: needed to size the archived prefix")
+        raise FileNotFoundError(f"{reference}: needed to establish the archived prefix")
     ref_ts = pd.to_datetime(pd.read_parquet(reference)["ts"], utc=True)
-    prefix_rows = int((ref_ts < FROZEN_END).sum())
-    lab = phase4.lab
-    original = lab.array_sha256
-    record: dict = {"frozen_hash": "verified on archived prefix",
-                    "archived_prefix_rows": prefix_rows}
+    archived_keys = pd.DatetimeIndex(sorted(ref_ts[ref_ts < FROZEN_END]))
 
-    def prefix_aware(values):
-        array = np.asarray(values, dtype=np.int8)
-        if len(array) == prefix_rows:
-            return original(array)
-        if len(array) < prefix_rows:
-            raise RuntimeError(
-                f"r5_phase4: frame is shorter than the archived prefix "
-                f"({len(array)} < {prefix_rows}); refusing to weaken the frozen check")
-        digest = original(array[:prefix_rows])
-        if digest != FROZEN_R4_1_PREDICTION_SHA:
-            raise RuntimeError(
-                f"r5_phase4: frozen R4.1 prediction hash mismatch on the archived "
-                f"prefix: {digest}")
-        record["extension_rows"] = int(len(array) - prefix_rows)
-        return FROZEN_R4_1_PREDICTION_SHA
+    r4_rows = pd.read_csv(phase4.R4_ROWS, parse_dates=["ts"])
+    r4_ts = pd.to_datetime(r4_rows["ts"], utc=True)
+    if not r4_ts.is_monotonic_increasing or r4_ts.duplicated().any():
+        raise RuntimeError("r5_phase4: R4.1 rows are not uniquely chronological")
+    candidate_keys = pd.DatetimeIndex(r4_ts[r4_ts < FROZEN_END])
+    if not candidate_keys.equals(archived_keys):
+        raise RuntimeError(
+            "r5_phase4: R4.1 archived-prefix timestamp keys differ from the "
+            f"archived ledger (candidate={len(candidate_keys)}, "
+            f"archived={len(archived_keys)}); refusing to hash a different window")
 
-    lab.array_sha256 = prefix_aware
-    return record
+    prefix_rows = len(archived_keys)
+    prediction = r4_rows["prediction"].to_numpy(np.int8)[:prefix_rows]
+    digest = phase4.lab.array_sha256(prediction)
+    if digest != FROZEN_R4_1_PREDICTION_SHA:
+        raise RuntimeError(
+            f"r5_phase4: frozen R4.1 prediction hash mismatch on the archived prefix: {digest}")
+    return {
+        "archived_prefix_rows": prefix_rows,
+        "archived_prefix_end": str(archived_keys[-1]),
+        "timestamp_keys_identical": True,
+        "prefix_digest": digest,
+    }
+
+
+class _prefix_hash_adapter:
+    """Scoped adapter for the frozen whole-array R4.1 hash check.
+
+    `build_frame()` hashes the WHOLE `r4_prediction` array against the frozen
+    digest, so appending genuine post-August rows would fail the check for
+    being longer rather than different. Inside this context the frozen digest
+    is accepted only for the exact array whose archived prefix was already
+    verified by `_establish_frozen_r4_prefix`; every other array still gets the
+    producer's own hash. The patch is removed on exit, and a parity run
+    (`end == FROZEN_END`) is never patched at all.
+    """
+
+    def __init__(self, phase4, end: pd.Timestamp):
+        self.phase4 = phase4
+        self.end = end
+        self.record: dict = {}
+        self._original = None
+
+    def __enter__(self) -> dict:
+        if self.end <= FROZEN_END:
+            self.record = {"frozen_hash": "unmodified (parity run)"}
+            return self.record
+        established = _establish_frozen_r4_prefix(self.phase4, self.end)
+        prefix_rows = established["archived_prefix_rows"]
+        lab = self.phase4.lab
+        self._original = lab.array_sha256
+        original = self._original
+        self.record = {"frozen_hash": "verified on archived timestamp prefix", **established}
+        record = self.record
+
+        def prefix_aware(values):
+            array = np.asarray(values, dtype=np.int8)
+            if len(array) <= prefix_rows:
+                return original(array)
+            digest = original(array[:prefix_rows])
+            if digest != FROZEN_R4_1_PREDICTION_SHA:
+                raise RuntimeError(
+                    "r5_phase4: frozen R4.1 prediction hash mismatch on the "
+                    f"archived prefix: {digest}")
+            record["extension_rows"] = int(len(array) - prefix_rows)
+            return FROZEN_R4_1_PREDICTION_SHA
+
+        lab.array_sha256 = prefix_aware
+        return self.record
+
+    def __exit__(self, *exc) -> bool:
+        if self._original is not None:
+            self.phase4.lab.array_sha256 = self._original
+            self._original = None
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -486,8 +613,8 @@ def run_r5_phase4(end: pd.Timestamp, previous: dict | None) -> StageResult:
     if not phase4_target.exists() or phase4_target.read_bytes() != R5_PHASE4.read_bytes():
         shutil.copy2(R5_PHASE4, phase4_target)
     phase4 = load_verbatim(phase4_target)
-    adapter = _install_prefix_hash_adapter(phase4, end)
-    phase4.main()
+    with _prefix_hash_adapter(phase4, end) as adapter:
+        phase4.main()
 
     out_csv = phase4.OUT / "t5_hot_calibration_ledger.csv"
     rows = pd.read_csv(out_csv, parse_dates=["ts"])
@@ -500,6 +627,7 @@ def run_r5_phase4(end: pd.Timestamp, previous: dict | None) -> StageResult:
 
     return StageResult(cursor=_coverage_cursor(rows, end), rows=len(rows), outputs=published,
                        patches=[models_patch.as_dict()], notes=notes)
+
 
 
 
