@@ -110,6 +110,12 @@ export const opSchema = z.discriminatedUnion("op", [
     op: z.literal("fits.applicable"),
     as_of_utc: z.string().nullable().optional(),
   }),
+  // Private artifact transfer. The worker never holds storage credentials: it
+  // asks for a short-lived signed URL for one validated key inside one bucket.
+  z.object({ op: z.literal("artifact.download_url"), key: artifactKey, ttl_seconds: artifactTtl }),
+  z.object({ op: z.literal("artifact.upload_url"), key: artifactKey }),
+  z.object({ op: z.literal("artifact.list"), prefix: artifactPrefix, limit: z.number().int().min(1).max(200).default(100) }),
+
   z.object({
     op: z.literal("health.heartbeat"),
     readiness: z.string().max(32),
