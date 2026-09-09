@@ -483,7 +483,8 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         over = np.abs(a[both] - b[both]) > tolerance
         idx = int(np.argmax(over))
         ts = pd.Timestamp(merged.ts.to_numpy()[both][idx])
-        position = int(np.searchsorted(inputs["ts"].to_numpy(), ts.to_datetime64()))
+        stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
+        position = int(stamps.searchsorted(ts))
         blocks = block_starts(inputs["identity"]["rows"])
         fit_block = max([s for s in blocks if s <= position], default=None)
         first_divergence = {"ts": str(ts), "position": position,
