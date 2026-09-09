@@ -213,14 +213,12 @@ class ExternalDirectionModel:
                 if classes != [int(c) for c in entry["classes"]]:
                     problems.append(f"class labels {classes} != manifest {entry['classes']}")
                 model = blob["pipeline"].named_steps["model"]
-                if model.coef_.shape[1] != len(blob["features"]) + sum(
-                    blob["pipeline"].named_steps["imputer"].indicator_.features_.shape
-                ) * 0 + (
-                    len(blob["pipeline"].named_steps["imputer"].indicator_.features_)
-                ):
+                if int(model.coef_.shape[1]) != int(model.n_features_in_):
+                    problems.append("coefficient width does not match the fitted input width")
+                if int(model.n_features_in_) < len(blob["features"]):
                     problems.append(
-                        f"coefficient width {model.coef_.shape[1]} is inconsistent with "
-                        f"{len(blob['features'])} features plus its missingness indicators"
+                        f"fitted input width {model.n_features_in_} is smaller than the "
+                        f"{len(blob['features'])} retained features"
                     )
                 for field in ("train_end", "scores_from", "scores_until"):
                     if pd.Timestamp(blob[field]) != pd.Timestamp(entry[field]):
