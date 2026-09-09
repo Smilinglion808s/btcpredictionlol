@@ -345,6 +345,13 @@ class TrainingSnapshot:
     relevant training input changes (a new row, a newly settled or corrected
     label, a schema change), the digest changes and the staged fit is stale: it
     is rejected and rebuilt off the timed path rather than silently activated.
+
+    ``complete`` is the eligibility gate. The boundary's entitled window is
+    ``[window_first_position, position)``; the snapshot is complete only when
+    every one of those positions is retained AND resolved - resolved meaning
+    either a settled in-domain label or an *evidenced* original source gap. A
+    label that has merely not arrived yet leaves the snapshot incomplete, and
+    an incomplete snapshot may not be fitted or certified "no fit".
     """
 
     position: int
@@ -356,6 +363,17 @@ class TrainingSnapshot:
     label_watermark: str | None
     unsettled_positions: int
     schema_digest: str
+    # Full-window evidence and provenance, all bound into ``digest``.
+    window_first_position: int
+    window_last_position: int
+    expected_positions: int
+    retained_positions: int
+    resolved_positions: int
+    missing_source_positions: int
+    push_positions: int
+    unresolved_positions: tuple[int, ...]
+    provenance_digest: str
+    complete: bool
     digest: str
 
 
