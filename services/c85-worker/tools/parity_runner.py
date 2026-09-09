@@ -55,6 +55,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from src.experts import direction_contract as dc  # noqa: E402
 from src.experts import long_context as lc  # noqa: E402
 
 CKPT_NPZ = "parity_ckpt.npz"
@@ -346,73 +347,217 @@ def run(frame_path: Path, state: Path, *, restart: bool = False,
 
 
 # -- comparison -------------------------------------------------------------
-def compare(frame_path: Path, state: Path, ledger_path: Path,
-            *, tolerance: float = TOLERANCE) -> dict[str, Any]:
-    """Compare rebuilt probabilities against the archived ledger.
+class ParityComparisonRefused(RuntimeError):
+    """The comparison inputs are not trustworthy, so no numbers are produced."""
 
-    Probability parity only. Direction and rank are NOT recomputed here: their
-    policy belongs to the recovered exact producers, and a threshold guess is
-    not the original rule.
+
+def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]]:
+    """Adapter for a collector-format generation written by the legacy runner.
+
+    The legacy metadata carries a SMALLER identity (rows, features, schema,
+    labels, a 4 MiB-prefix input hash, grid and HGB parameters). It is validated
+    on ITS OWN terms - the manifest digests, the recorded probability-prefix
+    digest recomputed from the array, shape/dtype, no scores beyond the block -
+    plus every legacy identity field that has a hardened equivalent. Nothing is
+    forged into the hardened schema and no hardened check is weakened: a legacy
+    generation is only ever accepted for READ-ONLY comparison, never for resume.
+    """
+
+    def legacy_sha(array: np.ndarray) -> str:
+        """The LEGACY digest definition: raw contiguous bytes, no shape prefix."""
+
+        return sha_bytes(np.ascontiguousarray(array).tobytes())
+
+    manifest = json.loads((generation / "MANIFEST.json").read_text())
+    problems = []
+    for name, entry in manifest["files"].items():
+        blob = (generation / name).read_bytes()
+        if len(blob) != entry["bytes"] or sha_bytes(blob) != entry["sha256"]:
+            problems.append(f"manifest:{name}")
+    meta = json.loads((generation / CKPT_META).read_text())
+    probability = np.load(generation / CKPT_NPZ)["probability"]
+    identity, legacy = inputs["identity"], meta.get("identity", {})
+
+    for key, value in (("rows", identity["rows"]), ("features", identity["features"]),
+                       ("schema_hash", identity["schema_hash"]),
+                       ("label_hash", legacy_sha(inputs["label"])),
+                       ("input_hash", sha_bytes(
+                           np.ascontiguousarray(inputs["x"]).tobytes()[:1 << 22]
+                           + str(inputs["x"].shape).encode())),
+                       ("hgb_params", identity["hgb_params"])):
+        if legacy.get(key) != value:
+            problems.append(f"legacy_identity:{key}")
+    for key, value in identity["grid"].items():
+        if legacy.get(key) != value:
+            problems.append(f"legacy_identity:{key}")
+    if probability.shape != (identity["rows"],) or probability.dtype != np.float64:
+        problems.append(f"shape/dtype:{probability.shape}/{probability.dtype}")
+
+    blocks = block_starts(identity["rows"])
+    index = int(meta["next_block_index"])
+    end = blocks[index] if index < len(blocks) else identity["rows"]
+    if legacy_sha(probability[:end]) != meta.get("probability_prefix_sha256"):
+        problems.append("probability_prefix_sha256")
+    trailing = int(np.isfinite(probability[end:]).sum())
+    if trailing:
+        problems.append(f"probability_beyond_checkpoint:{trailing}")
+    if problems:
+        raise ParityComparisonRefused(
+            f"legacy generation {generation.name} failed validation: {problems}")
+    return probability, {
+        "source": "legacy_collector_generation",
+        "generation": generation.name,
+        "next_block_index": index,
+        "processed_end_exclusive": end,
+        "block_start": meta.get("block_start"),
+        "block_ts": meta.get("block_ts"),
+        "fit_count": meta.get("fit_count"),
+        "last_fit_block": meta.get("last_fit_block"),
+        "of_blocks": len(blocks),
+        "legacy_input_hash_note": ("legacy input_hash covers only the first 4 MiB; "
+                                   "the full-frame hash of the current inputs is "
+                                   "recorded separately in this report"),
+    }
+
+
+def compare(frame_path: Path, state: Path, ledger_path: Path,
+            *, tolerance: float = TOLERANCE, legacy: bool = False) -> dict[str, Any]:
+    """Compare the COMPLETED probability prefix against the archived ledger.
+
+    Only positions ``[0, processed_end)`` are compared, end exclusive: the
+    unprocessed suffix is not evidence and is never counted as a finite-mask
+    mismatch. Rows the model legitimately left NaN inside the processed prefix
+    ARE included. Direction and rank come from the recovered exact producers in
+    ``direction_contract`` and are computed over the full original probability
+    prefix BEFORE any join, so rank warm-up and positional NaN slots are the
+    original ones.
+
+    Refuses outright on an invalid checkpoint or duplicate join keys.
     """
 
     inputs = load_inputs(frame_path)
-    verdict = validate_checkpoint(state, inputs)
-    probability, meta = read_checkpoint(state)
-    blocks = block_starts(inputs["identity"]["rows"])
-    complete_walk = int(meta["next_block_index"]) >= len(blocks)
+    if legacy:
+        probability, source = load_legacy_generation(state, inputs)
+        verdict = {"resumable": None, "problems": [], **source}
+    else:
+        verdict = validate_checkpoint(state, inputs)
+        if not verdict["resumable"]:
+            raise ParityComparisonRefused(
+                f"checkpoint at {state} is invalid: {verdict['problems']}")
+        probability, meta = read_checkpoint(state)
+        blocks = block_starts(inputs["identity"]["rows"])
+        index = int(meta["next_block_index"])
+        verdict = dict(verdict, source="hardened_runner_state",
+                       processed_end_exclusive=(blocks[index] if index < len(blocks)
+                                                else inputs["identity"]["rows"]))
+    end = int(verdict["processed_end_exclusive"])
+    complete_walk = int(verdict["next_block_index"]) >= int(verdict["of_blocks"])
 
-    rebuilt = pd.DataFrame({"ts": inputs["ts"], "probability": probability})
+    # Direction and rank over the ORIGINAL full prefix, before any subsetting.
+    prefix = probability[:end]
+    direction = dc.signed_direction(prefix)
+    rank = dc.rolling_rank(prefix)
+
+    rebuilt = pd.DataFrame({
+        "ts": inputs["ts"][:end], "probability": prefix,
+        "rebuilt_direction": direction, "rebuilt_rank": rank,
+    })
     archived = pd.read_csv(ledger_path)
     archived["ts"] = pd.to_datetime(archived.ts, utc=True)
 
     dup_arch = int(archived.ts.duplicated().sum())
     dup_reb = int(rebuilt.ts.duplicated().sum())
+    if dup_arch or dup_reb:
+        raise ParityComparisonRefused(
+            f"duplicate join keys: archived={dup_arch}, rebuilt={dup_reb}")
+
     merged = archived.merge(rebuilt, on="ts", how="inner")
     a = merged.external_probability_green.to_numpy(float)
     b = merged.probability.to_numpy(float)
     both = np.isfinite(a) & np.isfinite(b)
     diff = np.abs(a[both] - b[both]) if both.any() else np.array([])
+    mask_mismatches = int((np.isfinite(a) != np.isfinite(b)).sum())
 
     first_divergence = None
     if diff.size and diff.max() > tolerance:
-        idx = int(np.argmax(np.abs(a[both] - b[both]) > tolerance))
-        ts = merged.ts.to_numpy()[both][idx]
-        first_divergence = {"ts": str(ts), "archived": float(a[both][idx]),
-                            "rebuilt": float(b[both][idx])}
+        over = np.abs(a[both] - b[both]) > tolerance
+        idx = int(np.argmax(over))
+        ts = pd.Timestamp(merged.ts.to_numpy()[both][idx])
+        stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
+        position = int(stamps.searchsorted(ts))
+        blocks = block_starts(inputs["identity"]["rows"])
+        fit_block = max([s for s in blocks if s <= position], default=None)
+        first_divergence = {"ts": str(ts), "position": position,
+                            "fit_block_start": fit_block,
+                            "archived": float(a[both][idx]),
+                            "rebuilt": float(b[both][idx]),
+                            "abs_diff": float(diff[over][0])}
 
+    # Direction / rank, reported separately and never mixed into probability parity.
+    arch_dir = merged.external_direction.to_numpy(float)
+    dir_mask = both & np.isfinite(arch_dir)
+    arch_rank = merged.external_rank.to_numpy(float)
+    reb_rank = merged.rebuilt_rank.to_numpy(float)
+    rank_both = np.isfinite(arch_rank) & np.isfinite(reb_rank)
+    rank_diff = np.abs(arch_rank[rank_both] - reb_rank[rank_both]) if rank_both.any() \
+        else np.array([])
+
+    probability_ok = (mask_mismatches == 0 and diff.size > 0
+                      and float(diff.max()) <= tolerance)
     lo, hi = archived.ts.min(), archived.ts.max()
     window = rebuilt[(rebuilt.ts >= lo) & (rebuilt.ts <= hi)]
+    if not complete_walk:
+        status = "PARTIAL AGREEMENT" if probability_ok else "PARTIAL MISMATCH"
+    else:
+        status = "FULL PARITY" if probability_ok else "PARITY FAILED"
     return {
+        "status": status,
         "walk_complete": complete_walk,
-        "checkpoint": {k: verdict[k] for k in
-                       ("resumable", "problems", "next_block_index", "of_blocks",
-                        "block_ts", "fit_count", "generation")},
+        "partial": not complete_walk,
+        "checkpoint": verdict,
+        "processed_prefix_rows_end_exclusive": end,
+        "processed_first_ts": str(inputs["ts"].iloc[0]),
+        "processed_last_ts": str(inputs["ts"].iloc[end - 1]),
         "ledger": str(ledger_path),
         "ledger_sha256": sha_file(ledger_path),
         "identity": inputs["identity"],
         "overlap_first_ts": str(merged.ts.min()) if len(merged) else None,
         "overlap_last_ts": str(merged.ts.max()) if len(merged) else None,
         "archived_rows": int(len(archived)),
-        "rebuilt_rows_in_window": int(len(window)),
+        "rebuilt_rows_in_processed_window": int(len(window)),
         "overlap_rows": int(len(merged)),
         "duplicate_keys_archived": dup_arch,
         "duplicate_keys_rebuilt": dup_reb,
-        "missing_in_rebuilt": int(len(archived) - len(merged)),
+        "archived_rows_outside_processed_prefix": int(len(archived) - len(merged)),
         "extra_in_rebuilt": int(len(window) - len(merged)),
         "archived_finite": int(np.isfinite(a).sum()),
         "rebuilt_finite": int(np.isfinite(b).sum()),
-        "finite_mask_mismatches": int((np.isfinite(a) != np.isfinite(b)).sum()),
+        "finite_mask_mismatches": mask_mismatches,
         "compared": int(both.sum()),
         "tolerance": tolerance,
         "max_abs_diff": float(diff.max()) if diff.size else None,
         "mean_abs_diff": float(diff.mean()) if diff.size else None,
         "exceed_tolerance": int((diff > tolerance).sum()) if diff.size else None,
         "first_divergence": first_divergence,
-        "direction_policy": ("NOT EVALUATED HERE: direction and rank come from the "
-                             "recovered exact producers (direction_contract), not "
-                             "from a probability threshold guess"),
+        "direction": {
+            "policy": "direction_contract.signed_direction (p >= 0.5 -> +1, else -1)",
+            "compared": int(dir_mask.sum()),
+            "mismatches": int((np.sign(arch_dir[dir_mask])
+                               != merged.rebuilt_direction.to_numpy()[dir_mask]).sum()),
+        },
+        "rank": {
+            "policy": (f"direction_contract.rolling_rank (lookback {dc.RANK_LOOKBACK} "
+                       f"rows, minimum {dc.RANK_MINIMUM}, ties half, past only)"),
+            "archived_finite": int(np.isfinite(arch_rank).sum()),
+            "rebuilt_finite": int(np.isfinite(reb_rank).sum()),
+            "finite_mask_mismatches": int((np.isfinite(arch_rank)
+                                           != np.isfinite(reb_rank)).sum()),
+            "compared": int(rank_both.sum()),
+            "max_abs_diff": float(rank_diff.max()) if rank_diff.size else None,
+        },
         "kind": "historical replay parity, not forward testing",
     }
+
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -424,6 +569,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--max-blocks", type=int)
+    parser.add_argument("--legacy", action="store_true",
+                        help="compare a collector-format legacy generation (read-only)")
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -434,12 +581,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if args.ledger is None:
             parser.error("compare needs --ledger")
-        result = compare(args.frame, args.state, args.ledger)
+        try:
+            result = compare(args.frame, args.state, args.ledger, legacy=args.legacy)
+        except ParityComparisonRefused as exc:
+            print(json.dumps({"status": "REFUSED", "reason": str(exc)}, indent=1))
+            return 2
 
     payload = json.dumps(result, indent=1, default=str)
     if args.out:
         args.out.write_text(payload)
     print(payload)
+    if args.command == "validate":
+        return 0 if result.get("resumable") else 1
+    if args.command == "compare":
+        # An incomplete diagnostic is NOT a pass, and a mask or tolerance
+        # difference never exits successfully.
+        return 0 if result["status"] == "FULL PARITY" else 1
     return 0
 
 

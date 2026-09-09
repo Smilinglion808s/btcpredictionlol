@@ -211,3 +211,34 @@ Comparison ledger lineage: `continuous_coverage_ledger.csv`, SHA-256
 `external_probability_green`. Direction and rank must come from the recovered
 exact producers in `direction_contract.py`; the legacy runner's 0.5 threshold is
 a guess and its direction output must not be reported as parity.
+
+## PARTIAL comparison against the archived ledger (read-only, prefix only)
+
+Source: verified legacy generation `gen-0029-1788927485` (next_block_index 29 of
+183, block start 8448, block ts 2026-03-30 00:15 UTC, 27 fits, processed prefix
+`[0, 8544)` end-exclusive, last processed target 2026-03-31 00:00 UTC). Report
+object: `c85-artifacts/checkpoints/long_context_parity/reports/partial_parity_gen-0029-1788927485.json`.
+
+Result: **PARTIAL MISMATCH** (never a parity pass; the walk is 29/183 complete).
+Overlap 4,997 rows 2026-02-06 23:00 to 2026-03-31 00:00, no duplicate keys.
+Archived finite 2,374, rebuilt finite 2,592, finite-mask mismatches 218, compared
+2,374, all 2,374 above the 1e-9 tolerance, max |diff| 0.0472, mean 0.0098,
+correlation 0.955. First divergence 2026-03-05 00:15 UTC, position 6048, fit
+block 6048 - the archive's FIRST scored row.
+
+Direction and rank were computed with the recovered exact producers
+(`direction_contract.signed_direction`, `rolling_rank` at 2880/960 ties-half)
+over the full original probability prefix BEFORE the join: 202 direction
+differences out of 2,374; rank finite 1,414 archived vs 1,632 rebuilt, 218 mask
+differences, max rank difference 0.991. These follow from the probability
+difference and are reported separately, not as independent failures.
+
+Localisation (no tuning, no second run): the rebuilt walk fits first at position
+5952 (2026-03-04 00:15 UTC) with 5,854 eligible training rows against a 5,760
+minimum; the archive's first score is one block later, so its eligible set at
+5952 was below the minimum - at least ~95 rows the rebuilt frame admits are
+missing or PUSH in the original. The walk itself matches transcribed
+`walk_forward_probability` exactly, so the divergence is in the FEATURE FRAME,
+consistent with the still-unexplained feature pickle hash difference. Next
+evidence to gather: per-column missingness of the original frame versus the
+rebuilt frame over positions 0-5952.

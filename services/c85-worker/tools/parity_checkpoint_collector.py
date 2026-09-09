@@ -325,7 +325,8 @@ def upload_pointer(generation: Path, *, prefix: str = PREFIX) -> dict[str, Any]:
     previous = None
     url = f"{base}/storage/v1/object/{BUCKET}/{prefix}/LATEST.json"
     try:
-        with urllib.request.urlopen(_request("GET", url, key), timeout=120) as r:
+        with urllib.request.urlopen(
+                _request("GET", f"{url}?_={int(time.time() * 1000)}", key), timeout=120) as r:
             previous = json.loads(r.read())
     except urllib.error.HTTPError:
         previous = None
@@ -339,9 +340,16 @@ def upload_pointer(generation: Path, *, prefix: str = PREFIX) -> dict[str, Any]:
         "previous_generation": None if previous is None else previous.get("generation"),
         "advanced_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }, indent=1).encode()
-    with urllib.request.urlopen(_request("POST", url, key, payload), timeout=120) as r:
-        status = r.status
-    with urllib.request.urlopen(_request("GET", url, key), timeout=120) as r:
+    try:
+        with urllib.request.urlopen(_request("POST", url, key, payload), timeout=120) as r:
+            status = r.status
+    except urllib.error.HTTPError:
+        # the pointer already exists: replacing it is an update, not a create
+        with urllib.request.urlopen(_request("PUT", url, key, payload), timeout=120) as r:
+            status = r.status
+    # cache-busted read-back: the object CDN may still hold the previous pointer
+    bust = f"{url}?_={int(time.time() * 1000)}"
+    with urllib.request.urlopen(_request("GET", bust, key), timeout=120) as r:
         readback = json.loads(r.read())
     return {"status": str(status), "pointer": readback,
             "verified": readback["generation"] == generation.name}
