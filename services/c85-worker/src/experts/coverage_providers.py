@@ -41,27 +41,45 @@ class CoverageControlProvider:
         )
         self.restored = False
         self.restore_error: str | None = None
+        self.corrupt = False
         if self.state_path.exists():
             try:
                 self.producer = CoverageControlProducer.restore(self.state_path)
                 self.restored = True
             except Exception as exc:  # noqa: BLE001 - surfaced, never swallowed
+                # An existing state file that cannot be restored means the
+                # producer's history is unknown, NOT absent. Starting a cold
+                # producer here would silently reset every rolling window and
+                # rank series, so the provider refuses to advance until the
+                # state is verifiably restored or explicitly removed.
                 self.restore_error = f"{type(exc).__name__}: {exc}"
-                self.producer = CoverageControlProducer()
+                self.corrupt = True
+                self.producer = None  # type: ignore[assignment]
         else:
             self.producer = CoverageControlProducer()
         self.last: dict[str, Any] | None = None
+
+    def _require_producer(self) -> CoverageControlProducer:
+        if self.corrupt or self.producer is None:
+            raise ExpertUnavailable(
+                "C85_COVERAGE_CORRUPT_STATE: refusing to advance from an "
+                f"unverified state at {self.state_path}: {self.restore_error}"
+            )
+        return self.producer
+
 
     # ------------------------------------------------------------------ run
     def observe(self, row: dict[str, Any], *, persist: bool = True) -> dict[str, Any]:
         """Score ONE chronological target and persist the advanced state."""
 
-        scored = self.producer.observe(row)
+        producer = self._require_producer()
+        scored = producer.observe(row)
         self.last = scored
         if persist:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
-            self.producer.save(self.state_path)
+            producer.save(self.state_path)
         return scored
+
 
     def call(self, coverage_tag: str = "cov30") -> ExpertCall:
         """The control-branch call for the most recently observed target."""
@@ -95,6 +113,16 @@ class CoverageControlProvider:
 
     # --------------------------------------------------------------- status
     def status(self) -> dict[str, Any]:
+        if self.corrupt or self.producer is None:
+            return {
+                "provider": NAME,
+                "kind": "precursor",
+                "state_path": str(self.state_path),
+                "state_restored": False,
+                "restore_error": self.restore_error,
+                "usable": False,
+                "reason": "C85_COVERAGE_CORRUPT_STATE",
+            }
         controllers = {
             tag: {"threshold": c.threshold, "opportunities_seen": c.seen}
             for tag, c in self.producer.controllers.items()
@@ -112,9 +140,11 @@ class CoverageControlProvider:
             "state_path": str(self.state_path),
             "state_restored": self.restored,
             "restore_error": self.restore_error,
+            "usable": True,
             "cursor": self.producer.cursor,
             "targets_processed": self.producer.processed,
             "controllers": controllers,
+
             "not_covered": [
                 "C30 SELECTED_EXTERNAL_BLEND dual-score heads",
                 "C30 fee-0.10 hot calibration policy",
