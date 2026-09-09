@@ -77,7 +77,12 @@ class Worker:
         # Live packet production from the running collectors and the ported
         # ancestor chain. It fails closed and names every remaining producer,
         # rather than pretending an input exists.
-        self.packet_source = LivePacketSource(feeds=self.feeds, experts=self.experts)
+        # The artifact store is REQUIRED here: the packet source scores the C71
+        # direction heads and the monthly auxiliary bundles out of it. Omitting
+        # it silently produced packets with no meta/auxiliary columns.
+        self.packet_source = LivePacketSource(
+            feeds=self.feeds, experts=self.experts, artifacts=self.artifacts
+        )
         self.ticker_resolver = KalshiTickerResolver(
             self.settings.kalshi_series, self._fetch_market_metadata
         )
