@@ -183,3 +183,31 @@ immutable captured row set whose digest it certifies, so a label settling during
 the fit cannot change what the model saw. `scheduling_conflict()` reports the
 measured conflict (the final entitled label publishes at the boundary itself)
 rather than shortening the original schedule.
+
+## Hardened parity runner and durable generations (this stage)
+
+`tools/parity_runner.py` (git-tracked) is the runner to use for any future run or
+restart. Resume identity binds the full frame SHA, complete feature values with
+shape, ordered timestamps, completeness mask, labels, schema, HGB parameters,
+WINDOW/MINIMUM/REFIT_EVERY, `long_context.py` SHA and runtime versions; the
+probability array's shape, dtype, full digest and prefix digest are re-verified
+before any resume, and probabilities beyond the recorded block are rejected.
+Threads are pinned before NumPy/sklearn import. A restart is never silent: it
+requires `--restart`. Models are NOT serialised — recovery refits the eligible
+window; `tests/test_parity_runner.py` proves a verified resume reproduces an
+uninterrupted run bit-for-bit (10 tests).
+
+Durable generations live under `c85-artifacts/checkpoints/long_context_parity/`.
+Each generation is immutable (per-file objects plus MANIFEST written last) and
+the mutable `LATEST.json` pointer advances only after the generation has been
+downloaded back and verified. Verified generations: `gen-0017-1788926294`
+(block 17, 15 fits, 1,440 scored) and `gen-0025-1788927188` (block 25, 23 fits,
+2,208 scored); both re-downloaded, manifest/prefix/full digests match, no
+probability beyond the checkpoint. Earlier generations are never deleted.
+
+Comparison ledger lineage: `continuous_coverage_ledger.csv`, SHA-256
+`564bff1465d13b2f74d61ab5b5e4a17af7726fd503b8ea968d31fc502f17005e`, 19,780 rows,
+2026-02-06 23:00 to 2026-08-31 23:45 UTC, no duplicate timestamps, 16,845 finite
+`external_probability_green`. Direction and rank must come from the recovered
+exact producers in `direction_contract.py`; the legacy runner's 0.5 threshold is
+a guess and its direction output must not be reported as parity.
