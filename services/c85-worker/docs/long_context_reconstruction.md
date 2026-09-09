@@ -242,3 +242,29 @@ missing or PUSH in the original. The walk itself matches transcribed
 consistent with the still-unexplained feature pickle hash difference. Next
 evidence to gather: per-column missingness of the original frame versus the
 rebuilt frame over positions 0-5952.
+
+## 2026-09-09 — probability lineage (NO-FIT check)
+
+`continuous_coverage_ledger.external_probability_green` traces to
+`net_monthly_waterfall_r1.py::main`, which writes
+`net_monthly_r1_output/t0_long_context_full_predictions.csv` from
+`long_context_model.model_specs(...)[freeze["selected_head"]]` -> `fit_head`.
+That immediate file is absent from every recovered archive; the two archived
+copies of the coverage ledger and `net_monthly_final_selected_ledger.csv`
+carry byte-identical probabilities (19,600 overlapping rows, 16,665 jointly
+finite, max |d| = 0.0), so there is a single producer and no downstream
+post-processing to explain the divergence.
+
+The frozen head is `ALL_HGB` / policy `ALL_HGB::CONF_GLOBAL_Q25`, retain 0.25,
+324 features, timing 17280/5760/96 with rank 2880/960 — matching the
+transcription. The freeze also records
+`external_features_sha256 = 8618768f...` and `first_fit_ts 2026-03-02T00:15Z`,
+while the rebuilt frame hashes `93b99a13...` and first becomes eligible at
+2026-03-05T00:15Z (exactly 288 positions later). Cause remains the input
+frame, not the head selection.
+
+Record correction: the single-block experiment preserved only its summary
+JSON. Its per-row probability arrays and its runner script lived in `/tmp` and
+were lost to a sandbox reset; only `orig_probs_sha`/`trans_probs_sha` survive.
+Evidence objects:
+`c85-artifacts/reports/probability_lineage_2026-09-09/` (readback verified).
