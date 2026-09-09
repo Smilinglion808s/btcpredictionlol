@@ -58,7 +58,7 @@ def test_a_mis_declared_unit_is_rejected_not_silently_shifted():
 
 
 # -- schema strictness ------------------------------------------------------
-@pytest.mark.parametrize("bad", ["0", 0, 1, None, "yes", "False "])
+@pytest.mark.parametrize("bad", ["0", 0, 1, None, "yes", "true_"])
 def test_malformed_booleans_are_rejected_rather_than_truthy(bad):
     """`bool('false')` is True in Python; a side must never be decided that way."""
     with pytest.raises(TransportError):
