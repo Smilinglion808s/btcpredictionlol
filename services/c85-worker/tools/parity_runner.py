@@ -136,6 +136,7 @@ def load_inputs(frame_path: Path, *, prepare: bool = True) -> dict[str, Any]:
     identity = {
         "frame_path": str(frame_path),
         "frame_sha256": sha_file(frame_path),
+        "prepared": bool(prepare),
         "rows": int(len(frame)),
         "features": len(features),
         "schema_hash": sha_bytes("\n".join(features).encode()),
@@ -156,7 +157,7 @@ def load_inputs(frame_path: Path, *, prepare: bool = True) -> dict[str, Any]:
 
 
 IDENTITY_FIELDS = (
-    "frame_sha256", "rows", "features", "schema_hash", "input_hash_full",
+    "frame_sha256", "prepared", "rows", "features", "schema_hash", "input_hash_full",
     "timestamp_hash", "complete_mask_hash", "label_hash", "hgb_params", "grid",
     "long_context_sha256", "runtime",
 )
@@ -432,7 +433,8 @@ def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np
 
 
 def compare(frame_path: Path, state: Path, ledger_path: Path,
-            *, tolerance: float = TOLERANCE, legacy: bool = False) -> dict[str, Any]:
+            *, tolerance: float = TOLERANCE, legacy: bool = False,
+            prepare: bool = True) -> dict[str, Any]:
     """Compare the COMPLETED probability prefix against the archived ledger.
 
     Only positions ``[0, processed_end)`` are compared, end exclusive: the
@@ -446,7 +448,7 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
     Refuses outright on an invalid checkpoint or duplicate join keys.
     """
 
-    inputs = load_inputs(frame_path)
+    inputs = load_inputs(frame_path, prepare=prepare)
     if legacy:
         probability, source = load_legacy_generation(state, inputs)
         verdict = {"resumable": None, "problems": [], **source}
@@ -643,20 +645,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--max-blocks", type=int)
+    parser.add_argument("--no-prepare", action="store_true",
+                        help="read the raw derived frame (pre-recovery diagnostic only)")
     parser.add_argument("--legacy", action="store_true",
                         help="compare a collector-format legacy generation (read-only)")
     args = parser.parse_args(argv)
 
     if args.command == "run":
         result = run(args.frame, args.state, restart=args.restart,
-                     max_blocks=args.max_blocks)
+                     max_blocks=args.max_blocks, prepare=not args.no_prepare)
     elif args.command == "validate":
-        result = validate_checkpoint(args.state, load_inputs(args.frame))
+        result = validate_checkpoint(
+            args.state, load_inputs(args.frame, prepare=not args.no_prepare))
     else:
         if args.ledger is None:
             parser.error("compare needs --ledger")
         try:
-            result = compare(args.frame, args.state, args.ledger, legacy=args.legacy)
+            result = compare(args.frame, args.state, args.ledger,
+                             legacy=args.legacy, prepare=not args.no_prepare)
         except ParityComparisonRefused as exc:
             print(json.dumps({"status": "REFUSED", "reason": str(exc)}, indent=1))
             return 2
