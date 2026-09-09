@@ -772,6 +772,112 @@ class LongContextHead:
         return update.commit()
 
     # -- fitting (off the serving path) -------------------------------------
+    def _capture(self, position: int) -> tuple[tuple[_Row, ...], TrainingSnapshot]:
+        """Capture the boundary's rows ONCE and describe exactly those rows.
+
+        The returned rows are immutable copies. The fit is produced from this
+        captured tuple and the digest certifies the same tuple, so a label that
+        settles between describing and fitting cannot produce a model whose
+        certified snapshot is not the data it saw.
+        """
+
+        import hashlib
+
+        captured = tuple(
+            _Row(r.ts, np.array(r.values, dtype=float, copy=True), r.complete, r.label, r.pos)
+            for r in self.buffer
+        )
+        window_first = max(0, position - WINDOW)
+        window_last = position - 1
+        expected = max(0, position - window_first)
+        retained = [r for r in captured if window_first <= r.pos <= window_last]
+        resolved, unresolved, missing_source, push = [], [], 0, 0
+        for r in retained:
+            if r.ts in self._missing_labels:
+                missing_source += 1
+                resolved.append(r)
+            elif np.isfinite(r.label):
+                resolved.append(r)
+                if r.label == 0:
+                    push += 1
+            else:
+                unresolved.append(r.pos)
+        # Positions inside the entitled window that are not retained at all.
+        held = {r.pos for r in retained}
+        gaps = [p for p in range(window_first, position) if p not in held]
+        unresolved_all = tuple(sorted(unresolved + gaps))
+
+        rows = tuple(r for r in retained
+                     if r.complete and np.isfinite(r.label) and r.label != 0)
+        schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
+        provenance = hashlib.sha256()
+        for r in retained:
+            stamp = (self._label_available_at.get(r.ts)
+                     or self._missing_labels.get(r.ts) or "UNRESOLVED")
+            provenance.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|{stamp}\n".encode())
+        provenance_digest = provenance.hexdigest()
+
+        complete = not unresolved_all and len(retained) == min(expected, WINDOW)
+        digest = hashlib.sha256()
+        digest.update(
+            f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}|"
+            f"{window_first}|{window_last}|{expected}|{len(retained)}|"
+            f"{len(resolved)}|{missing_source}|{push}|{int(complete)}|"
+            f"{','.join(str(p) for p in unresolved_all)}|{provenance_digest}".encode()
+        )
+        for r in rows:
+            digest.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|".encode())
+            digest.update(_payload_digest(r.values).encode())
+        settled = [r.ts for r in retained if np.isfinite(r.label)]
+        snapshot = TrainingSnapshot(
+            position=position,
+            grid_origin=(MINIMUM, REFIT_EVERY, WINDOW),
+            first_position=rows[0].pos if rows else -1,
+            last_position=rows[-1].pos if rows else -1,
+            training_rows=len(rows),
+            cutoff_ts=rows[-1].ts.isoformat() if rows else None,
+            label_watermark=max(settled).isoformat() if settled else None,
+            unsettled_positions=len(unresolved_all),
+            schema_digest=schema_digest,
+            window_first_position=window_first,
+            window_last_position=window_last,
+            expected_positions=min(expected, WINDOW),
+            retained_positions=len(retained),
+            resolved_positions=len(resolved),
+            missing_source_positions=missing_source,
+            push_positions=push,
+            unresolved_positions=unresolved_all,
+            provenance_digest=provenance_digest,
+            complete=complete,
+            digest=digest.hexdigest(),
+        )
+        return rows, snapshot
+
+    def scheduling_conflict(self, position: int | None = None) -> dict[str, Any]:
+        """Measure, never hide, the boundary's label-availability conflict.
+
+        The final row a boundary at ``P`` is entitled to is position ``P-1``,
+        whose settling candle closes exactly at the boundary timestamp. So a
+        *complete* fit for that boundary cannot begin before the boundary
+        itself: this is a property of the original schedule, not something to
+        be worked around by dropping the last label.
+        """
+
+        position = self.refit_due_at() if position is None else int(position)
+        _rows, snapshot = self._capture(position)
+        last = self.buffer[-1].ts if self.buffer else None
+        return {
+            "position": position,
+            "complete": snapshot.complete,
+            "unresolved_positions": list(snapshot.unresolved_positions),
+            "earliest_complete_fit_start": (
+                None if last is None else (last + LABEL_CANDLE).isoformat()),
+            "boundary_last_target": None if last is None else last.isoformat(),
+            "note": ("the label of the boundary's final entitled row publishes at "
+                     "that row's ts + 15m, i.e. at the boundary itself; training "
+                     "cannot start earlier without shortening the original window"),
+        }
+
     def training_snapshot(self, position: int) -> TrainingSnapshot:
         """The immutable description of what a fit for ``position`` may use.
 
