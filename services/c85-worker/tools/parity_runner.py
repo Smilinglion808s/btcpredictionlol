@@ -283,8 +283,9 @@ def fit_at(block_start: int, inputs: dict[str, Any]):
 
 
 def run(frame_path: Path, state: Path, *, restart: bool = False,
-        max_blocks: int | None = None) -> dict[str, Any]:
-    inputs = load_inputs(frame_path)
+        max_blocks: int | None = None, prepare: bool = True) -> dict[str, Any]:
+    inputs = load_inputs(frame_path, prepare=prepare)
+
     identity = inputs["identity"]
     rows = identity["rows"]
     blocks = block_starts(rows)
