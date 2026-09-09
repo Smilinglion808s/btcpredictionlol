@@ -20,13 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import CACHE, FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
+from .config import CACHE, CACHE_ROOT, FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
 from .endpatch import load_producer
 from .runner import Stage, StageResult
 
-WORKSPACE = Path(os.environ.get(
-    "C85_WORKSPACE",
-    str(Path(__file__).resolve().parents[1] / "evaluation-fixtures" / "cache" / "c85work")))
+WORKSPACE = Path(os.environ.get("C85_WORKSPACE", str(CACHE_ROOT / "c85work")))
 
 SOURCES = UPSTREAM / "ancestor" / "source"
 PRODUCERS = {

@@ -20,6 +20,7 @@ publishing on any mismatch.
 from __future__ import annotations
 
 import importlib
+import os
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
+from .config import CACHE_ROOT, FROZEN_END, RESEARCH_START, UPSTREAM, ensure_dirs
 from .endpatch import load_producer
 from .runner import Stage, StageResult
 from .stages import CACHE, VerbatimRecord, load_verbatim, publish, workspace_for
@@ -40,7 +41,10 @@ PACKET = REPO / "evaluation-fixtures" / "upstream_packet.parquet"
 
 SOURCES = UPSTREAM / "ancestor" / "source"
 LAB_C81 = UPSTREAM / "upstream" / "lab" / "c81" / "lab"
-C85ROOT = Path("/dev-server/services/c85-worker/evaluation-fixtures/cache/c85root")
+# Staging root for the recovered c85 workspace. Configurable so a sandbox
+# whose local cache is gone can restore a disposable copy from the durable
+# private `c85-artifacts` objects and point the stage at it.
+C85ROOT = Path(os.environ.get("C85_C85ROOT", str(CACHE_ROOT / "c85root")))
 
 HTF_MODELS = SOURCES / "5fa9f70f0c59" / "htf_structure_r3_models.py"
 HTF_REFINE = SOURCES / "9d85759c9f9f" / "htf_structure_r4_refine.py"
@@ -81,6 +85,69 @@ def _parity_check(new: pd.DataFrame, ref: pd.DataFrame, key: str, name: str) -> 
     if mismatches:
         raise RuntimeError(f"{name}: historical-prefix parity FAILED: {mismatches}")
     return {"archived_prefix_rows": int(len(ref_prefix)), "parity": "ok"}
+
+
+R4_1_REQUIRED = (
+    "ts", "label", "base_direction", "probability_correct", "directional_rank",
+    "active_threshold", "trailing_coverage", "prediction",
+    "frozen_t5_r2_prediction", "full_r4_prediction",
+)
+R5_REQUIRED = (
+    "ts", "expansion_selected_prediction", "r4_probability_correct",
+    "r4_directional_rank", "r4_prediction",
+)
+
+
+def _coverage_cursor(rows: pd.DataFrame, end: pd.Timestamp) -> pd.Timestamp:
+    """Cursor = the coverage actually produced, never merely the end requested."""
+    ts = pd.to_datetime(rows["ts"], utc=True)
+    if ts.empty:
+        raise RuntimeError("stage produced no rows; refusing to advance the cursor")
+    return min(end, ts.max() + pd.Timedelta(minutes=15))
+
+
+def _validate_candidate(rows: pd.DataFrame, ref_path: Path, name: str,
+                        end: pd.Timestamp, *, required: tuple[str, ...]) -> dict:
+    """Validate a stage candidate BEFORE it is committed as current.
+
+    Required: the archived reference fixture exists; the declared schema is
+    present; the timestamp key is unique, sorted and on the 15-minute grid; no
+    row is at or beyond the research end (causal cutoff); and the archived
+    prefix (ts < FROZEN_END) matches the reference cell-for-cell.
+    """
+    if not ref_path.exists():
+        raise FileNotFoundError(
+            f"{name}: required archived reference fixture missing at {ref_path}; "
+            "refusing to publish an unverified candidate")
+    missing = [c for c in required if c not in rows.columns]
+    if missing:
+        raise RuntimeError(f"{name}: candidate is missing required columns: {missing}")
+    ts = pd.to_datetime(rows["ts"], utc=True)
+    if ts.duplicated().any():
+        raise RuntimeError(f"{name}: duplicate timestamps in candidate output")
+    if not ts.is_monotonic_increasing:
+        raise RuntimeError(f"{name}: candidate timestamps are not chronological")
+    if (ts >= end).any():
+        raise RuntimeError(f"{name}: candidate contains rows at/after the research end {end}")
+    gaps = ts.diff().dropna()
+    if len(gaps) and (gaps % pd.Timedelta(minutes=15) != pd.Timedelta(0)).any():
+        raise RuntimeError(f"{name}: candidate timestamps are off the 15-minute grid")
+    ref = pd.read_parquet(ref_path)
+    ref_missing = [c for c in required if c not in ref.columns]
+    if ref_missing:
+        raise RuntimeError(f"{name}: reference fixture lacks required columns: {ref_missing}")
+    notes: dict = {"columns": list(rows.columns), "reference": str(ref_path)}
+    notes.update(_parity_check(rows, ref, "ts", name))
+    extension = ts[ts >= FROZEN_END]
+    notes["extension_rows"] = int(len(extension))
+    if len(extension):
+        notes["extension_window"] = [str(extension.min()), str(extension.max())]
+        notes["identity"] = "c85-reconstruction-r1"
+        notes["parity_scope"] = (
+            "archived prefix ts < 2026-09-01 only; extension rows are "
+            "reconstruction output with no archived counterpart")
+    return notes
+
 
 
 # --------------------------------------------------------------------------- #
@@ -346,23 +413,68 @@ def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
 
     out_csv = C85ROOT / "external_research" / "htf_structure_r3_output" / "t5_book_day4h_r4_1_rows.csv"
     rows = pd.read_csv(out_csv, parse_dates=["ts"])
+    notes = _validate_candidate(
+        rows, FIXTURES / "t5_book_day4h_r4_1_rows.parquet", "r4_1", end,
+        required=R4_1_REQUIRED,
+    )
+    # Only a validated candidate is committed as current.
     published = [publish(out_csv, "t5_book_day4h_r4_1_rows.csv")]
 
-    notes: dict = {"columns": list(rows.columns)}
-    ref_path = FIXTURES / "t5_book_day4h_r4_1_rows.parquet"
-    if ref_path.exists():
-        ref = pd.read_parquet(ref_path)
-        notes.update(_parity_check(rows, ref, "ts", "r4_1"))
-    else:
-        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
-
-    return StageResult(cursor=end, rows=len(rows), outputs=published,
+    return StageResult(cursor=_coverage_cursor(rows, end), rows=len(rows), outputs=published,
                        patches=[models_patch.as_dict()], notes=notes)
+
+
+FROZEN_R4_1_PREDICTION_SHA = (
+    "8fed55351f098edd75e13f6021c9101be898853f37ff99e94c6ea7b8b4734eba")
+
+
+def _install_prefix_hash_adapter(phase4, end: pd.Timestamp) -> dict:
+    """Continuation adapter for the frozen R4.1 prediction hash.
+
+    `build_frame()` hashes the WHOLE r4_prediction array against a frozen
+    digest. Appending genuine post-August rows lengthens that array, so the
+    check would reject a correct continuation for being longer, not for being
+    different. The adapter keeps the frozen guarantee exactly where it applies:
+    the digest is verified over the archived timestamp prefix (ts < FROZEN_END),
+    and any prefix mismatch still aborts. A parity run (end == FROZEN_END) is
+    untouched.
+    """
+    if end <= FROZEN_END:
+        return {"frozen_hash": "unmodified (parity run)"}
+    reference = FIXTURES / "t5_hot_calibration_ledger.parquet"
+    if not reference.exists():
+        raise FileNotFoundError(f"{reference}: needed to size the archived prefix")
+    ref_ts = pd.to_datetime(pd.read_parquet(reference)["ts"], utc=True)
+    prefix_rows = int((ref_ts < FROZEN_END).sum())
+    lab = phase4.lab
+    original = lab.array_sha256
+    record: dict = {"frozen_hash": "verified on archived prefix",
+                    "archived_prefix_rows": prefix_rows}
+
+    def prefix_aware(values):
+        array = np.asarray(values, dtype=np.int8)
+        if len(array) == prefix_rows:
+            return original(array)
+        if len(array) < prefix_rows:
+            raise RuntimeError(
+                f"r5_phase4: frame is shorter than the archived prefix "
+                f"({len(array)} < {prefix_rows}); refusing to weaken the frozen check")
+        digest = original(array[:prefix_rows])
+        if digest != FROZEN_R4_1_PREDICTION_SHA:
+            raise RuntimeError(
+                f"r5_phase4: frozen R4.1 prediction hash mismatch on the archived "
+                f"prefix: {digest}")
+        record["extension_rows"] = int(len(array) - prefix_rows)
+        return FROZEN_R4_1_PREDICTION_SHA
+
+    lab.array_sha256 = prefix_aware
+    return record
 
 
 # --------------------------------------------------------------------------- #
 # Stage: r5_phase4  (r5_lab_manager_phase4.py::main)
 # --------------------------------------------------------------------------- #
+
 def run_r5_phase4(end: pd.Timestamp, previous: dict | None) -> StageResult:
     _ensure_c85root()
     sys.path.insert(0, str(C85ROOT))
@@ -374,24 +486,21 @@ def run_r5_phase4(end: pd.Timestamp, previous: dict | None) -> StageResult:
     if not phase4_target.exists() or phase4_target.read_bytes() != R5_PHASE4.read_bytes():
         shutil.copy2(R5_PHASE4, phase4_target)
     phase4 = load_verbatim(phase4_target)
+    adapter = _install_prefix_hash_adapter(phase4, end)
     phase4.main()
 
     out_csv = phase4.OUT / "t5_hot_calibration_ledger.csv"
     rows = pd.read_csv(out_csv, parse_dates=["ts"])
+    notes = _validate_candidate(
+        rows, FIXTURES / "t5_hot_calibration_ledger.parquet", "r5_phase4", end,
+        required=R5_REQUIRED,
+    )
+    notes.update({"frozen_hash_adapter": adapter})
     published = [publish(out_csv, "t5_hot_calibration_ledger.csv")]
 
-    notes: dict = {"columns": [c for c in (
-        "expansion_selected_prediction", "r4_probability_correct",
-        "r4_directional_rank", "r4_prediction") if c in rows.columns]}
-    ref_path = FIXTURES / "t5_hot_calibration_ledger.parquet"
-    if ref_path.exists():
-        ref = pd.read_parquet(ref_path)
-        notes.update(_parity_check(rows, ref, "ts", "r5_phase4"))
-    else:
-        notes["parity"] = f"skipped: reference fixture missing at {ref_path}"
-
-    return StageResult(cursor=end, rows=len(rows), outputs=published,
+    return StageResult(cursor=_coverage_cursor(rows, end), rows=len(rows), outputs=published,
                        patches=[models_patch.as_dict()], notes=notes)
+
 
 
 structure_valid = run_structure_valid
@@ -407,7 +516,10 @@ R4_STAGES = [
     ),
     Stage(
         name="r4_1",
-        frozen_end=True,
+        # No longer input-bound: htf_structure_r3.pkl now genuinely covers
+        # September (rebuilt from real Binance archives through 2026-09-08,
+        # archived prefix bit-identical), so the stage's ceiling is the real
+        # source coverage rather than the frozen research end.
         depends_on=("structure_valid",),
         run=run_r4_1,
         incremental=False,
@@ -415,7 +527,6 @@ R4_STAGES = [
     ),
     Stage(
         name="r5_phase4",
-        frozen_end=True,
         depends_on=("r4_1",),
         run=run_r5_phase4,
         incremental=False,
