@@ -109,16 +109,27 @@ def main() -> int:
     saved.loc[saved.index[-1], "binance_label"] = last_label
 
     extended = pd.concat([saved, new], ignore_index=True)
-    out = OUT / "continuation_frame_extended.pkl"
+    published = OUT / "continuation_frame_extended.pkl"
+    # An overlap disagreement means the rebuild does not reproduce the frame the
+    # committed generations were scored from. In that case NOTHING usable may be
+    # published under the expected name: a later stage would pick it up as if it
+    # had passed. The candidate is written to a quarantined path instead, and the
+    # observed discrepancy is recorded verbatim — the tolerance is not widened
+    # and the difference is not asserted to be harmless.
+    out = published if not disagreements else OUT / "continuation_frame_extended.REJECTED.pkl"
+    if disagreements and published.exists():
+        published.unlink()
     extended.to_pickle(out)
 
     report = {
+        "status": "REJECTED_OVERLAP_DISAGREEMENT" if disagreements else "PUBLISHED",
         "saved": {"path": str(SAVED), "sha256": sha256(SAVED), "rows": int(overlap),
                   "last_target": saved.target_ts.iloc[-1].isoformat()},
         "rebuilt": {"path": str(REBUILT), "sha256": sha256(REBUILT),
                     "rows": int(len(rebuilt)),
                     "last_target": rebuilt.target_ts.iloc[-1].isoformat()},
         "overlap_columns_compared": len(compare),
+        "overlap_tolerance": TOLERANCE,
         "overlap_worst_difference": worst,
         "overlap_disagreements": disagreements,
         "new_rows": int(len(new)),
@@ -128,9 +139,9 @@ def main() -> int:
             "ts": saved.target_ts.iloc[-1].isoformat(),
             "label": None if pd.isna(last_label) else float(last_label),
         },
-        "extended": {"path": str(out), "rows": int(len(extended)),
-                     "sha256": sha256(out),
-                     "last_target": extended.target_ts.iloc[-1].isoformat()},
+        "candidate": {"path": str(out), "usable": not disagreements,
+                      "rows": int(len(extended)), "sha256": sha256(out),
+                      "last_target": extended.target_ts.iloc[-1].isoformat()},
         "runtime": {"python": sys.version.split()[0], "pandas": pd.__version__,
                     "numpy": np.__version__},
     }
@@ -140,6 +151,7 @@ def main() -> int:
         "overlap_disagreements": disagreements[:10],
         "overlap_disagreement_count": len(disagreements)}, indent=1), flush=True)
     return 1 if disagreements else 0
+
 
 
 if __name__ == "__main__":

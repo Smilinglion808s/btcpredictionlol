@@ -254,12 +254,29 @@ class ExpertRegistry:
 
     def __init__(self) -> None:
         self._providers: dict[str, Any] = {}
+        # Precursor computations that genuinely run but are NOT a whole required
+        # expert (today: the shared T0/T5 coverage control that C30/C36/C37 all
+        # consume). They are reported for evidence and never counted towards
+        # `connected` — a partial branch must not stand in for its expert.
+        self._precursors: dict[str, Any] = {}
         self.chain: LiveExpertChain | None = None
 
     def register(self, name: str, provider: Any) -> None:
         if name not in REQUIRED_EXPERTS:
             raise ValueError(f"unknown inherited expert {name!r}")
         self._providers[name] = provider
+
+    def register_precursor(self, name: str, provider: Any) -> None:
+        if name in REQUIRED_EXPERTS:
+            raise ValueError(
+                f"{name!r} is a required expert; register it with register()"
+            )
+        self._precursors[name] = provider
+
+    @property
+    def precursors(self) -> dict[str, Any]:
+        return dict(self._precursors)
+
 
     @property
     def missing(self) -> list[str]:
@@ -301,6 +318,11 @@ class ExpertRegistry:
             # under test-only sys.path hacks that insert `src/`.
             "dependencies": _dependency_report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
+            "precursors": {
+                name: (provider.status() if hasattr(provider, "status") else {})
+                for name, provider in self._precursors.items()
+            },
+
             "long_context": (
                 self.chain.long_context_readiness()
                 if self.chain is not None
