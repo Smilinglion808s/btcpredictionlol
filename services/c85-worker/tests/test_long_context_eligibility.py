@@ -61,12 +61,19 @@ def _settle(head, previous, as_of):
     )
 
 
-def _drive(head, rows, *, settle=True):
-    """Advance the head causally: settle the previous target, then observe."""
+def _drive(head, rows, *, settle=True, settle_last=True):
+    """Advance the head causally: settle the previous target, then observe.
+
+    ``settle_last`` also settles the final observed row, whose candle closes at
+    the boundary timestamp. Without it the boundary's entitled window is not
+    resolved and training must fail closed - that is a separate test.
+    """
     for index, (ts, row, _label) in enumerate(rows):
         if settle and index:
             _settle(head, rows[index - 1], ts)
         head.observe(ts, row)
+    if settle and settle_last and rows:
+        _settle(head, rows[-1], rows[-1][0] + pd.Timedelta(minutes=15))
 
 
 def test_training_a_future_boundary_early_is_refused():
@@ -86,10 +93,18 @@ def test_a_fit_certified_after_more_rows_arrive_is_stale_and_rebuilt():
     assert staged is not None and staged.position == head.position
     snapshot = staged.snapshot
     assert snapshot is not None
-    assert snapshot.last_position == head.position - 2  # last row has no label yet
+    assert snapshot.last_position == head.position - 1  # the full window is resolved
+    assert snapshot.complete is True
+    assert snapshot.unresolved_positions == ()
 
-    # A label that settles afterwards changes the entitled training inputs.
-    _settle(head, rows[-1], rows[-1][0] + pd.Timedelta(minutes=15))
+    # A newly evidenced source gap changes the entitled training inputs.
+    gap_ts = rows[-2][0]
+    head._labels_by_ts.pop(gap_ts, None)
+    head._label_available_at.pop(gap_ts, None)
+    next(r for r in head.buffer if r.ts == gap_ts).label = float("nan")
+    head.settle_missing_label(gap_ts, available_at=gap_ts + pd.Timedelta(minutes=15),
+                              as_of=gap_ts + pd.Timedelta(minutes=15),
+                              reason="spot_1m coverage gap over the settling candle")
     rebuilt = head.training_snapshot(head.position)
     assert rebuilt.digest != snapshot.digest
 
@@ -122,10 +137,14 @@ def test_a_no_fit_verdict_reopens_when_the_inputs_change():
     assert update.activate is None
     assert update.probability is None
 
-    # A second class settles: the verdict must not persist.
-    head.settle_label(rows[-1][0], -1.0,
-                      available_at=rows[-1][0] + pd.Timedelta(minutes=15),
-                      as_of=rows[-1][0] + pd.Timedelta(minutes=15))
+    # A second class appears: the verdict must not persist.
+    corrected = rows[-1][0]
+    head._labels_by_ts.pop(corrected, None)
+    head._label_available_at.pop(corrected, None)
+    next(r for r in head.buffer if r.ts == corrected).label = float("nan")
+    head.settle_label(corrected, -1.0,
+                      available_at=corrected + pd.Timedelta(minutes=15),
+                      as_of=corrected + pd.Timedelta(minutes=15))
     reopened = head.training_snapshot(position)
     assert reopened.digest != first.digest
     assert head._no_fit_positions.get(position) != reopened.digest
