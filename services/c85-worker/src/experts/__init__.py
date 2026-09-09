@@ -72,6 +72,25 @@ class LiveExpertChain:
         from .leaf import LeafExperts
 
         self.leaf = LeafExperts()
+        # The C85 RECONSTRUCTION long-context bootstrap, when the deployment
+        # installed one. It carries the fitted head at its ABSOLUTE grid
+        # position plus the complete positional rank queue, so `external_
+        # direction` / `external_rank` are produced by the real head rather
+        # than by a supplied probability. It is STALE by construction (fitted
+        # through 2026-08-31, last observed target 2026-09-01T00:00Z) and
+        # `long_context_readiness()` reports exactly how stale; attaching it
+        # does NOT make the chain ready.
+        from .long_context_serving import restore_from_env
+
+        self.long_context: Any = None
+        self.long_context_error: str | None = None
+        try:
+            self.long_context = restore_from_env()
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            self.long_context_error = f"{type(exc).__name__}: {exc}"
+        if self.long_context is not None:
+            self.long_context.attach(self.leaf)
+
         self.c42 = C42Expert()
         self.c51 = C51Expert()
         self.c54 = C54Expert()
