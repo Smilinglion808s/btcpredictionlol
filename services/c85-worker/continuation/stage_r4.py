@@ -71,20 +71,37 @@ def _parity_check(new: pd.DataFrame, ref: pd.DataFrame, key: str, name: str) -> 
             f"archived={len(ref_prefix)} rebuilt={len(new_prefix)}"
         )
     mismatches: dict[str, int] = {}
+    settled: dict[str, object] = {}
     for column in ref_prefix.columns:
         if column == key or column not in new_prefix.columns:
             continue
         a, b = ref_prefix[column], new_prefix[column]
         if pd.api.types.is_numeric_dtype(a) and pd.api.types.is_numeric_dtype(b):
             af, bf = a.astype(float).to_numpy(), b.astype(float).to_numpy()
-            bad = int((~(np.isclose(af, bf, rtol=0, atol=1e-9) | (np.isnan(af) & np.isnan(bf)))).sum())
+            differs = ~(np.isclose(af, bf, rtol=0, atol=1e-9) | (np.isnan(af) & np.isnan(bf)))
+            if column == "label":
+                # An outcome that was still open when the archive was written and
+                # has since settled is genuinely new information, not drift. It is
+                # allowed ONLY in that direction (archived NaN -> rebuilt finite)
+                # and is reported explicitly; a changed settled label still aborts.
+                newly = differs & np.isnan(af) & ~np.isnan(bf)
+                if newly.any():
+                    settled["newly_settled_labels"] = int(newly.sum())
+                    settled["newly_settled_label_timestamps"] = [
+                        str(v) for v in ref_prefix.loc[newly, key].tolist()[:10]]
+                differs = differs & ~newly
+            bad = int(differs.sum())
         else:
             bad = int((a.astype(str) != b.astype(str)).sum())
         if bad:
             mismatches[column] = bad
     if mismatches:
         raise RuntimeError(f"{name}: historical-prefix parity FAILED: {mismatches}")
-    return {"archived_prefix_rows": int(len(ref_prefix)), "parity": "ok"}
+    note = {"archived_prefix_rows": int(len(ref_prefix)),
+            "parity": "ok" if not settled else "ok_except_newly_settled_labels"}
+    note.update(settled)
+    return note
+
 
 
 R4_1_REQUIRED = (
