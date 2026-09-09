@@ -46,7 +46,7 @@ def model():
 
 @pytest.fixture(scope="module")
 def observations():
-    binance = MULTI / "features/binance_multiwindow_features.csv.gz"
+    binance = MULTI / "features/binance_event_features.csv.gz"
     hyper = MULTI / "features/hyperliquid_context_features.csv.gz"
     if not (binance.exists() and hyper.exists()):
         pytest.skip("archived multivenue observation files not present")
