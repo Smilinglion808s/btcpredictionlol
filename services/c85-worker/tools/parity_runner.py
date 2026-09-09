@@ -476,33 +476,57 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         raise ParityComparisonRefused(
             f"duplicate join keys: archived={dup_arch}, rebuilt={dup_reb}")
 
-    merged = archived.merge(rebuilt, on="ts", how="inner")
+    merged = archived.merge(rebuilt, on="ts", how="inner").sort_values("ts")
     a = merged.external_probability_green.to_numpy(float)
     b = merged.probability.to_numpy(float)
     both = np.isfinite(a) & np.isfinite(b)
     diff = np.abs(a[both] - b[both]) if both.any() else np.array([])
-    mask_mismatches = int((np.isfinite(a) != np.isfinite(b)).sum())
+    finite_mask_divergent = np.isfinite(a) != np.isfinite(b)
+    mask_mismatches = int(finite_mask_divergent.sum())
+
+    stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
+    blocks = block_starts(inputs["identity"]["rows"])
+
+    def locate(ts: pd.Timestamp) -> dict[str, Any]:
+        position = int(stamps.searchsorted(ts))
+        return {"ts": str(ts), "position": position,
+                "fit_block_start": max([s for s in blocks if s <= position],
+                                       default=None)}
+
+    # Earliest FINITE-MASK divergence, reported separately from the earliest
+    # jointly-finite value divergence. Mask disagreement can start earlier and
+    # must not be described as if the value divergence were the first mismatch.
+    first_mask_divergence = None
+    if mask_mismatches:
+        idx = int(np.argmax(finite_mask_divergent))
+        first_mask_divergence = {
+            **locate(pd.Timestamp(merged.ts.to_numpy()[idx])),
+            "archived_finite": bool(np.isfinite(a[idx])),
+            "rebuilt_finite": bool(np.isfinite(b[idx])),
+        }
 
     first_divergence = None
     if diff.size and diff.max() > tolerance:
-        over = np.abs(a[both] - b[both]) > tolerance
+        over = diff > tolerance
         idx = int(np.argmax(over))
-        ts = pd.Timestamp(merged.ts.to_numpy()[both][idx])
-        stamps = pd.DatetimeIndex(pd.to_datetime(inputs["ts"], utc=True))
-        position = int(stamps.searchsorted(ts))
-        blocks = block_starts(inputs["identity"]["rows"])
-        fit_block = max([s for s in blocks if s <= position], default=None)
-        first_divergence = {"ts": str(ts), "position": position,
-                            "fit_block_start": fit_block,
-                            "archived": float(a[both][idx]),
-                            "rebuilt": float(b[both][idx]),
-                            "abs_diff": float(diff[over][0])}
+        first_divergence = {
+            **locate(pd.Timestamp(merged.ts.to_numpy()[both][idx])),
+            "archived": float(a[both][idx]),
+            "rebuilt": float(b[both][idx]),
+            "abs_diff": float(diff[idx]),
+        }
 
     # Direction / rank, reported separately and never mixed into probability parity.
     arch_dir = merged.external_direction.to_numpy(float)
     dir_mask = both & np.isfinite(arch_dir)
+    direction_mismatches = int((np.sign(arch_dir[dir_mask])
+                                != merged.rebuilt_direction.to_numpy()[dir_mask]).sum())
+    direction_mask_mismatches = int(
+        (np.isfinite(arch_dir) & (arch_dir != 0)) != (
+            merged.rebuilt_direction.to_numpy() != 0)).sum() if len(merged) else 0
     arch_rank = merged.external_rank.to_numpy(float)
     reb_rank = merged.rebuilt_rank.to_numpy(float)
+    rank_mask_mismatches = int((np.isfinite(arch_rank) != np.isfinite(reb_rank)).sum())
     rank_both = np.isfinite(arch_rank) & np.isfinite(reb_rank)
     rank_diff = np.abs(arch_rank[rank_both] - reb_rank[rank_both]) if rank_both.any() \
         else np.array([])
@@ -511,10 +535,28 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
                       and float(diff.max()) <= tolerance)
     lo, hi = archived.ts.min(), archived.ts.max()
     window = rebuilt[(rebuilt.ts >= lo) & (rebuilt.ts <= hi)]
+    # Expected-key coverage strictly WITHIN the processed bounds: an archived
+    # timestamp inside [first processed, last processed] that is absent from the
+    # rebuilt frame is a genuinely missing row, not "outside the prefix".
+    p_lo, p_hi = rebuilt.ts.min(), rebuilt.ts.max()
+    archived_in_bounds = archived[(archived.ts >= p_lo) & (archived.ts <= p_hi)]
+    missing_expected = sorted(set(archived_in_bounds.ts) - set(rebuilt.ts))
+    extra_in_bounds = sorted(set(window.ts) - set(archived.ts))
+    coverage_ok = not missing_expected
+    direction_ok = (direction_mismatches == 0 and direction_mask_mismatches == 0)
+    rank_ok = (rank_mask_mismatches == 0 and rank_diff.size > 0
+               and float(rank_diff.max()) <= tolerance)
+    contract_ok = probability_ok and coverage_ok and direction_ok and rank_ok
+
     if not complete_walk:
         status = "PARTIAL AGREEMENT" if probability_ok else "PARTIAL MISMATCH"
+        contract_status = ("PARTIAL CONTRACT AGREEMENT" if contract_ok
+                           else "PARTIAL CONTRACT MISMATCH")
     else:
         status = "FULL PARITY" if probability_ok else "PARITY FAILED"
+        contract_status = ("FULL CONTRACT PARITY" if contract_ok
+                           else "CONTRACT PARITY FAILED")
+
     return {
         "status": status,
         "walk_complete": complete_walk,
