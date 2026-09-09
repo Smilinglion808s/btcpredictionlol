@@ -621,7 +621,8 @@ class BinanceWindowAccumulator:
             if self.ingest(transport_name, p, receipt_ns=receipt_ns)
         )
 
-    def ingest_archive(self, venue: str, path: Path) -> int:
+    def ingest_archive(self, venue: str, path: Path, *,
+                       covers_us: tuple[int, int] | None = None) -> int:
         """Seed the buffer from a publisher daily archive.
 
         The archive's authentic `agg_trade_id` is preserved, so re-ingesting the
@@ -630,6 +631,11 @@ class BinanceWindowAccumulator:
         there is no collector clock in them - so `receipt_ns` stays -1 (unknown)
         and provenance is `archive`; LIVE mode then excludes these rows instead
         of pretending they were available.
+
+        A publisher daily file is a complete enumeration of one UTC day, so that
+        day is declared as proven coverage. `covers_us` overrides the declared
+        span for a partial or stitched file; the interval is never inferred from
+        the events themselves.
 
         Returns the number of NEW events stored.
         """
@@ -643,15 +649,27 @@ class BinanceWindowAccumulator:
                 "underlying_n": int(row.underlying_n), "signed": float(row.signed),
                 "quote": float(row.quote), "receipt_ns": -1, "provenance": "archive",
             })
+        if covers_us is not None:
+            buffer.declare_coverage(covers_us[0], covers_us[1], "archive")
+        elif len(raw):
+            day = 86_400_000_000
+            start = (int(raw["ts_us"].min()) // day) * day
+            buffer.declare_coverage(start, start + day, "archive")
         return added
 
     def ingest_bootstrap(self, transport_name: str, payloads: Iterable[dict[str, Any]],
-                         *, available_at_ns: int) -> int:
+                         *, available_at_ns: int,
+                         covers_us: tuple[int, int] | None = None) -> int:
         """A REST back-fill whose availability instant is KNOWN and explicit.
 
         `available_at_ns` is when the back-fill response was received, so these
         rows are legitimately usable by any freeze at or after that instant and
         by none before it. No per-event receipt time is invented.
+
+        `covers_us` is the event-time span the caller PROVED it enumerated - a
+        completed pagination sweep, not "the range the returned rows happen to
+        span". Without it the back-fill adds events but no coverage claim, and
+        the target stays un-warm rather than falsely warm.
         """
         transport = TRANSPORTS[transport_name]
         if transport.provenance != "bootstrap":
@@ -663,7 +681,14 @@ class BinanceWindowAccumulator:
             event["receipt_ns"] = int(available_at_ns)
             event["provenance"] = "bootstrap"
             added += buffer.add_event(event)
+        if covers_us is not None:
+            buffer.declare_coverage(covers_us[0], covers_us[1], "rest_pagination")
         return added
+
+    def declare_coverage(self, venue: str, start_us: int, end_us: int,
+                         source: str = "collector") -> None:
+        """Record a proven capture span, e.g. one uninterrupted socket session."""
+        self.buffers[venue].declare_coverage(start_us, end_us, source)
 
     def mark_gap(self, venue: str, start_ns: int, end_ns: int) -> None:
         self.buffers[venue].mark_gap(start_ns, end_ns)
