@@ -14,11 +14,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { verifyC85Signature } from "@/lib/c85/gateway.server";
-import { claimNonce, opSchema, runC85Op, serviceClient } from "@/lib/c85/ops.server";
+import { claimNonce, modelVersionSchema, opSchema, runC85Op, serviceClient } from "@/lib/c85/ops.server";
 
 const envelope = z.object({
   worker_id: z.string().min(1).max(120),
   nonce: z.string().min(8).max(120),
+  // Which identity this request writes under. Absent means the archived
+  // default; anything outside the allow-list is rejected before any write.
+  model_version: modelVersionSchema,
 });
 
 const methodNotAllowed = async () =>
@@ -66,7 +69,12 @@ export const Route = createFileRoute("/api/public/hooks/c85-ops")({
               { status: 409 },
             );
           }
-          const { status, result } = await runC85Op(supabase, head.data.worker_id, op.data);
+          const { status, result } = await runC85Op(
+            supabase,
+            head.data.worker_id,
+            op.data,
+            head.data.model_version,
+          );
           return Response.json({ op: op.data.op, ...result }, { status });
         } catch (e) {
           return Response.json(
