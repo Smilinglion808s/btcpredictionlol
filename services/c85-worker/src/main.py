@@ -16,6 +16,13 @@ reason, and no live prediction is published.
 """
 from __future__ import annotations
 
+# Thread pinning must happen before numpy/sklearn/uvicorn pull in their native
+# pools: in a container with a large visible CPU count the default OpenMP pool
+# turned one 200-row HGB fit from 0.12 s into 13.3 s, which alone would blow the
+# boundary compute budget. Importing this module has that side effect, so it
+# stays first and unsorted.
+from . import runtime_env  # noqa: F401  isort:skip
+
 import asyncio
 import os
 import time
@@ -23,6 +30,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import uvicorn
+
 
 from .artifacts import ArtifactStore
 from .backend import BackendClient
