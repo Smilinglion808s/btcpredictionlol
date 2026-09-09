@@ -534,24 +534,41 @@ class HyperliquidContextAccumulator:
             for name in FEATURE_COLUMNS
         }
 
-    def validity(self, target_ms: int, *, mode: str = HISTORICAL,
-                 freeze_ns: int | None = None) -> dict[str, Any]:
-        """Warm-up / completeness status. Nothing is imputed; NaN stays NaN."""
+    def input_coverage(self, target_ms: int, *, mode: str = HISTORICAL,
+                       freeze_ns: int | None = None) -> dict[str, Any]:
+        """ACQUISITION status for one target. Not a call/no-call verdict.
+
+        Missing columns are REPORTED, never converted into a prediction filter:
+        the fitted external-direction pipeline imputes (median + missingness
+        indicator), so refusing to score a NaN would be a new rule wearing the
+        unchanged model's name. What is flagged separately is data the collector
+        could not honestly supply at freeze - rows whose availability is unknown
+        and bars not yet confirmed complete - because those are acquisition
+        failures rather than the source's own absent values.
+        """
         features = self.features_for(target_ms, mode=mode, freeze_ns=freeze_ns)
         missing = [name for name in FEATURE_COLUMNS if features.get(name) is None]
+        streams = {"candles_15m": self.candles_15m, "candles_1h": self.candles_1h,
+                   "funding": self.funding}
         return {
             "target_ms": int(target_ms),
             "mode": mode,
+            "anchors": self.anchors(target_ms),
             "missing_columns": missing,
-            "candles_15m_retained": len(self.candles_15m.rows),
-            "candles_1h_retained": len(self.candles_1h.rows),
-            "funding_retained": len(self.funding.rows),
+            "retained": {name: len(s.versions) for name, s in streams.items()},
+            "versions_retained": {
+                name: sum(len(v) for v in s.versions.values()) for name, s in streams.items()
+            },
             "excluded_unknown_availability": sum(
-                getattr(s, "excluded_unknown", 0)
-                for s in (self.candles_15m, self.candles_1h, self.funding)
+                getattr(s, "excluded_unknown", 0) for s in streams.values()
             ),
-            "valid": not missing,
+            "excluded_not_confirmed_final": sum(
+                getattr(s, "excluded_partial", 0) for s in streams.values()
+            ),
         }
+
+    #: Retained name; the report is evidence, not a verdict.
+    validity = input_coverage
 
     def build_target(self, target_ms: int, *, mode: str = HISTORICAL,
                      freeze_ns: int | None = None) -> tuple[dict[str, float | None], dict[str, Any]]:
