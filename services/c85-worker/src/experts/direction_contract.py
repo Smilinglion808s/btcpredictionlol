@@ -95,8 +95,11 @@ def rolling_rank(
     """Verbatim `t5_precision_lab.rolling_rank` lines 100-110.
 
     Strictly past-only percentile of ``value`` within the trailing ``lookback``
-    *finite* prior observations; ties count half; NaN until ``minimum`` prior
-    finite observations exist. Non-finite values are neither ranked nor stored.
+    **rows** (``values[index - lookback:index]``), from which the non-finite
+    entries are dropped after slicing - so a row without a value still occupies
+    a slot in the window. Ties count half; the result is NaN until ``minimum``
+    finite values exist inside that positional window. Non-finite values are
+    neither ranked nor counted.
     """
 
     values = np.asarray(values, dtype=float)
