@@ -386,30 +386,131 @@ class LongContextLeafProducer:
     * ``external_rank``      = the strictly past-only positional rolling rank of
       ``abs(p - 0.5)`` over 2,880 rows with a 960-row minimum, ties half.
 
-    It does *not* own the head. ``observe`` must be called once per target in
-    chronological order - including targets whose probability is missing, which
-    is why the probability is passed explicitly as ``nan`` rather than skipped:
-    the original window is positional, so skipping a row shifts it.
+    It does *not* own the head. A target must be submitted for every row in
+    chronological order - including rows where the head produced no
+    probability, submitted as ``status=MODEL_NO_PROBABILITY``, because the
+    original window is positional and skipping a row shifts it. A row that
+    could not be processed at all is submitted as ``status=ACQUISITION_FAILED``
+    and is *rejected*: it is not a row of the original series, and advancing
+    the window for it would shift every later rank.
+
+    Updates are two-phase (:meth:`prepare` then :meth:`commit`) so a leaf
+    evaluation that fails after this point leaves no state behind. The
+    committed output for a target is immutable: an identical retry returns it
+    unchanged, a conflicting retry raises :class:`RetryConflict` carrying the
+    original.
     """
 
     rank_state: RollingRankState | None = None
+    last_key: int | None = None
+    last_output: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.rank_state is None:
             self.rank_state = RollingRankState()
 
-    def observe(self, key: int, probability: float | None) -> dict[str, Any]:
-        value = float("nan") if probability is None else float(probability)
-        rank = self.rank_state.observe(key, abs(value - 0.5) if np.isfinite(value) else float("nan"))
-        return {
+    def prepare(self, key: int, probability: float | None,
+                *, status: str = MODEL_SCORED) -> "LeafUpdate":
+        """Compute the leaf pair for one target without mutating state."""
+
+        key = int(key)
+        if status == ACQUISITION_FAILED:
+            raise AcquisitionFailure(
+                f"target {key} was never processed (status={status!r}); refusing to "
+                "advance the positional rank window for a row that is not part of "
+                "the original series"
+            )
+        if status not in (MODEL_SCORED, MODEL_NO_PROBABILITY):
+            raise ValueError(f"unknown long-context status {status!r}")
+        if status == MODEL_NO_PROBABILITY:
+            value = float("nan")
+        else:
+            if probability is None:
+                raise ValueError(
+                    "status=MODEL_SCORED requires a probability; use "
+                    "MODEL_NO_PROBABILITY for a row the head could not score"
+                )
+            value = float(probability)
+
+        if self.last_key is not None and key == self.last_key:
+            previous = float(self.last_output["external_probability_green"])
+            if not _same_value(previous, value):
+                raise RetryConflict(
+                    f"target {key} already produced probability {previous!r}; retry "
+                    f"carries {value!r}. The committed output is immutable.",
+                    original=dict(self.last_output),
+                )
+            return LeafUpdate(self, key, dict(self.last_output), None, duplicate=True)
+
+        rank_update = self.rank_state.prepare(
+            key, abs(value - 0.5) if np.isfinite(value) else float("nan")
+        )
+        output = {
             "external_probability_green": value,
             "external_direction": int(signed_direction(value)),
-            "external_rank": rank,
+            "external_rank": rank_update.rank,
+            "external_status": status,
         }
+        return LeafUpdate(self, key, output, rank_update)
+
+    def observe(self, key: int, probability: float | None,
+                *, status: str = MODEL_SCORED) -> dict[str, Any]:
+        """``prepare`` + ``commit``, for callers with nothing to roll back."""
+
+        if probability is None and status == MODEL_SCORED:
+            status = MODEL_NO_PROBABILITY
+        return self.prepare(key, probability, status=status).commit()
+
+    def _apply(self, key: int, output: dict[str, Any]) -> None:
+        self.last_key = key
+        self.last_output = dict(output)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"rank_state": self.rank_state.to_dict()}
+        output = None
+        if self.last_output is not None:
+            output = {
+                k: (None if isinstance(v, float) and not np.isfinite(v) else v)
+                for k, v in self.last_output.items()
+            }
+        return {
+            "rank_state": self.rank_state.to_dict(),
+            "last_key": self.last_key,
+            "last_output": output,
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "LongContextLeafProducer":
-        return cls(rank_state=RollingRankState.from_dict(payload["rank_state"]))
+        output = payload.get("last_output")
+        if output is not None:
+            output = dict(output)
+            for field_name in ("external_probability_green", "external_rank"):
+                if output.get(field_name) is None:
+                    output[field_name] = float("nan")
+        last_key = payload.get("last_key")
+        return cls(
+            rank_state=RollingRankState.from_dict(payload["rank_state"]),
+            last_key=None if last_key is None else int(last_key),
+            last_output=output,
+        )
+
+
+@dataclass
+class LeafUpdate:
+    """A prepared external leaf pair, applied only on :meth:`commit`."""
+
+    producer: LongContextLeafProducer
+    key: int
+    output: dict[str, Any]
+    rank_update: RankUpdate | None
+    duplicate: bool = False
+    committed: bool = False
+
+    def commit(self) -> dict[str, Any]:
+        if self.committed:
+            return dict(self.output)
+        self.committed = True
+        if not self.duplicate:
+            if self.rank_update is not None:
+                self.rank_update.commit()
+            self.producer._apply(self.key, self.output)
+        return dict(self.output)
