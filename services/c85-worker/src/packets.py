@@ -103,6 +103,12 @@ class LivePacketSource:
     experts: Any
     market: Any = None  # optional override; the Kalshi feed buffer is the default.
 
+    def _trade_buffer(self, name: str) -> Any:
+        trades = getattr(self.feeds, "trades", None)
+        if isinstance(trades, dict) and name in trades:
+            return trades[name]
+        return getattr(self.feeds, "buffers", {}).get(name)
+
     # ---------------------------------------------------------------- blockers
     def _feed_blockers(self, at_ns: int) -> list[str]:
         missing = self.feeds.missing(at_ns)
@@ -132,7 +138,7 @@ class LivePacketSource:
 
         # 1. Binance direction windows from received aggregate trades.
         for feed_name in ("binance_spot", "binance_um"):
-            buffer = self.feeds.trades.get(feed_name)
+            buffer = self._trade_buffer(feed_name)
             if buffer is None:
                 reasons.append(f"C85_FEED_NOT_CONFIGURED: {feed_name}")
                 continue
@@ -148,7 +154,7 @@ class LivePacketSource:
         #    begins at T; Binance defines that open as the first trade at or
         #    after T, which live trades give directly. If no spot trade has been
         #    received in [T, cutoff) there is no anchor open, and none is guessed.
-        spot_buffer = self.feeds.trades.get("binance_spot")
+        spot_buffer = self._trade_buffer("binance_spot")
         if spot_buffer is not None:
             opening = spot_buffer.slice(target_ns, cutoff_ns, freeze_ns)
             if opening:
