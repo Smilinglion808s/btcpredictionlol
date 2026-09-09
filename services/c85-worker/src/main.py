@@ -233,8 +233,37 @@ class Worker:
 
 
     # -- lifecycle --------------------------------------------------------------
+    async def refresh_readiness(self) -> None:
+        """Re-evaluate readiness against the CURRENT feed/expert state.
+
+        Readiness was previously computed once at startup, so a worker that
+        began with a cold or broken feed stayed BLOCKED for its whole lifetime
+        even after every input recovered, and a worker that started healthy kept
+        claiming readiness after a feed died. Neither is honest. This runs on
+        every heartbeat and moves the scheduler in BOTH directions.
+        """
+        previous = self.readiness
+        self.readiness, self.blocking_reason = self.evaluate_readiness()
+        armed = self.readiness in ("READY", "LOGGING")
+        was_armed = previous in ("READY", "LOGGING")
+        if armed and not was_armed:
+            self.warmup.ready(next_boundary())
+            self.scheduler.start()
+        elif not armed and was_armed:
+            # Stop scheduling boundaries we cannot honestly complete. Nothing is
+            # dispatched or logged as a prediction while blocked; the blocker is
+            # what the heartbeat reports.
+            await self.scheduler.stop()
+            self.warmup.block(self.blocking_reason or "unknown")
+        elif not armed:
+            self.warmup.block(self.blocking_reason or "unknown")
+
     async def heartbeat_loop(self) -> None:
         while True:
+            try:
+                await self.refresh_readiness()
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 self.store.heartbeat(
                     readiness=self.readiness,

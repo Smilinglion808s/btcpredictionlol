@@ -88,7 +88,7 @@ def test_packet_source_reports_every_blocker_at_once():
         source.build(target, int(target.timestamp() * 1_000_000_000) + 5_000_000_000)
     message = str(excinfo.value)
     assert "C85_FEEDS_STALE_AT_CUTOFF" in message
-    assert "C85_MARKET_WINDOW_MISSING" in message
+    assert "C85_MARKET_WINDOW_NOT_RECEIVED_BY_FREEZE" in message
     assert "C85_EXPERT_CHAIN_NOT_INSTANTIATED" in message
 
 

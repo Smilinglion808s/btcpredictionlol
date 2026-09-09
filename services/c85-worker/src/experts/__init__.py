@@ -34,6 +34,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .dependencies import report as _dependency_report
+
 REQUIRED_EXPERTS = ("c54", "c42", "c51", "c30", "c36", "c37", "r4", "external")
 
 
@@ -173,8 +175,10 @@ class ExpertRegistry:
             "required": list(REQUIRED_EXPERTS),
             "missing": self.missing,
             "blocking_reasons": LiveExpertChain.blocking_reasons(),
-            "dependencies": __import__(
-                "experts.dependencies", fromlist=["report"]
-            ).report(),
+            # Package-relative: `python -m src.main` puts the WORKER ROOT on
+            # sys.path, not `src/`, so `__import__("experts.dependencies")`
+            # raised ModuleNotFoundError in the real runtime while passing
+            # under test-only sys.path hacks that insert `src/`.
+            "dependencies": _dependency_report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
         }

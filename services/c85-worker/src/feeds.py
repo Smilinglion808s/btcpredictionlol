@@ -233,11 +233,27 @@ class QuoteBuffer(_BaseBuffer):
                 del self.windows[stale]
 
     def note_poll(self, receipt_ns: int) -> None:
-        """A successful API round-trip keeps the feed fresh between boundaries."""
+        """A successful API round-trip keeps the CONNECTION fresh.
+
+        A fresh connection is explicitly NOT evidence that this target's window
+        was received: `window()` still requires the aggregate itself, received
+        at or before the caller's freeze.
+        """
         self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
 
-    def window(self, target_ms: int) -> dict[str, Any] | None:
-        return self.windows.get(target_ms)
+    def window(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any] | None:
+        """The target's aggregate, only if it arrived at or before the freeze.
+
+        The Kalshi `[T, T+5s)` window can only be REQUESTED after T+5s, so a
+        packet frozen at the T+5 deadline can never legitimately contain it.
+        Returning None there is the measured deadline conflict, not a bug; the
+        alternative — handing back a later REST body under an earlier declared
+        freeze — would be backdating.
+        """
+        found = self.windows.get(target_ms)
+        if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
+            return None
+        return found
 
 
 # --------------------------------------------------------------------------- #
@@ -395,6 +411,59 @@ class KlineCollector:
                 self.buffer.error = f"{type(exc).__name__}: {exc}"
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 15.0)
+
+    async def backfill(self, minutes: int) -> int:
+        """Fetch `minutes` completed klines once, at startup.
+
+        The auxiliary block needs 481 completed BTCUSDT minutes behind a target;
+        waiting eight hours for the live stream to accumulate them is not a
+        design, it is an outage. These rows are the same exchange candles the
+        stream would deliver, and their receipt instant is the REAL fetch time —
+        never backdated — so a boundary frozen before this fetch still refuses
+        them.
+        """
+        stored = 0
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            remaining = minutes
+            end_ms: int | None = None
+            while remaining > 0:
+                params = {**self.params, "limit": min(1000, remaining)}
+                if end_ms is not None:
+                    params["endTime"] = end_ms
+                try:
+                    response = await client.get(self.rest_url, params=params)
+                    response.raise_for_status()
+                    rows = response.json()
+                except Exception as exc:  # noqa: BLE001 - warmup is best-effort
+                    self.buffer.error = f"backfill {type(exc).__name__}: {exc}"
+                    break
+                if not rows:
+                    break
+                receipt = now_ns()
+                now_ms = receipt // 1_000_000
+                for row in rows:
+                    close_ms = int(row[6])
+                    if close_ms >= now_ms:
+                        continue
+                    self.buffer.append(
+                        Kline(
+                            open_ms=int(row[0]),
+                            close_ms=close_ms,
+                            receipt_ns=receipt,
+                            open=float(row[1]),
+                            high=float(row[2]),
+                            low=float(row[3]),
+                            close=float(row[4]),
+                            base_volume=float(row[5]),
+                            quote_volume=float(row[7]),
+                            trade_count=int(row[8]),
+                            taker_buy_base=float(row[9]),
+                        )
+                    )
+                    stored += 1
+                remaining -= len(rows)
+                end_ms = int(rows[0][0]) - 1
+        return stored
 
     async def run_rest(self, interval_s: float = 10.0) -> None:
         """Poll closed klines. The newest returned candle may still be open."""
@@ -635,9 +704,16 @@ class FeedRegistry:
         self.trades["binance_cm"].retain_ns = 30 * 60 * NS
 
         self.klines: dict[str, KlineBuffer] = {
-            "binance_1m": KlineBuffer("binance_1m"),
+            # The auxiliary block reads 481 completed BTCUSDT minutes ending at
+            # T-1ms (240-minute rolling sigma behind a 240-minute return shift),
+            # so this buffer must retain more than the 240-minute default.
+            "binance_1m": KlineBuffer("binance_1m", retain_minutes=600),
             "binance_index": KlineBuffer("binance_index"),
-            "binance_usdc_1m": KlineBuffer("binance_usdc_1m"),
+            # research_c68/audit_quote_data.py asserts symbol == 'USDCUSDT':
+            # `quote_vwap_usdt_per_usdc` is the USDT-per-USDC RATE, not the
+            # BTCUSDC price. Reading BTCUSDC minutes here produced a ~BTC-priced
+            # value that could never satisfy the original 0.9..1.1 range check.
+            "binance_usdcusdt_1m": KlineBuffer("binance_usdcusdt_1m"),
             "binance_cm_1m": KlineBuffer("binance_cm_1m"),
         }
         self.quotes = QuoteBuffer("kalshi")
@@ -682,9 +758,9 @@ class FeedRegistry:
                 self.klines["binance_1m"], spot_ws, "btcusdt@kline_1m",
                 spot_rest, "/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1m"},
             ),
-            "binance_usdc_1m": KlineCollector(
-                self.klines["binance_usdc_1m"], spot_ws, "btcusdc@kline_1m",
-                spot_rest, "/api/v3/klines", {"symbol": "BTCUSDC", "interval": "1m"},
+            "binance_usdcusdt_1m": KlineCollector(
+                self.klines["binance_usdcusdt_1m"], spot_ws, "usdcusdt@kline_1m",
+                spot_rest, "/api/v3/klines", {"symbol": "USDCUSDT", "interval": "1m"},
             ),
             "binance_index": KlineCollector(
                 self.klines["binance_index"], um_ws, "btcusdt@indexPriceKline_1m",
@@ -728,6 +804,13 @@ class FeedRegistry:
     async def start(self) -> None:
         for name in self.trades:
             self._tasks.append(asyncio.create_task(self._trade_feed(name)))
+        # Minute history first: the auxiliary and COIN-M blocks are defined over
+        # hundreds of completed minutes, so the streams alone would leave the
+        # worker input-starved for hours after every restart.
+        await asyncio.gather(
+            *(c.backfill(c.buffer.retain_minutes) for c in self._klines.values()),
+            return_exceptions=True,
+        )
         for collector in self._klines.values():
             self._tasks.append(asyncio.create_task(collector.run_ws()))
             self._tasks.append(asyncio.create_task(collector.run_rest()))
