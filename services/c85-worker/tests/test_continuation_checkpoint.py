@@ -107,6 +107,10 @@ def test_interruption_before_the_pointer_keeps_the_previous_pair(cont, tmp_path)
     first = cont.write_pair(head, producer, ledger, floor=0)
 
     # Advance, write the new generation directory, but die before the pointer.
+    # COVERAGE QUALIFICATION: the injected failure fires on every write whose
+    # path ends in CURRENT, which includes the head's own pointer. It therefore
+    # proves "no pointer of either kind is left half-written", not specifically
+    # "a crash after the head export and before the pair pointer".
     for pos, (ts, row) in enumerate(_rows(head.position + 1), start=0):
         pass
     ts, row = list(_rows(head.position + 1))[-1]
