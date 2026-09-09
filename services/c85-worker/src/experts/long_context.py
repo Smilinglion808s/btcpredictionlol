@@ -45,9 +45,14 @@ different producer over different features.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+import shutil
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from typing import Any, Iterable, Sequence
 
 import numpy as np
@@ -93,6 +98,12 @@ class LongContextNotFitted(RuntimeError):
 
 class LongContextSchemaError(RuntimeError):
     """Raised when the incoming frame/packet does not carry the exact schema."""
+
+
+class LongContextOrderError(RuntimeError):
+    """Raised on an out-of-order target or a conflicting label re-settlement."""
+
+
 
 
 def feature_sets(columns: Sequence[str]) -> dict[str, list[str]]:
@@ -293,6 +304,8 @@ class LongContextHead:
     first_fit_ts: str | None = None
     model: Any = None
     _labels_by_ts: dict[pd.Timestamp, float] = field(default_factory=dict)
+    _last_ts: pd.Timestamp | None = None
+    _last_probability: float | None = None
 
     def __post_init__(self) -> None:
         self.features = list(self.features)
@@ -310,22 +323,55 @@ class LongContextHead:
                            for f in self.features], dtype=float)
 
     def settle_label(self, ts: pd.Timestamp, label: float) -> None:
-        """Record the realised Spot-candle sign for an already-observed target."""
+        """Record the realised Spot-candle sign for an already-observed target.
+
+        Idempotent by timestamp. A *conflicting* re-settlement is refused rather
+        than silently changing training data underneath an already-issued fit.
+        """
 
         ts = pd.Timestamp(ts)
-        self._labels_by_ts[ts] = float(label)
+        label = float(label)
+        previous = self._labels_by_ts.get(ts)
+        if previous is not None and np.isfinite(previous) and previous != label:
+            raise LongContextOrderError(
+                f"conflicting label for {ts.isoformat()}: {previous} then {label}"
+            )
+        self._labels_by_ts[ts] = label
         for row in self.buffer:
             if row.ts == ts:
-                row.label = float(label)
-                return
+                row.label = label
+                break
+        self._prune_labels()
+
+    def _prune_labels(self) -> None:
+        """Keep the label map bounded by the retained window, not by history."""
+
+        if not self.buffer:
+            return
+        oldest = self.buffer[0].ts
+        for key in [k for k in self._labels_by_ts if k < oldest]:
+            del self._labels_by_ts[key]
 
     def observe(self, ts: pd.Timestamp, row: dict[str, Any]) -> float | None:
         """Advance one target: refit when due, then score this row.
 
         Returns the probability, or ``None`` where the original writes NaN.
+
+        Ordering is enforced, because the walk-forward grid is positional: an
+        out-of-order target would silently shift every future refit boundary. A
+        repeat of the current target is treated as a retry and replays the
+        recorded probability without advancing the grid or duplicating the row.
         """
 
         ts = pd.Timestamp(ts)
+        if self._last_ts is not None:
+            if ts == self._last_ts:
+                return self._last_probability
+            if ts < self._last_ts:
+                raise LongContextOrderError(
+                    f"target {ts.isoformat()} precedes the last observed "
+                    f"{self._last_ts.isoformat()}; the refit grid is positional"
+                )
         values = self._vector(row)
         complete = bool(np.isfinite(values).all())
 
@@ -337,11 +383,16 @@ class LongContextHead:
         )
         while len(self.buffer) > WINDOW:
             self.buffer.popleft()
+        self._prune_labels()
         self.position += 1
+        self._last_ts = ts
 
         if self.model is None or not complete:
+            self._last_probability = None
             return None
-        return float(self.model.predict_proba(values.reshape(1, -1))[0, 1])
+        self._last_probability = float(self.model.predict_proba(values.reshape(1, -1))[0, 1])
+        return self._last_probability
+
 
     # -- fitting ------------------------------------------------------------
     def _refit(self, ts: pd.Timestamp) -> None:
@@ -379,6 +430,94 @@ class LongContextHead:
             "fitted": self.model is not None,
             "last_ts": self.buffer[-1].ts.isoformat() if self.buffer else None,
         }
+
+    def export_state(self, directory: Path | str) -> dict[str, Any]:
+        """Write the *complete* restart state: buffer, grid, labels and fit.
+
+        Written to a staging directory and renamed into place, so a crash
+        mid-export leaves the previous state intact rather than a half-written
+        one. Float values are stored at full float64 precision because the
+        refit consumes them directly.
+        """
+
+        import joblib
+
+        directory = Path(directory)
+        directory.parent.mkdir(parents=True, exist_ok=True)
+        staging = directory.with_name(directory.name + ".staging")
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
+
+        values = (np.vstack([r.values for r in self.buffer]) if self.buffer
+                  else np.zeros((0, len(self.features)), dtype=float))
+        np.savez(staging / "buffer.npz", values=values,
+                 labels=np.asarray([r.label for r in self.buffer], dtype=float),
+                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool))
+        meta = {
+            "head_id": HEAD_ID,
+            "spec": SPEC_NAME,
+            "features": self.features,
+            "position": self.position,
+            "fit_count": self.fit_count,
+            "first_fit_ts": self.first_fit_ts,
+            "last_ts": self._last_ts.isoformat() if self._last_ts is not None else None,
+            "last_probability": self._last_probability,
+            "buffer_ts": [r.ts.isoformat() for r in self.buffer],
+            "pending_labels": {k.isoformat(): v for k, v in self._labels_by_ts.items()},
+            "fitted": self.model is not None,
+        }
+        (staging / "state.json").write_text(json.dumps(meta, indent=1))
+        if self.model is not None:
+            joblib.dump(self.model, staging / "model.joblib")
+
+        previous = directory.with_name(directory.name + ".previous")
+        if directory.exists():
+            if previous.exists():
+                shutil.rmtree(previous)
+            os.replace(directory, previous)
+        os.replace(staging, directory)
+        if previous.exists():
+            shutil.rmtree(previous, ignore_errors=True)
+        return meta
+
+    @classmethod
+    def restore_state(cls, directory: Path | str) -> "LongContextHead":
+        """Rebuild an identical head. A restart must not restart the grid."""
+
+        import joblib
+
+        directory = Path(directory)
+        meta = json.loads((directory / "state.json").read_text())
+        if meta.get("head_id") != HEAD_ID:
+            raise LongContextSchemaError(
+                f"state belongs to {meta.get('head_id')!r}, not {HEAD_ID!r}"
+            )
+        blob = np.load(directory / "buffer.npz")
+        head = cls(features=list(meta["features"]))
+        for ts, row, complete, label in zip(
+            meta["buffer_ts"], blob["values"], blob["complete"], blob["labels"]
+        ):
+            head.buffer.append(_Row(pd.Timestamp(ts), np.asarray(row, dtype=float),
+                                    bool(complete), float(label)))
+        head.position = int(meta["position"])
+        head.fit_count = int(meta["fit_count"])
+        head.first_fit_ts = meta["first_fit_ts"]
+        head._last_ts = pd.Timestamp(meta["last_ts"]) if meta["last_ts"] else None
+        head._last_probability = meta["last_probability"]
+        head._labels_by_ts = {pd.Timestamp(k): float(v)
+                              for k, v in meta["pending_labels"].items()}
+        if meta.get("fitted"):
+            model_path = directory / "model.joblib"
+            if not model_path.exists():
+                raise LongContextSchemaError(
+                    "state claims a fitted head but model.joblib is absent; refusing "
+                    "to resume unfitted and silently emit no probabilities"
+                )
+            head.model = joblib.load(model_path)
+        return head
+
+
 
 
 def head_from_frame(frame: pd.DataFrame) -> LongContextHead:

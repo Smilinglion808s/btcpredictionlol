@@ -76,3 +76,44 @@ Then acquire `binance_context_2026` and build the feature frame to the audited
 hash before any probability parity claim.
 
 C85 betting remains suppressed; T45 untouched; C85 is not live.
+
+## Restore path proven (this change)
+
+Signed private-artifact transfer now exists end to end and was exercised
+against the live gateway, not a mock:
+
+| check | result |
+| --- | --- |
+| `artifact.list` (`releases/`) | 1 object, `releases/external_direction_r1.tar.gz`, 9,553 bytes |
+| restore into `/tmp/c85restore/clean/...` (source cache untouched) | object SHA-256 `60b73dd8ab863d02caa5e36333123043f2a1142c9ac9c590fc81198c4df028ea`, 6 manifest files verified, 1.084 s |
+| restored vs source `manifest.json` SHA-256 | identical (`96cc9bbf…`) |
+| restored vs source scores, 50 random observations per stage | `max_abs_p_diff = 0.0`; identical `fit_sha256`, phase and signed direction (T0/T5 `jul_aug`) |
+| wrong expected digest | refused; nothing installed |
+| bad HMAC signature | 401 |
+| key `releases/../../etc/passwd` | 400 |
+| key outside allowed prefixes (`secrets/…`) | 400 |
+| replayed signed body | 200 then 409 |
+
+The worker never holds a storage credential: it asks the gateway for a
+short-lived signed URL for one validated key, and that URL is never logged.
+
+## Source availability for the missing long-context history
+
+HEAD probes against `data.binance.vision` (measured, not assumed):
+
+| dataset | probe | status |
+| --- | --- | --- |
+| bookDepth daily | 2026-01-02 / 2026-09-05 | 200 (443,523 / 492,186 bytes) |
+| metrics daily | 2026-01-02 / 2026-09-05 | 200 (11,422 / 11,278 bytes) |
+| spot 1m | 2026-07 monthly / 2026-09-05 daily | 200 |
+| UM 1m, mark 1m, index 1m, premium 1m | 2026-07 monthly | 200 |
+
+All seven datasets the original `build_long_context_features.py` consumes are
+still retrievable, including September. Acquisition itself has not been run.
+
+## Still missing / still blocking a real probability
+
+* `long_context_features.pkl` (expected SHA-256 `8618768f…`, 23,328 × 545) and
+  the fitted `T0_LONG_CONTEXT_R1` head: neither is in the recovered tree.
+* Therefore no comparison against archived `external_probability_green` has
+  been made. The head-state tests are synthetic and are labelled as such.
