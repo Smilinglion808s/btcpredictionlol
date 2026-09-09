@@ -137,8 +137,9 @@ def test_label_for_an_unobserved_target_is_refused():
     rows = list(_rows(3))
     _drive(head, rows)
     future = rows[-1][0] + pd.Timedelta(minutes=15)
+    available = future + pd.Timedelta(minutes=15)
     with pytest.raises(lc.LongContextOrderError, match="precedes any observed target"):
-        head.settle_label(future, 1.0, available_at=future, as_of=future + pd.Timedelta(minutes=15))
+        head.settle_label(future, 1.0, available_at=available, as_of=available)
 
 
 def test_same_target_with_a_different_payload_is_a_conflict_not_a_retry():
