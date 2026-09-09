@@ -522,9 +522,7 @@ class LongContextHead:
         training data underneath an already-issued fit.
         """
 
-        ts = pd.Timestamp(ts)
-        available_at = pd.Timestamp(available_at)
-        as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        ts, available_at, as_of = self._temporal(ts, available_at, as_of)
         if source not in LABEL_SOURCES:
             raise LongContextOrderError(
                 f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
