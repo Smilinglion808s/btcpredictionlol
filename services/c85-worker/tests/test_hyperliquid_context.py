@@ -332,10 +332,10 @@ def test_pruning_never_drops_a_pending_targets_inputs_and_stays_bounded():
     acc.prune(later)
     # The oldest pending target still anchors retention, so ITS 96-row window
     # survives even though the newer target alone would have evicted it.
-    assert (T - 95 * FIFTEEN) in acc.candles_15m.versions
+    assert (T - 96 * FIFTEEN) in acc.candles_15m.versions
     acc.close_target(T)
     acc.prune(later)
-    assert (T - 95 * FIFTEEN) not in acc.candles_15m.versions
+    assert (T - 96 * FIFTEEN) not in acc.candles_15m.versions
     assert len(acc.candles_15m.versions) <= 96
 
 
