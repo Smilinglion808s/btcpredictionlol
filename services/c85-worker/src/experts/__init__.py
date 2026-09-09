@@ -115,6 +115,23 @@ class LiveExpertChain:
             }
         return self.c51_store.readiness()
 
+    def long_context_readiness(self, target_open: Any | None = None) -> dict[str, Any]:
+        """Honest state of the reconstruction long-context leaf."""
+
+        if self.long_context is None:
+            return {
+                "installed": False,
+                "ready": False,
+                "blocking_reasons": [
+                    self.long_context_error
+                    or "C85_LONG_CONTEXT_NOT_INSTALLED: set C85_LONG_CONTEXT_STATE_DIR "
+                    "to the restored bootstrap checkpoint"
+                ],
+            }
+        return {"installed": True, **self.long_context.readiness(target_open)}
+
+
+
 
     def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
         """Produce every ancestor column the C85 feature frame consumes.
