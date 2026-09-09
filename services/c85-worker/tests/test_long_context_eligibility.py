@@ -307,7 +307,8 @@ def test_the_fit_uses_the_captured_rows_its_digest_certifies():
     _drive(head, rows)
     victim = rows[-1][0]
 
-    original_fit = lc.HistGradientBoostingClassifier.fit
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    original_fit = HistGradientBoostingClassifier.fit
 
     def racing_fit(self, X, y, sample_weight=None):
         # A concurrent correction arrives mid-fit.
@@ -318,11 +319,11 @@ def test_the_fit_uses_the_captured_rows_its_digest_certifies():
                 r.label = float("nan")
         return original_fit(self, X, y, sample_weight=sample_weight)
 
-    lc.HistGradientBoostingClassifier.fit = racing_fit
+    HistGradientBoostingClassifier.fit = racing_fit
     try:
         staged = head.train_ahead()
     finally:
-        lc.HistGradientBoostingClassifier.fit = original_fit
+        HistGradientBoostingClassifier.fit = original_fit
 
     assert staged is not None
     assert staged.training_rows == staged.snapshot.training_rows
