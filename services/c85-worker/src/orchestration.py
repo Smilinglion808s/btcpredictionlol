@@ -177,6 +177,25 @@ class BoundaryOrchestrator:
         self.ticker_resolver = ticker_resolver
         self.allow_dispatch = allow_dispatch
         self.clock_ns = clock_ns
+        #: Set when an expert-chain commit left the fitted head advanced while
+        #: the positional rank window did not move (`ChainCommitError`). That
+        #: cannot be undone in place, so the orchestrator refuses EVERY further
+        #: boundary until an operator restores the last verified head+rank
+        #: generation and calls `clear_chain_halt()`.
+        self.chain_halt: dict[str, Any] | None = None
+
+    def clear_chain_halt(self, *, restored_generation: str) -> None:
+        """Release the halt after a verified paired restore.
+
+        `restored_generation` is the generation id of the head+rank pair that
+        was restored; it is recorded so the release is auditable and cannot be
+        performed by simply swallowing the error.
+        """
+        if not restored_generation:
+            raise ValueError("clear_chain_halt requires the restored generation id")
+        self.chain_halt = None
+        self.last_chain_halt_cleared = restored_generation
+
 
     # -- clocks ---------------------------------------------------------------
     @staticmethod
