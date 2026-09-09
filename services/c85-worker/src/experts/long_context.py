@@ -588,16 +588,32 @@ class LongContextHead:
         activate: StagedFit | None = None
         model = self.model
         if self.position >= MINIMUM and self.position % REFIT_EVERY == 0:
+            snapshot = self.training_snapshot(self.position)
             staged = self._staged_fit
-            if (staged is None or staged.position != self.position) \
-                    and self.position not in self._no_fit_positions:
-                raise LongContextTrainingRequired(
-                    f"refit is due at position {self.position} and no fit was staged; "
-                    "call train_ahead() off the serving path"
-                )
-            if staged is not None and staged.position == self.position:
+            usable = (
+                staged is not None
+                and staged.position == self.position
+                and staged.snapshot is not None
+                and staged.snapshot.digest == snapshot.digest
+            )
+            if not usable:
+                if self._no_fit_positions.get(self.position) == snapshot.digest:
+                    pass  # certified "no fit possible" for exactly these inputs
+                elif staged is not None and staged.position == self.position:
+                    raise LongContextTrainingRequired(
+                        f"the fit staged for position {self.position} was built from "
+                        "different training inputs and is stale; rebuild it with "
+                        "train_ahead() off the serving path"
+                    )
+                else:
+                    raise LongContextTrainingRequired(
+                        f"refit is due at position {self.position} and no fit was staged; "
+                        "call train_ahead() off the serving path"
+                    )
+            elif staged is not None:
                 activate = staged
                 model = staged.model
+
 
         probability: float | None = None
         if model is not None and complete:
