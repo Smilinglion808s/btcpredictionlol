@@ -386,3 +386,52 @@ def test_the_snapshot_digest_binds_label_provenance():
     assert second.training_rows == first.training_rows
     assert second.provenance_digest != first.provenance_digest
     assert second.digest != first.digest
+
+
+def test_a_label_received_after_the_boundary_clock_cannot_enter_that_fit():
+    """The boundary at P occurs at (P-1).ts + 15m; later receipts are unknowable."""
+
+    head, rows = _boundary_rows()
+    ts = rows[-1][0]
+    late = ts + pd.Timedelta(minutes=30)  # received a candle after the boundary
+    head.settle_label(ts, rows[-1][2], available_at=late, as_of=late)
+
+    snapshot = head.training_snapshot(head.position)
+    assert snapshot.boundary_clock == (ts + pd.Timedelta(minutes=15)).isoformat()
+    assert snapshot.future_known_positions == (head.position - 1,)
+    with pytest.raises(lc.LongContextTrainingRequired, match="after the boundary clock"):
+        head.train_ahead()
+    assert head._no_fit_positions == {}  # no verdict certified on future knowledge
+
+    conflict = head.scheduling_conflict()
+    assert conflict["future_known_positions"] == [head.position - 1]
+
+
+def test_a_label_received_exactly_at_the_boundary_clock_is_eligible():
+    head, rows = _boundary_rows()
+    ts = rows[-1][0]
+    at_clock = ts + pd.Timedelta(minutes=15)
+    head.settle_label(ts, rows[-1][2], available_at=at_clock, as_of=at_clock)
+
+    snapshot = head.training_snapshot(head.position)
+    assert snapshot.future_known_positions == ()
+    assert snapshot.complete is True
+    assert head.train_ahead() is not None
+
+
+def test_the_boundary_clock_and_receipt_times_are_part_of_the_certified_digest():
+    head, rows = _boundary_rows()
+    ts = rows[-1][0]
+    head.settle_label(ts, rows[-1][2], available_at=ts + pd.Timedelta(minutes=15),
+                      as_of=ts + pd.Timedelta(minutes=15))
+    first = head.training_snapshot(head.position)
+
+    other, other_rows = _boundary_rows()
+    other_ts = other_rows[-1][0]
+    other.settle_label(other_ts, other_rows[-1][2],
+                       available_at=other_ts + pd.Timedelta(minutes=30),
+                       as_of=other_ts + pd.Timedelta(minutes=30))
+    second = other.training_snapshot(other.position)
+
+    assert second.training_rows == first.training_rows
+    assert second.digest != first.digest

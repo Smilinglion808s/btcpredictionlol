@@ -310,6 +310,43 @@ def upload_generation(generation: Path, *, prefix: str = PREFIX) -> list[dict[st
     return results
 
 
+def upload_pointer(generation: Path, *, prefix: str = PREFIX) -> dict[str, Any]:
+    """Advance the LATEST pointer LAST, after the generation itself verified.
+
+    Previous generations are never deleted or overwritten: the pointer is the
+    only mutable object, so a failed collection leaves the last known-good
+    generation both present and still pointed at.
+    """
+
+    base = os.environ["SUPABASE_URL"].rstrip("/")
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    record = json.loads((generation / "checkpoint.json").read_text())
+    manifest = json.loads((generation / MANIFEST).read_text())
+    previous = None
+    url = f"{base}/storage/v1/object/{BUCKET}/{prefix}/LATEST.json"
+    try:
+        with urllib.request.urlopen(_request("GET", url, key), timeout=120) as r:
+            previous = json.loads(r.read())
+    except urllib.error.HTTPError:
+        previous = None
+    payload = json.dumps({
+        "generation": generation.name,
+        "next_block_index": record["next_block_index"],
+        "block_ts": record["block_ts"],
+        "fit_count": record["fit_count"],
+        "probability_full_sha256": record["probability_full_sha256"],
+        "manifest_sha256": sha256_bytes(json.dumps(manifest, indent=1).encode()),
+        "previous_generation": None if previous is None else previous.get("generation"),
+        "advanced_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }, indent=1).encode()
+    with urllib.request.urlopen(_request("POST", url, key, payload), timeout=120) as r:
+        status = r.status
+    with urllib.request.urlopen(_request("GET", url, key), timeout=120) as r:
+        readback = json.loads(r.read())
+    return {"status": str(status), "pointer": readback,
+            "verified": readback["generation"] == generation.name}
+
+
 def main() -> int:
     root = Path(os.environ.get("C85_PARITY_ROOT", "/tmp/c85"))
     generations = Path(os.environ.get("C85_GENERATION_ROOT", "/tmp/c85/generations"))
@@ -324,7 +361,11 @@ def main() -> int:
     manifest = verify_generation(generation)
     uploads = upload_generation(generation)
     check = resume_contract(generation, identity)
+    pointer = upload_pointer(generation) if all(u["verified"] for u in uploads) and check["resumable"] else {
+        "status": "not advanced", "verified": False,
+        "reason": "generation did not verify; the previous pointer stands"}
     print(json.dumps({
+        "pointer": pointer,
         "generation": generation.name,
         "manifest_files": {k: v["sha256"] for k, v in manifest["files"].items()},
         "uploads": uploads,
@@ -334,7 +375,8 @@ def main() -> int:
         "fit_count": capture["meta"]["fit_count"],
         "scored_rows": capture["scored_rows"],
     }, indent=1))
-    return 0 if all(u["verified"] for u in uploads) and check["resumable"] else 1
+    return 0 if all(u["verified"] for u in uploads) and check["resumable"] \
+        and pointer.get("verified") else 1
 
 
 if __name__ == "__main__":
