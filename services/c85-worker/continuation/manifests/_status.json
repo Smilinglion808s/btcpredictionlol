@@ -1,162 +1,162 @@
 [
   {
-    "ceiling": "2026-09-08 18:30:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-08 18:30:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [],
     "error": null,
-    "mode": "incremental",
-    "rows": 27041,
+    "mode": null,
+    "rows": null,
     "stage": "binance_events",
-    "updated_at": "2026-09-08T19:03:08.736541+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 1027,
+    "mode": null,
+    "rows": null,
     "stage": "external_direction",
-    "updated_at": "2026-09-08T16:54:36.947107+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 19780,
+    "mode": null,
+    "rows": null,
     "stage": "fee_coverage",
-    "updated_at": "2026-09-08T16:54:51.652523+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "fee_coverage"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 19780,
+    "mode": null,
+    "rows": null,
     "stage": "fixed_floor",
-    "updated_at": "2026-09-08T16:54:58.704657+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "fee_coverage",
       "fixed_floor",
       "external_direction"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 19780,
+    "mode": null,
+    "rows": null,
     "stage": "c30",
-    "updated_at": "2026-09-08T16:55:52.594362+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "c30"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 20561,
+    "mode": null,
+    "rows": null,
     "stage": "phase3",
-    "updated_at": "2026-09-08T16:57:26.334460+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "phase3"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 20343,
+    "mode": null,
+    "rows": null,
     "stage": "c36_timing",
-    "updated_at": "2026-09-08T18:32:36.170870+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "c36_timing"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 22558,
+    "mode": null,
+    "rows": null,
     "stage": "c36_frontier",
-    "updated_at": "2026-09-08T19:03:40.814852+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "phase3",
       "c36_timing",
       "c36_frontier"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 19780,
+    "mode": null,
+    "rows": null,
     "stage": "c37",
-    "updated_at": "2026-09-08T19:44:25.632526+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-08 18:30:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-08 18:30:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "binance_events"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 27041,
+    "mode": null,
+    "rows": null,
     "stage": "structure_valid",
-    "updated_at": "2026-09-08T20:27:01.934800+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "structure_valid"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 26124,
+    "mode": null,
+    "rows": null,
     "stage": "r4_1",
-    "updated_at": "2026-09-08T20:34:49.667015+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "r4_1"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 26124,
+    "mode": null,
+    "rows": null,
     "stage": "r5_phase4",
-    "updated_at": "2026-09-08T20:58:50.658019+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "phase3",
       "fee_coverage",
@@ -164,85 +164,85 @@
       "r5_phase4"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 19780,
+    "mode": null,
+    "rows": null,
     "stage": "c42",
-    "updated_at": "2026-09-08T21:18:54.100807+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-08 18:30:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-08 18:30:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 27017,
+    "mode": null,
+    "rows": null,
     "stage": "polymarket_inventory",
-    "updated_at": "2026-09-08T19:48:08.006905+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-08 18:30:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-08 18:30:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "polymarket_inventory"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 27017,
+    "mode": null,
+    "rows": null,
     "stage": "c51_target_native",
-    "updated_at": "2026-09-08T19:58:13.672042+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "c42"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 8342,
+    "mode": null,
+    "rows": null,
     "stage": "polymarket_early_prior",
-    "updated_at": "2026-09-08T21:32:21.090638+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-01 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [
       "c51_target_native",
       "polymarket_early_prior"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 26304,
+    "mode": null,
+    "rows": null,
     "stage": "c51_rebase",
-    "updated_at": "2026-09-08T21:39:50.346000+00:00"
+    "updated_at": null
   },
   {
     "ceiling": "2026-09-01 00:00:00+00:00",
     "complete": false,
-    "cursor": "2025-12-01 00:00:00+00:00",
+    "cursor": null,
     "depends_on": [
       "c51_rebase",
       "c42"
     ],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 0,
+    "mode": null,
+    "rows": null,
     "stage": "c54",
-    "updated_at": "2026-09-08T21:39:52.854526+00:00"
+    "updated_at": null
   },
   {
-    "ceiling": "2026-09-08 18:30:00+00:00",
-    "complete": true,
-    "cursor": "2026-09-08 19:00:00+00:00",
+    "ceiling": "2026-09-09 00:00:00+00:00",
+    "complete": false,
+    "cursor": null,
     "depends_on": [],
     "error": null,
-    "mode": "bootstrap",
-    "rows": 25338,
+    "mode": null,
+    "rows": null,
     "stage": "kalshi_t5",
-    "updated_at": "2026-09-08T19:37:45.472290+00:00"
+    "updated_at": null
   }
 ]
