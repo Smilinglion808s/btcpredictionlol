@@ -444,7 +444,9 @@ class LongContextHead:
     _last_probability: float | None = None
     _last_digest: str | None = None
     _staged_fit: StagedFit | None = None
-    _no_fit_positions: set[int] = field(default_factory=set)
+    # position -> snapshot digest under which "no fit is possible" was observed.
+    # Keyed by digest so that a later, richer snapshot re-opens eligibility.
+    _no_fit_positions: dict[int, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.features = list(self.features)
