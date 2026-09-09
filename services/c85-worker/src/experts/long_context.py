@@ -373,6 +373,11 @@ class TrainingSnapshot:
     push_positions: int
     unresolved_positions: tuple[int, ...]
     provenance_digest: str
+    # The effective boundary clock: the instant the boundary at ``position``
+    # occurs (the final entitled row's settling candle close). A label whose
+    # receipt is dated after this instant was not knowable at the boundary.
+    boundary_clock: str | None
+    future_known_positions: tuple[int, ...]
     complete: bool
     digest: str
 
@@ -808,6 +813,19 @@ class LongContextHead:
         gaps = [p for p in range(window_first, position) if p not in held]
         unresolved_all = tuple(sorted(unresolved + gaps))
 
+        # Effective boundary clock: target ``position`` occurs one candle after
+        # the final entitled row ``position-1``.
+        boundary_clock = (retained[-1].ts + LABEL_CANDLE) if retained else None
+        future_known = []
+        for r in retained:
+            stamp = self._label_available_at.get(r.ts) or self._missing_labels.get(r.ts)
+            if not stamp or boundary_clock is None:
+                continue
+            received = pd.Timestamp(stamp.split("|", 1)[0])
+            if received > boundary_clock:
+                future_known.append(r.pos)
+        future_known_positions = tuple(sorted(future_known))
+
         rows = tuple(r for r in retained
                      if r.complete and np.isfinite(r.label) and r.label != 0)
         schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
@@ -824,6 +842,8 @@ class LongContextHead:
             f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}|"
             f"{window_first}|{window_last}|{expected}|{len(retained)}|"
             f"{len(resolved)}|{missing_source}|{push}|{int(complete)}|"
+            f"{'' if boundary_clock is None else boundary_clock.isoformat()}|"
+            f"{','.join(str(p) for p in future_known_positions)}|"
             f"{','.join(str(p) for p in unresolved_all)}|{provenance_digest}".encode()
         )
         for r in rows:
@@ -849,6 +869,8 @@ class LongContextHead:
             push_positions=push,
             unresolved_positions=unresolved_all,
             provenance_digest=provenance_digest,
+            boundary_clock=None if boundary_clock is None else boundary_clock.isoformat(),
+            future_known_positions=future_known_positions,
             complete=complete,
             digest=digest.hexdigest(),
         )
@@ -870,6 +892,8 @@ class LongContextHead:
         return {
             "position": position,
             "complete": snapshot.complete,
+            "boundary_clock": snapshot.boundary_clock,
+            "future_known_positions": list(snapshot.future_known_positions),
             "unresolved_positions": list(snapshot.unresolved_positions),
             "earliest_complete_fit_start": (
                 None if last is None else (last + LABEL_CANDLE).isoformat()),
@@ -927,6 +951,12 @@ class LongContextHead:
                 and staged.snapshot is not None
                 and staged.snapshot.digest == snapshot.digest):
             return staged
+        if snapshot.future_known_positions:
+            raise LongContextTrainingRequired(
+                f"positions {list(snapshot.future_known_positions)[:5]} carry labels "
+                f"received after the boundary clock {snapshot.boundary_clock}; the "
+                "original fit at this boundary could not have known them"
+            )
         if not snapshot.complete:
             missing = list(snapshot.unresolved_positions)
             raise LongContextTrainingRequired(
@@ -1039,6 +1069,7 @@ class LongContextHead:
                     **staged.snapshot.__dict__,
                     "grid_origin": list(staged.snapshot.grid_origin),
                     "unresolved_positions": list(staged.snapshot.unresolved_positions),
+                    "future_known_positions": list(staged.snapshot.future_known_positions),
                 },
             },
             "no_fit_positions": {str(p): d for p, d in self._no_fit_positions.items()},
@@ -1189,7 +1220,9 @@ class LongContextHead:
                 snapshot=None if snap is None else TrainingSnapshot(
                     **{**snap,
                        "grid_origin": tuple(snap["grid_origin"]),
-                       "unresolved_positions": tuple(snap.get("unresolved_positions", ()))}
+                       "unresolved_positions": tuple(snap.get("unresolved_positions", ())),
+                       "future_known_positions": tuple(
+                           snap.get("future_known_positions", ()))}
                 ),
             )
         if meta.get("fitted"):
