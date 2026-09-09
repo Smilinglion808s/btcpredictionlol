@@ -17,6 +17,37 @@ export type Ops = z.infer<typeof opSchema>;
 
 const nsish = z.union([z.string(), z.number(), z.null()]).optional();
 
+// --- private artifact transfer -------------------------------------------
+//
+// One bucket, three prefixes, nothing else reachable. The key is validated
+// structurally (no traversal, no absolute path, no wildcard, conservative
+// character set) rather than by string search, and the signed URL is returned
+// to the caller only — it is never logged, echoed into an error, or stored.
+export const ARTIFACT_BUCKET = "c85-artifacts";
+export const ARTIFACT_PREFIXES = ["releases", "checkpoints", "datasets"] as const;
+
+const KEY_RE = new RegExp(
+  `^(?:${ARTIFACT_PREFIXES.join("|")})/(?!.*\\.\\.)[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,198}[A-Za-z0-9._-])?$`,
+);
+
+const artifactKey = z
+  .string()
+  .min(3)
+  .max(220)
+  .refine((k) => KEY_RE.test(k) && !k.includes("//"), "invalid artifact key");
+
+const artifactPrefix = z
+  .string()
+  .max(220)
+  .default("releases/")
+  .refine(
+    (p) => ARTIFACT_PREFIXES.some((allowed) => p === `${allowed}/` || p.startsWith(`${allowed}/`)) && !p.includes(".."),
+    "invalid artifact prefix",
+  );
+
+const artifactTtl = z.number().int().min(30).max(900).default(120);
+
+
 const checkpointSchema = z.object({
   model_version: z.string().default(C85_MODEL_VERSION),
   as_of_utc: z.string().nullable().optional(),
