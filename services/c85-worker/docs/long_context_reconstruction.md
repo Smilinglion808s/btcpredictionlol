@@ -144,3 +144,42 @@ constants. No parity number, fitted head export, or operational claim exists
 until it finishes and the archived-ledger comparison is written.
 
 C85 betting remains suppressed; T45 untouched; C85 is not live.
+
+## Durable parity checkpoint collector (independent of the running job)
+
+`tools/parity_checkpoint_collector.py` never touches the running reproduction.
+It captures a metadata/NPZ pair that provably belongs to one writer generation
+(metadata read before and after the NPZ, plus the recorded probability-prefix
+digest recomputed from the NPZ itself; disagreement retries), records the full
+identity of the inputs (frame SHA, full contiguous X hash, timestamp hash,
+complete-mask hash, ordered schema hash, label hash, frozen config, runtime
+versions and thread settings), and writes an immutable `gen-NNNN-<epoch>`
+directory whose `MANIFEST.json` is written last. Payloads upload first, manifest
+last, and every object is downloaded back and byte/SHA verified.
+
+The checkpoint keeps **no serialised model**. A resume RECONSTRUCTS the active
+model by refitting at `last_fit_block` from the same immutable inputs; equality
+with uninterrupted operation is proven by a separate deterministic test
+(`test_refit_reconstruction_equals_uninterrupted_walk_forward`). Any mismatch in
+rows, features, schema, full inputs, timestamps, complete mask, labels, frame,
+config, runtime, probability digest or block index refuses the resume - row
+counts alone never suffice.
+
+First collected generation: `checkpoints/long_context_parity/gen-0017-1788926294`
+(block 17/183, 15 fits, 1440 scored rows, all objects verified on download).
+
+## Trainer eligibility (settled)
+
+Label domain is exactly `{-1, 0, +1}` from the recovered generator
+(`np.where(contiguous, np.sign(next_close - next_open), np.nan)`). `0` is a
+genuine PUSH (resolved, never trained on). NaN means the source was not
+contiguous over the settling candle and is recorded only through
+`settle_missing_label()` with explicit availability and source-completeness
+evidence. A label that has simply not arrived is *unresolved*: the boundary's
+entitled window `[position-WINDOW, position)` is then incomplete, and
+`train_ahead()` fails closed with `LongContextTrainingRequired` instead of
+producing a shortened fit or a bogus "no fit" verdict. Each fit is bound to one
+immutable captured row set whose digest it certifies, so a label settling during
+the fit cannot change what the model saw. `scheduling_conflict()` reports the
+measured conflict (the final entitled label publishes at the boundary itself)
+rather than shortening the original schedule.

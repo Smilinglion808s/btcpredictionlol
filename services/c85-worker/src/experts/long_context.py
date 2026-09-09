@@ -308,6 +308,15 @@ MAX_PENDING_LABELS = REFIT_EVERY * 4
 LABEL_CANDLE = pd.Timedelta(minutes=15)
 LABEL_SOURCES = frozenset({"binance_spot_1m"})
 
+# The recovered generator is
+#     frame["binance_label"] = np.where(contiguous, np.sign(next_close - next_open), np.nan)
+# (`build_long_context_features.py`). So the domain is exactly the sign set,
+# with 0.0 a genuine PUSH (flat candle, excluded from training by the original's
+# ``label != 0`` filter), and NaN reserved for one thing only: the original
+# source was NOT contiguous over the settling candle. A label that has simply
+# not been received yet is NOT a NaN - it is unresolved, and it blocks the fit.
+LABEL_DOMAIN = (-1.0, 0.0, 1.0)
+
 
 def _payload_digest(values: np.ndarray) -> str:
     import hashlib
@@ -336,6 +345,13 @@ class TrainingSnapshot:
     relevant training input changes (a new row, a newly settled or corrected
     label, a schema change), the digest changes and the staged fit is stale: it
     is rejected and rebuilt off the timed path rather than silently activated.
+
+    ``complete`` is the eligibility gate. The boundary's entitled window is
+    ``[window_first_position, position)``; the snapshot is complete only when
+    every one of those positions is retained AND resolved - resolved meaning
+    either a settled in-domain label or an *evidenced* original source gap. A
+    label that has merely not arrived yet leaves the snapshot incomplete, and
+    an incomplete snapshot may not be fitted or certified "no fit".
     """
 
     position: int
@@ -347,6 +363,17 @@ class TrainingSnapshot:
     label_watermark: str | None
     unsettled_positions: int
     schema_digest: str
+    # Full-window evidence and provenance, all bound into ``digest``.
+    window_first_position: int
+    window_last_position: int
+    expected_positions: int
+    retained_positions: int
+    resolved_positions: int
+    missing_source_positions: int
+    push_positions: int
+    unresolved_positions: tuple[int, ...]
+    provenance_digest: str
+    complete: bool
     digest: str
 
 
@@ -440,6 +467,10 @@ class LongContextHead:
     version: int = 0
     _labels_by_ts: dict[pd.Timestamp, float] = field(default_factory=dict)
     _label_available_at: dict[pd.Timestamp, str] = field(default_factory=dict)
+    # Targets whose label is an *original* NaN: the source was not contiguous
+    # over the settling candle. Recorded with evidence, never inferred from a
+    # label that simply has not arrived.
+    _missing_labels: dict[pd.Timestamp, str] = field(default_factory=dict)
     _last_ts: pd.Timestamp | None = None
     _last_probability: float | None = None
     _last_digest: str | None = None
@@ -491,9 +522,7 @@ class LongContextHead:
         training data underneath an already-issued fit.
         """
 
-        ts = pd.Timestamp(ts)
-        available_at = pd.Timestamp(available_at)
-        as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        ts, available_at, as_of = self._temporal(ts, available_at, as_of)
         if source not in LABEL_SOURCES:
             raise LongContextOrderError(
                 f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
@@ -521,8 +550,18 @@ class LongContextHead:
                 "the original never labels rows outside the trailing window"
             )
         label = float(label)
-        if not np.isfinite(label):
-            raise LongContextOrderError(f"non-finite label for {ts.isoformat()}")
+        if label not in LABEL_DOMAIN:
+            raise LongContextOrderError(
+                f"label {label!r} for {ts.isoformat()} is outside the recovered "
+                f"generator's domain {LABEL_DOMAIN} (sign of the settling candle; "
+                "0.0 is a PUSH). A non-contiguous source is settle_missing_label(), "
+                "not an arbitrary number"
+            )
+        if ts in self._missing_labels:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} was already recorded as an original source "
+                "gap; it cannot also carry a settled label"
+            )
         stamp = f"{available_at.isoformat()}|{source}"
         previous = self._labels_by_ts.get(ts)
         if previous is not None and np.isfinite(previous):
@@ -540,6 +579,72 @@ class LongContextHead:
         self._prune_labels()
         self.version += 1
 
+    def settle_missing_label(
+        self,
+        ts: pd.Timestamp,
+        *,
+        available_at: pd.Timestamp,
+        as_of: pd.Timestamp | None = None,
+        source: str = "binance_spot_1m",
+        reason: str,
+    ) -> None:
+        """Record an *original* NaN: the source was not contiguous at ``ts``.
+
+        This is the only way a target becomes permanently unlabelled. It needs
+        the same temporal evidence as a settled label plus an explicit
+        source-completeness reason, so that a label which has merely not been
+        received yet can never be mistaken for the original's NaN.
+        """
+
+        ts, available_at, as_of = self._temporal(ts, available_at, as_of)
+        if source not in LABEL_SOURCES:
+            raise LongContextOrderError(
+                f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
+            )
+        if not reason or not str(reason).strip():
+            raise LongContextOrderError(
+                "an original source gap needs explicit source-completeness evidence"
+            )
+        if available_at < ts + LABEL_CANDLE:
+            raise LongContextOrderError(
+                f"the gap at {ts.isoformat()} cannot be evidenced before its candle "
+                f"closes at {(ts + LABEL_CANDLE).isoformat()}"
+            )
+        if available_at > as_of:
+            raise LongContextOrderError(
+                f"gap evidence for {ts.isoformat()} is dated in the future"
+            )
+        row = next((r for r in self.buffer if r.ts == ts), None)
+        if row is None:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} is not a retained observed target"
+            )
+        settled = self._labels_by_ts.get(ts)
+        if settled is not None and np.isfinite(settled):
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} already settled to {settled}; it cannot "
+                "become an original source gap"
+            )
+        stamp = f"{available_at.isoformat()}|{source}|{reason}"
+        if self._missing_labels.get(ts) == stamp:
+            return  # identical duplicate
+        self._missing_labels[ts] = stamp
+        row.label = float("nan")
+        self._prune_labels()
+        self.version += 1
+
+    @staticmethod
+    def _temporal(ts, available_at, as_of):
+        """Coerce and validate the three timestamps; NaT is never a timestamp."""
+
+        ts = pd.Timestamp(ts)
+        available_at = pd.Timestamp(available_at)
+        as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        for name, value in (("ts", ts), ("available_at", available_at), ("as_of", as_of)):
+            if value is pd.NaT or pd.isna(value):
+                raise LongContextOrderError(f"{name} is NaT; a label needs a real timestamp")
+        return ts, available_at, as_of
+
     def _prune_labels(self) -> None:
         """Keep the label map bounded by the retained window, not by history."""
 
@@ -549,6 +654,8 @@ class LongContextHead:
         for key in [k for k in self._labels_by_ts if k < oldest]:
             del self._labels_by_ts[key]
             self._label_available_at.pop(key, None)
+        for key in [k for k in self._missing_labels if k < oldest]:
+            del self._missing_labels[key]
 
     # -- serving path (no training, no mutation) ----------------------------
     def refit_due_at(self) -> int | None:
@@ -588,7 +695,7 @@ class LongContextHead:
         activate: StagedFit | None = None
         model = self.model
         if self.position >= MINIMUM and self.position % REFIT_EVERY == 0:
-            snapshot = self.training_snapshot(self.position)
+            snapshot = self.training_snapshot(self.position, copy=False)
             staged = self._staged_fit
             usable = (
                 staged is not None
@@ -665,28 +772,65 @@ class LongContextHead:
         return update.commit()
 
     # -- fitting (off the serving path) -------------------------------------
-    def training_snapshot(self, position: int) -> TrainingSnapshot:
-        """The immutable description of what a fit for ``position`` may use.
+    def _capture(self, position: int, *, copy: bool = True
+                 ) -> tuple[tuple[_Row, ...], TrainingSnapshot]:
+        """Capture the boundary's rows ONCE and describe exactly those rows.
 
-        This is the eligibility contract: the exact positional range, the grid
-        origin, the settled-label watermark, the ordered schema and a digest
-        over every training row actually admitted. Two calls agree only when
-        nothing relevant has changed.
+        The returned rows are immutable copies. The fit is produced from this
+        captured tuple and the digest certifies the same tuple, so a label that
+        settles between describing and fitting cannot produce a model whose
+        certified snapshot is not the data it saw.
         """
 
         import hashlib
 
-        rows = [r for r in self.buffer
-                if r.complete and np.isfinite(r.label) and r.label != 0]
-        unsettled = sum(1 for r in self.buffer if not np.isfinite(r.label))
+        captured = tuple(
+            _Row(r.ts, np.array(r.values, dtype=float, copy=True), r.complete, r.label, r.pos)
+            for r in self.buffer
+        ) if copy else tuple(self.buffer)
+        window_first = max(0, position - WINDOW)
+        window_last = position - 1
+        expected = max(0, position - window_first)
+        retained = [r for r in captured if window_first <= r.pos <= window_last]
+        resolved, unresolved, missing_source, push = [], [], 0, 0
+        for r in retained:
+            if r.ts in self._missing_labels:
+                missing_source += 1
+                resolved.append(r)
+            elif np.isfinite(r.label):
+                resolved.append(r)
+                if r.label == 0:
+                    push += 1
+            else:
+                unresolved.append(r.pos)
+        # Positions inside the entitled window that are not retained at all.
+        held = {r.pos for r in retained}
+        gaps = [p for p in range(window_first, position) if p not in held]
+        unresolved_all = tuple(sorted(unresolved + gaps))
+
+        rows = tuple(r for r in retained
+                     if r.complete and np.isfinite(r.label) and r.label != 0)
         schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
+        provenance = hashlib.sha256()
+        for r in retained:
+            stamp = (self._label_available_at.get(r.ts)
+                     or self._missing_labels.get(r.ts) or "UNRESOLVED")
+            provenance.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|{stamp}\n".encode())
+        provenance_digest = provenance.hexdigest()
+
+        complete = not unresolved_all and len(retained) == min(expected, WINDOW)
         digest = hashlib.sha256()
-        digest.update(f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}".encode())
+        digest.update(
+            f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}|"
+            f"{window_first}|{window_last}|{expected}|{len(retained)}|"
+            f"{len(resolved)}|{missing_source}|{push}|{int(complete)}|"
+            f"{','.join(str(p) for p in unresolved_all)}|{provenance_digest}".encode()
+        )
         for r in rows:
             digest.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|".encode())
             digest.update(_payload_digest(r.values).encode())
-        settled = [r.ts for r in self.buffer if np.isfinite(r.label)]
-        return TrainingSnapshot(
+        settled = [r.ts for r in retained if np.isfinite(r.label)]
+        snapshot = TrainingSnapshot(
             position=position,
             grid_origin=(MINIMUM, REFIT_EVERY, WINDOW),
             first_position=rows[0].pos if rows else -1,
@@ -694,10 +838,56 @@ class LongContextHead:
             training_rows=len(rows),
             cutoff_ts=rows[-1].ts.isoformat() if rows else None,
             label_watermark=max(settled).isoformat() if settled else None,
-            unsettled_positions=unsettled,
+            unsettled_positions=len(unresolved_all),
             schema_digest=schema_digest,
+            window_first_position=window_first,
+            window_last_position=window_last,
+            expected_positions=min(expected, WINDOW),
+            retained_positions=len(retained),
+            resolved_positions=len(resolved),
+            missing_source_positions=missing_source,
+            push_positions=push,
+            unresolved_positions=unresolved_all,
+            provenance_digest=provenance_digest,
+            complete=complete,
             digest=digest.hexdigest(),
         )
+        return rows, snapshot
+
+    def scheduling_conflict(self, position: int | None = None) -> dict[str, Any]:
+        """Measure, never hide, the boundary's label-availability conflict.
+
+        The final row a boundary at ``P`` is entitled to is position ``P-1``,
+        whose settling candle closes exactly at the boundary timestamp. So a
+        *complete* fit for that boundary cannot begin before the boundary
+        itself: this is a property of the original schedule, not something to
+        be worked around by dropping the last label.
+        """
+
+        position = self.refit_due_at() if position is None else int(position)
+        _rows, snapshot = self._capture(position, copy=False)
+        last = self.buffer[-1].ts if self.buffer else None
+        return {
+            "position": position,
+            "complete": snapshot.complete,
+            "unresolved_positions": list(snapshot.unresolved_positions),
+            "earliest_complete_fit_start": (
+                None if last is None else (last + LABEL_CANDLE).isoformat()),
+            "boundary_last_target": None if last is None else last.isoformat(),
+            "note": ("the label of the boundary's final entitled row publishes at "
+                     "that row's ts + 15m, i.e. at the boundary itself; training "
+                     "cannot start earlier without shortening the original window"),
+        }
+
+    def training_snapshot(self, position: int, *, copy: bool = True) -> TrainingSnapshot:
+        """The immutable description of what a fit for ``position`` may use.
+
+        ``copy=False`` only describes the current rows (used on the serving path,
+        where cloning the whole trailing window would cost real milliseconds);
+        the digest is identical either way. ``train_ahead`` always captures.
+        """
+
+        return self._capture(position, copy=copy)[1]
 
     def train_ahead(self, *, position: int | None = None) -> StagedFit | None:
         """Fit the model that the next scheduled refit position will activate.
@@ -709,6 +899,13 @@ class LongContextHead:
         refused: the original never trains on a shorter history than the
         boundary defines, and a fit made early would silently miss the labels
         that settle in between.
+
+        It also requires the boundary's entitled window to be RESOLVED, not
+        merely present: every position in ``[position-WINDOW, position)`` must
+        be retained and must carry either a settled in-domain label or evidenced
+        original source gap. A label that has not arrived yet is not the
+        original's NaN, so it fails closed here (``LongContextTrainingRequired``)
+        rather than producing a shortened fit or a bogus "no fit" verdict.
 
         Uses exactly the rows the original would have used at that boundary:
         the retained trailing window, restricted to feature-complete rows with a
@@ -724,14 +921,21 @@ class LongContextHead:
                 f"a fit for position {position} is not yet eligible: the head is at "
                 f"{self.position} and the rows before {position} do not all exist yet"
             )
-        snapshot = self.training_snapshot(position)
+        rows, snapshot = self._capture(position)
         staged = self._staged_fit
         if (staged is not None and staged.position == position
                 and staged.snapshot is not None
                 and staged.snapshot.digest == snapshot.digest):
             return staged
-        rows = [r for r in self.buffer
-                if r.complete and np.isfinite(r.label) and r.label != 0]
+        if not snapshot.complete:
+            missing = list(snapshot.unresolved_positions)
+            raise LongContextTrainingRequired(
+                f"the training window for position {position} is not resolved: "
+                f"{len(missing)} of {snapshot.expected_positions} entitled positions "
+                f"have no settled label and no evidenced source gap "
+                f"(first {missing[:5]}). Waiting for the original required inputs; "
+                "a pending label is not an original NaN"
+            )
         if len(rows) < MINIMUM:
             self._no_fit_positions[position] = snapshot.digest
             return None
@@ -821,6 +1025,7 @@ class LongContextHead:
             "pending_labels": {k.isoformat(): v for k, v in self._labels_by_ts.items()},
             "label_availability": {k.isoformat(): v
                                    for k, v in self._label_available_at.items()},
+            "missing_labels": {k.isoformat(): v for k, v in self._missing_labels.items()},
             "fitted": self.model is not None,
             # A restart immediately before a scheduled refit must not lose the
             # fit that was already produced off the timed path, nor the
@@ -833,6 +1038,7 @@ class LongContextHead:
                 "snapshot": None if staged.snapshot is None else {
                     **staged.snapshot.__dict__,
                     "grid_origin": list(staged.snapshot.grid_origin),
+                    "unresolved_positions": list(staged.snapshot.unresolved_positions),
                 },
             },
             "no_fit_positions": {str(p): d for p, d in self._no_fit_positions.items()},
@@ -962,6 +1168,8 @@ class LongContextHead:
                               for k, v in meta["pending_labels"].items()}
         head._label_available_at = {pd.Timestamp(k): str(v)
                                     for k, v in (meta.get("label_availability") or {}).items()}
+        head._missing_labels = {pd.Timestamp(k): str(v)
+                                for k, v in (meta.get("missing_labels") or {}).items()}
         head._no_fit_positions = {int(p): str(d)
                                   for p, d in (meta.get("no_fit_positions") or {}).items()}
         staged_meta = meta.get("staged_fit")
@@ -979,7 +1187,9 @@ class LongContextHead:
                 training_rows=int(staged_meta["training_rows"]),
                 cutoff_ts=staged_meta.get("cutoff_ts"),
                 snapshot=None if snap is None else TrainingSnapshot(
-                    **{**snap, "grid_origin": tuple(snap["grid_origin"])}
+                    **{**snap,
+                       "grid_origin": tuple(snap["grid_origin"]),
+                       "unresolved_positions": tuple(snap.get("unresolved_positions", ()))}
                 ),
             )
         if meta.get("fitted"):
