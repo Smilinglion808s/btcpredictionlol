@@ -26,22 +26,32 @@ Coverage of the recovered ledgers: 2026-02-06T23:00Z..2026-08-31T23:45Z
 rows, 26,124 rows each). They are historical intermediates and parity fixtures
 -- they are NOT a live source, and they do not extend past 2026-08-31.
 
-So each of the nine keys is now `UNPORTED`: producer source and historical
-inputs are both in hand, and what remains is (a) transcribing each producer's
-computation for freshly arriving candles and (b) recovering continuation inputs
-after the ledger cutoff. Where a ledger is used at all, it is used only for
+STATUS 2026-09-09. `external_direction` and `external_rank` are no longer
+pass-through: their producer contract is transcribed in
+`direction_contract.py` (signed call, positional 2,880/960 rolling rank of
+|p-0.5|, ties half) and verified against the archived continuous ledger --
+19,780 rows, zero direction mismatches, max rank difference 1.11e-16 -- and it
+is wired into `LeafExperts` through `LongContextLeafProducer`. What is still
+absent is the *head* that emits the probability: frozen `T0_LONG_CONTEXT_R1`
+(`ALL_HGB`, 324 features, retain 0.25) exists only as freeze metadata, with no
+fitted artifact and no feature pickle in recovery. So these two keys compute
+correctly from a probability and stay fail-closed without one.
+
+The other seven keys remain `UNPORTED`: producer source and historical inputs
+are in hand, and what remains is (a) transcribing each producer's computation
+for freshly arriving candles and (b) recovering continuation inputs after the
+ledger cutoff. Where a ledger is used at all, it is used only for
 stage-by-stage parity checking of a transcribed computation -- replaying a
 ledger is never counted as evidence that its producer was ported.
 
 Until a producer is transcribed and proven at parity, this module raises rather
-than guessing at a root signal; fabricating `directional_matrix` outputs from
-column naming conventions would violate the "no approximations, no fabricated
-parameters" rule.
+than guessing at a root signal.
 
-`LeafExperts.evaluate()` therefore FAILS CLOSED for every one of the nine keys:
-it raises `MissingUpstreamSignalError` naming, per key, the exact producer file
-and the exact blocker, unless the caller has independently supplied the
-already-computed upstream field in `packet`.
+`LeafExperts.evaluate()` therefore FAILS CLOSED for every key without a wired
+producer: it raises `MissingUpstreamSignalError` naming, per key, the exact
+producer file and blocker, unless the caller opted into `allow_supplied` (tests
+and archived replay) and placed the already-computed upstream field in
+`packet`.
 
 Everything below that *is* transcribed is transcribed exactly, with a docstring
 pointing at the file and line range it came from.
