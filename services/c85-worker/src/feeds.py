@@ -464,7 +464,7 @@ class KalshiWindowCollector:
         self.base = api_base.rstrip("/")
         self.series = series
         self.poll_s = poll_s
-        self._markets: dict[int, str] = {}   # target_ms -> ticker
+        self._markets: dict[int, dict[str, Any]] = {}  # target_ms -> market
         self._markets_at_ns = -1
         self._fetched: set[int] = set()
 
@@ -482,10 +482,18 @@ class KalshiWindowCollector:
             import datetime as _dt
 
             stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
-            self._markets[int(stamp.timestamp() * 1000)] = market["ticker"]
+            strike = market.get("floor_strike")
+            self._markets[int(stamp.timestamp() * 1000)] = {
+                "ticker": market["ticker"],
+                # floor_strike is target-native and comes from the market itself;
+                # a missing or non-numeric value stays None and fails the packet.
+                "floor_strike": None if strike is None else float(strike),
+            }
         self._markets_at_ns = now_ns()
 
-    async def _fetch_window(self, client: httpx.AsyncClient, target_ms: int, ticker: str) -> None:
+    async def _fetch_window(self, client: httpx.AsyncClient, target_ms: int,
+                            market: dict[str, Any]) -> None:
+        ticker = market["ticker"]
         start_s = target_ms // 1000
         accepted: list[dict[str, Any]] = []
         rejected = {"time": 0, "ticker": 0, "block": 0}
@@ -546,6 +554,7 @@ class KalshiWindowCollector:
             target_ms,
             {
                 "ticker": ticker,
+                "floor_strike": market.get("floor_strike"),
                 "receipt_ns": receipt,
                 "eligible_trade_count": len(accepted),
                 "eligible_contract_volume": volume,
@@ -569,7 +578,7 @@ class KalshiWindowCollector:
                     if now_ns() - self._markets_at_ns > 60 * NS:
                         await self._refresh_markets(client)
                     now_ms = now_ns() // 1_000_000
-                    for target_ms, ticker in sorted(self._markets.items()):
+                    for target_ms, market in sorted(self._markets.items()):
                         if target_ms in self._fetched:
                             continue
                         # The window is only complete once T+5s has elapsed.
@@ -578,7 +587,7 @@ class KalshiWindowCollector:
                         if now_ms - target_ms > 15 * 60_000:
                             self._fetched.add(target_ms)  # too old to matter
                             continue
-                        await self._fetch_window(client, target_ms, ticker)
+                        await self._fetch_window(client, target_ms, market)
                     self.buffer.connected_since_ns = self.buffer.connected_since_ns or now_ns()
                     self.buffer.transport = "rest"
                     self.buffer.error = None
