@@ -85,9 +85,13 @@ class Worker:
             gateway=self.gateway,
             packet_source=self.packet_source,
             ticker_resolver=self.ticker_resolver,
-            # Execution dispatch is a SEPARATE gate from logging readiness.
-            allow_dispatch=self.settings.allow_live_publication,
+            # Execution dispatch is a SEPARATE gate from logging readiness, and
+            # for this authorized reconstruction run it is hard-suppressed here
+            # rather than trusted to configuration: an inherited or accidental
+            # allow_live_publication=true must not be able to place a bet.
+            allow_dispatch=False,
         )
+
         self.scheduler = BoundaryScheduler(self.on_boundary)
 
 
