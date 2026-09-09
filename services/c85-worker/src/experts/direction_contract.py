@@ -35,7 +35,9 @@ Three corrections to earlier worker code are encoded here.
    ledger happens to contain no exact-0.5 row, so this is taken from the source
    expression, not inferred from data.
 3. ``external_rank`` is the **global** ``rolling_rank`` of ``|p - 0.5|`` over
-   the trailing 2,880 finite observations (minimum 960), NOT the per-direction
+   the trailing 2,880 **rows** - a positional window, from which the non-finite
+   entries are dropped only after slicing, so rows without a probability still
+   consume a slot - with a 960-row minimum. It is NOT the per-direction
    ``directional_past_rank``. ``directional_past_rank`` (lookback 768, minimum
    96) belongs to the c30/c70 ``map_external_scores`` ranks, a different pair
    of columns.
