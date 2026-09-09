@@ -260,11 +260,80 @@ The frozen head is `ALL_HGB` / policy `ALL_HGB::CONF_GLOBAL_Q25`, retain 0.25,
 transcription. The freeze also records
 `external_features_sha256 = 8618768f...` and `first_fit_ts 2026-03-02T00:15Z`,
 while the rebuilt frame hashes `93b99a13...` and first becomes eligible at
-2026-03-05T00:15Z (exactly 288 positions later). Cause remains the input
-frame, not the head selection.
+2026-03-05T00:15Z. **Superseded below**: the freeze's `first_fit_ts` is a
+literal grid label, not an executed fit, and a differing pickle SHA-256 alone
+does not establish differing values (serialisation/runtime can change it). The
+head selection is still ruled out; the input frame is *not* established as the
+cause by these two facts.
 
 Record correction: the single-block experiment preserved only its summary
 JSON. Its per-row probability arrays and its runner script lived in `/tmp` and
 were lost to a sandbox reset; only `orig_probs_sha`/`trans_probs_sha` survive.
-Evidence objects:
-`c85-artifacts/reports/probability_lineage_2026-09-09/` (readback verified).
+Evidence objects: `c85-artifacts/checkpoints/reports/…` — the gateway only
+admits the `releases/`, `checkpoints/`, `datasets` prefixes, so the earlier
+`reports/…` path in this file was wrong.
+
+
+## 2026-09-09 (2) — first-fit eligibility at the archived boundary (NO FIT)
+
+Script: `reproduction/diagnose_first_fit_eligibility.py` (imports the recovered
+original `load_external` / `feature_sets` / `model_specs`; no fit, no download,
+no rule change). Inputs: rebuilt frame `93b99a13…`, original source
+`678844521fb5da77…`. Frame key integrity: 23,328 rows, no duplicate
+timestamps, monotonic, uniform 15-minute grid. Selection: 324 ordered features
+(`49ed0926…`).
+
+| boundary | window | label-eligible | complete+label-eligible | deficit vs 5,760 | fits |
+| --- | --- | --- | --- | --- | --- |
+| 2026-03-02T00:15Z (pos 5760) | 0..5760 | 5,757 | 5,558 | 202 | no |
+| 2026-03-03T00:15Z (pos 5856) | 0..5856 | 5,853 | 5,654 | 106 | no |
+| 2026-03-04T00:15Z (pos 5952) | 0..5952 | 5,949 | 5,750 | 10 | no |
+| 2026-03-05T00:15Z (pos 6048) | 0..6048 | 6,045 | 5,843 | 0 | **yes** |
+
+Two corrections this establishes:
+
+1. **The three-day shift is not ~288 missing rows.** The deficit at the archived
+   boundary is 202 rows, and only 10 at 2026-03-04. Earlier wording (and the
+   "at least ~95 rows" localisation above) is superseded.
+2. **`first_fit_ts 2026-03-02T00:15Z` is not evidence of a fit at that
+   boundary.** `finalize_phase` writes `first_fit_ts = frame.ts.iloc[MINIMUM]`
+   unconditionally (line 628 of the recovered `long_context_model.py`); only
+   `walk_forward_hgb`'s own `first_fit` reflects an executed fit and it is not
+   what the freeze records. Independently, position 5760 is **arithmetically
+   unfittable on any frame**: the window holds exactly 5,760 rows and the
+   original rule also drops zero/non-finite labels, so with even one flat label
+   in the first 60 days the eligible set cannot reach MINIMUM = 5,760. In the
+   rebuilt frame the ceiling is 5,757.
+
+Missingness among label-eligible rows at pos 5760 (199 incomplete rows,
+overlapping): DEPTH 108, METRICS 95, PRICE 60. Minimal explanatory groups
+(columns sharing one missing-row pattern): the 66 `book_*` depth columns (108
+rows), then 6 `metric_*` columns (95), then PRICE groups of 3/8 columns (60,
+59, 20, 19 rows) — no single column and no single family closes the gap.
+
+### What is proven / unproven / required
+
+1. **Proven (rebuilt side).** With the original preparation and selection, the
+   rebuilt frame first satisfies the original eligibility rule at
+   2026-03-05T00:15Z, with the exact counts above, and cannot satisfy it at
+   2026-03-02T00:15Z for a structural reason unrelated to data quality.
+2. **Unproven (original side).** No archived per-row mask, per-feature
+   completeness, training-count log, or original feature value exists for that
+   boundary. The archived audit records only global aggregates (23,328 rows,
+   543 features, `complete_spot_rows` 23,328, `book_rows` 23,328,
+   `metric_rows` 23,327, `binance_nonflat_labels` 23,308) — nothing
+   position-scoped. Localisation of the probability divergence against the
+   archive is therefore **impossible with the artifacts that exist**, and the
+   archive's own first scored row (2026-03-05 00:15Z, position 6048) is in fact
+   the same boundary the rebuilt frame first fits at.
+3. **Required artifact.** Either the original `long_context_features.pkl`
+   (`8618768f…`) or a per-position/per-column completeness or training-count
+   log from the original run. Without one of these, unchanged historical
+   fitted state cannot be reproduced or falsified numerically.
+
+Evidence object (readback verified):
+`c85-artifacts/checkpoints/reports/first_fit_eligibility_2026-09-09/`
+(`first_fit_eligibility.json` sha256 `04335e50f33a6103…`,
+`diagnose_first_fit_eligibility.py` sha256 `3c830d7dbe43e933…`).
+
+C85 betting remains suppressed; T45 untouched; nothing deployed or published.
