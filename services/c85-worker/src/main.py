@@ -149,8 +149,13 @@ class Worker:
         return "LOGGING_READY", None
 
     def dispatch_status(self) -> str:
-        """Execution dispatch is suppressed unless explicitly enabled."""
-        return "ENABLED" if self.settings.allow_live_publication else "SUPPRESSED"
+        """Execution dispatch for the reconstruction build is always suppressed.
+
+        This mirrors `allow_dispatch=False` on the orchestrator, so the reported
+        status cannot disagree with what the boundary path will actually do.
+        """
+        return "SUPPRESSED"
+
 
     def evaluate_readiness(self) -> tuple[str, str | None]:
         """Combined view used by the boundary path and the health endpoint."""
