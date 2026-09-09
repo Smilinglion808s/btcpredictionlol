@@ -550,8 +550,18 @@ class LongContextHead:
                 "the original never labels rows outside the trailing window"
             )
         label = float(label)
-        if not np.isfinite(label):
-            raise LongContextOrderError(f"non-finite label for {ts.isoformat()}")
+        if label not in LABEL_DOMAIN:
+            raise LongContextOrderError(
+                f"label {label!r} for {ts.isoformat()} is outside the recovered "
+                f"generator's domain {LABEL_DOMAIN} (sign of the settling candle; "
+                "0.0 is a PUSH). A non-contiguous source is settle_missing_label(), "
+                "not an arbitrary number"
+            )
+        if ts in self._missing_labels:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} was already recorded as an original source "
+                "gap; it cannot also carry a settled label"
+            )
         stamp = f"{available_at.isoformat()}|{source}"
         previous = self._labels_by_ts.get(ts)
         if previous is not None and np.isfinite(previous):
@@ -569,6 +579,72 @@ class LongContextHead:
         self._prune_labels()
         self.version += 1
 
+    def settle_missing_label(
+        self,
+        ts: pd.Timestamp,
+        *,
+        available_at: pd.Timestamp,
+        as_of: pd.Timestamp | None = None,
+        source: str = "binance_spot_1m",
+        reason: str,
+    ) -> None:
+        """Record an *original* NaN: the source was not contiguous at ``ts``.
+
+        This is the only way a target becomes permanently unlabelled. It needs
+        the same temporal evidence as a settled label plus an explicit
+        source-completeness reason, so that a label which has merely not been
+        received yet can never be mistaken for the original's NaN.
+        """
+
+        ts, available_at, as_of = self._temporal(ts, available_at, as_of)
+        if source not in LABEL_SOURCES:
+            raise LongContextOrderError(
+                f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
+            )
+        if not reason or not str(reason).strip():
+            raise LongContextOrderError(
+                "an original source gap needs explicit source-completeness evidence"
+            )
+        if available_at < ts + LABEL_CANDLE:
+            raise LongContextOrderError(
+                f"the gap at {ts.isoformat()} cannot be evidenced before its candle "
+                f"closes at {(ts + LABEL_CANDLE).isoformat()}"
+            )
+        if available_at > as_of:
+            raise LongContextOrderError(
+                f"gap evidence for {ts.isoformat()} is dated in the future"
+            )
+        row = next((r for r in self.buffer if r.ts == ts), None)
+        if row is None:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} is not a retained observed target"
+            )
+        settled = self._labels_by_ts.get(ts)
+        if settled is not None and np.isfinite(settled):
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} already settled to {settled}; it cannot "
+                "become an original source gap"
+            )
+        stamp = f"{available_at.isoformat()}|{source}|{reason}"
+        if self._missing_labels.get(ts) == stamp:
+            return  # identical duplicate
+        self._missing_labels[ts] = stamp
+        row.label = float("nan")
+        self._prune_labels()
+        self.version += 1
+
+    @staticmethod
+    def _temporal(ts, available_at, as_of):
+        """Coerce and validate the three timestamps; NaT is never a timestamp."""
+
+        ts = pd.Timestamp(ts)
+        available_at = pd.Timestamp(available_at)
+        as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        for name, value in (("ts", ts), ("available_at", available_at), ("as_of", as_of)):
+            if value is pd.NaT or pd.isna(value):
+                raise LongContextOrderError(f"{name} is NaT; a label needs a real timestamp")
+        return ts, available_at, as_of
+
     def _prune_labels(self) -> None:
         """Keep the label map bounded by the retained window, not by history."""
 
@@ -578,6 +654,8 @@ class LongContextHead:
         for key in [k for k in self._labels_by_ts if k < oldest]:
             del self._labels_by_ts[key]
             self._label_available_at.pop(key, None)
+        for key in [k for k in self._missing_labels if k < oldest]:
+            del self._missing_labels[key]
 
     # -- serving path (no training, no mutation) ----------------------------
     def refit_due_at(self) -> int | None:
