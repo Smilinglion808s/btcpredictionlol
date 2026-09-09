@@ -1,12 +1,29 @@
-"""External direction: raw producers -> directional matrix -> fitted head.
+"""C30/C70 multivenue direction head: producers -> directional matrix -> fit.
 
-This is the seam between the live producers and the *original* fitted external
-direction model. Nothing here re-derives, re-tunes or re-orders anything: the
-pipelines are the artifacts produced by ``tools/refit_external_direction.py``,
-which re-executed the original schedule from
-``c30_c70_lab_manager_r2.py`` and reproduced its recorded selection
-(``BINANCE_HYPERLIQUID``, ``C=0.03`` for both stages), its validation and
-challenge metrics, and its retained feature lists exactly.
+NAMING CORRECTION (2026-09-09). This module is *not* the producer of the leaf
+key ``external_direction``. Tracing the recovered sources end to end:
+
+  long_context_model.predictions()            -> external_direction / external_rank
+    -> t0_long_context_full_predictions.csv
+    -> t0_t5_coverage_bridge_audit_r1.py      -> continuous_coverage_ledger.csv
+    -> t0_t5_fee_coverage_frontier_r1.py      -> fee_coverage_shadow_ledger.csv
+    -> build_c42_maturation_consensus_r1.py   -> C42 -> C85
+
+``external_direction`` is therefore the signed call of the frozen
+``T0_LONG_CONTEXT_R1`` head (``ALL_HGB``, retain 0.25) - see
+``src/experts/direction_contract.py``, which carries that contract and matches
+the archived ledger exactly. What *this* module holds is the
+``c30_c70_lab_manager_r2.py`` head, whose outputs are ``p_t0_green`` /
+``p_t5_green`` in ``map_external_scores`` (lines 368-390), consumed there via
+``directional_past_rank`` of ``p_correct`` - a different rank family (lookback
+768, minimum 96) from ``external_rank``. Nothing computed here may be written
+into the ``external_direction`` / ``external_rank`` leaf fields.
+
+The pipelines are the artifacts produced by ``tools/refit_external_direction.py``,
+which re-executed the original schedule from ``c30_c70_lab_manager_r2.py`` and
+reproduced its recorded selection (``BINANCE_HYPERLIQUID``, ``C=0.03`` for both
+stages), its validation and challenge metrics, and its retained feature lists
+exactly.
 
 The three things this module is careful about, because getting any of them
 wrong would quietly change the model:
@@ -45,6 +62,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from .direction_contract import signed_direction
 from .direction_matrix import SOURCE_SETS, directional_matrix
 
 DEFAULT_FITS_DIR = Path(
@@ -185,18 +203,28 @@ class ExternalDirectionModel:
         design = self.design_row(stage, target_ts, observation)
         proba = fit.pipeline.predict_proba(design)
         classes = list(fit.pipeline.classes_)
-        p_up = float(proba[0][classes.index(1)])
+        green_index = classes.index(1)
+        p_green = float(proba[0][green_index])
         present = [c for c in fit.features if not pd.isna(design.iloc[0][c])]
         return {
             "stage": stage,
             "target_ts": pd.Timestamp(target_ts).isoformat(),
             "phase": fit.phase,
-            "fit_id": f"external_direction_{stage}_{fit.phase}",
+            "fit_id": f"c30_c70_direction_{stage}_{fit.phase}",
             "fit_sha256": fit.sha256,
             "train_end": fit.train_end.isoformat(),
             "source_set": fit.source_set,
-            "p_up": p_up,
-            "direction": 1 if p_up >= 0.5 else 0,
+            # `p_t0_green` / `p_t5_green` in c30_c70_lab_manager_r2.map_external_scores.
+            "p_green": p_green,
+            # The positive class *index* in `pipeline.classes_`. This is a
+            # bookkeeping value, NOT a call, and is deliberately named apart
+            # from any `direction` field: the C85 leaf direction contract is
+            # signed {-1,+1} with 0 for "no probability" (direction_contract).
+            "class_index": int(green_index),
+            # Signed under the same contract as the rest of the chain, so this
+            # value can never be confused with a 1/0 class index. It is the
+            # sign of *this* head only, not `external_direction`.
+            "signed_direction": signed_direction(p_green),
             "features_present": len(present),
             "features_expected": len(fit.features),
             "features_missing": [c for c in fit.features if c not in present],

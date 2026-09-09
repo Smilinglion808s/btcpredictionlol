@@ -1,0 +1,17 @@
+{
+  "ledger": "/mnt/documents/.lovable/c85-cache/upx/upstream/vault_work/legacy_lab2/sources/T0_T5_CONTINUOUS_COVERAGE_LAB_CHECKPOINT_R1.zip__expanded/continuous_coverage_ledger.csv",
+  "rows": 19780,
+  "coverage": [
+    "2026-02-06T23:00:00+00:00",
+    "2026-08-31T23:45:00+00:00"
+  ],
+  "direction_mismatches": 0,
+  "direction_value_counts": {
+    "-1": 8890,
+    "1": 7955,
+    "0": 2935
+  },
+  "rank_finiteness_mismatches": 0,
+  "rank_max_abs_difference": 1.1102230246251565e-16,
+  "exact_half_probability_rows": 0
+}
