@@ -711,48 +711,73 @@ class BinanceWindowAccumulator:
         for buffer in self.buffers.values():
             buffer.prune(floor)
 
-    # -- validity -----------------------------------------------------------
+    # -- input coverage -------------------------------------------------------
+    def window_us(self, target_us: int) -> tuple[int, int]:
+        """The ONLY event-time span this target reads: [T-900s, T+5s)."""
+        return (int(target_us) - RETENTION_US,
+                int(target_us) + max(T5_WINDOW_SECONDS) * ONE_SECOND_US)
+
     def has_history(self, target_us: int, venue: str = "spot") -> bool:
-        """True only when coverage begins at or before the 900s T0 window start.
+        """True only when PROVEN coverage spans the whole window this target reads.
 
-        This uses the buffer's recorded coverage start rather than the oldest
-        surviving event: an empty first minute is not evidence of absence, and a
-        pruned buffer must not look like a covered one.
+        Declared coverage, not the oldest surviving event: one ancient trade in
+        an otherwise sparse bootstrap is not evidence that the tape around it was
+        captured, and a pruned buffer must not look like a covered one.
         """
-        start = self.buffers[venue].coverage_start_us
-        return start is not None and start <= target_us - RETENTION_US
+        start, end = self.window_us(target_us)
+        return self.buffers[venue].covers(start, end)
 
-    def validity(self, target_us: int, *, mode: str = HISTORICAL,
-                 freeze_ns: int | None = None) -> dict[str, Any]:
-        """Feed continuity / warm-up status for exactly one target.
+    def input_coverage(self, target_us: int, *, mode: str = HISTORICAL,
+                       freeze_ns: int | None = None) -> dict[str, Any]:
+        """ACQUISITION evidence for exactly one target. Not a model gate.
 
-        No silence threshold is invented here: a feed with no trades in a window
-        is reported as such and the original no-imputation rule still applies.
-        What IS enforced is that the packet may only be called valid when the
-        source window is warm and unbroken, and when nothing needed was excluded
-        for unknown availability.
+        This reports whether the inputs this target reads were actually captured
+        and actually available; it deliberately does NOT decide whether to
+        predict. The original external-direction pipeline imputes missing
+        columns (SimpleImputer median + add_indicator), so treating "a feature
+        is NaN" as a no-call would be a new filter smuggled in under the name of
+        an unchanged model. Deciding what to do with incomplete inputs belongs
+        to the policy layer, on the original rules.
+
+        Everything here is scoped to [T-900s, T+5s) - the only events the target
+        reads. A gap or an unknown-availability event outside that span is
+        irrelevant to it and is not counted against it.
         """
-        window_start_us = target_us - RETENTION_US
-        window_end_us = target_us + max(T5_WINDOW_SECONDS) * ONE_SECOND_US
-        report: dict[str, Any] = {"target_us": target_us, "mode": mode, "venues": {}}
-        valid = True
+        window_start_us, window_end_us = self.window_us(target_us)
+        report: dict[str, Any] = {"target_us": int(target_us), "mode": mode,
+                                  "window_us": [window_start_us, window_end_us],
+                                  "venues": {}}
+        complete = True
         for venue, buffer in self.buffers.items():
             frame = buffer.frame(mode=mode, freeze_ns=freeze_ns)
+            in_window = frame.loc[
+                (frame["ts_us"] >= window_start_us) & (frame["ts_us"] < window_end_us)
+            ] if len(frame) else frame
             gaps = buffer.gap_overlaps(window_start_us * 1000, window_end_us * 1000)
-            warm = self.has_history(target_us, venue)
-            unknown = buffer.excluded_unknown_availability
-            venue_ok = warm and not gaps and (mode == HISTORICAL or unknown == 0)
-            valid = valid and venue_ok
+            covered = buffer.covers(window_start_us, window_end_us)
+            # Unknown availability only matters for events this target reads.
+            unknown_in_window = sum(
+                1 for event in buffer.events.values()
+                if int(event.get("receipt_ns", -1)) < 0
+                and window_start_us <= int(event["ts_us"]) < window_end_us
+            ) if mode == LIVE else 0
+            venue_complete = covered and not gaps and unknown_in_window == 0
+            complete = complete and venue_complete
             report["venues"][venue] = {
-                "warm": warm,
-                "coverage_start_us": buffer.coverage_start_us,
-                "events_available": int(len(frame)),
+                "coverage_proven": covered,
+                "coverage_intervals": [[a, b, s] for a, b, s in buffer.coverage],
+                "events_available_in_window": int(len(in_window)),
                 "receipt_gaps": [[a, b] for a, b in gaps],
-                "excluded_unknown_availability": unknown,
-                "valid": venue_ok,
+                "excluded_unknown_availability_in_window": unknown_in_window,
+                "merged_duplicates": buffer.merged_duplicates,
+                "conflicting_duplicates": len(buffer.conflicts),
+                "inputs_complete": venue_complete,
             }
-        report["valid"] = valid
+        report["inputs_complete"] = complete
         return report
+
+    #: Retained name; the report is acquisition evidence, not a verdict.
+    validity = input_coverage
 
     # -- features -----------------------------------------------------------
     def features_for(self, target_us: int, *, mode: str = HISTORICAL,
