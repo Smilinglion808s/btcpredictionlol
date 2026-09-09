@@ -70,13 +70,10 @@ class Worker:
         self.blocking_reason: str | None = None
         self.owns_lease = False
         self.pending_bridge: list[datetime] = []
-        # Live raw-feature production is still an unmet dependency, so the
-        # orchestrator is wired to the fail-closed packet source. Swapping in a
-        # real source is the only change needed to make the boundary path live;
-        # nothing else on the path is a placeholder.
-        self.packet_source = UnavailablePacketSource(
-            reasons=self.experts.status().get("blocking_reasons") or None
-        )
+        # Live packet production from the running collectors and the ported
+        # ancestor chain. It fails closed and names every remaining producer,
+        # rather than pretending an input exists.
+        self.packet_source = LivePacketSource(feeds=self.feeds, experts=self.experts)
         self.ticker_resolver = KalshiTickerResolver(
             self.settings.kalshi_series, self._fetch_market_metadata
         )
@@ -86,9 +83,11 @@ class Worker:
             gateway=self.gateway,
             packet_source=self.packet_source,
             ticker_resolver=self.ticker_resolver,
+            # Execution dispatch is a SEPARATE gate from logging readiness.
             allow_dispatch=self.settings.allow_live_publication,
         )
         self.scheduler = BoundaryScheduler(self.on_boundary)
+
 
     def _fetch_market_metadata(self, ticker: str) -> list[dict[str, Any]]:
         """Real venue metadata for ticker verification (never cached across days)."""
@@ -101,7 +100,19 @@ class Worker:
             return response.json().get("markets", [])
 
     # -- readiness --------------------------------------------------------------
-    def evaluate_readiness(self) -> tuple[str, str | None]:
+    #
+    # Two INDEPENDENT gates, never collapsed into one:
+    #
+    #   logging readiness  can this build compute and durably record a forward
+    #                      decision for the next boundary? (feeds, experts,
+    #                      bridge, applicable fit, live packet source)
+    #   dispatch gate      may an accepted decision be sent to the execution
+    #                      webhook? (C85_ALLOW_LIVE_PUBLICATION)
+    #
+    # A healthy prediction LOGGER therefore runs with dispatch suppressed. The
+    # old single gate blocked logging whenever publication was off, which made
+    # suppressed logging impossible.
+    def evaluate_logging_readiness(self) -> tuple[str, str | None]:
         missing_feeds = self.feeds.missing()
         if missing_feeds:
             return "BLOCKED", f"C85_FEEDS_STALE: {', '.join(missing_feeds)}"
@@ -122,13 +133,23 @@ class Worker:
         missing_fit = self.missing_applicable_fit()
         if missing_fit:
             return "BLOCKED", missing_fit
-        if isinstance(self.packet_source, UnavailablePacketSource):
-            return "BLOCKED", "C85_RAW_PACKET_SOURCE_UNAVAILABLE :: " + "; ".join(
-                self.packet_source.reasons
+        packet_reasons = self.packet_source.blocking_reasons(time.time_ns())
+        if packet_reasons:
+            return "BLOCKED", "C85_RAW_PACKET_SOURCE_UNAVAILABLE :: " + " || ".join(
+                packet_reasons
             )
-        if not self.settings.allow_live_publication:
-            return "BLOCKED", "C85_ALLOW_LIVE_PUBLICATION=false"
-        return "READY", None
+        return "LOGGING_READY", None
+
+    def dispatch_status(self) -> str:
+        """Execution dispatch is suppressed unless explicitly enabled."""
+        return "ENABLED" if self.settings.allow_live_publication else "SUPPRESSED"
+
+    def evaluate_readiness(self) -> tuple[str, str | None]:
+        """Combined view used by the boundary path and the health endpoint."""
+        status, reason = self.evaluate_logging_readiness()
+        if status != "LOGGING_READY":
+            return "BLOCKED", reason
+        return ("READY" if self.dispatch_status() == "ENABLED" else "LOGGING"), None
 
     def missing_applicable_fit(self, at: datetime | None = None) -> str | None:
         """Both heads must already be fitted for the next target's UTC day."""
@@ -141,6 +162,7 @@ class Worker:
         if missing:
             return f"C85_NO_APPLICABLE_FIT: {', '.join(missing)} for {target.date()}"
         return None
+
 
     def snapshot(self) -> dict[str, Any]:
         return {
