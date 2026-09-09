@@ -64,6 +64,20 @@ class BackendClient:
         }
 
     def call(self, op: str, **payload: Any) -> dict[str, Any]:
+        # A nested decision/checkpoint carrying a different model_version than
+        # the envelope would let an archived-identity row be written under a
+        # reconstruction envelope (or the reverse). Stamping is not enough:
+        # any disagreement is refused before the request is signed.
+        for key in ("decision", "checkpoint", "prediction", "target"):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                nested_version = nested.get("model_version")
+                if nested_version is not None and nested_version != self.model_version:
+                    raise BackendError(
+                        0,
+                        f"C85_MODEL_VERSION_CONFLICT: {key}.model_version={nested_version!r} "
+                        f"disagrees with the request identity {self.model_version!r}",
+                    )
         last: Exception | None = None
         for attempt in range(self.retries + 1):
             envelope = {
@@ -74,6 +88,7 @@ class BackendClient:
                 **payload,
             }
             body = json.dumps(envelope, separators=(",", ":"), allow_nan=False, default=str)
+
             try:
                 response = self._client.post(self.ops_url, content=body, headers=self._headers(body))
             except httpx.HTTPError as exc:  # transport failure — safe to retry

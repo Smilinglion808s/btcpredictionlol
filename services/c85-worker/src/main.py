@@ -42,7 +42,9 @@ from .health import create_app
 from .packets import LivePacketSource
 from .reconstruction import identity as reconstruction_identity
 from .reconstruction import logging_model_version
+from .orchestration import BoundaryOrchestrator
 from .scheduler import BoundaryScheduler, RunTiming, next_boundary
+
 from .store import C85Store
 from .tickers import KalshiTickerResolver
 from .warmup import Stage, WarmupCoordinator
@@ -85,9 +87,13 @@ class Worker:
             gateway=self.gateway,
             packet_source=self.packet_source,
             ticker_resolver=self.ticker_resolver,
-            # Execution dispatch is a SEPARATE gate from logging readiness.
-            allow_dispatch=self.settings.allow_live_publication,
+            # Execution dispatch is a SEPARATE gate from logging readiness, and
+            # for this authorized reconstruction run it is hard-suppressed here
+            # rather than trusted to configuration: an inherited or accidental
+            # allow_live_publication=true must not be able to place a bet.
+            allow_dispatch=False,
         )
+
         self.scheduler = BoundaryScheduler(self.on_boundary)
 
 
@@ -143,8 +149,13 @@ class Worker:
         return "LOGGING_READY", None
 
     def dispatch_status(self) -> str:
-        """Execution dispatch is suppressed unless explicitly enabled."""
-        return "ENABLED" if self.settings.allow_live_publication else "SUPPRESSED"
+        """Execution dispatch for the reconstruction build is always suppressed.
+
+        This mirrors `allow_dispatch=False` on the orchestrator, so the reported
+        status cannot disagree with what the boundary path will actually do.
+        """
+        return "SUPPRESSED"
+
 
     def evaluate_readiness(self) -> tuple[str, str | None]:
         """Combined view used by the boundary path and the health endpoint."""

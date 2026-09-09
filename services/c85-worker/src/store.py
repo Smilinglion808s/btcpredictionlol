@@ -142,9 +142,17 @@ class C85Store:
         return data
 
     def checkpoint_payload(self, state: C85State, stage: str) -> dict[str, Any]:
+        """Serialize a checkpoint whose hash covers exactly what is persisted.
+
+        The reconstruction identity is a SIBLING field, deliberately not merged
+        into `expert_state`: `state_sha256` hashes the state, and `from_dict`
+        reads `expert_state` straight back, so injecting identity there made a
+        restored state hash differently from the checkpoint it came from.
+        """
         payload = state.to_dict()
         return {
             "model_version": logging_model_version(),
+            "reconstruction": reconstruction_identity(),
             "as_of_utc": datetime.now(timezone.utc).isoformat(),
             "last_processed_target_utc": state.last_processed_target_utc,
             "next_target_utc": state.next_target_utc,
@@ -154,12 +162,13 @@ class C85Store:
             "deterioration_state": payload["deterioration_state"],
             "pending_base_calls": list(state.deterioration.pending.keys()),
             "consumed_settlements": state.deterioration.consumed[-5000:],
-            "expert_state": {**(state.expert_state or {}), "reconstruction": reconstruction_identity()},
+            "expert_state": state.expert_state or {},
             "applicable_fits": state.applicable_fits,
             "source_watermarks": state.source_watermarks,
             "state_sha256": state.sha256(),
             "expected_parent_seq": self._last_seq,
         }
+
 
     def save_checkpoint(self, state: C85State, stage: str) -> int:
         """Append a monotonic, hashed checkpoint. Never overwrites an earlier one."""
