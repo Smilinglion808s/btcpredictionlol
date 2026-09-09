@@ -463,9 +463,9 @@ class _frozen_grid_guard:
         })
         state = {"checked": False}
 
-        def guarded(frame, prediction, mask):
-            report = original(frame, prediction, mask)
-            if state["checked"]:
+        def guarded(frame, prediction, mask, *args, **kwargs):
+            report = original(frame, prediction, mask, *args, **kwargs)
+            if state["checked"] or args or kwargs:
                 return report
             state["checked"] = True
             candidate = pd.DataFrame({
