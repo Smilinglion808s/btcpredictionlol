@@ -40,12 +40,26 @@ def next_boundary(after: datetime | None = None) -> datetime:
 
 @dataclass
 class RunTiming:
+    """Measured instants for one boundary.
+
+    Every field except `model_input_cutoff_ns` is an *observed* clock reading.
+    `model_input_cutoff_ns` is the immutable model rule (T+5s exclusive) and is
+    never a measurement; `packet_freeze_ns` is when the packet was actually
+    frozen, which may trail the rule by scheduler latency.
+    """
+
     target_open_ns: int
+    model_input_cutoff_ns: int | None = None
     packet_freeze_ns: int | None = None
+    last_receipt_ns: int | None = None
+    packet_build_started_ns: int | None = None
+    packet_build_complete_ns: int | None = None
     compute_started_ns: int | None = None
     compute_complete_ns: int | None = None
     decision_durable_ns: int | None = None
+    dispatch_started_ns: int | None = None
     dispatch_ns: int | None = None
+    dispatch_ack_ns: int | None = None
 
     @property
     def deadline_ns(self) -> int:
@@ -57,25 +71,42 @@ class RunTiming:
         return (moment_ns - self.target_open_ns) / 1_000_000
 
     def as_dict(self) -> dict[str, Any]:
+        def s(v: int | None) -> str | None:
+            return None if v is None else str(v)
+
+        ack = self.dispatch_ack_ns
         return {
             # 64-bit values are serialised as decimal strings so no consumer can
             # lose ordering precision through a JavaScript Number.
             "target_open_ns": str(self.target_open_ns),
-            "packet_freeze_ns": None if self.packet_freeze_ns is None else str(self.packet_freeze_ns),
-            "compute_started_ns": None if self.compute_started_ns is None else str(self.compute_started_ns),
-            "compute_complete_ns": None if self.compute_complete_ns is None else str(self.compute_complete_ns),
-            "decision_durable_ns": None if self.decision_durable_ns is None else str(self.decision_durable_ns),
-            "dispatch_ns": None if self.dispatch_ns is None else str(self.dispatch_ns),
-            "publication_offset_ms": self.offset_ms(self.dispatch_ns),
+            "model_input_cutoff_ns": s(self.model_input_cutoff_ns),
+            "packet_freeze_ns": s(self.packet_freeze_ns),
+            "last_receipt_ns": s(self.last_receipt_ns),
+            "packet_build_started_ns": s(self.packet_build_started_ns),
+            "packet_build_complete_ns": s(self.packet_build_complete_ns),
+            "compute_started_ns": s(self.compute_started_ns),
+            "compute_complete_ns": s(self.compute_complete_ns),
+            "decision_durable_ns": s(self.decision_durable_ns),
+            "dispatch_started_ns": s(self.dispatch_started_ns),
+            "dispatch_ns": s(self.dispatch_ns),
+            "dispatch_ack_ns": s(ack),
+            "publication_offset_ms": self.offset_ms(ack if ack is not None else self.dispatch_ns),
+            "freeze_offset_ms": self.offset_ms(self.packet_freeze_ns),
+            "durable_offset_ms": self.offset_ms(self.decision_durable_ns),
             "compute_ms": (
                 None
                 if self.compute_complete_ns is None or self.compute_started_ns is None
                 else (self.compute_complete_ns - self.compute_started_ns) / 1_000_000
             ),
-            "deadline_met": (
-                None if self.dispatch_ns is None else self.dispatch_ns < self.deadline_ns
+            "build_ms": (
+                None
+                if self.packet_build_complete_ns is None or self.packet_build_started_ns is None
+                else (self.packet_build_complete_ns - self.packet_build_started_ns) / 1_000_000
             ),
+            # Accepted-by-gateway time is the only honest publication instant.
+            "deadline_met": (None if ack is None else ack < self.deadline_ns),
         }
+
 
 
 async def sleep_until_ns(when_ns: int) -> None:
