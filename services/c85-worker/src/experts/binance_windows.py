@@ -550,7 +550,9 @@ class VenueBuffer:
             "venue": self.venue,
             "events": {str(k): v for k, v in self.events.items()},
             "gaps": [[a, b] for a, b in self.gaps],
-            "coverage_start_us": self.coverage_start_us,
+            "coverage": [[a, b, s] for a, b, s in self.coverage],
+            "merged_duplicates": self.merged_duplicates,
+            "conflicts": self.conflicts,
         }
 
     @classmethod
@@ -559,7 +561,9 @@ class VenueBuffer:
             venue=payload["venue"],
             events={int(k): dict(v) for k, v in (payload.get("events") or {}).items()},
             gaps=[(int(a), int(b)) for a, b in (payload.get("gaps") or [])],
-            coverage_start_us=payload.get("coverage_start_us"),
+            coverage=[(int(a), int(b), str(s)) for a, b, s in (payload.get("coverage") or [])],
+            merged_duplicates=int(payload.get("merged_duplicates", 0)),
+            conflicts=list(payload.get("conflicts") or []),
         )
 
 
