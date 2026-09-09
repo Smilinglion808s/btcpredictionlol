@@ -560,6 +560,14 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
 
     return {
         "status": status,
+        "probability_status": status,
+        "contract_status": contract_status,
+        "contract_components": {
+            "probability_ok": bool(probability_ok),
+            "expected_key_coverage_ok": bool(coverage_ok),
+            "direction_ok": bool(direction_ok),
+            "rank_ok": bool(rank_ok),
+        },
         "walk_complete": complete_walk,
         "partial": not complete_walk,
         "checkpoint": verdict,
@@ -578,6 +586,9 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         "duplicate_keys_rebuilt": dup_reb,
         "archived_rows_outside_processed_prefix": int(len(archived) - len(merged)),
         "extra_in_rebuilt": int(len(window) - len(merged)),
+        "missing_expected_keys_in_processed_bounds": len(missing_expected),
+        "missing_expected_keys_sample": [str(t) for t in missing_expected[:10]],
+        "extra_rebuilt_keys_in_archive_window": len(extra_in_bounds),
         "archived_finite": int(np.isfinite(a).sum()),
         "rebuilt_finite": int(np.isfinite(b).sum()),
         "finite_mask_mismatches": mask_mismatches,
@@ -586,24 +597,28 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
         "max_abs_diff": float(diff.max()) if diff.size else None,
         "mean_abs_diff": float(diff.mean()) if diff.size else None,
         "exceed_tolerance": int((diff > tolerance).sum()) if diff.size else None,
+        "first_finite_mask_divergence": first_mask_divergence,
+        "first_probability_divergence": first_divergence,
         "first_divergence": first_divergence,
         "direction": {
             "policy": "direction_contract.signed_direction (p >= 0.5 -> +1, else -1)",
             "compared": int(dir_mask.sum()),
-            "mismatches": int((np.sign(arch_dir[dir_mask])
-                               != merged.rebuilt_direction.to_numpy()[dir_mask]).sum()),
+            "mismatches": direction_mismatches,
+            "presence_mask_mismatches": direction_mask_mismatches,
         },
         "rank": {
-            "policy": (f"direction_contract.rolling_rank (lookback {dc.RANK_LOOKBACK} "
-                       f"rows, minimum {dc.RANK_MINIMUM}, ties half, past only)"),
+            "policy": (f"direction_contract.rolling_rank of |p - 0.5| "
+                       f"(lookback {dc.RANK_LOOKBACK} rows, minimum "
+                       f"{dc.RANK_MINIMUM}, ties half, past only)"),
             "archived_finite": int(np.isfinite(arch_rank).sum()),
             "rebuilt_finite": int(np.isfinite(reb_rank).sum()),
-            "finite_mask_mismatches": int((np.isfinite(arch_rank)
-                                           != np.isfinite(reb_rank)).sum()),
+            "finite_mask_mismatches": rank_mask_mismatches,
             "compared": int(rank_both.sum()),
             "max_abs_diff": float(rank_diff.max()) if rank_diff.size else None,
+            "mean_abs_diff": float(rank_diff.mean()) if rank_diff.size else None,
         },
         "kind": "historical replay parity, not forward testing",
+
     }
 
 
