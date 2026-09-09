@@ -175,3 +175,53 @@ def test_resume_is_refused_when_the_probabilities_were_swapped(tmp_path):
     verdict = cc.resume_contract(generation, _identity())
     assert verdict["resumable"] is False
     assert "probability_full_sha256" in verdict["mismatches"]
+
+
+def test_refit_reconstruction_equals_uninterrupted_walk_forward():
+    """SYNTHETIC: the resume model is REFIT, not restored - prove equality.
+
+    A short deterministic walk-forward is run straight through, then run again
+    with a stop after two blocks where the active model is reconstructed by
+    refitting at ``last_fit_block`` from the same immutable inputs. The
+    probability vectors must be bit-identical, otherwise "resumable" would be a
+    claim rather than a fact.
+    """
+
+    sys.path.insert(0, str(ROOT))
+    from src.experts import long_context as lc  # noqa: PLC0415
+
+    rng = np.random.default_rng(4117)
+    rows, features, refit, minimum = 96, 4, 8, 16
+    x = rng.normal(size=(rows, features))
+    y = (x[:, 0] + 0.3 * rng.normal(size=rows) > 0).astype(np.int8)
+
+    def walk(stop_after_blocks=None):
+        probability = np.full(rows, np.nan)
+        model, last_fit = None, None
+        for position in range(minimum, rows):
+            if (position - minimum) % refit == 0:
+                model = lc._new_model()
+                model.fit(x[:position], y[:position])
+                last_fit = position
+                if stop_after_blocks is not None and \
+                        (position - minimum) // refit == stop_after_blocks:
+                    return probability, last_fit
+            probability[position] = model.predict_proba(x[position:position + 1])[0, 1]
+        return probability, last_fit
+
+    full, _ = walk()
+    partial, last_fit = walk(stop_after_blocks=2)
+
+    # Resume: reconstruct the active model by refitting at last_fit_block.
+    resumed = lc._new_model()
+    resumed.fit(x[:last_fit], y[:last_fit])
+    probability = partial.copy()
+    for position in range(last_fit, rows):
+        if position > last_fit and (position - minimum) % refit == 0:
+            resumed = lc._new_model()
+            resumed.fit(x[:position], y[:position])
+        probability[position] = resumed.predict_proba(x[position:position + 1])[0, 1]
+
+    scored = np.isfinite(full)
+    assert np.array_equal(probability[scored], full[scored])
+    assert cc.sha256_array(probability) == cc.sha256_array(full)
