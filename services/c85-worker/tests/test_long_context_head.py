@@ -13,8 +13,16 @@ recovered source.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+# This sandbox massively oversubscribes OpenMP threads: one HGB fit takes 13 s
+# with the default thread pool and 0.12 s pinned to one thread. Pin before any
+# sklearn import. The worker does the same in `src/runtime_env.py`.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 
 import numpy as np
 import pandas as pd
