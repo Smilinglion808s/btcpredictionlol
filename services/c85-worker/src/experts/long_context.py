@@ -426,6 +426,94 @@ class LongContextHead:
             "last_ts": self.buffer[-1].ts.isoformat() if self.buffer else None,
         }
 
+    def export_state(self, directory: Path | str) -> dict[str, Any]:
+        """Write the *complete* restart state: buffer, grid, labels and fit.
+
+        Written to a staging directory and renamed into place, so a crash
+        mid-export leaves the previous state intact rather than a half-written
+        one. Float values are stored at full float64 precision because the
+        refit consumes them directly.
+        """
+
+        import joblib
+
+        directory = Path(directory)
+        directory.parent.mkdir(parents=True, exist_ok=True)
+        staging = directory.with_name(directory.name + ".staging")
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
+
+        values = (np.vstack([r.values for r in self.buffer]) if self.buffer
+                  else np.zeros((0, len(self.features)), dtype=float))
+        np.savez(staging / "buffer.npz", values=values,
+                 labels=np.asarray([r.label for r in self.buffer], dtype=float),
+                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool))
+        meta = {
+            "head_id": HEAD_ID,
+            "spec": SPEC_NAME,
+            "features": self.features,
+            "position": self.position,
+            "fit_count": self.fit_count,
+            "first_fit_ts": self.first_fit_ts,
+            "last_ts": self._last_ts.isoformat() if self._last_ts is not None else None,
+            "last_probability": self._last_probability,
+            "buffer_ts": [r.ts.isoformat() for r in self.buffer],
+            "pending_labels": {k.isoformat(): v for k, v in self._labels_by_ts.items()},
+            "fitted": self.model is not None,
+        }
+        (staging / "state.json").write_text(json.dumps(meta, indent=1))
+        if self.model is not None:
+            joblib.dump(self.model, staging / "model.joblib")
+
+        previous = directory.with_name(directory.name + ".previous")
+        if directory.exists():
+            if previous.exists():
+                shutil.rmtree(previous)
+            os.replace(directory, previous)
+        os.replace(staging, directory)
+        if previous.exists():
+            shutil.rmtree(previous, ignore_errors=True)
+        return meta
+
+    @classmethod
+    def restore_state(cls, directory: Path | str) -> "LongContextHead":
+        """Rebuild an identical head. A restart must not restart the grid."""
+
+        import joblib
+
+        directory = Path(directory)
+        meta = json.loads((directory / "state.json").read_text())
+        if meta.get("head_id") != HEAD_ID:
+            raise LongContextSchemaError(
+                f"state belongs to {meta.get('head_id')!r}, not {HEAD_ID!r}"
+            )
+        blob = np.load(directory / "buffer.npz")
+        head = cls(features=list(meta["features"]))
+        for ts, row, complete, label in zip(
+            meta["buffer_ts"], blob["values"], blob["complete"], blob["labels"]
+        ):
+            head.buffer.append(_Row(pd.Timestamp(ts), np.asarray(row, dtype=float),
+                                    bool(complete), float(label)))
+        head.position = int(meta["position"])
+        head.fit_count = int(meta["fit_count"])
+        head.first_fit_ts = meta["first_fit_ts"]
+        head._last_ts = pd.Timestamp(meta["last_ts"]) if meta["last_ts"] else None
+        head._last_probability = meta["last_probability"]
+        head._labels_by_ts = {pd.Timestamp(k): float(v)
+                              for k, v in meta["pending_labels"].items()}
+        if meta.get("fitted"):
+            model_path = directory / "model.joblib"
+            if not model_path.exists():
+                raise LongContextSchemaError(
+                    "state claims a fitted head but model.joblib is absent; refusing "
+                    "to resume unfitted and silently emit no probabilities"
+                )
+            head.model = joblib.load(model_path)
+        return head
+
+
+
 
 def head_from_frame(frame: pd.DataFrame) -> LongContextHead:
     """Build a head for the exact schema of a recovered feature frame."""
