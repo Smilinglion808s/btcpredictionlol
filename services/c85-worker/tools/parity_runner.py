@@ -111,16 +111,27 @@ def runtime_identity() -> dict[str, Any]:
 
 
 # -- inputs -----------------------------------------------------------------
-def load_inputs(frame_path: Path) -> dict[str, Any]:
-    """Load the derived frame exactly as the original walk consumes it."""
+def load_inputs(frame_path: Path, *, prepare: bool = True) -> dict[str, Any]:
+    """Load the derived frame exactly as the original walk consumes it.
+
+    ``prepare`` applies ``long_context.prepare_external_frame`` - the original
+    ``load_external`` stale-book mask and ``book_fresh_within_60s`` indicator.
+    It is on by default because the original model never sees the raw derived
+    frame. ``prepare=False`` exists only to re-read a historical checkpoint that
+    was produced before that step was recovered; such a checkpoint is a
+    diagnostic, not a parity candidate.
+    """
 
     frame = pd.read_pickle(frame_path)
+    if prepare:
+        frame = lc.prepare_external_frame(frame)
     frame = frame.rename(columns={"binance_label": "label", "target_ts": "ts"})
     features = lc.feature_columns(list(frame.columns))
     x = frame[features].to_numpy(float)
     label = frame.label.to_numpy(float)
     ts = pd.to_datetime(frame.ts, utc=True)
     complete = np.isfinite(x).all(axis=1)
+
 
     identity = {
         "frame_path": str(frame_path),
