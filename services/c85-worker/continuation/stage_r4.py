@@ -568,15 +568,15 @@ FROZEN_R4_1_PREDICTION_SHA = (
 
 
 def _establish_frozen_r4_prefix(phase4, end: pd.Timestamp) -> dict:
-    """Independently establish the archived R4.1 prefix before any hashing.
+    """Independently establish the archived R4.1 rows before any hashing.
 
-    The frozen digest belongs to the archived timestamp keys, not to a row
-    count, so the prefix is established from the timestamps themselves: the
-    R4.1 rows the producer is about to read are matched key-for-key against the
-    archived ledger's `ts < FROZEN_END` keys, and the digest is then taken over
-    exactly that slice of the producer's own `r4_prediction` source column
-    (`prediction` in the R4.1 ledger). Any key difference, or any digest
-    difference, aborts before the stage runs.
+    The frozen digest belongs to specific archived timestamp keys, not to a row
+    count. Those keys are read from the archived ledger and located inside the
+    R4.1 file the producer is about to consume; the digest is then taken over
+    exactly the `prediction` values at those positions. Keys the archive never
+    had — genuinely newer rows, including late-August candles that were still
+    unlisted when the archive was written — are excluded from the digest and
+    reported. A missing archived key, or any digest difference, aborts.
     """
     reference = FIXTURES / "t5_hot_calibration_ledger.parquet"
     if not reference.exists():
@@ -585,27 +585,27 @@ def _establish_frozen_r4_prefix(phase4, end: pd.Timestamp) -> dict:
     archived_keys = pd.DatetimeIndex(sorted(ref_ts[ref_ts < FROZEN_END]))
 
     r4_rows = pd.read_csv(phase4.R4_ROWS, parse_dates=["ts"])
-    r4_ts = pd.to_datetime(r4_rows["ts"], utc=True)
+    r4_ts = pd.DatetimeIndex(pd.to_datetime(r4_rows["ts"], utc=True))
     if not r4_ts.is_monotonic_increasing or r4_ts.duplicated().any():
         raise RuntimeError("r5_phase4: R4.1 rows are not uniquely chronological")
-    candidate_keys = pd.DatetimeIndex(r4_ts[r4_ts < FROZEN_END])
-    if not candidate_keys.equals(archived_keys):
+    absent = archived_keys.difference(r4_ts)
+    if len(absent):
         raise RuntimeError(
-            "r5_phase4: R4.1 archived-prefix timestamp keys differ from the "
-            f"archived ledger (candidate={len(candidate_keys)}, "
-            f"archived={len(archived_keys)}); refusing to hash a different window")
-
-    prefix_rows = len(archived_keys)
-    prediction = r4_rows["prediction"].to_numpy(np.int8)[:prefix_rows]
+            f"r5_phase4: {len(absent)} archived R4.1 timestamps are missing from the "
+            f"candidate ledger, first={absent[0]}; refusing to hash a different window")
+    selector = r4_ts.isin(archived_keys)
+    prediction = r4_rows["prediction"].to_numpy(np.int8)[selector]
     digest = phase4.lab.array_sha256(prediction)
     if digest != FROZEN_R4_1_PREDICTION_SHA:
         raise RuntimeError(
-            f"r5_phase4: frozen R4.1 prediction hash mismatch on the archived prefix: {digest}")
+            f"r5_phase4: frozen R4.1 prediction hash mismatch on the archived rows: {digest}")
+    newer_in_window = int((~selector & (r4_ts < FROZEN_END)).sum())
     return {
-        "archived_prefix_rows": prefix_rows,
-        "archived_prefix_end": str(archived_keys[-1]),
-        "timestamp_keys_identical": True,
+        "archived_rows": int(len(archived_keys)),
+        "archived_rows_end": str(archived_keys[-1]),
+        "rows_newer_than_archive_inside_frozen_window": newer_in_window,
         "prefix_digest": digest,
+        "selector": selector,
     }
 
 
@@ -613,12 +613,12 @@ class _prefix_hash_adapter:
     """Scoped adapter for the frozen whole-array R4.1 hash check.
 
     `build_frame()` hashes the WHOLE `r4_prediction` array against the frozen
-    digest, so appending genuine post-August rows would fail the check for
-    being longer rather than different. Inside this context the frozen digest
-    is accepted only for the exact array whose archived prefix was already
-    verified by `_establish_frozen_r4_prefix`; every other array still gets the
-    producer's own hash. The patch is removed on exit, and a parity run
-    (`end == FROZEN_END`) is never patched at all.
+    digest, so appending genuine newer rows would fail the check for covering
+    more candles rather than for computing something different. Inside this
+    context the frozen digest is accepted only for an array whose archived
+    positions were already verified by `_establish_frozen_r4_prefix`; every
+    other array still gets the producer's own hash. The patch is removed on
+    exit, and a parity run (`end <= FROZEN_END`) is never patched at all.
     """
 
     def __init__(self, phase4, end: pd.Timestamp):
@@ -632,27 +632,29 @@ class _prefix_hash_adapter:
             self.record = {"frozen_hash": "unmodified (parity run)"}
             return self.record
         established = _establish_frozen_r4_prefix(self.phase4, self.end)
-        prefix_rows = established["archived_prefix_rows"]
+        selector = established.pop("selector")
+        rows = len(selector)
         lab = self.phase4.lab
         self._original = lab.array_sha256
         original = self._original
-        self.record = {"frozen_hash": "verified on archived timestamp prefix", **established}
+        self.record = {"frozen_hash": "verified on archived timestamp rows", **established}
         record = self.record
 
         def prefix_aware(values):
             array = np.asarray(values, dtype=np.int8)
-            if len(array) <= prefix_rows:
+            if len(array) != rows:
                 return original(array)
-            digest = original(array[:prefix_rows])
+            digest = original(array[selector])
             if digest != FROZEN_R4_1_PREDICTION_SHA:
                 raise RuntimeError(
                     "r5_phase4: frozen R4.1 prediction hash mismatch on the "
-                    f"archived prefix: {digest}")
-            record["extension_rows"] = int(len(array) - prefix_rows)
+                    f"archived rows: {digest}")
+            record["extension_rows"] = int(rows - int(selector.sum()))
             return FROZEN_R4_1_PREDICTION_SHA
 
         lab.array_sha256 = prefix_aware
         return self.record
+
 
     def __exit__(self, *exc) -> bool:
         if self._original is not None:
