@@ -125,7 +125,13 @@ def load_inputs(frame_path: Path, *, prepare: bool = True) -> dict[str, Any]:
     frame = pd.read_pickle(frame_path)
     if prepare:
         frame = lc.prepare_external_frame(frame)
-    frame = frame.rename(columns={"binance_label": "label", "target_ts": "ts"})
+    if "label" in frame.columns:
+        # prepare_external_frame already derived `label` from `binance_label`;
+        # renaming again would create a duplicate column.
+        frame = frame.drop(columns=["binance_label"], errors="ignore")
+        frame = frame.rename(columns={"target_ts": "ts"})
+    else:
+        frame = frame.rename(columns={"binance_label": "label", "target_ts": "ts"})
     features = lc.feature_columns(list(frame.columns))
     x = frame[features].to_numpy(float)
     label = frame.label.to_numpy(float)
