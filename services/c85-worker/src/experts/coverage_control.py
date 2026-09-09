@@ -189,8 +189,7 @@ class CoverageController:
 
     def _recalibrate(self) -> None:
         recent = list(self.window)
-        best_threshold = self.threshold
-        best_distance = math.inf
+        distances: list[float] = []
         for candidate in CANDIDATE_THRESHOLDS:
             called = 0
             for t0_eligible, external_rank, t5_rank in recent:
@@ -210,15 +209,18 @@ class CoverageController:
                 if use_t0 or use_t5:
                     called += 1
             coverage = called / len(recent)
-            distance = abs(coverage - self.target_coverage)
-            # np.isclose tie handling, taking the LAST (highest) tied candidate.
-            if distance < best_distance - 1e-9 or (
-                abs(distance - best_distance) <= 1e-8 + 1e-5 * abs(distance)
-            ):
-                if distance < best_distance:
-                    best_distance = distance
-                best_threshold = candidate
-        self.threshold = float(best_threshold)
+            distances.append(abs(coverage - self.target_coverage))
+        minimum = min(distances)
+        # np.isclose(distance, distance.min()) with the default rtol/atol, then
+        # the LAST tied candidate: the higher, fee-conservative threshold.
+        tolerance = 1e-8 + 1e-5 * abs(minimum)
+        tied = [
+            index
+            for index, distance in enumerate(distances)
+            if abs(distance - minimum) <= tolerance
+        ]
+        self.threshold = float(CANDIDATE_THRESHOLDS[tied[-1]])
+
 
     def decide(
         self,
