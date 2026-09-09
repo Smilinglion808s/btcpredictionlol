@@ -96,6 +96,9 @@ def main() -> int:
 
     # Canonical metric slice comparison (same full origin, different runtime).
     canonical = pd.read_parquet(METRICS)
+    if "target_ts" not in canonical.columns:
+        canonical = canonical.reset_index()
+    canonical["target_ts"] = pd.to_datetime(canonical.target_ts, utc=True)
     canonical = canonical.sort_values("target_ts").reset_index(drop=True)
     joined = tail.merge(canonical, on="target_ts", how="inner", suffixes=("", "_canon"))
     metric_columns = [c for c in tail.columns
