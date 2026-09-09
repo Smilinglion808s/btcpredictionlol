@@ -516,7 +516,10 @@ R4_STAGES = [
     ),
     Stage(
         name="r4_1",
-        frozen_end=True,
+        # No longer input-bound: htf_structure_r3.pkl now genuinely covers
+        # September (rebuilt from real Binance archives through 2026-09-08,
+        # archived prefix bit-identical), so the stage's ceiling is the real
+        # source coverage rather than the frozen research end.
         depends_on=("structure_valid",),
         run=run_r4_1,
         incremental=False,
@@ -524,7 +527,6 @@ R4_STAGES = [
     ),
     Stage(
         name="r5_phase4",
-        frozen_end=True,
         depends_on=("r4_1",),
         run=run_r5_phase4,
         incremental=False,
