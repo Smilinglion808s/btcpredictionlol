@@ -111,9 +111,36 @@ HEAD probes against `data.binance.vision` (measured, not assumed):
 All seven datasets the original `build_long_context_features.py` consumes are
 still retrievable, including September. Acquisition itself has not been run.
 
-## Still missing / still blocking a real probability
+## Acquisition and rebuild: COMPLETE (parity: NOT yet proven)
 
-* `long_context_features.pkl` (expected SHA-256 `8618768f…`, 23,328 × 545) and
-  the fitted `T0_LONG_CONTEXT_R1` head: neither is in the recovered tree.
-* Therefore no comparison against archived `external_probability_green` has
-  been made. The head-state tests are synthetic and are labelled as such.
+The two sections above describe the state *before* acquisition; they are kept
+as history. Current state:
+
+| item | measured result |
+| --- | --- |
+| raw acquisition | 676 archives, 187,783,108 bytes, 2026-01-01 .. 2026-08-31; every per-archive SHA verified (`download_audit.json` -> `BINANCE_CONTEXT_2026_CHECKSUM_VERIFIED`) |
+| durable raw copy | 10 objects under `datasets/binance_context_2026/` in `c85-artifacts`, 7 shards < 200 MB + manifest/audit/checksums; each downloaded back, byte length and SHA-256 re-verified, tar member counts correct |
+| rebuild | unchanged `build_long_context_features.py`; 23,328 rows x 545 columns (543 features), 2026-01-01T00:15Z .. 2026-09-01T00:00Z, causal audit intact, all source-completeness checks passed |
+| rebuilt frame SHA-256 | `93b99a13161d279378c6418d176cd3b7800650e76f1b41bd24085a10dd246958` |
+| durable derived copy | `datasets/long_context/long_context_features.pkl` (101,730,153 bytes) and `long_context_feature_audit.json` (1,049 bytes); both downloaded back and SHA-256 matched |
+| feature selection | the **original** selector from the recovered `long_context_model.py`, run on this rebuilt frame, returns 323 ordered features (PRICE 207, DEPTH 66, METRICS 50) identical to the implementation's list. The earlier "324" figure is not reproduced by the original selector; nothing was inserted or removed by hand |
+
+### Hash difference: cause UNPROVEN
+
+The rebuilt frame's SHA-256 differs from the audited `8618768f…`. Matching
+row/column counts, date range and audit fields do **not** establish that the
+values are equal, and no claim is made that the difference is serialisation
+only. The cause stays open pending schema/order/dtype/mask/value evidence, and
+the decisive test is independent parity against the archived
+`external_probability_green`, not the pickle bytes.
+
+### Probability parity: IN PROGRESS
+
+A resumable walk-forward reproduction (`/tmp/c85/parity_run.py`, thread limits
+set before NumPy/scikit-learn import, checkpointed after every one of 183
+refit blocks with a probability-prefix digest, model position and schema /
+input / label hashes) is running against the rebuilt frame with the frozen
+constants. No parity number, fitted head export, or operational claim exists
+until it finishes and the archived-ledger comparison is written.
+
+C85 betting remains suppressed; T45 untouched; C85 is not live.

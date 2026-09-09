@@ -298,10 +298,15 @@ class _Row:
     values: np.ndarray
     complete: bool
     label: float
+    pos: int = -1
 
 
 # A label that has not settled yet is *pending*: bounded, never unbounded.
 MAX_PENDING_LABELS = REFIT_EVERY * 4
+
+# The settling candle of target ``T`` is the Spot candle that *begins* at ``T``.
+LABEL_CANDLE = pd.Timedelta(minutes=15)
+LABEL_SOURCES = frozenset({"binance_spot_1m"})
 
 
 def _payload_digest(values: np.ndarray) -> str:
@@ -323,6 +328,28 @@ def _sha256_file(path: Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
+@dataclass(frozen=True)
+class TrainingSnapshot:
+    """The immutable set of inputs one refit boundary is entitled to use.
+
+    A fit is certified for exactly one boundary and exactly one snapshot. If any
+    relevant training input changes (a new row, a newly settled or corrected
+    label, a schema change), the digest changes and the staged fit is stale: it
+    is rejected and rebuilt off the timed path rather than silently activated.
+    """
+
+    position: int
+    grid_origin: tuple[int, int, int]        # (MINIMUM, REFIT_EVERY, WINDOW)
+    first_position: int
+    last_position: int
+    training_rows: int
+    cutoff_ts: str | None
+    label_watermark: str | None
+    unsettled_positions: int
+    schema_digest: str
+    digest: str
+
+
 @dataclass
 class StagedFit:
     """A fit produced off the serving path for one specific refit position."""
@@ -332,6 +359,8 @@ class StagedFit:
     fit_id: str
     training_rows: int
     cutoff_ts: str | None
+    snapshot: TrainingSnapshot | None = None
+
 
 
 @dataclass
@@ -415,7 +444,9 @@ class LongContextHead:
     _last_probability: float | None = None
     _last_digest: str | None = None
     _staged_fit: StagedFit | None = None
-    _no_fit_positions: set[int] = field(default_factory=set)
+    # position -> snapshot digest under which "no fit is possible" was observed.
+    # Keyed by digest so that a later, richer snapshot re-opens eligibility.
+    _no_fit_positions: dict[int, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.features = list(self.features)
@@ -444,16 +475,35 @@ class LongContextHead:
         """Record a realised Spot-candle sign that the source has published.
 
         ``available_at`` is when the original source made the settling candle
-        observable; ``as_of`` is the clock the caller is settling at. A label
-        that is not yet available, or that belongs to a target this head has not
-        observed, is refused - the walk-forward loop never sees such a row.
-        Idempotent by timestamp; a *conflicting* re-settlement is refused rather
-        than silently changing training data underneath an already-issued fit.
+        observable; ``as_of`` is the clock the caller is settling at. Accepted
+        only when all of the following hold, matching the original's data
+        domain rather than merely "a finite number at some timestamp":
+
+        * ``source`` is an original label source (``LABEL_SOURCES``);
+        * ``available_at`` is at or after the settling candle's close
+          (``ts + 15m``) - the candle simply does not exist before then;
+        * ``available_at <= as_of`` - the caller cannot settle from the future;
+        * ``ts`` is a target this head actually observed and still retains.
+
+        Idempotent: an *identical* re-settlement is a no-op and does not bump
+        the version, so it cannot invalidate an in-flight prepared update. A
+        *conflicting* re-settlement is refused rather than silently changing
+        training data underneath an already-issued fit.
         """
 
         ts = pd.Timestamp(ts)
         available_at = pd.Timestamp(available_at)
         as_of = pd.Timestamp(as_of) if as_of is not None else available_at
+        if source not in LABEL_SOURCES:
+            raise LongContextOrderError(
+                f"label source {source!r} is not an original source {sorted(LABEL_SOURCES)}"
+            )
+        if available_at < ts + LABEL_CANDLE:
+            raise LongContextOrderError(
+                f"label for {ts.isoformat()} cannot be available at "
+                f"{available_at.isoformat()}; its candle closes at "
+                f"{(ts + LABEL_CANDLE).isoformat()}"
+            )
         if available_at > as_of:
             raise LongContextOrderError(
                 f"label for {ts.isoformat()} is not available until "
@@ -464,22 +514,29 @@ class LongContextHead:
                 f"label for {ts.isoformat()} precedes any observed target; "
                 "the original never trains on unobserved rows"
             )
+        row = next((r for r in self.buffer if r.ts == ts), None)
+        if row is None:
+            raise LongContextOrderError(
+                f"target {ts.isoformat()} is not a retained observed target; "
+                "the original never labels rows outside the trailing window"
+            )
         label = float(label)
         if not np.isfinite(label):
             raise LongContextOrderError(f"non-finite label for {ts.isoformat()}")
+        stamp = f"{available_at.isoformat()}|{source}"
         previous = self._labels_by_ts.get(ts)
-        if previous is not None and np.isfinite(previous) and previous != label:
-            raise LongContextOrderError(
-                f"conflicting label for {ts.isoformat()}: {previous} then {label}"
-            )
+        if previous is not None and np.isfinite(previous):
+            if previous != label:
+                raise LongContextOrderError(
+                    f"conflicting label for {ts.isoformat()}: {previous} then {label}"
+                )
+            if self._label_available_at.get(ts) == stamp:
+                return  # identical duplicate: no state change, no version bump
         if previous is None and len(self._labels_by_ts) >= MAX_PENDING_LABELS + WINDOW:
             raise LongContextOrderError("pending label map exceeded its bound")
         self._labels_by_ts[ts] = label
-        self._label_available_at[ts] = f"{available_at.isoformat()}|{source}"
-        for row in self.buffer:
-            if row.ts == ts:
-                row.label = label
-                break
+        self._label_available_at[ts] = stamp
+        row.label = label
         self._prune_labels()
         self.version += 1
 
@@ -531,16 +588,32 @@ class LongContextHead:
         activate: StagedFit | None = None
         model = self.model
         if self.position >= MINIMUM and self.position % REFIT_EVERY == 0:
+            snapshot = self.training_snapshot(self.position)
             staged = self._staged_fit
-            if (staged is None or staged.position != self.position) \
-                    and self.position not in self._no_fit_positions:
-                raise LongContextTrainingRequired(
-                    f"refit is due at position {self.position} and no fit was staged; "
-                    "call train_ahead() off the serving path"
-                )
-            if staged is not None and staged.position == self.position:
+            usable = (
+                staged is not None
+                and staged.position == self.position
+                and staged.snapshot is not None
+                and staged.snapshot.digest == snapshot.digest
+            )
+            if not usable:
+                if self._no_fit_positions.get(self.position) == snapshot.digest:
+                    pass  # certified "no fit possible" for exactly these inputs
+                elif staged is not None and staged.position == self.position:
+                    raise LongContextTrainingRequired(
+                        f"the fit staged for position {self.position} was built from "
+                        "different training inputs and is stale; rebuild it with "
+                        "train_ahead() off the serving path"
+                    )
+                else:
+                    raise LongContextTrainingRequired(
+                        f"refit is due at position {self.position} and no fit was staged; "
+                        "call train_ahead() off the serving path"
+                    )
+            elif staged is not None:
                 activate = staged
                 model = staged.model
+
 
         probability: float | None = None
         if model is not None and complete:
@@ -561,13 +634,16 @@ class LongContextHead:
             self._staged_fit = None
         self.buffer.append(
             _Row(update.ts, update.values, update.complete,
-                 float(self._labels_by_ts.get(update.ts, np.nan)))
+                 float(self._labels_by_ts.get(update.ts, np.nan)), self.position)
         )
         while len(self.buffer) > WINDOW:
             self.buffer.popleft()
         self._prune_labels()
         self.position += 1
-        self._no_fit_positions = {p for p in self._no_fit_positions if p >= self.position}
+        # An eligibility verdict only survives while it is still in the future;
+        # it is keyed by snapshot digest, so changed inputs re-open the boundary.
+        self._no_fit_positions = {p: d for p, d in self._no_fit_positions.items()
+                                  if p >= self.position}
         self._last_ts = update.ts
         self._last_probability = update.probability
         self._last_digest = update.digest
@@ -589,26 +665,79 @@ class LongContextHead:
         return update.commit()
 
     # -- fitting (off the serving path) -------------------------------------
-    def train_ahead(self) -> StagedFit | None:
+    def training_snapshot(self, position: int) -> TrainingSnapshot:
+        """The immutable description of what a fit for ``position`` may use.
+
+        This is the eligibility contract: the exact positional range, the grid
+        origin, the settled-label watermark, the ordered schema and a digest
+        over every training row actually admitted. Two calls agree only when
+        nothing relevant has changed.
+        """
+
+        import hashlib
+
+        rows = [r for r in self.buffer
+                if r.complete and np.isfinite(r.label) and r.label != 0]
+        unsettled = sum(1 for r in self.buffer if not np.isfinite(r.label))
+        schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
+        digest = hashlib.sha256()
+        digest.update(f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}".encode())
+        for r in rows:
+            digest.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|".encode())
+            digest.update(_payload_digest(r.values).encode())
+        settled = [r.ts for r in self.buffer if np.isfinite(r.label)]
+        return TrainingSnapshot(
+            position=position,
+            grid_origin=(MINIMUM, REFIT_EVERY, WINDOW),
+            first_position=rows[0].pos if rows else -1,
+            last_position=rows[-1].pos if rows else -1,
+            training_rows=len(rows),
+            cutoff_ts=rows[-1].ts.isoformat() if rows else None,
+            label_watermark=max(settled).isoformat() if settled else None,
+            unsettled_positions=unsettled,
+            schema_digest=schema_digest,
+            digest=digest.hexdigest(),
+        )
+
+    def train_ahead(self, *, position: int | None = None) -> StagedFit | None:
         """Fit the model that the next scheduled refit position will activate.
+
+        A fit is certified for one boundary only, and only once every training
+        input that boundary is entitled to actually exists - i.e. once the head
+        stands at that position, so that all rows strictly before it have been
+        observed. Training for a boundary that is still several targets away is
+        refused: the original never trains on a shorter history than the
+        boundary defines, and a fit made early would silently miss the labels
+        that settle in between.
 
         Uses exactly the rows the original would have used at that boundary:
         the retained trailing window, restricted to feature-complete rows with a
         finite non-zero settled label.
         """
 
-        position = self.refit_due_at()
+        due = self.refit_due_at()
+        position = due if position is None else int(position)
         if position is None or position < MINIMUM:
             return None
-        if self._staged_fit is not None and self._staged_fit.position == position:
-            return self._staged_fit
-        rows = [r for r in self.buffer if r.complete and np.isfinite(r.label) and r.label != 0]
+        if position != self.position:
+            raise LongContextTrainingRequired(
+                f"a fit for position {position} is not yet eligible: the head is at "
+                f"{self.position} and the rows before {position} do not all exist yet"
+            )
+        snapshot = self.training_snapshot(position)
+        staged = self._staged_fit
+        if (staged is not None and staged.position == position
+                and staged.snapshot is not None
+                and staged.snapshot.digest == snapshot.digest):
+            return staged
+        rows = [r for r in self.buffer
+                if r.complete and np.isfinite(r.label) and r.label != 0]
         if len(rows) < MINIMUM:
-            self._no_fit_positions.add(position)
+            self._no_fit_positions[position] = snapshot.digest
             return None
         target = np.asarray([1 if r.label > 0 else 0 for r in rows], dtype=np.int8)
         if np.unique(target).size != 2:
-            self._no_fit_positions.add(position)
+            self._no_fit_positions[position] = snapshot.digest
             return None
         x = np.vstack([r.values for r in rows])
         weights = day_balanced_weights(pd.Series([r.ts for r in rows]))
@@ -620,8 +749,10 @@ class LongContextHead:
             fit_id=f"{HEAD_ID}:{position}:{rows[-1].ts.isoformat()}",
             training_rows=len(rows),
             cutoff_ts=rows[-1].ts.isoformat(),
+            snapshot=snapshot,
         )
         self._staged_fit = staged
+        self._no_fit_positions.pop(position, None)
         return staged
 
     # -- serialisation ------------------------------------------------------
@@ -669,7 +800,9 @@ class LongContextHead:
                   else np.zeros((0, len(self.features)), dtype=float))
         np.savez(staging / "buffer.npz", values=values,
                  labels=np.asarray([r.label for r in self.buffer], dtype=float),
-                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool))
+                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool),
+                 positions=np.asarray([r.pos for r in self.buffer], dtype=np.int64))
+        staged = self._staged_fit
         meta = {
             "head_id": HEAD_ID,
             "spec": SPEC_NAME,
@@ -689,10 +822,27 @@ class LongContextHead:
             "label_availability": {k.isoformat(): v
                                    for k, v in self._label_available_at.items()},
             "fitted": self.model is not None,
+            # A restart immediately before a scheduled refit must not lose the
+            # fit that was already produced off the timed path, nor the
+            # eligibility verdicts recorded against specific training inputs.
+            "staged_fit": None if staged is None else {
+                "position": staged.position,
+                "fit_id": staged.fit_id,
+                "training_rows": staged.training_rows,
+                "cutoff_ts": staged.cutoff_ts,
+                "snapshot": None if staged.snapshot is None else {
+                    **staged.snapshot.__dict__,
+                    "grid_origin": list(staged.snapshot.grid_origin),
+                },
+            },
+            "no_fit_positions": {str(p): d for p, d in self._no_fit_positions.items()},
         }
         (staging / "state.json").write_text(json.dumps(meta, indent=1))
         if self.model is not None:
             joblib.dump(self.model, staging / "model.joblib")
+        if staged is not None:
+            joblib.dump(staged.model, staging / "staged_model.joblib")
+
 
         manifest = {
             "head_id": HEAD_ID,
@@ -782,12 +932,25 @@ class LongContextHead:
             )
         if int(meta.get("feature_count", len(features))) != len(features):
             raise LongContextSchemaError("feature_count disagrees with the feature list")
+        position = int(meta["position"])
+        if "positions" in blob.files:
+            positions = [int(p) for p in blob["positions"]]
+            if len(positions) != rows:
+                raise LongContextSchemaError("buffer positions disagree with the row count")
+        else:
+            positions = list(range(position - rows, position))
+        if rows and (positions[-1] != position - 1
+                     or positions != list(range(positions[0], positions[0] + rows))):
+            raise LongContextSchemaError(
+                "buffer positions are not the contiguous run ending at position-1"
+            )
 
         head = cls(features=features)
-        for ts, row, flag, label in zip(stamps, values, complete, labels, strict=True):
+        for ts, row, flag, label, pos in zip(stamps, values, complete, labels, positions,
+                                             strict=True):
             head.buffer.append(_Row(pd.Timestamp(ts), np.asarray(row, dtype=float),
-                                    bool(flag), float(label)))
-        head.position = int(meta["position"])
+                                    bool(flag), float(label), int(pos)))
+        head.position = position
         head.fit_count = int(meta["fit_count"])
         head.fit_id = meta.get("fit_id")
         head.first_fit_ts = meta["first_fit_ts"]
@@ -799,6 +962,26 @@ class LongContextHead:
                               for k, v in meta["pending_labels"].items()}
         head._label_available_at = {pd.Timestamp(k): str(v)
                                     for k, v in (meta.get("label_availability") or {}).items()}
+        head._no_fit_positions = {int(p): str(d)
+                                  for p, d in (meta.get("no_fit_positions") or {}).items()}
+        staged_meta = meta.get("staged_fit")
+        if staged_meta:
+            if "staged_model.joblib" not in files:
+                raise LongContextSchemaError(
+                    "state claims a staged fit but the manifest does not cover "
+                    "staged_model.joblib"
+                )
+            snap = staged_meta.get("snapshot")
+            head._staged_fit = StagedFit(
+                position=int(staged_meta["position"]),
+                model=joblib.load(generation / "staged_model.joblib"),
+                fit_id=str(staged_meta["fit_id"]),
+                training_rows=int(staged_meta["training_rows"]),
+                cutoff_ts=staged_meta.get("cutoff_ts"),
+                snapshot=None if snap is None else TrainingSnapshot(
+                    **{**snap, "grid_origin": tuple(snap["grid_origin"])}
+                ),
+            )
         if meta.get("fitted"):
             if "model.joblib" not in files:
                 raise LongContextSchemaError(
