@@ -144,6 +144,18 @@ def normalize_funding(rows: Iterable[dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
+
+def _ns(series: pd.Series) -> pd.Series:
+    """Pin datetime resolution to nanoseconds.
+
+    Purely a pandas-version artifact: newer pandas returns `datetime64[ms, UTC]`
+    from `to_datetime(..., unit="ms")`, which cannot be `merge_asof`-joined
+    against the nanosecond grid. The instants are identical; no rule, rounding
+    or ordering changes.
+    """
+    return series.astype("datetime64[ns, UTC]")
+
+
 # --------------------------------------------------------------------------
 # verbatim transcription of build_hyperliquid (lines 399-461)
 # --------------------------------------------------------------------------
@@ -161,7 +173,7 @@ def build_hyperliquid_features(
     `date_range(START, END, freq='15min', inclusive='left')`.
     """
     candles = candles_15m.copy()
-    candles["bar_ts"] = pd.to_datetime(candles["t"], unit="ms", utc=True)
+    candles["bar_ts"] = _ns(pd.to_datetime(candles["t"], unit="ms", utc=True))
     candles = candles.sort_values("bar_ts").drop_duplicates("bar_ts", keep="last")
     candles["target_ts"] = candles["bar_ts"] + pd.Timedelta(minutes=15)
     for column in ("o", "h", "l", "c", "v", "n"):
@@ -182,7 +194,7 @@ def build_hyperliquid_features(
     result = candles[keep].copy()
 
     hourly = candles_1h.copy()
-    hourly["bar_ts"] = pd.to_datetime(hourly["t"], unit="ms", utc=True)
+    hourly["bar_ts"] = _ns(pd.to_datetime(hourly["t"], unit="ms", utc=True))
     hourly = hourly.sort_values("bar_ts").drop_duplicates("bar_ts", keep="last")
     hourly["target_ts"] = hourly["bar_ts"] + pd.Timedelta(hours=1)
     for column in ("o", "h", "l", "c", "v", "n"):
@@ -206,7 +218,7 @@ def build_hyperliquid_features(
     )
 
     funding = funding.copy()
-    funding["event_ts"] = pd.to_datetime(funding["time"], unit="ms", utc=True)
+    funding["event_ts"] = _ns(pd.to_datetime(funding["time"], unit="ms", utc=True))
     funding["hyperliquid_funding_rate"] = pd.to_numeric(funding["fundingRate"], errors="coerce")
     funding["hyperliquid_premium"] = pd.to_numeric(funding["premium"], errors="coerce")
     funding = funding.sort_values("event_ts").drop_duplicates("event_ts", keep="last")
