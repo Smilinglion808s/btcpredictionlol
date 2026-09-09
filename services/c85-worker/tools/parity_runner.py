@@ -521,9 +521,10 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
     dir_mask = both & np.isfinite(arch_dir)
     direction_mismatches = int((np.sign(arch_dir[dir_mask])
                                 != merged.rebuilt_direction.to_numpy()[dir_mask]).sum())
-    direction_mask_mismatches = int(
-        (np.isfinite(arch_dir) & (arch_dir != 0)) != (
-            merged.rebuilt_direction.to_numpy() != 0)).sum() if len(merged) else 0
+    direction_mask_mismatches = int((
+        (np.isfinite(arch_dir) & (arch_dir != 0))
+        != (merged.rebuilt_direction.to_numpy() != 0)).sum()) if len(merged) else 0
+
     arch_rank = merged.external_rank.to_numpy(float)
     reb_rank = merged.rebuilt_rank.to_numpy(float)
     rank_mask_mismatches = int((np.isfinite(arch_rank) != np.isfinite(reb_rank)).sum())
