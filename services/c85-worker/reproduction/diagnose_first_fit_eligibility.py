@@ -137,6 +137,8 @@ def boundary_report(module, frame, features, block_start: int) -> dict:
         "both_classes_present": bool(np.unique(target[train]).size == 2) if len(train) else False,
         "would_fit": bool(fittable),
         "incomplete_label_eligible_rows": int(incomplete_rows.sum()),
+        "max_rows_if_all_missingness_removed": max_recoverable,
+        "minimum_reachable_at_this_boundary": bool(max_recoverable >= module.MINIMUM),
         "missing_by_family": per_family,
         "missing_by_feature": dict(sorted(per_feature.items(), key=lambda kv: -kv[1])),
         "minimal_explanatory_columns": explanatory,
@@ -167,7 +169,7 @@ def main() -> None:
     features = specs["ALL_HGB"]["features"]
 
     archived = pd.Timestamp(args.archived_first_fit_ts)
-    matches = np.where(frame.ts.to_numpy() == np.datetime64(archived.tz_convert("UTC").tz_localize(None), "ns"))[0]
+    matches = np.where(frame.ts.to_numpy() == archived.tz_convert("UTC").to_datetime64())[0]
     archived_position = int(matches[0]) if len(matches) else None
 
     boundaries = list(range(module.MINIMUM, len(frame), module.REFIT_EVERY))
