@@ -92,6 +92,7 @@ class LongContextNotFitted(RuntimeError):
 
 
 class LongContextSchemaError(RuntimeError):
+
     """Raised when the incoming frame/packet does not carry the exact schema."""
 
 
