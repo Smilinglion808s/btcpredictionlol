@@ -115,24 +115,154 @@ def load_frame() -> tuple[pd.DataFrame, list[str]]:
     return frame, lc.feature_columns(list(frame.columns))
 
 
-def load_producer() -> dc.LongContextLeafProducer:
-    payload = json.loads((RANK / "rank_state.json").read_text())
+class PairIntegrityError(RuntimeError):
+    """The persisted head+rank+ledger generation is not one verified pair."""
+
+
+def _producer_from_payload(payload: dict) -> dc.LongContextLeafProducer:
     if "rank_state" not in payload:  # a bare RollingRankState export
         payload = {"rank_state": payload, "last_key": None, "last_output": None,
                    "version": 0}
     return dc.LongContextLeafProducer.from_dict(payload)
 
 
-def truncate_ledger(path: Path, cursor: int) -> int:
-    """Bind the ledger to the committed cursor; committed state is authority."""
+def write_pair(head: lc.LongContextHead, producer: dc.LongContextLeafProducer,
+               ledger: Path) -> dict:
+    """Persist head, rank and ledger as ONE generation, pointer activated LAST.
+
+    Ordering is the whole point: the head writes its own immutable generation
+    (and retains the previous one), the rank state and the ledger snapshot are
+    staged into a generation directory of the same name and moved into place,
+    and only then is `RANK/CURRENT` replaced. `RANK/CURRENT` — not the head's
+    own pointer — is the authority for the PAIR, so an interruption at any
+    point leaves the previous complete pair active.
+    """
+
+    from src import reconstruction
+
+    meta = head.export_state(STATE)
+    generation = meta["generation"]
+    generations = RANK / "generations"
+    generations.mkdir(parents=True, exist_ok=True)
+    staging = generations / f".staging-{os.getpid()}-{int(time.time() * 1e6)}"
+    staging.mkdir(parents=True, exist_ok=False)
+    rank_path = staging / "rank_state.json"
+    rank_path.write_text(json.dumps(producer.to_dict(), indent=1))
+    ledger_copy = staging / "ledger.csv"
+    ledger_copy.write_bytes(ledger.read_bytes())
+    manifest = {
+        "generation": generation,
+        "head_position": head.position,
+        "head_fit_count": head.fit_count,
+        "head_state_dir": str(STATE / "generations" / generation),
+        "rank_last_key": producer.last_key,
+        "rank_version": producer.version,
+        "ledger_rows": max(0, len(ledger_copy.read_text().splitlines()) - 1),
+        "files": {
+            "rank_state.json": sha256(rank_path),
+            "ledger.csv": sha256(ledger_copy),
+        },
+        "identity": reconstruction.identity(),
+        "runtime": runtime_metadata(),
+        "written_at": pd.Timestamp.utcnow().isoformat(),
+    }
+    (staging / "MANIFEST.json").write_text(json.dumps(manifest, indent=1))
+    target = generations / generation
+    if target.exists():
+        for child in target.iterdir():
+            child.unlink()
+        target.rmdir()
+    os.replace(staging, target)
+    pointer_tmp = RANK / f".CURRENT-{os.getpid()}-{int(time.time() * 1e6)}"
+    pointer_tmp.write_text(generation)
+    os.replace(pointer_tmp, RANK / "CURRENT")
+    return manifest
+
+
+def load_pair(ledger: Path) -> tuple[lc.LongContextHead, dc.LongContextLeafProducer, dict]:
+    """Restore the ACTIVE pair, verifying identity, cursor and hashes.
+
+    Refuses every inconsistency instead of repairing it: a missing pointer, a
+    missing head generation, a rank digest that does not match the manifest, a
+    ledger digest that does not match, a head/rank cursor disagreement, or a
+    committed history the ledger cannot account for.
+    """
+
+    pointer = RANK / "CURRENT"
+    if pointer.exists():
+        generation = pointer.read_text().strip()
+        gen_dir = RANK / "generations" / generation
+        if not gen_dir.is_dir():
+            raise PairIntegrityError(
+                f"RANK/CURRENT points at a missing generation {generation!r}")
+        manifest = json.loads((gen_dir / "MANIFEST.json").read_text())
+        for name, expected in manifest["files"].items():
+            got = sha256(gen_dir / name)
+            if got != expected:
+                raise PairIntegrityError(
+                    f"{name} digest {got} does not match the manifest {expected}")
+        head_dir = STATE / "generations" / generation
+        if not head_dir.is_dir():
+            raise PairIntegrityError(
+                f"head generation {generation!r} is missing at {head_dir}")
+        head = lc.LongContextHead.restore_state(head_dir)
+        producer = _producer_from_payload(json.loads((gen_dir / "rank_state.json").read_text()))
+        if head.position != manifest["head_position"]:
+            raise PairIntegrityError(
+                f"restored head position {head.position} != manifest "
+                f"{manifest['head_position']}")
+        if producer.last_key != manifest["rank_last_key"]:
+            raise PairIntegrityError(
+                f"restored rank last_key {producer.last_key} != manifest "
+                f"{manifest['rank_last_key']}")
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_bytes((gen_dir / "ledger.csv").read_bytes())
+        log(f"restored pair generation {generation} (head={head.position} "
+            f"rank_last_key={producer.last_key})")
+    else:
+        # The bootstrap package predates the paired pointer: accept it once,
+        # explicitly, and re-emit it as a proper generation on first checkpoint.
+        rank_path = RANK / "rank_state.json"
+        if not rank_path.exists():
+            raise PairIntegrityError(
+                f"no RANK/CURRENT pointer and no legacy {rank_path}; nothing to restore")
+        head = lc.LongContextHead.restore_state(STATE)
+        producer = _producer_from_payload(json.loads(rank_path.read_text()))
+        manifest = {"generation": "LEGACY_BOOTSTRAP", "head_position": head.position,
+                    "rank_last_key": producer.last_key}
+        log("restored LEGACY bootstrap pair (no paired pointer); the next "
+            "checkpoint writes a verified generation")
+
+    if producer.last_key is not None and producer.last_key != head.position - 1:
+        raise PairIntegrityError(
+            f"head is at position {head.position} but the rank window last "
+            f"committed {producer.last_key}; the pair is not one generation")
+    return head, producer, manifest
+
+
+def truncate_ledger(path: Path, cursor: int, *, floor: int) -> int:
+    """Bind the ledger to the committed cursor; committed state is authority.
+
+    `floor` is the first position this run may own (the bootstrap cursor). A
+    committed cursor above the floor with no ledger rows to account for it is
+    an inconsistency, not an empty start: refuse rather than fabricate a ledger.
+    """
 
     if not path.exists():
+        if cursor > floor:
+            raise PairIntegrityError(
+                f"committed cursor {cursor} is ahead of the ledger floor {floor} "
+                f"but {path} does not exist; the committed history is missing")
         path.write_text(LEDGER_HEADER)
         return 0
     kept = [
         line for line in path.read_text().splitlines()
         if line and not line.startswith("position,") and int(line.split(",", 1)[0]) < cursor
     ]
+    if cursor > floor and len(kept) < cursor - floor:
+        raise PairIntegrityError(
+            f"ledger holds {len(kept)} committed rows but the cursor implies "
+            f"{cursor - floor} between {floor} and {cursor}; committed history is missing")
     path.write_text(LEDGER_HEADER + "".join(f"{line}\n" for line in kept))
     return len(kept)
 
@@ -152,46 +282,18 @@ def settle(head: lc.LongContextHead, ts, label: float, as_of) -> None:
 
 def checkpoint(head: lc.LongContextHead, producer: dc.LongContextLeafProducer,
                ledger: Path) -> dict:
-    """Persist head, rank and ledger as ONE verifiable generation."""
-
-    meta = head.export_state(STATE)
-    RANK.mkdir(parents=True, exist_ok=True)
-    rank_path = RANK / "rank_state.json"
-    tmp = rank_path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(producer.to_dict(), indent=1))
-    os.replace(tmp, rank_path)
-    manifest = {
-        "generation": meta["generation"],
-        "head_position": head.position,
-        "head_fit_count": head.fit_count,
-        "rank_last_key": producer.last_key,
-        "rank_version": producer.version,
-        "files": {
-            "rank_state.json": sha256(rank_path),
-            "ledger": sha256(ledger),
-        },
-        "ledger_path": ledger.name,
-        "runtime": runtime_metadata(),
-        "written_at": pd.Timestamp.utcnow().isoformat(),
-    }
-    (RANK / "rank_manifest.json").write_text(json.dumps(manifest, indent=1))
-    return manifest
+    return write_pair(head, producer, ledger)
 
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     frame, features = load_frame()
-    head = lc.LongContextHead.restore_state(STATE)
-    producer = load_producer()
     ledger = OUT / "continuation_ledger.csv"
+    head, producer, _manifest = load_pair(ledger)
 
-    if producer.last_key is not None and producer.last_key != head.position - 1:
-        raise SystemExit(
-            f"refusing to run: head is at position {head.position} but the rank "
-            f"window last committed {producer.last_key}; the pair is not the same "
-            "generation"
-        )
-    kept = truncate_ledger(ledger, head.position)
+    floor = int(os.environ.get("C85_LC_LEDGER_FLOOR", str(head.position)))
+    kept = truncate_ledger(ledger, head.position, floor=floor)
+
     start = head.position
     stop = min(len(frame), start + COUNT)
     log(f"frame rows={len(frame)} features={len(features)}; head position={start} "

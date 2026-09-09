@@ -177,6 +177,25 @@ class BoundaryOrchestrator:
         self.ticker_resolver = ticker_resolver
         self.allow_dispatch = allow_dispatch
         self.clock_ns = clock_ns
+        #: Set when an expert-chain commit left the fitted head advanced while
+        #: the positional rank window did not move (`ChainCommitError`). That
+        #: cannot be undone in place, so the orchestrator refuses EVERY further
+        #: boundary until an operator restores the last verified head+rank
+        #: generation and calls `clear_chain_halt()`.
+        self.chain_halt: dict[str, Any] | None = None
+
+    def clear_chain_halt(self, *, restored_generation: str) -> None:
+        """Release the halt after a verified paired restore.
+
+        `restored_generation` is the generation id of the head+rank pair that
+        was restored; it is recorded so the release is auditable and cannot be
+        performed by simply swallowing the error.
+        """
+        if not restored_generation:
+            raise ValueError("clear_chain_halt requires the restored generation id")
+        self.chain_halt = None
+        self.last_chain_halt_cleared = restored_generation
+
 
     # -- clocks ---------------------------------------------------------------
     @staticmethod
@@ -310,6 +329,20 @@ class BoundaryOrchestrator:
     ) -> BoundaryOutcome:
         target_open = target_open.astimezone(timezone.utc)
         target_ns = int(target_open.timestamp() * NS)
+
+        # 0a. an inconsistent head/rank pair halts everything. No packet is
+        #     built, no decision is computed and nothing is dispatched until a
+        #     verified paired restore releases the halt.
+        if self.chain_halt is not None:
+            return BoundaryOutcome(
+                ticker=None, target_open=target_open, status="HALTED",
+                blocker=(
+                    "C85_CHAIN_STATE_INCONSISTENT_RESTORE_REQUIRED: "
+                    + str(self.chain_halt.get("error"))
+                ),
+            )
+
+
 
         # 0. duplicate / retry suppression against the authoritative state only.
         if self.already_processed(state, target_open):
@@ -490,11 +523,13 @@ class BoundaryOrchestrator:
 
         # The decision is durable: the expert chain may now advance, exactly
         # once, head and rank window together.
+        chain_failure: str | None = None
         if inputs.pending_update is not None:
             try:
                 inputs.pending_update.commit()
-            except Exception as exc:  # noqa: BLE001 - recorded, never silently dropped
-                candidate.expert_state["chain_commit_error"] = f"{type(exc).__name__}: {exc}"
+            except Exception as exc:  # noqa: BLE001 - fatal: the pair may be split
+                chain_failure = f"{type(exc).__name__}: {exc}"
+                candidate.expert_state["chain_commit_error"] = chain_failure
 
 
         # 6. only now is the candidate authoritative.
@@ -509,7 +544,38 @@ class BoundaryOrchestrator:
             state.checkpoint_seq = seq
             if reconciled_commit and hasattr(self.store, "_last_seq"):
                 self.store._last_seq = seq  # noqa: SLF001 - documented recovery path
+
+        if chain_failure is not None:
+            # A ChainCommitError means the fitted head may already have moved
+            # while the rank window did not. `rollback()` only drops references
+            # and cannot undo a committed mutation, so there is nothing to undo
+            # here: the run stops. The decision row itself is already durable
+            # and the state has adopted it, so recovery reconciles this target
+            # idempotently (`already_processed` / `_reconcile_commit`) instead
+            # of revising or re-logging it. Nothing is dispatched.
+            self.chain_halt = {
+                "error": chain_failure,
+                "target_open_utc": target_open.isoformat(),
+                "identity": decision.identity,
+                "checkpoint_seq": seq,
+            }
+            decision.status = "LOGGED"
+            decision.status_reason = "C85_CHAIN_STATE_INCONSISTENT"
+            self._stamp_timing(decision, timing, cutoff_ns, inputs.source)
+            return BoundaryOutcome(
+                ticker=ticker,
+                target_open=target_open,
+                status="CHAIN_INCONSISTENT",
+                decision=decision,
+                committed=True,
+                state_promoted=True,
+                checkpoint_seq=seq,
+                blocker=(
+                    "C85_CHAIN_STATE_INCONSISTENT_RESTORE_REQUIRED: " + chain_failure
+                ),
+            )
         self._stamp_timing(decision, timing, cutoff_ns, inputs.source)
+
 
         if newly_consumed:
             try:
