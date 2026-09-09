@@ -173,12 +173,27 @@ def test_restart_reload_reproduces_identical_features():
 
 # -- synthetic edge cases (supplemental; NOT archived raw parity) -------------
 def _event(accumulator, venue, agg_id, ts_us, price, qty, maker=False, receipt_ns=None):
-    accumulator.add(
-        venue, agg_trade_id=agg_id,
-        transact_time=ts_us if venue == "spot" else ts_us // 1000,
-        price=price, quantity=qty, first_trade_id=agg_id, last_trade_id=agg_id,
-        is_buyer_maker=maker, receipt_ns=receipt_ns,
-    )
+    """Feed one event through a real transport adapter.
+
+    With a receipt time this uses the websocket transport (milliseconds, the
+    observed live unit); without one it uses the archive transport, whose
+    availability is legitimately unknown.
+    """
+    if receipt_ns is None:
+        name = f"{venue}_archive_csv"
+        stamp = ts_us if venue == "spot" else ts_us // 1000
+        payload = {
+            "agg_trade_id": agg_id, "price": price, "quantity": qty,
+            "first_trade_id": agg_id, "last_trade_id": agg_id,
+            "transact_time": stamp, "is_buyer_maker": maker,
+        }
+    else:
+        name = f"{venue}_ws_aggTrade"
+        payload = {
+            "a": agg_id, "p": price, "q": qty, "f": agg_id, "l": agg_id,
+            "T": ts_us // 1000, "m": maker,
+        }
+    return accumulator.ingest(name, payload, receipt_ns=receipt_ns)
 
 
 def test_synthetic_half_open_boundary_endpoints():
