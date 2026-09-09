@@ -344,6 +344,10 @@ REQUIRED_KEYS = (
 # tracked separately in `dependencies.py`; nothing here claims a supplied file
 # is missing, and nothing is ever fabricated.
 from .dependencies import LEAF_DEPENDENCIES  # noqa: E402
+from .direction_contract import (  # noqa: E402
+    MODEL_NO_PROBABILITY,
+    MODEL_SCORED,
+)
 
 _BLOCKED_BY: dict[str, str] = {d.key: d.summary() for d in LEAF_DEPENDENCIES}
 _BLOCKED_BY.setdefault(
