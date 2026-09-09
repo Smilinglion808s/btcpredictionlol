@@ -67,6 +67,22 @@ class Worker:
         # does not make the worker ready: the registry stays disconnected until
         # every stage can actually run, and evaluate_readiness surfaces why.
         self.experts.chain = LiveExpertChain()
+        # First inherited ancestor computation that actually runs incrementally
+        # in the worker: the shared T0/T5 coverage control that C30, C36 and C37
+        # all consume. It is attached as a PRECURSOR — it reproduces the C30
+        # control branch exactly, but the C30 expert also needs its selected
+        # blend and hot-calibration heads, so `c30` stays missing and the
+        # registry stays disconnected.
+        from .experts.coverage_providers import install as _install_coverage
+
+        try:
+            self.coverage_control = _install_coverage(self.experts)
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            self.coverage_control = None
+            self.coverage_control_error = f"{type(exc).__name__}: {exc}"
+        else:
+            self.coverage_control_error = None
+
         self.gateway = GatewayClient(self.settings.gateway_url, self.settings.gateway_secret)
         self.warmup = WarmupCoordinator(self.artifacts, self.store)
         self.state = None
