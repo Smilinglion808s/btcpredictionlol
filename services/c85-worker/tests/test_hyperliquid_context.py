@@ -353,4 +353,4 @@ def test_repeated_polling_of_the_same_window_is_idempotent(sample):
     first = acc.ingest_candles("15m", sample["c15"][:100], available_ns=1)
     second = acc.ingest_candles("15m", sample["c15"][:100], available_ns=2)
     assert first == 100 and second == 0
-    assert len(acc.candles_15m.rows) == 100
+    assert len(acc.candles_15m.versions) == 100
