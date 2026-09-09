@@ -55,6 +55,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from src.experts import direction_contract as dc  # noqa: E402
 from src.experts import long_context as lc  # noqa: E402
 
 CKPT_NPZ = "parity_ckpt.npz"
@@ -559,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--max-blocks", type=int)
+    parser.add_argument("--legacy", action="store_true",
+                        help="compare a collector-format legacy generation (read-only)")
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -569,12 +572,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if args.ledger is None:
             parser.error("compare needs --ledger")
-        result = compare(args.frame, args.state, args.ledger)
+        try:
+            result = compare(args.frame, args.state, args.ledger, legacy=args.legacy)
+        except ParityComparisonRefused as exc:
+            print(json.dumps({"status": "REFUSED", "reason": str(exc)}, indent=1))
+            return 2
 
     payload = json.dumps(result, indent=1, default=str)
     if args.out:
         args.out.write_text(payload)
     print(payload)
+    if args.command == "validate":
+        return 0 if result.get("resumable") else 1
+    if args.command == "compare":
+        # An incomplete diagnostic is NOT a pass, and a mask or tolerance
+        # difference never exits successfully.
+        return 0 if result["status"] == "FULL PARITY" else 1
     return 0
 
 
