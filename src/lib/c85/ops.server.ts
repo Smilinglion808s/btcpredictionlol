@@ -363,6 +363,53 @@ export async function runC85Op(
       return ok({ fits: data ?? [] });
     }
 
+    case "artifact.download_url": {
+      const { data, error } = await supabase.storage
+        .from(ARTIFACT_BUCKET)
+        .createSignedUrl(body.key, body.ttl_seconds);
+      if (error || !data?.signedUrl) {
+        // Never echo storage internals; a missing object and a disallowed one
+        // look identical to the caller.
+        return { status: 404, result: { ok: false, error: "artifact_unavailable" } };
+      }
+      return ok({
+        bucket: ARTIFACT_BUCKET,
+        key: body.key,
+        expires_in: body.ttl_seconds,
+        url: data.signedUrl,
+      });
+    }
+
+    case "artifact.upload_url": {
+      const { data, error } = await supabase.storage
+        .from(ARTIFACT_BUCKET)
+        .createSignedUploadUrl(body.key, { upsert: true });
+      if (error || !data?.signedUrl) {
+        return { status: 400, result: { ok: false, error: "artifact_upload_unavailable" } };
+      }
+      return ok({ bucket: ARTIFACT_BUCKET, key: body.key, url: data.signedUrl, token: data.token });
+    }
+
+    case "artifact.list": {
+      const slash = body.prefix.lastIndexOf("/");
+      const folder = body.prefix.slice(0, slash);
+      const search = body.prefix.slice(slash + 1);
+      const { data, error } = await supabase.storage
+        .from(ARTIFACT_BUCKET)
+        .list(folder, { limit: body.limit, search: search || undefined });
+      if (error) throw new Error(error.message);
+      return ok({
+        bucket: ARTIFACT_BUCKET,
+        objects: (data ?? []).map((o) => ({
+          key: `${folder}/${o.name}`,
+          size: (o.metadata as Record<string, unknown> | null)?.size ?? null,
+          updated_at: o.updated_at ?? null,
+        })),
+      });
+    }
+
+
+
     case "health.heartbeat": {
       const { op: _op, timing, ...fields } = body;
       const { error } = await supabase.from("c85_worker_health").upsert(
