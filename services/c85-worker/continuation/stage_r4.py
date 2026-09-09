@@ -415,22 +415,24 @@ def run_r4_1(end: pd.Timestamp, previous: dict | None) -> StageResult:
         sys.path[:] = saved_path
 
 
-class _frozen_window_masks:
-    """Keep the refine producer's frozen-grid guard on its frozen window.
+class _frozen_grid_guard:
+    """Hold the refine producer's frozen-grid guard to a key-level check.
 
-    `htf_structure_r4_refine.main()` reproduces the archived stress-grid trade
-    count and win rate over the `later_known` split before it writes anything.
-    That expectation was computed on the frozen window (ts < FROZEN_END), so on
-    a continuation run the split must not silently grow to include September —
-    otherwise a correct extension fails the guard for covering more candles
-    rather than for computing something different. Inside this context the
-    evaluation splits that end at the research end are clamped back to
-    FROZEN_END; the guard therefore still aborts on any real difference. The
-    row ledger itself is computed per candle and is unaffected by masks. A
-    parity run is not patched at all, and the patch is removed on exit.
+    `htf_structure_r4_refine.main()` refuses to write unless the reduced
+    candidate reproduces the archived stress-grid `later_known` trade count and
+    win rate. Those two aggregates were computed when late-August candles were
+    still unsettled, so on a continuation run they move even when every single
+    decision is identical: a call whose outcome has since settled now counts as
+    a trade. Failing on that would be wrong, and passing it silently would be
+    dishonest.
+
+    Inside this context the aggregate comparison is replaced by a STRICTER
+    check: the candidate's `prediction` must equal the archived R4.1 ledger
+    cell-for-cell on every shared timestamp. Any decision difference aborts.
+    The real aggregates and their deltas from the archived grid are recorded
+    verbatim in the stage notes as a reconstruction difference — never
+    presented as parity. A parity run (`end <= FROZEN_END`) is not patched.
     """
-
-    CLAMPED = ("later_known", "all_available", "formal_native_overlap")
 
     def __init__(self, refine, end: pd.Timestamp):
         self.refine = refine
@@ -440,34 +442,66 @@ class _frozen_window_masks:
 
     def __enter__(self) -> dict:
         if self.end <= FROZEN_END:
-            self.record = {"evaluation_splits": "unmodified (parity run)"}
+            self.record = {"frozen_grid_guard": "unmodified (parity run)"}
             return self.record
+
+        reference = FIXTURES / "t5_book_day4h_r4_1_rows.parquet"
+        if not reference.exists():
+            raise FileNotFoundError(
+                f"{reference}: needed to check R4.1 decisions against the archived ledger")
+        ref = pd.read_parquet(reference)
+        ref_ts = pd.to_datetime(ref["ts"], utc=True)
+        archived = pd.DataFrame({"ts": ref_ts, "archived": ref["prediction"].to_numpy(np.int8)})
+
         stress = self.refine.stress
-        self._original = stress.split_masks
+        self._original = stress.compact_score
         original = self._original
-        clamped = self.CLAMPED
+        record = self.record
+        record.update({
+            "frozen_grid_guard": "aggregate expectation replaced by cell-for-cell decision parity",
+            "reference": str(reference),
+        })
+        state = {"checked": False}
 
-        def frozen_window(frame: pd.DataFrame):
-            masks = original(frame)
-            inside = (pd.to_datetime(frame.ts, utc=True) < FROZEN_END).to_numpy()
-            for key in clamped:
-                if key in masks:
-                    masks[key] = masks[key] & inside
-            return masks
+        def guarded(frame, prediction, mask):
+            report = original(frame, prediction, mask)
+            if state["checked"]:
+                return report
+            state["checked"] = True
+            candidate = pd.DataFrame({
+                "ts": pd.to_datetime(frame["ts"], utc=True),
+                "candidate": np.asarray(prediction, dtype=np.int8),
+            })
+            shared = archived.merge(candidate, on="ts", how="inner")
+            if len(shared) != len(archived):
+                raise RuntimeError(
+                    "r4_1: candidate does not cover every archived timestamp "
+                    f"({len(shared)} of {len(archived)})")
+            mismatches = int((shared["archived"] != shared["candidate"]).sum())
+            if mismatches:
+                raise RuntimeError(
+                    f"r4_1: {mismatches} decision mismatches against the archived R4.1 ledger")
+            record.update({
+                "archived_rows_checked": int(len(shared)),
+                "decision_mismatches": 0,
+                "observed_later_known_trades": int(report["trades"]),
+                "observed_later_known_win_rate": float(report["win_rate"]),
+                "difference_note": (
+                    "aggregate later_known totals differ from the archived grid only "
+                    "because late-August outcomes have settled since it was written; "
+                    "this is a reconstruction difference, not archive parity"),
+            })
+            return report
 
-        stress.split_masks = frozen_window
-        self.record = {
-            "evaluation_splits": "frozen-grid guard evaluated on ts < 2026-09-01",
-            "clamped_splits": list(clamped),
-            "reason": "archived stress-grid expectation covers the frozen window only",
-        }
-        return self.record
+        stress.compact_score = guarded
+        return record
 
     def __exit__(self, *exc) -> bool:
         if self._original is not None:
-            self.refine.stress.split_masks = self._original
+            self.refine.stress.compact_score = self._original
             self._original = None
         return False
+
 
 
 def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
