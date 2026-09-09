@@ -634,13 +634,16 @@ class LongContextHead:
             self._staged_fit = None
         self.buffer.append(
             _Row(update.ts, update.values, update.complete,
-                 float(self._labels_by_ts.get(update.ts, np.nan)))
+                 float(self._labels_by_ts.get(update.ts, np.nan)), self.position)
         )
         while len(self.buffer) > WINDOW:
             self.buffer.popleft()
         self._prune_labels()
         self.position += 1
-        self._no_fit_positions = {p for p in self._no_fit_positions if p >= self.position}
+        # An eligibility verdict only survives while it is still in the future;
+        # it is keyed by snapshot digest, so changed inputs re-open the boundary.
+        self._no_fit_positions = {p: d for p, d in self._no_fit_positions.items()
+                                  if p >= self.position}
         self._last_ts = update.ts
         self._last_probability = update.probability
         self._last_digest = update.digest
@@ -662,26 +665,79 @@ class LongContextHead:
         return update.commit()
 
     # -- fitting (off the serving path) -------------------------------------
-    def train_ahead(self) -> StagedFit | None:
+    def training_snapshot(self, position: int) -> TrainingSnapshot:
+        """The immutable description of what a fit for ``position`` may use.
+
+        This is the eligibility contract: the exact positional range, the grid
+        origin, the settled-label watermark, the ordered schema and a digest
+        over every training row actually admitted. Two calls agree only when
+        nothing relevant has changed.
+        """
+
+        import hashlib
+
+        rows = [r for r in self.buffer
+                if r.complete and np.isfinite(r.label) and r.label != 0]
+        unsettled = sum(1 for r in self.buffer if not np.isfinite(r.label))
+        schema_digest = hashlib.sha256("\n".join(self.features).encode()).hexdigest()
+        digest = hashlib.sha256()
+        digest.update(f"{position}|{MINIMUM}|{REFIT_EVERY}|{WINDOW}|{schema_digest}".encode())
+        for r in rows:
+            digest.update(f"{r.pos}|{r.ts.isoformat()}|{r.label}|".encode())
+            digest.update(_payload_digest(r.values).encode())
+        settled = [r.ts for r in self.buffer if np.isfinite(r.label)]
+        return TrainingSnapshot(
+            position=position,
+            grid_origin=(MINIMUM, REFIT_EVERY, WINDOW),
+            first_position=rows[0].pos if rows else -1,
+            last_position=rows[-1].pos if rows else -1,
+            training_rows=len(rows),
+            cutoff_ts=rows[-1].ts.isoformat() if rows else None,
+            label_watermark=max(settled).isoformat() if settled else None,
+            unsettled_positions=unsettled,
+            schema_digest=schema_digest,
+            digest=digest.hexdigest(),
+        )
+
+    def train_ahead(self, *, position: int | None = None) -> StagedFit | None:
         """Fit the model that the next scheduled refit position will activate.
+
+        A fit is certified for one boundary only, and only once every training
+        input that boundary is entitled to actually exists - i.e. once the head
+        stands at that position, so that all rows strictly before it have been
+        observed. Training for a boundary that is still several targets away is
+        refused: the original never trains on a shorter history than the
+        boundary defines, and a fit made early would silently miss the labels
+        that settle in between.
 
         Uses exactly the rows the original would have used at that boundary:
         the retained trailing window, restricted to feature-complete rows with a
         finite non-zero settled label.
         """
 
-        position = self.refit_due_at()
+        due = self.refit_due_at()
+        position = due if position is None else int(position)
         if position is None or position < MINIMUM:
             return None
-        if self._staged_fit is not None and self._staged_fit.position == position:
-            return self._staged_fit
-        rows = [r for r in self.buffer if r.complete and np.isfinite(r.label) and r.label != 0]
+        if position != self.position:
+            raise LongContextTrainingRequired(
+                f"a fit for position {position} is not yet eligible: the head is at "
+                f"{self.position} and the rows before {position} do not all exist yet"
+            )
+        snapshot = self.training_snapshot(position)
+        staged = self._staged_fit
+        if (staged is not None and staged.position == position
+                and staged.snapshot is not None
+                and staged.snapshot.digest == snapshot.digest):
+            return staged
+        rows = [r for r in self.buffer
+                if r.complete and np.isfinite(r.label) and r.label != 0]
         if len(rows) < MINIMUM:
-            self._no_fit_positions.add(position)
+            self._no_fit_positions[position] = snapshot.digest
             return None
         target = np.asarray([1 if r.label > 0 else 0 for r in rows], dtype=np.int8)
         if np.unique(target).size != 2:
-            self._no_fit_positions.add(position)
+            self._no_fit_positions[position] = snapshot.digest
             return None
         x = np.vstack([r.values for r in rows])
         weights = day_balanced_weights(pd.Series([r.ts for r in rows]))
@@ -693,8 +749,10 @@ class LongContextHead:
             fit_id=f"{HEAD_ID}:{position}:{rows[-1].ts.isoformat()}",
             training_rows=len(rows),
             cutoff_ts=rows[-1].ts.isoformat(),
+            snapshot=snapshot,
         )
         self._staged_fit = staged
+        self._no_fit_positions.pop(position, None)
         return staged
 
     # -- serialisation ------------------------------------------------------
