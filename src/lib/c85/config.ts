@@ -9,6 +9,21 @@ export const C85_DISPLAY_NAME = "C85";
 export const C85_VARIANT = "MULTI_META";
 export const C85_SERIES_TICKER = "KXBTC15M";
 
+/**
+ * Reconstruction identity. The rebuilt worker was never shown to reproduce the
+ * archived `c85-multi-meta-r1` ledger numerically, so every row it writes —
+ * decisions, checkpoints, fits, settlements, health — carries this separate
+ * version. Archived performance does not transfer to it, and the two identities
+ * never share a row: all C85 tables are keyed on `model_version`.
+ */
+export const C85_RECONSTRUCTION_VERSION = "c85-reconstruction-r1";
+
+/** The only identities a signed worker request may write under. */
+export const C85_WRITABLE_MODEL_VERSIONS = [
+  C85_MODEL_VERSION,
+  C85_RECONSTRUCTION_VERSION,
+] as const;
+
 export const C85_TARGETS_TABLE = "c85_targets";
 export const C85_SETTLEMENTS_TABLE = "c85_settlements";
 export const C85_HEALTH_TABLE = "c85_worker_health";

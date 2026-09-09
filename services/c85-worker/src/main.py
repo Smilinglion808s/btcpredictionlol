@@ -39,7 +39,9 @@ from .experts import ExpertRegistry, LiveExpertChain
 from .feeds import FeedRegistry
 from .gateway import GatewayClient
 from .health import create_app
-from .orchestration import BoundaryOrchestrator, UnavailablePacketSource
+from .packets import LivePacketSource
+from .reconstruction import identity as reconstruction_identity
+from .reconstruction import logging_model_version
 from .scheduler import BoundaryScheduler, RunTiming, next_boundary
 from .store import C85Store
 from .tickers import KalshiTickerResolver
@@ -70,13 +72,10 @@ class Worker:
         self.blocking_reason: str | None = None
         self.owns_lease = False
         self.pending_bridge: list[datetime] = []
-        # Live raw-feature production is still an unmet dependency, so the
-        # orchestrator is wired to the fail-closed packet source. Swapping in a
-        # real source is the only change needed to make the boundary path live;
-        # nothing else on the path is a placeholder.
-        self.packet_source = UnavailablePacketSource(
-            reasons=self.experts.status().get("blocking_reasons") or None
-        )
+        # Live packet production from the running collectors and the ported
+        # ancestor chain. It fails closed and names every remaining producer,
+        # rather than pretending an input exists.
+        self.packet_source = LivePacketSource(feeds=self.feeds, experts=self.experts)
         self.ticker_resolver = KalshiTickerResolver(
             self.settings.kalshi_series, self._fetch_market_metadata
         )
@@ -86,9 +85,11 @@ class Worker:
             gateway=self.gateway,
             packet_source=self.packet_source,
             ticker_resolver=self.ticker_resolver,
+            # Execution dispatch is a SEPARATE gate from logging readiness.
             allow_dispatch=self.settings.allow_live_publication,
         )
         self.scheduler = BoundaryScheduler(self.on_boundary)
+
 
     def _fetch_market_metadata(self, ticker: str) -> list[dict[str, Any]]:
         """Real venue metadata for ticker verification (never cached across days)."""
@@ -101,7 +102,19 @@ class Worker:
             return response.json().get("markets", [])
 
     # -- readiness --------------------------------------------------------------
-    def evaluate_readiness(self) -> tuple[str, str | None]:
+    #
+    # Two INDEPENDENT gates, never collapsed into one:
+    #
+    #   logging readiness  can this build compute and durably record a forward
+    #                      decision for the next boundary? (feeds, experts,
+    #                      bridge, applicable fit, live packet source)
+    #   dispatch gate      may an accepted decision be sent to the execution
+    #                      webhook? (C85_ALLOW_LIVE_PUBLICATION)
+    #
+    # A healthy prediction LOGGER therefore runs with dispatch suppressed. The
+    # old single gate blocked logging whenever publication was off, which made
+    # suppressed logging impossible.
+    def evaluate_logging_readiness(self) -> tuple[str, str | None]:
         missing_feeds = self.feeds.missing()
         if missing_feeds:
             return "BLOCKED", f"C85_FEEDS_STALE: {', '.join(missing_feeds)}"
@@ -122,13 +135,23 @@ class Worker:
         missing_fit = self.missing_applicable_fit()
         if missing_fit:
             return "BLOCKED", missing_fit
-        if isinstance(self.packet_source, UnavailablePacketSource):
-            return "BLOCKED", "C85_RAW_PACKET_SOURCE_UNAVAILABLE :: " + "; ".join(
-                self.packet_source.reasons
+        packet_reasons = self.packet_source.blocking_reasons(time.time_ns())
+        if packet_reasons:
+            return "BLOCKED", "C85_RAW_PACKET_SOURCE_UNAVAILABLE :: " + " || ".join(
+                packet_reasons
             )
-        if not self.settings.allow_live_publication:
-            return "BLOCKED", "C85_ALLOW_LIVE_PUBLICATION=false"
-        return "READY", None
+        return "LOGGING_READY", None
+
+    def dispatch_status(self) -> str:
+        """Execution dispatch is suppressed unless explicitly enabled."""
+        return "ENABLED" if self.settings.allow_live_publication else "SUPPRESSED"
+
+    def evaluate_readiness(self) -> tuple[str, str | None]:
+        """Combined view used by the boundary path and the health endpoint."""
+        status, reason = self.evaluate_logging_readiness()
+        if status != "LOGGING_READY":
+            return "BLOCKED", reason
+        return ("READY" if self.dispatch_status() == "ENABLED" else "LOGGING"), None
 
     def missing_applicable_fit(self, at: datetime | None = None) -> str | None:
         """Both heads must already be fitted for the next target's UTC day."""
@@ -142,13 +165,20 @@ class Worker:
             return f"C85_NO_APPLICABLE_FIT: {', '.join(missing)} for {target.date()}"
         return None
 
+
     def snapshot(self) -> dict[str, Any]:
+        logging_status, logging_reason = self.evaluate_logging_readiness()
         return {
-            "model_version": MODEL_VERSION,
+            "model_version": logging_model_version(),
+            "archived_model_version": MODEL_VERSION,
+            "reconstruction": reconstruction_identity(),
             "display_name": DISPLAY_NAME,
             "worker_id": self.settings.worker_id,
             "build_sha": self.settings.build_sha,
             "readiness": self.readiness,
+            "logging_readiness": logging_status,
+            "logging_blocking_reason": logging_reason,
+            "dispatch": self.dispatch_status(),
             "stage": self.warmup.progress.stage.value,
             "blocking_reason": self.blocking_reason,
             "progress": self.warmup.progress.as_dict(),
@@ -163,11 +193,12 @@ class Worker:
 
     # -- boundary ---------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> None:
-        """Compute and publish one target, or record exactly why it did not."""
-        readiness, reason = self.evaluate_readiness()
-        if readiness != "READY":
+        """Compute and log one target, dispatching only when dispatch is enabled."""
+        logging_status, reason = self.evaluate_logging_readiness()
+        if logging_status != "LOGGING_READY":
             self.store.mark_missed(self.ticker_resolver.unverified_label(target), target, reason or "not_ready")
             return
+
 
         # Scheduler ownership: overlapping deployments must never both process
         # the same target. The lease is short-lived and fenced in the backend.
@@ -207,7 +238,8 @@ class Worker:
             except Exception:  # noqa: BLE001
                 pass
             try:
-                if self.readiness == "READY":
+                # The lease is needed to LOG a target, not only to dispatch.
+                if self.readiness in ("READY", "LOGGING"):
                     self.owns_lease = bool(
                         self.store.acquire_lease(self.settings.lease_ttl_seconds).get("granted")
                     )
@@ -230,11 +262,14 @@ class Worker:
 
 
         self.readiness, self.blocking_reason = self.evaluate_readiness()
-        if self.readiness == "READY":
+        # The scheduler is armed for LOGGING as well as READY: a suppressed
+        # build still computes and durably records every boundary.
+        if self.readiness in ("READY", "LOGGING"):
             self.warmup.ready(next_boundary())
             self.scheduler.start()
         else:
             self.warmup.block(self.blocking_reason or "unknown")
+
 
         asyncio.create_task(self.heartbeat_loop())
 
