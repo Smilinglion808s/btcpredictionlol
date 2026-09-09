@@ -28,7 +28,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.experts.binance_windows import (  # noqa: E402
+from src.experts.binance_windows import (
+    LIVE,  # noqa: E402
     FIFTEEN_MIN_US,
     ONE_SECOND_US,
     BinanceWindowAccumulator,
@@ -219,10 +220,7 @@ def test_synthetic_duplicates_and_out_of_order_receipt():
     target_us = 1_767_312_000_000_000
     _event(accumulator, "spot", 10, target_us + 2 * ONE_SECOND_US, 102.0, 1.0)
     _event(accumulator, "spot", 11, target_us + 1 * ONE_SECOND_US, 101.0, 1.0)  # arrives late
-    assert accumulator.add(
-        "spot", agg_trade_id=10, transact_time=target_us + 2 * ONE_SECOND_US,
-        price=102.0, quantity=1.0, first_trade_id=10, last_trade_id=10, is_buyer_maker=False,
-    ) is False
+    assert _event(accumulator, "spot", 10, target_us + 2 * ONE_SECOND_US, 102.0, 1.0) is False
     features = accumulator.features_for(target_us)
     assert features["binance_spot_t5_w005_event_count"] == 2
     # first/last price follow EVENT time, not arrival order
@@ -238,7 +236,7 @@ def test_synthetic_receipt_after_freeze_is_not_available():
     freeze_ns = (target_us + 5 * ONE_SECOND_US) * 1000
     _event(accumulator, "spot", 20, target_us + ONE_SECOND_US, 100.0, 1.0, receipt_ns=freeze_ns - 10)
     _event(accumulator, "spot", 21, target_us + 2 * ONE_SECOND_US, 500.0, 1.0, receipt_ns=freeze_ns + 10)
-    live = accumulator.features_for(target_us, freeze_ns=freeze_ns)
+    live = accumulator.features_for(target_us, mode=LIVE, freeze_ns=freeze_ns)
     assert live["binance_spot_t5_w005_event_count"] == 1
     assert accumulator.features_for(target_us)["binance_spot_t5_w005_event_count"] == 2
 
