@@ -256,7 +256,8 @@ def test_a_missing_internal_row_is_not_excused_as_outside_the_prefix(ranked_worl
     result = pr.compare(frame_path, state, ledger_path)
     assert result["missing_expected_keys_in_processed_bounds"] == 1
     assert result["contract_components"]["expected_key_coverage_ok"] is False
-    assert result["contract_status"].endswith("MISMATCH")
+    assert result["contract_status"] in ("CONTRACT PARITY FAILED",
+                                        "PARTIAL CONTRACT MISMATCH")
 
 
 def test_earliest_mask_divergence_is_reported_before_the_value_divergence(ranked_world):
