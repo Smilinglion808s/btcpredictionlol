@@ -236,7 +236,8 @@ class Worker:
             except Exception:  # noqa: BLE001
                 pass
             try:
-                if self.readiness == "READY":
+                # The lease is needed to LOG a target, not only to dispatch.
+                if self.readiness in ("READY", "LOGGING"):
                     self.owns_lease = bool(
                         self.store.acquire_lease(self.settings.lease_ttl_seconds).get("granted")
                     )
@@ -259,11 +260,14 @@ class Worker:
 
 
         self.readiness, self.blocking_reason = self.evaluate_readiness()
-        if self.readiness == "READY":
+        # The scheduler is armed for LOGGING as well as READY: a suppressed
+        # build still computes and durably records every boundary.
+        if self.readiness in ("READY", "LOGGING"):
             self.warmup.ready(next_boundary())
             self.scheduler.start()
         else:
             self.warmup.block(self.blocking_reason or "unknown")
+
 
         asyncio.create_task(self.heartbeat_loop())
 
