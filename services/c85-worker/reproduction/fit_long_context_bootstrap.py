@@ -114,6 +114,32 @@ def settle(head: lc.LongContextHead, ts: pd.Timestamp, label: float,
         )
 
 
+LEDGER_HEADER = "position,ts,status,probability\n"
+
+
+def truncate_ledger(path: Path, cursor: int) -> int:
+    """Bind the ledger to the committed cursor.
+
+    The ledger is appended per target while `CURRENT` only advances at a
+    checkpoint, so a crash leaves rows for positions the restored state never
+    committed. Replaying those positions would append them a second time. On
+    resume every row at or after the restored cursor is therefore dropped: the
+    committed state is the authority, the ledger follows it.
+    """
+
+    if not path.exists():
+        path.write_text(LEDGER_HEADER)
+        return 0
+    kept: list[str] = []
+    for line in path.read_text().splitlines():
+        if not line or line.startswith("position,"):
+            continue
+        if int(line.split(",", 1)[0]) < cursor:
+            kept.append(line)
+    path.write_text(LEDGER_HEADER + "".join(f"{line}\n" for line in kept))
+    return len(kept)
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     frame, features = load_frame()
@@ -130,10 +156,12 @@ def main() -> int:
     probabilities_path = OUT / "probabilities.csv"
     if (STATE / "CURRENT").exists():
         head = lc.LongContextHead.restore_state(STATE)
-        log(f"resumed at position {head.position} (fits={head.fit_count})")
+        kept = truncate_ledger(probabilities_path, head.position)
+        log(f"resumed at position {head.position} (fits={head.fit_count}); "
+            f"ledger bound to cursor, {kept} rows retained")
     else:
         head = hydrate(frame, features, b0)
-        probabilities_path.write_text("position,ts,probability\n")
+        probabilities_path.write_text(LEDGER_HEADER)
         log(f"hydrated {len(head.buffer)} rows into the trailing window")
 
     records = frame[["ts", "label", *features]].to_dict("records")
@@ -157,9 +185,16 @@ def main() -> int:
                 f"rows={getattr(staged, 'training_rows', 0)} "
                 f"{round(time.time() - fit_started, 1)}s")
         probability = head.observe(record["ts"], record, allow_inline_training=False)
-        if probability is not None:
-            with probabilities_path.open("a") as handle:
-                handle.write(f"{pos},{pd.Timestamp(record['ts']).isoformat()},{probability!r}\n")
+        # EVERY target position gets a ledger row, including the ones the head
+        # could not score. `external_rank` is a POSITIONAL window, so an omitted
+        # slot shifts every later rank; the slot is retained with an empty
+        # probability and status MODEL_NO_PROBABILITY, never an invented score.
+        status = "MODEL_SCORED" if probability is not None else "MODEL_NO_PROBABILITY"
+        with probabilities_path.open("a") as handle:
+            handle.write(
+                f"{pos},{pd.Timestamp(record['ts']).isoformat()},{status},"
+                f"{'' if probability is None else repr(probability)}\n"
+            )
         if due:
             boundaries_done += 1
             if boundaries_done % CHECKPOINT_EVERY == 0:
@@ -168,6 +203,7 @@ def main() -> int:
                     "cursor_position": head.position,
                     "generation": meta["generation"],
                     "fit_count": head.fit_count,
+                    "ledger_rows": sum(1 for _ in probabilities_path.open()) - 1,
                     "elapsed_seconds": round(time.time() - started, 1),
                 }, indent=1))
                 log(f"checkpoint {meta['generation']} at position {head.position}")
@@ -181,7 +217,7 @@ def main() -> int:
         "frame_last_ts": frame.ts.iloc[-1].isoformat(),
         "bootstrap_start_position": b0,
         "last_boundary": last_boundary,
-        "probability_rows": sum(1 for _ in probabilities_path.open()) - 1,
+        "ledger_grid_rows": sum(1 for _ in probabilities_path.open()) - 1,
         "elapsed_seconds": round(time.time() - started, 1),
     }
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1))

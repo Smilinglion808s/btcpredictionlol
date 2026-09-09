@@ -72,6 +72,25 @@ class LiveExpertChain:
         from .leaf import LeafExperts
 
         self.leaf = LeafExperts()
+        # The C85 RECONSTRUCTION long-context bootstrap, when the deployment
+        # installed one. It carries the fitted head at its ABSOLUTE grid
+        # position plus the complete positional rank queue, so `external_
+        # direction` / `external_rank` are produced by the real head rather
+        # than by a supplied probability. It is STALE by construction (fitted
+        # through 2026-08-31, last observed target 2026-09-01T00:00Z) and
+        # `long_context_readiness()` reports exactly how stale; attaching it
+        # does NOT make the chain ready.
+        from .long_context_serving import restore_from_env
+
+        self.long_context: Any = None
+        self.long_context_error: str | None = None
+        try:
+            self.long_context = restore_from_env()
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            self.long_context_error = f"{type(exc).__name__}: {exc}"
+        if self.long_context is not None:
+            self.long_context.attach(self.leaf)
+
         self.c42 = C42Expert()
         self.c51 = C51Expert()
         self.c54 = C54Expert()
@@ -95,6 +114,23 @@ class LiveExpertChain:
                 "blocking_reasons": ["C85_C51_STATES_NOT_INSTALLED: artifacts/c51 missing"],
             }
         return self.c51_store.readiness()
+
+    def long_context_readiness(self, target_open: Any | None = None) -> dict[str, Any]:
+        """Honest state of the reconstruction long-context leaf."""
+
+        if self.long_context is None:
+            return {
+                "installed": False,
+                "ready": False,
+                "blocking_reasons": [
+                    self.long_context_error
+                    or "C85_LONG_CONTEXT_NOT_INSTALLED: set C85_LONG_CONTEXT_STATE_DIR "
+                    "to the restored bootstrap checkpoint"
+                ],
+            }
+        return {"installed": True, **self.long_context.readiness(target_open)}
+
+
 
 
     def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
@@ -181,4 +217,10 @@ class ExpertRegistry:
             # under test-only sys.path hacks that insert `src/`.
             "dependencies": _dependency_report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
+            "long_context": (
+                self.chain.long_context_readiness()
+                if self.chain is not None
+                else {"installed": False, "ready": False,
+                      "blocking_reasons": ["C85_CHAIN_NOT_CONSTRUCTED"]}
+            ),
         }
