@@ -800,7 +800,9 @@ class LongContextHead:
                   else np.zeros((0, len(self.features)), dtype=float))
         np.savez(staging / "buffer.npz", values=values,
                  labels=np.asarray([r.label for r in self.buffer], dtype=float),
-                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool))
+                 complete=np.asarray([r.complete for r in self.buffer], dtype=bool),
+                 positions=np.asarray([r.pos for r in self.buffer], dtype=np.int64))
+        staged = self._staged_fit
         meta = {
             "head_id": HEAD_ID,
             "spec": SPEC_NAME,
@@ -820,10 +822,27 @@ class LongContextHead:
             "label_availability": {k.isoformat(): v
                                    for k, v in self._label_available_at.items()},
             "fitted": self.model is not None,
+            # A restart immediately before a scheduled refit must not lose the
+            # fit that was already produced off the timed path, nor the
+            # eligibility verdicts recorded against specific training inputs.
+            "staged_fit": None if staged is None else {
+                "position": staged.position,
+                "fit_id": staged.fit_id,
+                "training_rows": staged.training_rows,
+                "cutoff_ts": staged.cutoff_ts,
+                "snapshot": None if staged.snapshot is None else {
+                    **staged.snapshot.__dict__,
+                    "grid_origin": list(staged.snapshot.grid_origin),
+                },
+            },
+            "no_fit_positions": {str(p): d for p, d in self._no_fit_positions.items()},
         }
         (staging / "state.json").write_text(json.dumps(meta, indent=1))
         if self.model is not None:
             joblib.dump(self.model, staging / "model.joblib")
+        if staged is not None:
+            joblib.dump(staged.model, staging / "staged_model.joblib")
+
 
         manifest = {
             "head_id": HEAD_ID,
