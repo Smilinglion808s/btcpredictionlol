@@ -210,6 +210,38 @@ class C85Store:
         if lease.get("granted") and fence is not None:
             self._lease_fence = int(fence)
 
+    # -- sequence handling -----------------------------------------------------
+    def _adopt_sequence(self, response: Any, state: C85State | None, *, required: bool) -> int | None:
+        """Adopt the checkpoint sequence the backend actually assigned.
+
+        `c85_append_checkpoint` validates `expected_parent_seq` against the
+        stored head and raises on mismatch, so a sequence that is written but
+        not adopted here makes the NEXT write fail with a stale parent. Every
+        successful write that carried a checkpoint must land its sequence in
+        both `self._last_seq` and the in-memory state.
+        """
+        if not isinstance(response, dict) or response.get("ok") is False:
+            raise BackendError(0, f"C85_MALFORMED_COMMIT_RESPONSE: {response!r}")
+        checkpoint = response.get("checkpoint")
+        seq_raw = (checkpoint or {}).get("checkpoint_seq") if isinstance(checkpoint, dict) else None
+        if seq_raw is None:
+            if required:
+                raise BackendError(
+                    0, "C85_MISSING_CHECKPOINT_SEQ: checkpoint was sent but no sequence returned"
+                )
+            return None
+        seq = int(seq_raw)
+        if seq <= 0:
+            raise BackendError(0, f"C85_INVALID_CHECKPOINT_SEQ: {seq_raw!r}")
+        self._last_seq = seq
+        if state is not None:
+            state.checkpoint_seq = seq
+        return seq
+
+    @property
+    def last_seq(self) -> int:
+        return self._last_seq
+
     # -- targets ---------------------------------------------------------------
     def commit_decision(
         self,
@@ -225,12 +257,14 @@ class C85Store:
         `outbox` must match the signed contract in src/lib/c85/ops.server.ts:
         {dedupe_key, payload, expires_at}. Anything else is rejected by Zod.
         """
-        return self.backend.call(
+        res = self.backend.call(
             "decision.commit",
             target=target_row(decision, published_at=published_at),
             checkpoint=None if state is None else self.checkpoint_payload(state, stage),
             outbox=outbox,
         )
+        self._adopt_sequence(res, state, required=state is not None)
+        return res
 
     def commit_dispatch_result(
         self,
@@ -245,12 +279,15 @@ class C85Store:
         row and allows exactly this: timing, status and published_at. No new ops
         contract is invented — this is the same `decision.commit` op.
         """
-        return self.backend.call(
+        res = self.backend.call(
             "decision.commit",
             target=target_row(decision, published_at=published_at),
             checkpoint=None,
             outbox=None,
         )
+        self._adopt_sequence(res, None, required=False)
+        return res
+
 
     def committed_identity(self) -> dict[str, Any] | None:
         """Read back the durable checkpoint to resolve an ambiguous commit."""
@@ -282,11 +319,14 @@ class C85Store:
         self, settlement_ids: list[str], state: C85State | None = None, stage: str = "READY"
     ) -> dict[str, Any]:
         """Exactly-once: already-consumed ids are not returned a second time."""
-        return self.backend.call(
+        res = self.backend.call(
             "settlements.consume",
             settlement_ids=settlement_ids,
             checkpoint=None if state is None else self.checkpoint_payload(state, stage),
         )
+        self._adopt_sequence(res, state, required=state is not None)
+        return res
+
 
     # -- fits ------------------------------------------------------------------
     def save_fit(self, **fields: Any) -> dict[str, Any]:
