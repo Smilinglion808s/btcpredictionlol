@@ -374,20 +374,36 @@ class LeafExperts:
     The remaining seven keys are still ``UNPORTED``: producer source and
     historical outputs are recovered, transcription is not done.
 
-    ``supplied`` values are accepted only when ``allow_supplied=True``, which is
-    for tests and archived replay. Production callers leave it False so a
-    pre-computed number can never masquerade as a live computation.
+    ``allow_supplied`` defaults to **False**: production fails closed, and a
+    pre-computed value on the packet is ignored outright. Fixture and archived
+    replay callers opt in explicitly with ``allow_supplied=True``.
+
+    In production the probability that drives the external pair comes only from
+    ``long_context_head`` - the real fitted head reading validated raw inputs.
+    ``packet["external_probability_green"]`` is a *supplied output* and is read
+    only in supplied mode; it can never override live inference.
+
+    Updates are two-phase. ``evaluate`` prepares the external pair, and the
+    producer state is committed only once every required key resolved. A failed
+    evaluation therefore leaves the rank window untouched, which matters
+    because the window is positional: a phantom row shifts every later rank.
+    Callers driving the orchestration transaction use :meth:`prepare` and
+    commit at the same point they persist the checkpoint.
     """
 
     fitted_pipelines: dict[str, Pipeline] = field(default_factory=dict)
     rank_histories: dict[str, deque] = field(default_factory=dict)
     long_context: Any = None
     long_context_head: Any = None
-    allow_supplied: bool = True
+    allow_supplied: bool = False
 
     # -- computed keys ------------------------------------------------------
-    def _external_pair(self, packet: dict[str, Any]) -> dict[str, Any] | None:
-        """Compute the external leaf pair, or None when no probability exists."""
+    def _external_update(self, packet: dict[str, Any]):
+        """Prepare the external leaf pair, or None when there is no source.
+
+        Nothing is mutated here. Returns a ``LeafUpdate`` whose ``.output``
+        holds the pair and whose ``.commit()`` applies the rank window.
+        """
 
         if self.long_context is None:
             return None
@@ -396,36 +412,45 @@ class LeafExperts:
             key = packet.get("ts")
         if key is None:
             return None
-        probability = packet.get("external_probability_green")
-        if probability is None and self.long_context_head is not None:
+
+        if self.long_context_head is not None:
+            # PRODUCTION PATH. The head reads the packet's validated raw inputs.
+            # A probability supplied on the packet is deliberately not consulted
+            # at all, in either mode, when a head exists.
             probability = self.long_context_head(packet)
+            status = (
+                MODEL_SCORED if probability is not None else MODEL_NO_PROBABILITY
+            )
+            return self.long_context.prepare(int(key), probability, status=status)
+
+        if not self.allow_supplied:
+            # No head: we must not manufacture a probability, and a supplied
+            # one is not a computation. Fail closed.
+            return None
+
+        # SUPPLIED / REPLAY PATH ONLY.
+        probability = packet.get("external_probability_green")
         if probability is None:
-            # No finite probability is a *legitimate* state in the original
-            # (2,935 such rows in the archived ledger) - but only when the head
-            # actually ran. With no head at all we must not manufacture one, so
-            # this returns None and the keys stay fail-closed.
-            if self.long_context_head is None:
-                return None
-            probability = float("nan")
-        return self.long_context.observe(int(key), probability)
+            return None
+        return self.long_context.prepare(
+            int(key), float(probability), status=MODEL_SCORED
+        )
 
-    def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
-        """Fail-closed evaluation.
+    def prepare(self, packet: dict[str, Any]) -> tuple[dict[str, Any], Any]:
+        """Evaluate without committing; returns ``(result, update_or_None)``.
 
-        `packet` is a single-candle dict of raw inputs (the
-        upstream_packet.parquet row schema). Keys with a wired producer are
-        computed here; keys without one raise `MissingUpstreamSignalError`
-        unless `allow_supplied` and the caller placed the fully-computed
-        upstream value on the packet, in which case it is passed through
-        unchanged - no ranking/admission math is applied to a value that
-        already claims to be a final output.
+        The caller commits the update inside the same transaction that persists
+        the decision and checkpoint.
         """
 
         if not isinstance(packet, dict):
             raise MissingUpstreamSignalError("packet must be a dict of raw/upstream candle inputs")
 
+        update = self._external_update(packet)
+        computed = dict(update.output) if update is not None else {}
+        computed.pop("external_status", None)
+
         result: dict[str, Any] = {}
-        computed = self._external_pair(packet) or {}
         missing: list[str] = []
         for key in REQUIRED_KEYS:
             if key in computed:
@@ -449,4 +474,21 @@ class LeafExperts:
                 "named; only genuinely absent artifacts are listed as missing). "
                 "Fail-closed rather than fabricate:\n" + details
             )
+        return result, update
+
+    def evaluate(self, packet: dict[str, Any]) -> dict[str, Any]:
+        """Fail-closed evaluation that commits on success only.
+
+        `packet` is a single-candle dict of raw inputs (the
+        upstream_packet.parquet row schema). Keys with a wired producer are
+        computed here; keys without one raise `MissingUpstreamSignalError`
+        unless the caller opted into `allow_supplied` and placed the
+        fully-computed upstream value on the packet, in which case it is passed
+        through unchanged - no ranking/admission math is applied to a value that
+        already claims to be a final output.
+        """
+
+        result, update = self.prepare(packet)
+        if update is not None:
+            update.commit()
         return result
