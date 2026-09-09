@@ -145,6 +145,113 @@ class ExternalDirectionModel:
                 ))
         return cls(fits, report=report)
 
+    @classmethod
+    def load_release(cls, root: Path | str) -> "ExternalDirectionModel":
+        """Load a *relocatable* release directory, hashing bytes before unpickling.
+
+        Differences from :meth:`load`, all of them safety properties:
+
+        * every artifact path in ``manifest.json`` is **relative to the release
+          root**, so the release can be moved to any path, on any host, with
+          the original mount absent;
+        * the SHA-256 of the file on disk is computed and compared to the
+          manifest **before** ``joblib.load`` ever sees the bytes - the earlier
+          loader copied the expected digest into the result without hashing;
+        * after loading, the artifact's own metadata (stage, phase, source set,
+          C, feature count, class labels, scheduled window) is validated
+          against the manifest, and the phase windows are checked to be sorted
+          and non-overlapping.
+        """
+
+        import hashlib
+
+        import joblib
+
+        root = Path(root).resolve()
+        manifest_path = root / "manifest.json"
+        if not manifest_path.exists():
+            raise ExternalDirectionUnavailable(f"no release manifest at {manifest_path}")
+        manifest = json.loads(manifest_path.read_text())
+
+        fits: dict[str, list[PhaseFit]] = {}
+        for stage in STAGES:
+            entries = manifest["stages"][stage]["phases"]
+            for phase, entry in entries.items():
+                relative = Path(entry["path"])
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ExternalDirectionUnavailable(
+                        f"release manifest path escapes the release root: {relative}"
+                    )
+                path = (root / relative).resolve()
+                if not str(path).startswith(str(root)):
+                    raise ExternalDirectionUnavailable(
+                        f"release manifest path escapes the release root: {relative}"
+                    )
+                if not path.exists():
+                    raise ExternalDirectionUnavailable(f"release artifact missing: {relative}")
+                digest = hashlib.sha256()
+                with path.open("rb") as handle:
+                    for block in iter(lambda: handle.read(1 << 20), b""):
+                        digest.update(block)
+                actual = digest.hexdigest()
+                if actual != entry["sha256"]:
+                    raise ExternalDirectionUnavailable(
+                        f"release artifact {relative} failed its digest: manifest "
+                        f"{entry['sha256']}, on disk {actual} - refusing to deserialise"
+                    )
+                blob = joblib.load(path)
+                problems = []
+                if blob.get("stage", stage) != stage or entry.get("stage", stage) != stage:
+                    problems.append("stage mismatch")
+                if blob["source_set"] != entry["source_set"]:
+                    problems.append("source_set mismatch")
+                if float(blob["c_value"]) != float(entry["c_value"]):
+                    problems.append("c_value mismatch")
+                if len(blob["features"]) != int(entry["feature_count"]):
+                    problems.append("feature count mismatch")
+                classes = [int(c) for c in blob["pipeline"].classes_]
+                if classes != [int(c) for c in entry["classes"]]:
+                    problems.append(f"class labels {classes} != manifest {entry['classes']}")
+                model = blob["pipeline"].named_steps["model"]
+                if model.coef_.shape[1] != len(blob["features"]) + sum(
+                    blob["pipeline"].named_steps["imputer"].indicator_.features_.shape
+                ) * 0 + (
+                    len(blob["pipeline"].named_steps["imputer"].indicator_.features_)
+                ):
+                    problems.append(
+                        f"coefficient width {model.coef_.shape[1]} is inconsistent with "
+                        f"{len(blob['features'])} features plus its missingness indicators"
+                    )
+                for field in ("train_end", "scores_from", "scores_until"):
+                    if pd.Timestamp(blob[field]) != pd.Timestamp(entry[field]):
+                        problems.append(f"{field} mismatch")
+                if problems:
+                    raise ExternalDirectionUnavailable(
+                        f"release artifact {relative} failed validation: " + "; ".join(problems)
+                    )
+                fits.setdefault(stage, []).append(PhaseFit(
+                    stage=stage,
+                    phase=phase,
+                    source_set=blob["source_set"],
+                    c_value=float(blob["c_value"]),
+                    features=tuple(blob["features"]),
+                    train_end=pd.Timestamp(blob["train_end"]),
+                    scores_from=pd.Timestamp(blob["scores_from"]),
+                    scores_until=pd.Timestamp(blob["scores_until"]),
+                    sha256=actual,
+                    pipeline=blob["pipeline"],
+                ))
+
+        for stage, stage_fits in fits.items():
+            ordered = sorted(stage_fits, key=lambda f: f.scores_from)
+            for earlier, later in zip(ordered, ordered[1:]):
+                if later.scores_from < earlier.scores_until:
+                    raise ExternalDirectionUnavailable(
+                        f"{stage} phases {earlier.phase} and {later.phase} have "
+                        "overlapping scoring windows"
+                    )
+        return cls(fits, report=manifest)
+
     # -- causal selection ---------------------------------------------------
     def phase_for(self, stage: str, target_ts: pd.Timestamp) -> PhaseFit:
         target_ts = pd.Timestamp(target_ts)
