@@ -528,7 +528,7 @@ def _run_r4_1_inner(end: pd.Timestamp, previous: dict | None) -> StageResult:
     workspace_refine = C85ROOT / "external_research" / HTF_REFINE.name
     shutil.copy2(refine_target, workspace_refine)
     refine = load_verbatim(workspace_refine)
-    with _frozen_window_masks(refine, end) as split_record:
+    with _frozen_grid_guard(refine, end) as split_record:
         refine.main()
 
     out_csv = C85ROOT / "external_research" / "htf_structure_r3_output" / "t5_book_day4h_r4_1_rows.csv"
