@@ -408,22 +408,65 @@ class VenueBuffer:
     #: Half-open [start_ns, end_ns) intervals of receipt-clock time during which
     #: this feed was known to be down. Recorded by the collector, never guessed.
     gaps: list[tuple[int, int]] = field(default_factory=list)
-    #: Oldest event time this buffer can legitimately claim to cover.
-    coverage_start_us: int | None = None
+    #: Half-open [start_us, end_us) EVENT-time intervals the acquisition can
+    #: PROVE it enumerated: a websocket session between connect and disconnect,
+    #: a completed REST pagination sweep, or a publisher daily archive. This is
+    #: evidence supplied by the collector, never inferred from the events on
+    #: hand — a single ancient trade says nothing about whether the tape either
+    #: side of it was captured.
+    coverage: list[tuple[int, int, str]] = field(default_factory=list)
+    #: Identical duplicates whose availability was merged, and duplicates whose
+    #: economic fields disagreed (quarantined, never overwritten).
+    merged_duplicates: int = 0
+    conflicts: list[dict[str, Any]] = field(default_factory=list)
     excluded_unknown_availability: int = 0
+
+    #: The fields that identify the trade itself. Availability and provenance
+    #: are metadata about DELIVERY and are merged; these are not.
+    ECONOMIC_FIELDS = ("ts_us", "price", "quantity", "underlying_n", "signed", "quote")
 
     # -- ingestion ----------------------------------------------------------
     def add_event(self, event: dict[str, Any]) -> bool:
+        """Store one aggregate trade. Returns True only for a genuinely NEW id.
+
+        A repeat of an id already held is not simply dropped. The same trade
+        routinely arrives twice by different roads — an archive replay with no
+        collector clock, then the live socket, or a REST back-fill overlapping
+        the stream — and dropping the second copy unconditionally left the row
+        permanently stamped "availability unknown", so LIVE mode excluded it
+        forever even though its arrival time was later proven. So:
+
+          * identical economic fields -> merge DELIVERY metadata only. The
+            availability becomes the earliest KNOWN receipt; an unknown (-1)
+            never displaces a known one and a later replay never back-dates a
+            receipt below one already recorded from a real delivery.
+          * disagreeing economic fields -> quarantine. The stored event is left
+            untouched and the conflicting payload is recorded for reporting.
+        """
         key = int(event["agg_trade_id"])
-        if key in self.events:
+        stored = self.events.get(key)
+        if stored is None:
+            fresh = dict(event)
+            fresh.pop("agg_trade_id", None)
+            self.events[key] = fresh
+            return True
+
+        if any(stored[f] != event[f] for f in self.ECONOMIC_FIELDS):
+            self.conflicts.append({
+                "agg_trade_id": key,
+                "stored": {f: stored[f] for f in self.ECONOMIC_FIELDS},
+                "rejected": {f: event[f] for f in self.ECONOMIC_FIELDS},
+                "rejected_provenance": event.get("provenance"),
+            })
             return False
-        stored = dict(event)
-        stored.pop("agg_trade_id", None)
-        self.events[key] = stored
-        ts_us = int(event["ts_us"])
-        if self.coverage_start_us is None or ts_us < self.coverage_start_us:
-            self.coverage_start_us = ts_us
-        return True
+
+        incoming = int(event.get("receipt_ns", -1))
+        current = int(stored.get("receipt_ns", -1))
+        if incoming >= 0 and (current < 0 or incoming < current):
+            stored["receipt_ns"] = incoming
+            stored["provenance"] = event.get("provenance", stored.get("provenance"))
+        self.merged_duplicates += 1
+        return False
 
     def add_payload(self, transport: Transport, payload: dict[str, Any],
                     *, receipt_ns: int | None = None) -> bool:
@@ -436,12 +479,40 @@ class VenueBuffer:
         if end_ns > start_ns:
             self.gaps.append((int(start_ns), int(end_ns)))
 
+    def declare_coverage(self, start_us: int, end_us: int, source: str) -> None:
+        """Record PROVEN enumeration of [start_us, end_us) in event time."""
+        if end_us <= start_us:
+            return
+        merged = sorted(self.coverage + [(int(start_us), int(end_us), str(source))])
+        collapsed: list[tuple[int, int, str]] = []
+        for interval in merged:
+            if collapsed and interval[0] <= collapsed[-1][1] and interval[2] == collapsed[-1][2]:
+                previous = collapsed[-1]
+                collapsed[-1] = (previous[0], max(previous[1], interval[1]), previous[2])
+            else:
+                collapsed.append(interval)
+        self.coverage = collapsed
+
+    def covers(self, start_us: int, end_us: int) -> bool:
+        """True only when declared coverage spans ALL of [start_us, end_us)."""
+        cursor = int(start_us)
+        for a, b, _ in sorted(self.coverage):
+            if a > cursor:
+                return False
+            cursor = max(cursor, b)
+            if cursor >= int(end_us):
+                return True
+        return cursor >= int(end_us)
+
     # -- retention ----------------------------------------------------------
     def prune(self, keep_from_us: int) -> None:
         for key in [k for k, e in self.events.items() if e["ts_us"] < keep_from_us]:
             del self.events[key]
-        if self.coverage_start_us is not None:
-            self.coverage_start_us = max(self.coverage_start_us, keep_from_us)
+        self.coverage = [
+            (max(a, int(keep_from_us)), b, s)
+            for a, b, s in self.coverage
+            if b > int(keep_from_us)
+        ]
 
     # -- reading ------------------------------------------------------------
     def frame(self, *, mode: str = HISTORICAL, freeze_ns: int | None = None) -> pd.DataFrame:
