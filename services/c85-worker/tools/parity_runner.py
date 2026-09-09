@@ -363,6 +363,11 @@ def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np
     generation is only ever accepted for READ-ONLY comparison, never for resume.
     """
 
+    def legacy_sha(array: np.ndarray) -> str:
+        """The LEGACY digest definition: raw contiguous bytes, no shape prefix."""
+
+        return sha_bytes(np.ascontiguousarray(array).tobytes())
+
     manifest = json.loads((generation / "MANIFEST.json").read_text())
     problems = []
     for name, entry in manifest["files"].items():
@@ -375,7 +380,10 @@ def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np
 
     for key, value in (("rows", identity["rows"]), ("features", identity["features"]),
                        ("schema_hash", identity["schema_hash"]),
-                       ("label_hash", identity["label_hash"]),
+                       ("label_hash", legacy_sha(inputs["label"])),
+                       ("input_hash", sha_bytes(
+                           np.ascontiguousarray(inputs["x"]).tobytes()[:1 << 22]
+                           + str(inputs["x"].shape).encode())),
                        ("hgb_params", identity["hgb_params"])):
         if legacy.get(key) != value:
             problems.append(f"legacy_identity:{key}")
@@ -388,7 +396,7 @@ def load_legacy_generation(generation: Path, inputs: dict[str, Any]) -> tuple[np
     blocks = block_starts(identity["rows"])
     index = int(meta["next_block_index"])
     end = blocks[index] if index < len(blocks) else identity["rows"]
-    if sha_array(probability[:end]) != meta.get("probability_prefix_sha256"):
+    if legacy_sha(probability[:end]) != meta.get("probability_prefix_sha256"):
         problems.append("probability_prefix_sha256")
     trailing = int(np.isfinite(probability[end:]).sum())
     if trailing:
