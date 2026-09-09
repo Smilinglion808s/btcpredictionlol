@@ -169,7 +169,7 @@ def main() -> None:
     features = specs["ALL_HGB"]["features"]
 
     archived = pd.Timestamp(args.archived_first_fit_ts)
-    matches = np.where(frame.ts.to_numpy() == archived.tz_convert("UTC").to_datetime64())[0]
+    matches = frame.index[frame.ts == archived.tz_convert("UTC")].to_numpy()
     archived_position = int(matches[0]) if len(matches) else None
 
     boundaries = list(range(module.MINIMUM, len(frame), module.REFIT_EVERY))
@@ -204,6 +204,10 @@ def main() -> None:
         "selected_features_sha256": hashlib.sha256("\n".join(features).encode()).hexdigest(),
         "archived_first_fit_ts": archived.isoformat(),
         "archived_first_fit_position_in_rebuilt_frame": archived_position,
+        "archived_first_fit_ts_is_literal_grid_label": (
+            "finalize_phase writes first_fit_ts = frame.ts.iloc[MINIMUM] unconditionally; "
+            "it is the position-5760 grid label, not the timestamp of an executed fit"
+        ),
         "position_MINIMUM_ts": frame.ts.iloc[module.MINIMUM].isoformat(),
         "rebuilt_first_eligible_boundary": first_eligible["target_ts"] if first_eligible else None,
         "boundaries": reports,
