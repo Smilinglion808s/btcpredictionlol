@@ -330,6 +330,20 @@ class BoundaryOrchestrator:
         target_open = target_open.astimezone(timezone.utc)
         target_ns = int(target_open.timestamp() * NS)
 
+        # 0a. an inconsistent head/rank pair halts everything. No packet is
+        #     built, no decision is computed and nothing is dispatched until a
+        #     verified paired restore releases the halt.
+        if self.chain_halt is not None:
+            return BoundaryOutcome(
+                ticker=None, target_open=target_open, status="HALTED",
+                blocker=(
+                    "C85_CHAIN_STATE_INCONSISTENT_RESTORE_REQUIRED: "
+                    + str(self.chain_halt.get("error"))
+                ),
+            )
+
+
+
         # 0. duplicate / retry suppression against the authoritative state only.
         if self.already_processed(state, target_open):
             return BoundaryOutcome(
