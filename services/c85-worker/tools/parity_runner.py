@@ -168,7 +168,7 @@ def write_checkpoint(state: Path, probability: np.ndarray, meta: dict[str, Any])
     state.mkdir(parents=True, exist_ok=True)
     generation = uuid.uuid4().hex
     npz = state / CKPT_NPZ
-    tmp = state / f".{CKPT_NPZ}.{generation}.tmp"
+    tmp = state / f".{generation}.tmp.npz"  # np.savez appends .npz
     np.savez(tmp, probability=probability)
     os.replace(tmp, npz)
 
