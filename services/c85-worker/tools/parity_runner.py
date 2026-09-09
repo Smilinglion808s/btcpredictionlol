@@ -454,9 +454,14 @@ def compare(frame_path: Path, state: Path, ledger_path: Path,
     complete_walk = int(verdict["next_block_index"]) >= int(verdict["of_blocks"])
 
     # Direction and rank over the ORIGINAL full prefix, before any subsetting.
+    # `external_rank` is the rolling rank of the CONFIDENCE |p - 0.5|
+    # (direction_contract module docstring / long_context_model.predictions),
+    # never of the probability itself.
     prefix = probability[:end]
     direction = dc.signed_direction(prefix)
-    rank = dc.rolling_rank(prefix)
+    confidence = np.abs(prefix - 0.5)
+    rank = dc.rolling_rank(confidence)
+
 
     rebuilt = pd.DataFrame({
         "ts": inputs["ts"][:end], "probability": prefix,
