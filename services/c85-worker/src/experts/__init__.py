@@ -318,6 +318,11 @@ class ExpertRegistry:
             # under test-only sys.path hacks that insert `src/`.
             "dependencies": _dependency_report(),
             "ports_present": ["leaf", "c42", "c51", "c54"],
+            "precursors": {
+                name: (provider.status() if hasattr(provider, "status") else {})
+                for name, provider in self._precursors.items()
+            },
+
             "long_context": (
                 self.chain.long_context_readiness()
                 if self.chain is not None
