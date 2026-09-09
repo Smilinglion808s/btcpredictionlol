@@ -932,12 +932,25 @@ class LongContextHead:
             )
         if int(meta.get("feature_count", len(features))) != len(features):
             raise LongContextSchemaError("feature_count disagrees with the feature list")
+        position = int(meta["position"])
+        if "positions" in blob.files:
+            positions = [int(p) for p in blob["positions"]]
+            if len(positions) != rows:
+                raise LongContextSchemaError("buffer positions disagree with the row count")
+        else:
+            positions = list(range(position - rows, position))
+        if rows and (positions[-1] != position - 1
+                     or positions != list(range(positions[0], positions[0] + rows))):
+            raise LongContextSchemaError(
+                "buffer positions are not the contiguous run ending at position-1"
+            )
 
         head = cls(features=features)
-        for ts, row, flag, label in zip(stamps, values, complete, labels, strict=True):
+        for ts, row, flag, label, pos in zip(stamps, values, complete, labels, positions,
+                                             strict=True):
             head.buffer.append(_Row(pd.Timestamp(ts), np.asarray(row, dtype=float),
-                                    bool(flag), float(label)))
-        head.position = int(meta["position"])
+                                    bool(flag), float(label), int(pos)))
+        head.position = position
         head.fit_count = int(meta["fit_count"])
         head.fit_id = meta.get("fit_id")
         head.first_fit_ts = meta["first_fit_ts"]
@@ -949,6 +962,26 @@ class LongContextHead:
                               for k, v in meta["pending_labels"].items()}
         head._label_available_at = {pd.Timestamp(k): str(v)
                                     for k, v in (meta.get("label_availability") or {}).items()}
+        head._no_fit_positions = {int(p): str(d)
+                                  for p, d in (meta.get("no_fit_positions") or {}).items()}
+        staged_meta = meta.get("staged_fit")
+        if staged_meta:
+            if "staged_model.joblib" not in files:
+                raise LongContextSchemaError(
+                    "state claims a staged fit but the manifest does not cover "
+                    "staged_model.joblib"
+                )
+            snap = staged_meta.get("snapshot")
+            head._staged_fit = StagedFit(
+                position=int(staged_meta["position"]),
+                model=joblib.load(generation / "staged_model.joblib"),
+                fit_id=str(staged_meta["fit_id"]),
+                training_rows=int(staged_meta["training_rows"]),
+                cutoff_ts=staged_meta.get("cutoff_ts"),
+                snapshot=None if snap is None else TrainingSnapshot(
+                    **{**snap, "grid_origin": tuple(snap["grid_origin"])}
+                ),
+            )
         if meta.get("fitted"):
             if "model.joblib" not in files:
                 raise LongContextSchemaError(
