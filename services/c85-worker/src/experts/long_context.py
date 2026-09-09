@@ -467,6 +467,10 @@ class LongContextHead:
     version: int = 0
     _labels_by_ts: dict[pd.Timestamp, float] = field(default_factory=dict)
     _label_available_at: dict[pd.Timestamp, str] = field(default_factory=dict)
+    # Targets whose label is an *original* NaN: the source was not contiguous
+    # over the settling candle. Recorded with evidence, never inferred from a
+    # label that simply has not arrived.
+    _missing_labels: dict[pd.Timestamp, str] = field(default_factory=dict)
     _last_ts: pd.Timestamp | None = None
     _last_probability: float | None = None
     _last_digest: str | None = None
