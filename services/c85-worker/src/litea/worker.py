@@ -470,26 +470,29 @@ class LiteAWorker:
         # decision is reused; anything else is re-acquired. Either way the
         # decision only proceeds while this process demonstrably owns the
         # boundary — the wait is what moved, not the guarantee.
+        #
+        # A refusal writes NOTHING. The interval belongs to whoever holds the
+        # lease, and a process that has just been told it is not the writer
+        # must not stamp a MISSED row over the owner's row.
         lease_wait_ns = 0
-        if prepared is not None and prepared["lease"].get("granted") is False and prepared[
-            "lease"
-        ].get("owner_id"):
-            owner = prepared["lease"].get("owner_id", "other")
-            self.store.mark_missed(label, target, f"LITEA_LEASE_HELD_BY:{owner}")
+        prepared_lease = (prepared or {}).get("lease") or {}
+        if prepared is not None and self.lease_state(prepared_lease, 0) == "DENIED" and (
+            prepared_lease.get("owner_id")
+        ):
+            owner = prepared_lease.get("owner_id", "other")
             return BoundaryOutcome(target, "MISSED", f"lease held by {owner}")
 
         # Judged against the LATER of the cutoff and now: a boundary that is
         # already running late needs a lease valid for the real decision time,
         # not for a cutoff that has passed.
         reused = self._lease_usable(prepared, max(cutoff_ns, time.time_ns()))
-        lease = (prepared or {}).get("lease") or {}
+        lease = prepared_lease
         if not reused:
             lease_started = time.time_ns()
             lease = self.store.acquire_lease(self.lease_ttl_seconds)
             lease_wait_ns = time.time_ns() - lease_started
             if not lease.get("granted"):
                 owner = lease.get("owner_id", "other")
-                self.store.mark_missed(label, target, f"LITEA_LEASE_HELD_BY:{owner}")
                 return BoundaryOutcome(target, "MISSED", f"lease held by {owner}")
 
         # The full [T, T+5s) window is used. The packet freezes at the model's
