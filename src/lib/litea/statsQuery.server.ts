@@ -48,6 +48,16 @@ export type LiteAPhase =
   | "STALE"
   | "LIVE_SHADOW";
 
+/** Settled unit payoff per the model spec: a win pays +0.87, a loss costs 1. */
+export const WIN_UNIT = 0.87;
+export const LOSS_UNIT = 1;
+/** Win rate needed to break even at that payoff. */
+export const BREAK_EVEN_WIN_RATE = LOSS_UNIT / (WIN_UNIT + LOSS_UNIT);
+
+export function netUnits(wins: number, losses: number): number {
+  return wins * WIN_UNIT - losses * LOSS_UNIT;
+}
+
 export interface LiteADecision {
   target_open_utc: string;
   run_mode: string;
@@ -96,7 +106,29 @@ export interface LiteAStats {
     losses: number;
     pending: number;
     win_rate: number | null;
+    /** Unit P/L at the model's settled payoff: +0.87 per win, −1 per loss. */
+    net_units: number;
   };
+  /** Today's (UTC) graded LIVE calls only. */
+  today: {
+    date: string;
+    calls: number;
+    wins: number;
+    losses: number;
+    pending: number;
+    win_rate: number | null;
+    net_units: number;
+  };
+  /** Per-UTC-day graded LIVE results, newest first, up to 14 days. */
+  daily: Array<{
+    date: string;
+    calls: number;
+    wins: number;
+    losses: number;
+    pending: number;
+    win_rate: number | null;
+    net_units: number;
+  }>;
 }
 
 const SELECT_COLUMNS = [
