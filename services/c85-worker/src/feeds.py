@@ -517,6 +517,33 @@ class MarketBuffer(_BaseBuffer):
         kinds: dict[str, int] = {}
         for entry in log:
             kinds[str(entry.get("kind"))] = kinds.get(str(entry.get("kind")), 0) + 1
+        chosen, why = self.chosen(target_ms, frozen_at_ns)
+        per_source = self.sources.get(target_ms, {})
+
+        def path(name: str) -> dict[str, Any]:
+            record = per_source.get(name)
+            polls = [o for o in log if str(o.get("path") or "primary") == name]
+            first = min((int(o["receipt_ns"]) for o in polls
+                         if o.get("strike_state") == "finite"), default=None)
+            return {
+                "polls": len(polls),
+                "last_kind": polls[-1].get("kind") if polls else None,
+                "last_http_status": polls[-1].get("http_status") if polls else None,
+                "held_strike_state": (
+                    None if record is None
+                    else ("finite" if self._usable(record) else "null")
+                ),
+                "held_receipt_ns": None if record is None else int(record.get("receipt_ns", 0)),
+                "held_by_freeze": (
+                    None if record is None
+                    else int(record.get("receipt_ns", 0)) <= int(frozen_at_ns)
+                ),
+                "first_finite_receipt_ns": first,
+                "ticker": None if record is None else record.get("ticker"),
+                "window_verified": None if record is None else True,
+            }
+
+        primary_path, backup_path = path("primary"), path("backup")
         return {
             "target_ms": target_ms,
             "freeze_ns": int(frozen_at_ns),
@@ -546,8 +573,26 @@ class MarketBuffer(_BaseBuffer):
             ),
             "stored_status": None if stored is None else stored.get("status"),
             "suppressed_overwrites": self.suppressed_overwrites.get(target_ms, 0),
+            # Which OFFICIAL path this freeze actually used, and what each path
+            # had to offer. Both ask the venue for the same contract.
+            "source_chosen": why if chosen is not None else None,
+            "no_source_reason": None if chosen is not None else why,
+            "primary": primary_path,
+            "backup": backup_path,
+            "same_contract_verified": (
+                None
+                if not (primary_path["held_strike_state"] and backup_path["held_strike_state"])
+                else target_ms not in self.conflicts
+            ),
+            "conflict": self.conflicts.get(target_ms),
+            "backup_rescued": bool(
+                why == "backup"
+                and not (primary_path["held_strike_state"] == "finite"
+                         and primary_path["held_by_freeze"])
+            ),
             "last_observation": log[-1] if log else None,
         }
+
 
 
 
