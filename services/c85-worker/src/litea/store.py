@@ -106,7 +106,9 @@ def target_row(
             "input_valid": bool(packet.input_valid),
             "blockers": packet.blockers or None,
             "model_id": MODEL_ID,
+            "market_diagnostics": _jsonable(packet.source.get("market_diagnostics")),
             "execution_enabled": False,
+
         },
 
         "target_open_ns": str(timing.get("target_open_ns")),
