@@ -878,26 +878,32 @@ class KalshiWindowCollector:
 
 
 class KalshiStrikeCollector:
-    """The target's own STRIKE, fetched the moment the contract opens.
+    """The target's own STRIKE, read from the target's own market record.
 
-    KXBTC15M contracts are listed ahead of time but their `floor_strike` is
-    only published when the market OPENS, which is the target instant T itself
-    (verified against the venue: an `initialized` future market returns a null
-    strike, the `active` current market returns a number). A 60-second market
-    refresh would therefore miss the strike for most targets, and the packet
-    that needs it freezes at T+5s.
+    MEASURED venue behaviour (2026-09-10, this address): the series listing
+    returns future contracts with `status: initialized` and a NULL
+    `floor_strike`, and the `status=open` filter lags by minutes — during the
+    04:30 boundary it still returned only the 04:15 contract. Polling that
+    listing is therefore not a way to obtain the current target's strike, which
+    is what produced `LITEA_MARKET_NOT_LISTED_BY_FREEZE` on the 04:00 and 04:15
+    rows.
 
-    So this collector polls the open-markets listing rapidly across `[T, T+4s)`
-    until the target's own strike appears, and records it with the measured
-    receipt instant. It stops as soon as the strike is held: no polling loop
-    runs while nothing is expected, and no value is ever guessed or carried
-    over from the neighbouring interval.
+    So this collector asks for the target's OWN market by ticker
+    (`KXBTC15M-YYMMMDDHHMM-MM`, close-stamped in US Eastern, the venue's
+    convention) and accepts it only when the record's own open/close instants
+    are exactly `[T, T+15m)`. Polling starts before T — a request made early is
+    not a value invented early: the record is stored with the receipt instant
+    at which the venue actually served a non-null strike, and a packet frozen
+    before that instant still refuses it.
     """
 
     INTERVAL_MS = 15 * 60_000
-    #: Stop trying inside the packet's own deadline; a later arrival is a
-    #: genuinely missing input, not something to backdate.
-    WINDOW_MS = 4_000
+    #: Start asking before the open, so the very first published strike is
+    #: caught rather than missed by a poll phase.
+    LEAD_MS = 120_000
+    #: Keep asking a little past the packet deadline so the row can record how
+    #: LATE the venue actually was, instead of silently reporting nothing.
+    TAIL_MS = 20_000
 
     def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
                  poll_s: float = 0.25) -> None:
@@ -910,57 +916,80 @@ class KalshiStrikeCollector:
         record = self.buffer.markets.get(target_ms)
         return bool(record and record.get("floor_strike") is not None)
 
-    async def _poll_once(self, client: httpx.AsyncClient) -> None:
-        response = await client.get(
-            f"{self.base}/markets",
-            params={"series_ticker": self.series, "status": "open", "limit": 20},
-        )
-        response.raise_for_status()
-        receipt = now_ns()
-        self.buffer.note_poll(receipt)
+    def ticker_for(self, target_ms: int) -> str:
         import datetime as _dt
 
-        for market in response.json().get("markets", []):
-            open_time = market.get("open_time")
-            strike = market.get("floor_strike")
-            if not open_time or strike is None:
-                continue
-            stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
-            self.buffer.record(
-                int(stamp.timestamp() * 1000),
-                {
-                    "ticker": market["ticker"],
-                    "floor_strike": float(strike),
-                    "open_time": open_time,
-                    "close_time": market.get("close_time"),
-                    "status": market.get("status"),
-                    "receipt_ns": receipt,
-                },
-            )
+        close = _dt.datetime.fromtimestamp(
+            (target_ms + self.INTERVAL_MS) / 1000, _dt.timezone.utc
+        )
+        return f"{format_ticker(self.series, close)}-{close.astimezone(EASTERN):%M}"
+
+    async def _poll_once(self, client: httpx.AsyncClient, target_ms: int) -> None:
+        import datetime as _dt
+
+        ticker = self.ticker_for(target_ms)
+        response = await client.get(f"{self.base}/markets/{ticker}")
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        if response.status_code == 404:
+            return  # not listed yet; nothing is assumed about it
+        response.raise_for_status()
+        market = response.json().get("market") or {}
+        open_time = market.get("open_time")
+        close_time = market.get("close_time")
+        if not open_time or not close_time:
+            return
+        opened = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+        closed = _dt.datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+        # The contract must be the one whose window IS this target's interval.
+        if int(opened.timestamp() * 1000) != target_ms:
+            return
+        if int(closed.timestamp() * 1000) != target_ms + self.INTERVAL_MS:
+            return
+        strike = market.get("floor_strike")
+        self.buffer.record(
+            target_ms,
+            {
+                "ticker": market.get("ticker", ticker),
+                "floor_strike": None if strike is None else float(strike),
+                "open_time": open_time,
+                "close_time": close_time,
+                "status": market.get("status"),
+                "receipt_ns": receipt,
+            },
+        )
 
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=3.0) as client:
             while True:
                 now_ms = now_ns() // 1_000_000
-                target_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
-                offset = now_ms - target_ms
-                if offset < self.WINDOW_MS and not self._has_strike(target_ms):
-                    try:
-                        await self._poll_once(client)
-                        self.buffer.connected_since_ns = (
-                            self.buffer.connected_since_ns or now_ns()
-                        )
-                        self.buffer.transport = "rest"
-                        self.buffer.error = None
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:  # noqa: BLE001
-                        self.buffer.error = f"{type(exc).__name__}: {exc}"
-                    await asyncio.sleep(self.poll_s)
+                current_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
+                offset = now_ms - current_ms
+                upcoming = current_ms + self.INTERVAL_MS
+                if offset >= self.INTERVAL_MS - self.LEAD_MS and not self._has_strike(upcoming):
+                    target_ms = upcoming          # the boundary about to open
+                elif offset < self.TAIL_MS and not self._has_strike(current_ms):
+                    target_ms = current_ms        # the boundary just opened
+                else:
+                    wait_ms = self.INTERVAL_MS - self.LEAD_MS - offset
+                    if wait_ms <= 0:
+                        wait_ms = self.INTERVAL_MS - offset
+                    await asyncio.sleep(max(0.2, wait_ms / 1000))
                     continue
-                # Nothing expected until the next boundary; wake just before it.
-                wait_ms = self.INTERVAL_MS - offset - 200
-                await asyncio.sleep(max(0.2, wait_ms / 1000))
+                try:
+                    await self._poll_once(client, target_ms)
+                    self.buffer.connected_since_ns = (
+                        self.buffer.connected_since_ns or now_ns()
+                    )
+                    self.buffer.transport = "rest"
+                    self.buffer.error = None
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    self.buffer.error = f"{type(exc).__name__}: {exc}"
+                # Rapid only around the open itself; unhurried while waiting.
+                await asyncio.sleep(self.poll_s if offset < self.TAIL_MS else 1.0)
+
 
 
 # --------------------------------------------------------------------------- #
