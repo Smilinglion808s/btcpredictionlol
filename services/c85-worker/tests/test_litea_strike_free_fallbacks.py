@@ -326,3 +326,42 @@ def test_both_free_feeds_collect_at_the_same_time():
         return len(coinbase.ticks), len(kraken.ticks)
 
     assert asyncio.run(scenario()) == (10, 10)
+
+
+# --------------------------------------------------------------------------- #
+# trade-tape sampling budgets
+# --------------------------------------------------------------------------- #
+def test_trade_backups_carry_their_own_disclosed_sampling_budgets():
+    """A quiet minute on a thin tape is coverage, not corruption.
+
+    Measured on the live sockets: Coinbase prints several times a second while
+    Kraken can go ~7s without a trade. The trade budgets are wider than the
+    index-grade ones, are attached to every estimate, and apply only here.
+    """
+    buffer, collector = coinbase_buffer(ticks=1)
+    assert buffer.max_gap_ms == 20_000
+    assert buffer.max_tick_age_ms == 10_000
+    assert buffer.min_ticks == 20
+    assert kraken_buffer(ticks=1)[0].max_gap_ms == 20_000
+    # An index-grade buffer keeps the strict budgets.
+    assert ReferenceBuffer("x", source="x").max_gap_ms == 5_000
+
+    thin = ReferenceBuffer("kraken_btcusd", source="kraken_btcusd")
+    thin_collector = KrakenTradeCollector(thin)
+    for index in range(21):
+        ms = TARGET_MS - index * 2_800
+        thin_collector.ingest(
+            kraken_trade([(ms, 68_500.0, index)]), (ms + 20) * 1_000_000
+        )
+    detail = thin.boundary_reference(TARGET_MS, FREEZE_NS)
+    assert detail["usable"] is True and detail["max_gap_budget_ms"] == 20_000
+
+    # A 25-second hole is still refused.
+    holed = ReferenceBuffer("kraken_btcusd", source="kraken_btcusd")
+    holed_collector = KrakenTradeCollector(holed)
+    for index in range(20):
+        ms = TARGET_MS - index * 1_000
+        holed_collector.ingest(
+            kraken_trade([(ms, 68_500.0, index)]), (ms + 20) * 1_000_000
+        )
+    assert holed.boundary_reference(TARGET_MS, FREEZE_NS)["usable"] is False
