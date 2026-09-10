@@ -998,29 +998,71 @@ class KalshiStrikeCollector:
         )
         return f"{format_ticker(self.series, close)}-{close.astimezone(EASTERN):%M}"
 
+    @staticmethod
+    def _strike_state(raw: Any) -> str:
+        """What the venue actually put in `floor_strike`, without judging it."""
+        if raw is None:
+            return "null"
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return "unparsable"
+        if not math.isfinite(value):
+            return "nonfinite"
+        if value == 0:
+            return "zero"
+        return "finite" if value > 0 else "negative"
+
     async def _poll_once(self, client: httpx.AsyncClient, target_ms: int) -> None:
         import datetime as _dt
 
         ticker = self.ticker_for(target_ms)
+        started = now_ns()
         response = await client.get(f"{self.base}/markets/{ticker}")
         receipt = now_ns()
         self.buffer.note_poll(receipt)
+
+        def note(kind: str, **extra: Any) -> None:
+            self.buffer.observe(
+                target_ms,
+                {
+                    "poll_started_ns": started,
+                    "receipt_ns": receipt,
+                    "ticker": ticker,
+                    "kind": kind,
+                    **extra,
+                },
+            )
+
         if response.status_code == 404:
+            note("not_listed", http_status=404)
             return  # not listed yet; nothing is assumed about it
+        if response.status_code >= 400:
+            note("http_error", http_status=response.status_code)
         response.raise_for_status()
         market = response.json().get("market") or {}
         open_time = market.get("open_time")
         close_time = market.get("close_time")
+        strike_state = self._strike_state(market.get("floor_strike"))
         if not open_time or not close_time:
+            note("no_window_times", strike_state=strike_state, status=market.get("status"))
             return
         opened = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
         closed = _dt.datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+        open_match = int(opened.timestamp() * 1000) == target_ms
+        close_match = int(closed.timestamp() * 1000) == target_ms + self.INTERVAL_MS
         # The contract must be the one whose window IS this target's interval.
-        if int(opened.timestamp() * 1000) != target_ms:
-            return
-        if int(closed.timestamp() * 1000) != target_ms + self.INTERVAL_MS:
+        if not (open_match and close_match):
+            note(
+                "window_mismatch",
+                strike_state=strike_state,
+                status=market.get("status"),
+                open_match=open_match,
+                close_match=close_match,
+            )
             return
         strike = market.get("floor_strike")
+        note("recorded", strike_state=strike_state, status=market.get("status"))
         self.buffer.record(
             target_ms,
             {
@@ -1032,6 +1074,7 @@ class KalshiStrikeCollector:
                 "receipt_ns": receipt,
             },
         )
+
 
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=3.0) as client:
