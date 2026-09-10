@@ -55,10 +55,9 @@ class RemoteArtifacts:
         url = signed.get("url")
         if not url:
             raise RuntimeError(f"LITEA_ARTIFACT_UPLOAD_UNAVAILABLE: {key}")
-        token = signed.get("token")
-        headers = {"content-type": "application/octet-stream"}
-        if token:
-            headers["authorization"] = f"Bearer {token}"
+        # The signed upload URL already carries its own one-shot token; the
+        # worker never sees a storage credential.
+        headers = {"content-type": "application/octet-stream", "x-upsert": "true"}
         response = httpx.put(url, content=body, headers=headers, timeout=300.0)
         if response.status_code >= 300:
             raise RuntimeError(
