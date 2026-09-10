@@ -1145,20 +1145,38 @@ class FeedRegistry:
             raise
 
     async def start(self) -> None:
-        for name in self.trades:
+        for name in self._selected(self.trades):
             self._tasks.append(asyncio.create_task(self._trade_feed(name)))
         # Minute history first: the auxiliary and COIN-M blocks are defined over
         # hundreds of completed minutes, so the streams alone would leave the
         # worker input-starved for hours after every restart.
-        await asyncio.gather(
-            *(c.backfill(c.buffer.retain_minutes) for c in self._klines.values()),
-            return_exceptions=True,
-        )
-        for collector in self._klines.values():
+        #
+        # SEQUENTIALLY, through the shared host budget. Firing every backfill at
+        # once is what earned the venue ban that left the COIN-M context short
+        # at the 04:00 and 04:15 boundaries; the limiter can only pace requests
+        # it sees one at a time.
+        klines = {k: v for k, v in self._klines.items() if k in self._selected(self._klines)}
+        for collector in klines.values():
+            try:
+                await collector.backfill(collector.buffer.retain_minutes)
+            except Exception as exc:  # noqa: BLE001 - a refusal is repaired below
+                collector.buffer.error = f"backfill {type(exc).__name__}: {exc}"
+        for collector in klines.values():
             self._tasks.append(asyncio.create_task(collector.run_ws()))
             self._tasks.append(asyncio.create_task(collector.run_rest()))
-        self._tasks.append(asyncio.create_task(self._kalshi.run()))
-        self._tasks.append(asyncio.create_task(self._strikes.run()))
+            # A one-shot backfill is not history: this keeps asking, after the
+            # venue's own deadline, until the recent window is genuinely held.
+            self._tasks.append(asyncio.create_task(collector.repair_history(30)))
+        if self.only is None or "kalshi" in self.only:
+            self._tasks.append(asyncio.create_task(self._kalshi.run()))
+        if self.only is None or "kalshi_markets" in self.only:
+            self._tasks.append(asyncio.create_task(self._strikes.run()))
+
+    def _selected(self, group: dict[str, Any]) -> list[str]:
+        if self.only is None:
+            return list(group)
+        return [name for name in group if name in self.only]
+
 
     async def stop(self) -> None:
         for task in self._tasks:
