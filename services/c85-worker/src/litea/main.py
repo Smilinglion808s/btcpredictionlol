@@ -209,7 +209,9 @@ class LiteAService:
             report = {}
             try:
                 report = self.snapshot()
-                armed = report["readiness"] == "LOGGING_READY"
+                # RECORDING_ONLY still arms the scheduler. Only a genuine
+                # recording blocker disarms it.
+                armed = report["readiness"] in ("LOGGING_READY", "RECORDING_ONLY")
                 if armed and self.scheduler._task is None:  # noqa: SLF001
                     self.scheduler.start()
                 elif not armed and self.scheduler._task is not None:  # noqa: SLF001
@@ -230,6 +232,22 @@ class LiteAService:
                 pass
             await asyncio.sleep(self.settings.heartbeat_seconds)
 
+    async def recovery_loop(self) -> None:
+        """Drain undelivered decisions away from the boundary path.
+
+        Delivery failures used to be retried only at the next boundary, which
+        the same failure had already blocked. This loop is what makes a
+        transport outage self-healing.
+        """
+        while True:
+            await asyncio.sleep(30)
+            try:
+                outcome = await asyncio.to_thread(self.worker.reconcile_pending)
+                if outcome and outcome.get("delivered"):
+                    self.state.save(self.state_path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
+
     async def settlement_loop(self) -> None:
         while True:
             try:
@@ -243,6 +261,8 @@ class LiteAService:
                         "checkpoint.append",
                         checkpoint=checkpoint_payload(self.state, next_target=next_boundary()),
                     )
+                    # Newly known labels can make a due daily fit eligible.
+                    await asyncio.to_thread(self._catch_up_fits)
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(60)
@@ -252,14 +272,18 @@ class LiteAService:
         self._catch_up_fits()
 
         status, reason = self.worker.evaluate_readiness()
-        if status == "LOGGING_READY":
+        if status in ("LOGGING_READY", "RECORDING_ONLY"):
             self.scheduler.start()
+            if reason:
+                print(f"[{MODEL_ID}] recording without scoring: {reason}", flush=True)
         else:
-            print(f"[{MODEL_ID}] not logging yet: {reason}", flush=True)
+            print(f"[{MODEL_ID}] not recording yet: {reason}", flush=True)
 
         asyncio.create_task(self.heartbeat_loop())
+        asyncio.create_task(self.recovery_loop())
         asyncio.create_task(self.settlement_loop())
         asyncio.create_task(self.fit_loop())
+
 
         config = uvicorn.Config(
             create_app(self.snapshot),
