@@ -577,13 +577,16 @@ class MarketBuffer(_BaseBuffer):
             "suppressed_overwrites": self.suppressed_overwrites.get(target_ms, 0),
             # Which OFFICIAL path this freeze actually used, and what each path
             # had to offer. Both ask the venue for the same contract.
-            "source_chosen": why if chosen is not None else None,
-            "no_source_reason": None if chosen is not None else why,
+            "source_chosen": why if self._usable(chosen) else None,
+            "no_source_reason": None if self._usable(chosen) else why,
             "primary": primary_path,
             "backup": backup_path,
             "same_contract_verified": (
                 None
-                if not (primary_path["held_strike_state"] and backup_path["held_strike_state"])
+                if not (
+                    primary_path["held_strike_state"] == "finite"
+                    and backup_path["held_strike_state"] == "finite"
+                )
                 else target_ms not in self.conflicts
             ),
             "conflict": self.conflicts.get(target_ms),
