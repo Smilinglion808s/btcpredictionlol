@@ -63,8 +63,12 @@ class RecoveredPacket:
 
     input_valid: bool
     features: dict[str, Any]
+    direction60: dict[str, Any]
     blockers: str | None
     source: dict[str, Any] = field(default_factory=dict)
+
+    def as_engine_features(self) -> dict[str, Any]:
+        return dict(self.direction60)
 
 
 def _floor(moment: datetime) -> datetime:
@@ -272,6 +276,7 @@ class StartupBridge:
         packet = RecoveredPacket(
             input_valid=bool(row["input_valid"]),
             features={"anchor_valid": bool(row["input_valid"])},
+            direction60=features,
             blockers=row.get("blockers"),
             source={"feed_watermarks": {}, "recovery": "PUBLIC_VENUE_REST"},
         )
