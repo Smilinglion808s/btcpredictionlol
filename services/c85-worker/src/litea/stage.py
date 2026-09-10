@@ -53,6 +53,8 @@ from ..features import (
     quote_fields,
 )
 from ..packets import _events, _kline_row
+from .reconstruct import empty_window_template
+
 
 NS = 1_000_000_000
 MINUTE_MS = 60_000
@@ -82,6 +84,10 @@ class V1Stage:
     direction_features: dict[str, float] | None
     market: dict[str, Any] | None = None
     watermarks: dict[str, Any] = field(default_factory=dict)
+    #: Small, secret-free record of what the venue actually served for this
+    #: target's contract, so a late publication can be told from a defect.
+    market_diagnostics: dict[str, Any] | None = None
+
 
 
 class V1DirectionStage:
@@ -181,7 +187,18 @@ class V1DirectionStage:
         freeze_ns = max(int(freeze_ns), int(cutoff_ns))
 
         reasons: list[str] = self.blocking_reasons(cutoff_ns)
-        row: dict[str, Any] = {"ts": target_open, "target_ms": target_ms}
+        # The canonical row starts from the reference EMPTY-WINDOW template:
+        # an unobserved sub-window is NaN in every aggregate, exactly as the
+        # archive builder leaves it. Starting from a bare row instead made a
+        # genuinely empty first second (no trade in [T, T+1s)) delete the
+        # column entirely, and the derived blocks then raised KeyError. NaN is
+        # the model-allowed per-feature missingness handled by the fitted
+        # median imputation; it is NOT zero-fill and does not fabricate events.
+        row: dict[str, Any] = {
+            "ts": target_open,
+            "target_ms": target_ms,
+            **empty_window_template(),
+        }
 
         # 1. Binance direction windows from received aggregate trades.
         for feed_name in ("binance_spot", "binance_um"):
@@ -189,11 +206,14 @@ class V1DirectionStage:
             if buffer is None:
                 reasons.append(f"LITEA_FEED_NOT_CONFIGURED: {feed_name}")
                 continue
-            row.update(
-                binance_window_features(
-                    _events(buffer, target_ns, cutoff_ns, freeze_ns), target_ms, feed_name
-                )
-            )
+            events = _events(buffer, target_ns, cutoff_ns, freeze_ns)
+            if events.empty:
+                # Acquisition genuinely produced nothing for this venue over
+                # [T-15m, T+5s) — a source failure, not per-feature missingness.
+                reasons.append(f"LITEA_NO_EVENTS_RECEIVED: {feed_name}")
+                continue
+            row.update(binance_window_features(events, target_ms, feed_name))
+
         if "binance_spot_t5_w005_return_bps" in row:
             row.update(binance_cross_fields(row))
 
@@ -225,6 +245,12 @@ class V1DirectionStage:
         #    The [T, T+5s) quote aggregate is deliberately not consulted.
         markets = self._buffer("kalshi_markets")
         market = markets.get(target_ms, freeze_ns) if markets is not None else None
+        market_diagnostics = (
+            markets.diagnostics(target_ms, freeze_ns)
+            if markets is not None and hasattr(markets, "diagnostics")
+            else None
+        )
+
         if market is None:
             reasons.append(
                 "LITEA_MARKET_NOT_LISTED_BY_FREEZE: no KXBTC15M contract opening at this "
@@ -366,4 +392,6 @@ class V1DirectionStage:
             direction_features=direction_features,
             market=market,
             watermarks=self.watermarks(freeze_ns),
+            market_diagnostics=market_diagnostics,
         )
+

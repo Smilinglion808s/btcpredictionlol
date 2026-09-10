@@ -110,7 +110,9 @@ class Direction60Source:
             "market_receipt_ns": (
                 None if stage.market is None else str(stage.market.get("receipt_ns"))
             ),
+            "market_diagnostics": stage.market_diagnostics,
         }
+
 
         # `input_valid` is a SOURCING statement, not a quality score: every
         # required stage produced a value from received data. A non-finite
