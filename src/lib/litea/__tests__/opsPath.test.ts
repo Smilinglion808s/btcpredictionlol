@@ -95,6 +95,7 @@ afterEach(() => {
 
 describe("decision.commit for Version 1", () => {
   it("refuses a worker outbox request while the server control is off", async () => {
+    delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
     const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
