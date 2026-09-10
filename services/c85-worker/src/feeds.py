@@ -384,6 +384,8 @@ class MarketBuffer(_BaseBuffer):
     #: the STATE of the strike field — never credentials and never a price.
     observations: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
     suppressed_overwrites: dict[int, int] = field(default_factory=dict)
+    #: Last transport outcome per official path; None means that path is fine.
+    path_errors: dict[str, str | None] = field(default_factory=dict)
     retain: int = 192
     observe_retain: int = 12
 
@@ -1450,6 +1452,13 @@ class FeedRegistry:
             env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
         )
+        #: Second OFFICIAL path to the same contract, run concurrently so a
+        #: slow or strike-less answer on one path cannot cost the boundary.
+        self._strikes_backup = KalshiStrikeBackupCollector(
+            self.markets,
+            env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
+            env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
+        )
         self._tasks: list[asyncio.Task] = []
 
     async def _trade_feed(self, name: str) -> None:
@@ -1502,6 +1511,7 @@ class FeedRegistry:
             self._tasks.append(asyncio.create_task(self._kalshi.run()))
         if self.only is None or "kalshi_markets" in self.only:
             self._tasks.append(asyncio.create_task(self._strikes.run()))
+            self._tasks.append(asyncio.create_task(self._strikes_backup.run()))
 
     def _selected(self, group: dict[str, Any]) -> list[str]:
         if self.only is None:
