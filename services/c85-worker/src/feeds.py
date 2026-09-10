@@ -369,7 +369,14 @@ class MarketBuffer(_BaseBuffer):
 
     freshness_budget_ns: int = 300 * NS
     markets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: Per-target poll observations, kept ONLY to distinguish a genuinely late
+    #: venue publication from a parsing/buffer defect. Small, secret-free and
+    #: account-free: request/receipt instants, the record's own window match and
+    #: the STATE of the strike field — never credentials and never a price.
+    observations: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    suppressed_overwrites: dict[int, int] = field(default_factory=dict)
     retain: int = 192
+    observe_retain: int = 12
 
     def record(self, target_ms: int, market: dict[str, Any]) -> None:
         # A contract is LISTED before it opens but its floor_strike is only
@@ -381,6 +388,9 @@ class MarketBuffer(_BaseBuffer):
             and existing.get("floor_strike") is not None
             and market.get("floor_strike") is None
         ):
+            self.suppressed_overwrites[target_ms] = (
+                self.suppressed_overwrites.get(target_ms, 0) + 1
+            )
             return
         self.markets[target_ms] = market
         self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
@@ -388,6 +398,20 @@ class MarketBuffer(_BaseBuffer):
         if len(self.markets) > self.retain:
             for stale in sorted(self.markets)[: len(self.markets) - self.retain]:
                 del self.markets[stale]
+                self.observations.pop(stale, None)
+                self.suppressed_overwrites.pop(stale, None)
+
+    def observe(self, target_ms: int, entry: dict[str, Any]) -> None:
+        """Log one poll outcome for a target. Never affects packet inputs."""
+        log = self.observations.setdefault(target_ms, [])
+        if len(log) >= self.observe_retain:
+            # keep the earliest polls (when the strike would first appear) and
+            # the most recent one; drop the middle.
+            del log[self.observe_retain // 2]
+        log.append(entry)
+        if len(self.observations) > self.retain:
+            for stale in sorted(self.observations)[: len(self.observations) - self.retain]:
+                del self.observations[stale]
 
     def note_poll(self, receipt_ns: int) -> None:
         self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
@@ -398,6 +422,54 @@ class MarketBuffer(_BaseBuffer):
         if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
             return None
         return found
+
+    def diagnostics(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any]:
+        """A small, honest account of what the venue actually served.
+
+        Answers exactly one question: was a finite positive floor_strike
+        available to be received before the freeze? If it was and the packet
+        still lacked it, that is a buffer/parse defect; if it was not, the
+        target was genuinely venue-late and the row stays input-unavailable.
+        """
+        log = self.observations.get(target_ms, [])
+        stored = self.markets.get(target_ms)
+        finite = [o for o in log if o.get("strike_state") == "finite"]
+        first_finite = min((int(o["receipt_ns"]) for o in finite), default=None)
+        kinds: dict[str, int] = {}
+        for entry in log:
+            kinds[str(entry.get("kind"))] = kinds.get(str(entry.get("kind")), 0) + 1
+        return {
+            "target_ms": target_ms,
+            "freeze_ns": int(frozen_at_ns),
+            "polls": len(log),
+            "polls_before_freeze": sum(
+                1 for o in log if int(o.get("receipt_ns", 0)) <= frozen_at_ns
+            ),
+            "outcomes": kinds,
+            "first_poll_started_ns": (
+                min((int(o["poll_started_ns"]) for o in log), default=None)
+            ),
+            "first_receipt_ns": min((int(o["receipt_ns"]) for o in log), default=None),
+            "first_finite_strike_receipt_ns": first_finite,
+            "finite_strike_before_freeze": (
+                None if first_finite is None else first_finite <= frozen_at_ns
+            ),
+            "finite_strike_late_by_ms": (
+                None
+                if first_finite is None
+                else max(0, (first_finite - int(frozen_at_ns)) // 1_000_000)
+            ),
+            "stored_receipt_ns": None if stored is None else int(stored.get("receipt_ns", 0)),
+            "stored_strike_state": (
+                None
+                if stored is None
+                else ("finite" if stored.get("floor_strike") is not None else "null")
+            ),
+            "stored_status": None if stored is None else stored.get("status"),
+            "suppressed_overwrites": self.suppressed_overwrites.get(target_ms, 0),
+            "last_observation": log[-1] if log else None,
+        }
+
 
 
 # --------------------------------------------------------------------------- #
