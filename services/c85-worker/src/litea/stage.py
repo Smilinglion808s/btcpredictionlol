@@ -251,12 +251,26 @@ class V1DirectionStage:
             else None
         )
 
-        if market is None:
+        conflicted = bool(
+            markets is not None
+            and target_ms in getattr(markets, "conflicts", {})
+        )
+        if conflicted:
+            # Two OFFICIAL readings of the same contract disagreed. Preferring
+            # one would be a guess, so the boundary is refused pending
+            # diagnosis rather than scored against an unverified strike.
+            reasons.append(
+                "LITEA_FLOOR_STRIKE_CONFLICT: the venue's two official market readings "
+                "for this contract reported different floor_strike values; no strike is "
+                "chosen and the boundary is not scored"
+            )
+        elif market is None:
             reasons.append(
                 "LITEA_MARKET_NOT_LISTED_BY_FREEZE: no KXBTC15M contract opening at this "
                 "target had been received at the declared freeze; the strike is taken "
                 "from the venue's own market record and is never derived from a price"
             )
+
         else:
             strike = market.get("floor_strike")
             if strike is None or not np.isfinite(float(strike)) or float(strike) <= 0:
