@@ -266,6 +266,21 @@ export async function runC85Op(
     }
 
     case "decision.commit": {
+      // A shadow-only identity may never enqueue a dispatch, whatever the
+      // worker sends. Enforced here, at the trust boundary, instead of relying
+      // on the worker to omit the field.
+      if (
+        body.outbox &&
+        (C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS as readonly string[]).includes(mv)
+      ) {
+        return {
+          status: 400,
+          result: {
+            ok: false,
+            error: `c85_ops:${mv} is shadow-only and cannot enqueue an outbox entry`,
+          },
+        };
+      }
       const target = { ...body.target, model_version: mv };
       const { data, error } = await supabase.rpc("c85_commit_decision", {
         p_target: target,
