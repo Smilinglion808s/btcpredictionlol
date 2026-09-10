@@ -602,14 +602,27 @@ class KlineCollector:
         return stored
 
     async def run_rest(self, interval_s: float = 10.0) -> None:
-        """Poll closed klines. The newest returned candle may still be open."""
+        """Poll closed klines. The newest returned candle may still be open.
+
+        While the websocket is delivering closed minutes this poll adds nothing
+        but request weight, and request weight is what earns the venue ban that
+        empties the history everything else depends on. So it only polls when
+        the stream is not currently supplying the feed.
+        """
         async with httpx.AsyncClient(timeout=6.0) as client:
             while True:
+                if self.buffer.transport == "websocket" and self.buffer.is_fresh(now_ns()):
+                    await asyncio.sleep(interval_s)
+                    continue
+                response = None
                 try:
+                    await LIMITER.acquire(self.rest_url)
                     response = await client.get(
                         self.rest_url, params={**self.params, "limit": 10}
                     )
+                    LIMITER.note(self.rest_url, response)
                     response.raise_for_status()
+
                     receipt = now_ns()
                     now_ms = receipt // 1_000_000
                     for row in response.json():
