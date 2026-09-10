@@ -51,7 +51,7 @@ class LiteAService:
             model_version=MODEL_ID,
         )
         self.store = LiteAStore(self.backend, self.settings.worker_id)
-        self.feeds = FeedRegistry(dict(os.environ))
+        self.feeds = FeedRegistry(dict(os.environ), only=FeedRegistry.V1_FEEDS)
         # Version 1 sources its own direction stage from the feed registry; the
         # shared C85 packet source is deliberately NOT constructed here — its
         # Kalshi stage needs a [T, T+5s) trade aggregate that only exists after
