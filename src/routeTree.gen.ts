@@ -20,9 +20,7 @@ import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv
 import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
 import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
 import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
-import { Route as ApiPublicHooksB4x4BackfillRouteImport } from './routes/api/public/hooks/b4x4-backfill'
 import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
-import { Route as ApiPublicHooksB4x4ObShadowCaptureRouteImport } from './routes/api/public/hooks/b4x4-ob-shadow-capture'
 import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
 import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
 import { Route as ApiPublicHooksC85DecisionRouteImport } from './routes/api/public/hooks/c85-decision'
@@ -99,22 +97,10 @@ const ApiExportT45pfCsvRoute = ApiExportT45pfCsvRouteImport.update({
   path: '/api/export/t45pf-csv',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicHooksB4x4BackfillRoute =
-  ApiPublicHooksB4x4BackfillRouteImport.update({
-    id: '/api/public/hooks/b4x4-backfill',
-    path: '/api/public/hooks/b4x4-backfill',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicHooksB4x4Es1WarmupRoute =
   ApiPublicHooksB4x4Es1WarmupRouteImport.update({
     id: '/api/public/hooks/b4x4-es1-warmup',
     path: '/api/public/hooks/b4x4-es1-warmup',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksB4x4ObShadowCaptureRoute =
-  ApiPublicHooksB4x4ObShadowCaptureRouteImport.update({
-    id: '/api/public/hooks/b4x4-ob-shadow-capture',
-    path: '/api/public/hooks/b4x4-ob-shadow-capture',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksBinanceObFinalizeRoute =
@@ -250,9 +236,7 @@ export interface FileRoutesByFullPath {
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
@@ -286,9 +270,7 @@ export interface FileRoutesByTo {
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
@@ -324,9 +306,7 @@ export interface FileRoutesById {
   '/api/export/t10-csv': typeof ApiExportT10CsvRoute
   '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-backfill': typeof ApiPublicHooksB4x4BackfillRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/b4x4-ob-shadow-capture': typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
   '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
   '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
@@ -362,9 +342,7 @@ export interface FileRouteTypes {
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
@@ -398,9 +376,7 @@ export interface FileRouteTypes {
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
@@ -435,9 +411,7 @@ export interface FileRouteTypes {
     | '/api/export/t10-csv'
     | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-backfill'
     | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/b4x4-ob-shadow-capture'
     | '/api/public/hooks/binance-ob-finalize'
     | '/api/public/hooks/binance-ob-ingest'
     | '/api/public/hooks/c85-decision'
@@ -468,9 +442,7 @@ export interface RootRouteChildren {
   ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
   ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
   ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
-  ApiPublicHooksB4x4BackfillRoute: typeof ApiPublicHooksB4x4BackfillRoute
   ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
-  ApiPublicHooksB4x4ObShadowCaptureRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRoute
   ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
   ApiPublicHooksBinanceObIngestRoute: typeof ApiPublicHooksBinanceObIngestRoute
   ApiPublicHooksC85DecisionRoute: typeof ApiPublicHooksC85DecisionRoute
@@ -573,25 +545,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExportT45pfCsvRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/b4x4-backfill': {
-      id: '/api/public/hooks/b4x4-backfill'
-      path: '/api/public/hooks/b4x4-backfill'
-      fullPath: '/api/public/hooks/b4x4-backfill'
-      preLoaderRoute: typeof ApiPublicHooksB4x4BackfillRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/b4x4-es1-warmup': {
       id: '/api/public/hooks/b4x4-es1-warmup'
       path: '/api/public/hooks/b4x4-es1-warmup'
       fullPath: '/api/public/hooks/b4x4-es1-warmup'
       preLoaderRoute: typeof ApiPublicHooksB4x4Es1WarmupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/b4x4-ob-shadow-capture': {
-      id: '/api/public/hooks/b4x4-ob-shadow-capture'
-      path: '/api/public/hooks/b4x4-ob-shadow-capture'
-      fullPath: '/api/public/hooks/b4x4-ob-shadow-capture'
-      preLoaderRoute: typeof ApiPublicHooksB4x4ObShadowCaptureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/binance-ob-finalize': {
@@ -770,10 +728,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiExportT10CsvRoute: ApiExportT10CsvRoute,
   ApiExportT30CsvRoute: ApiExportT30CsvRoute,
   ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
-  ApiPublicHooksB4x4BackfillRoute: ApiPublicHooksB4x4BackfillRoute,
   ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
-  ApiPublicHooksB4x4ObShadowCaptureRoute:
-    ApiPublicHooksB4x4ObShadowCaptureRoute,
   ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
   ApiPublicHooksBinanceObIngestRoute: ApiPublicHooksBinanceObIngestRoute,
   ApiPublicHooksC85DecisionRoute: ApiPublicHooksC85DecisionRoute,

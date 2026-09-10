@@ -77,33 +77,8 @@ export async function sweepUnresolvedRows(
   // ---- V6: retired. No further tracking or resolution sweeping. ----
   const v6Swept = false;
 
-  // ---- B4x4: resolve any closed target still missing resolved_at. ----
+  // ---- B4x4: retired (2026-09-10). No tracking or resolution sweeping. ----
   const b4Targets: string[] = [];
-  try {
-    const { data } = await supabase
-      .from("b4x4_predictions")
-      .select("target_candle_ts")
-      .is("resolved_at", null)
-      .gte("target_candle_ts", sinceIso)
-      .lte("target_candle_ts", cutoffIso)
-      .order("target_candle_ts", { ascending: true })
-      .limit(500);
-    const { resolveB4x4Row } = await import("@/lib/b4x4/orchestrator");
-    for (const r of (data ?? []) as unknown as Array<{ target_candle_ts: string }>) {
-      const ts = new Date(r.target_candle_ts).toISOString();
-      const c = candles.get(ts);
-      if (!c) continue;
-      await resolveB4x4Row(supabase, r.target_candle_ts, c.dir, {
-        open: Number(c.ohlc.open),
-        high: Number(c.ohlc.high),
-        low: Number(c.ohlc.low),
-        close: Number(c.ohlc.close),
-      });
-      b4Targets.push(ts);
-    }
-  } catch (e) {
-    errors.push(`b4x4: ${e instanceof Error ? e.message : String(e)}`);
-  }
 
   // ---- TD1 / TD2 ----
   // Gradeable rows (A2 gave a direction) go through the normal resolver.
