@@ -216,8 +216,19 @@ class StartupBridge:
         settled = [t for t in targets
                    if decided_after is not None and pd.Timestamp(t) <= decided_after]
         recorded = self._recorded_rows(settled)
+        # A target this process already reconstructed and wrote into the local
+        # frame is not fetched again: those are the same authentic inputs, and
+        # re-reading the venue for them is what turns a transient rate-limit
+        # refusal into a bridge that can never finish.
+        recorded.update(
+            {
+                key: row
+                for key, row in self._frame_rows(targets).items()
+                if key not in recorded
+            }
+        )
         reused = [recorded[pd.Timestamp(t).tz_convert("UTC").isoformat()]
-                  for t in settled
+                  for t in targets
                   if pd.Timestamp(t).tz_convert("UTC").isoformat() in recorded]
         to_recover = [t for t in targets
                       if pd.Timestamp(t).tz_convert("UTC").isoformat() not in recorded]
