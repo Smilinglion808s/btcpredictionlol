@@ -36,6 +36,17 @@ def _num(value: Any) -> Any:
     return value
 
 
+def _jsonable(value: Any) -> Any:
+    """JSON has no NaN. A missing input is recorded as null — never as 0.0."""
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def target_row(
     *,
     target_open: datetime,
@@ -80,9 +91,9 @@ def target_row(
 
         "feature_order_sha256": FEATURE_ORDER_SHA256,
         "features": {
-            "direction60": packet.as_engine_features(),
-            "lite_a": engine_output,
-            "daily_floor": guard_output,
+            "direction60": _jsonable(packet.as_engine_features()),
+            "lite_a": _jsonable(engine_output),
+            "daily_floor": _jsonable(guard_output),
             "input_valid": bool(packet.input_valid),
             "blockers": packet.blockers or None,
             "model_id": MODEL_ID,

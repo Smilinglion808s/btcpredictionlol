@@ -318,12 +318,19 @@ class LiteAWorker:
         outcome = self._commit(row, checkpoint)
         if outcome["ok"]:
             # Durable acknowledgement is its own measurement; compute completion
-            # is not a publication guarantee.
+            # is not a publication guarantee. The committed row is amended with
+            # the measured ACK instant in a second, IDEMPOTENT write of the same
+            # decision — same identity, same sides, so nothing advances twice.
             measured["durable_ack_ns"] = outcome["ack_ns"]
             measured["durable_ack_offset_ms"] = (outcome["ack_ns"] - target_ns) / 1_000_000
             measured["commit_latency_ms"] = outcome["ack_latency_ms"]
             self.state.cursors.last_committed_target = target.isoformat()
             self.state.save(self.state_path)
+            try:
+                self.store.commit({**row, "decision_durable_ns": str(outcome["ack_ns"])}, None)
+            except Exception:  # noqa: BLE001 - the decision itself is already durable
+                pass
+
 
         # The recorded opportunity enters the rolling training frame with the
         # features that were ACTUALLY frozen at this target's own cutoff, valid

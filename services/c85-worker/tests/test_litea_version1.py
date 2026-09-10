@@ -286,3 +286,31 @@ def test_row_never_zero_fills_the_c85_only_columns():
 
 def test_row_is_json_serialisable():
     json.dumps(_row())
+
+
+def test_nan_feature_is_serialised_as_null_never_zero():
+    """A missing input must reach the ledger as JSON null.
+
+    `json.dumps(..., allow_nan=False)` in the signed backend client refuses NaN,
+    and zero-filling would invent an observation that never happened.
+    """
+    from src.litea.store import _jsonable
+
+    cleaned = _jsonable({"a": float("nan"), "b": [float("inf"), 1.5], "c": 0.0})
+    assert cleaned == {"a": None, "b": [None, 1.5], "c": 0.0}
+    assert json.dumps(cleaned, allow_nan=False)
+
+
+def test_checkpoint_carries_the_sealed_paired_envelope():
+    """The checkpoint must be restorable without re-manufacturing its digest."""
+    from src.litea.state import LiteAState
+    from src.litea.store import checkpoint_payload
+
+    state = LiteAState()
+    state.cursors.last_fit_cutoff = "2026-09-08T00:00:00+00:00"
+    payload = checkpoint_payload(state, next_target=None)
+    envelope = payload["expert_state"]["litea_paired_envelope"]
+    assert envelope["sha256"] == payload["state_sha256"]
+    restored = LiteAState.restore(envelope)
+    assert restored.cursors.last_fit_cutoff == "2026-09-08T00:00:00+00:00"
+    assert restored.snapshot()["sha256"] == envelope["sha256"]
