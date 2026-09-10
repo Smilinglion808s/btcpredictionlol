@@ -44,6 +44,8 @@ from typing import Any, Callable, Iterable
 import httpx
 import websockets
 
+from .tickers import EASTERN, format_ticker
+
 NS = 1_000_000_000
 
 
