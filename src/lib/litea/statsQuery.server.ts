@@ -432,5 +432,7 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
     latest_scored_age_s: newestScoredAge,
     research_rows: researchRows,
     live,
+    today,
+    daily,
   };
 }
