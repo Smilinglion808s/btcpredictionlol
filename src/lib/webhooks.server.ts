@@ -596,12 +596,12 @@ export async function deliverWebhookNow(
           attempt: 1,
         });
 
-        // An attempt that produced no HTTP status may still have reached the
-        // bot. For guarded (Version 1) deliveries that ambiguity is resolved
-        // conservatively: no retry, rather than a possible second order.
+        // A cancelled attempt never posted and is terminal: it must not be
+        // revived here. An attempt that produced no HTTP status may still have
+        // reached the bot, so it is left unresolved rather than repeated.
         const ambiguous = guard != null && !r.cancelled && r.status === null;
-        if (!r.ok && !ambiguous) {
-          for (let attempt = 2; attempt <= BACKOFFS_MS.length; attempt++) {
+        if (maxAttempts > 1 && !r.ok && !r.cancelled && !ambiguous) {
+          for (let attempt = 2; attempt <= Math.min(maxAttempts, BACKOFFS_MS.length); attempt++) {
             await new Promise((res) => setTimeout(res, BACKOFFS_MS[attempt - 1] ?? 2_000));
             // The kill switch, allow-list, original deadline and claim
             // ownership are re-checked before this retry actually posts.
