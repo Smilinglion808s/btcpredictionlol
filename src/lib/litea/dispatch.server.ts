@@ -275,6 +275,22 @@ export async function dispatchLiteaDecision(
     return { verdict: "NOT_CLAIM_OWNER", dedupeKey, claim: claimed.outcome };
   }
 
+  /**
+   * Re-evaluated immediately before EVERY real attempt, first and retries
+   * alike: current kill switch, allow-list, the ORIGINAL (never extended)
+   * ceiling, and this owner's claim still being live.
+   */
+  const guard = async (): Promise<boolean> => {
+    const verdict = evaluateLiteaDispatch(row, {
+      nowMs: deps.now(),
+      executionEnabled: liteaServerExecutionEnabled(),
+      allowedModels: liteaEffectiveAllowlist(),
+      alreadySent: false,
+      transportDeadlineMs: args.transportDeadlineMs,
+    });
+    if (verdict !== "WOULD_SEND") return false;
+    return await deps.ownsClaim(dedupeKey, owner);
+  };
 
   // Re-check the ceiling with the clock as it is NOW, after the durable write.
   const preSend = evaluateLiteaDispatch(row, {
@@ -287,19 +303,21 @@ export async function dispatchLiteaDecision(
   if (preSend !== "WOULD_SEND") {
     await deps.settle({
       dedupeKey,
+      owner,
       targetId: args.targetId,
       status: preSend === "EXPIRED" ? "EXPIRED" : "FAILED",
       error: `pre_send_${preSend.toLowerCase()}`,
       publicationOffsetMs: null,
     });
-    return { verdict: preSend, dedupeKey };
+    return { verdict: preSend, dedupeKey, claim: claimed.outcome };
   }
 
-  const delivery = await deps.deliver(payload);
+  const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
   await deps.settle({
     dedupeKey,
+    owner,
     targetId: args.targetId,
     status,
     error: status === "SENT" ? null : "no_endpoint_accepted",
@@ -308,10 +326,12 @@ export async function dispatchLiteaDecision(
   return {
     verdict: status,
     dedupeKey,
+    claim: claimed.outcome,
     delivered: delivery.delivered,
     publicationOffsetMs: sentMs - openMs,
   };
 }
+
 
 type MinimalClient = {
   from: (table: string) => any;
