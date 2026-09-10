@@ -172,10 +172,22 @@ export function LiteACard({
   const phase = PHASES[(stats?.phase as keyof typeof PHASES) ?? "PREPARING"] ?? PHASES.PREPARING;
   const latest = stats?.latest ?? null;
   const live = stats?.live ?? {};
+  const today = stats?.today ?? {};
+  const daily: any[] = Array.isArray(stats?.daily) ? stats.daily : [];
   const liveOpportunities = Number(live.opportunities ?? 0);
   const graded = Number(live.wins ?? 0) + Number(live.losses ?? 0);
+  const winRate = live.win_rate == null ? null : Number(live.win_rate);
+  const netUnits = Number(live.net_units ?? 0);
+  const todayNet = Number(today.net_units ?? 0);
+  // +0.87 per win, −1 per loss → break-even at ~53.5%.
+  const BREAK_EVEN = 1 / 1.87;
+  const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
+
+  const gaugeR = 34;
+  const circumference = 2 * Math.PI * gaugeR;
+  const wrPct = winRate == null ? 0 : Math.max(0, Math.min(100, winRate * 100));
 
   return (
     <Card className="v1-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
