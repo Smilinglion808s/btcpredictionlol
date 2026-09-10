@@ -472,6 +472,42 @@ class MarketBuffer(_BaseBuffer):
     def note_poll(self, receipt_ns: int) -> None:
         self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
 
+    def eligible_conflict(
+        self, target_ms: int, frozen_at_ns: int
+    ) -> dict[str, Any] | None:
+        """A disagreement among the records this FREEZE could actually use.
+
+        MEASURED defect: conflict was decided over every record ever stored for
+        the target, so a contradicting answer that landed AFTER the freeze
+        retroactively invalidated a selection that was already correct at the
+        time. Only official records received at or before the freeze, and only
+        those carrying a usable strike, can conflict with one another.
+        """
+        per_source = self.sources.get(target_ms, {})
+        eligible = {
+            name: record
+            for name, record in per_source.items()
+            if self._usable(record) and int(record.get("receipt_ns", 0)) <= int(frozen_at_ns)
+        }
+        readings = {
+            (float(record["floor_strike"]), record.get("ticker"))
+            for record in eligible.values()
+        }
+        if len(readings) < 2:
+            return None
+        return {
+            "paths": sorted(eligible),
+            "readings": [
+                {
+                    "path": name,
+                    "floor_strike": float(record["floor_strike"]),
+                    "ticker": record.get("ticker"),
+                    "receipt_ns": int(record.get("receipt_ns", 0)),
+                }
+                for name, record in sorted(eligible.items())
+            ],
+        }
+
     def chosen(self, target_ms: int, frozen_at_ns: int) -> tuple[dict[str, Any] | None, str]:
         """The record this freeze may use, and why that one.
 
@@ -480,7 +516,7 @@ class MarketBuffer(_BaseBuffer):
         that carried it was received at or before the freeze. A disagreement
         between the two paths yields no record at all.
         """
-        if target_ms in self.conflicts:
+        if self.eligible_conflict(target_ms, frozen_at_ns) is not None:
             return None, "conflict"
         per_source = self.sources.get(target_ms, {})
         fallback: dict[str, Any] | None = None
