@@ -139,6 +139,7 @@ class RemoteArtifacts:
         copy.
         """
         manifest = self.manifest()
+        self.state_digest_note: str | None = getattr(self, "state_digest_note", None)
         installed: list[str] = []
         for relative, expected in manifest.items():
             if not (
@@ -188,7 +189,11 @@ class RemoteArtifacts:
             if self._install(key, destination, expected):
                 installed.append(relative)
 
-        return {"manifest_entries": len(manifest), "installed": installed}
+        return {
+            "manifest_entries": len(manifest),
+            "installed": installed,
+            "state_digest_note": self.state_digest_note,
+        }
 
     def publish(self, *, heads_root: Path, training: Path | None, state: Path | None) -> dict[str, str]:
         """Push the local position back, then record it in the manifest."""
