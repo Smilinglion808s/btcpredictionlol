@@ -57,7 +57,16 @@ class RemoteArtifacts:
                 raise RuntimeError(f"LITEA_ARTIFACT_NO_URL: {key}")
             return None
         try:
-            response = httpx.get(url, timeout=120.0, follow_redirects=True)
+            # The storage CDN will happily serve a just-replaced object's
+            # PREVIOUS body for a short window. A restore that accepted that
+            # would silently rewind the serving position, so every read is
+            # explicitly uncached.
+            response = httpx.get(
+                url,
+                timeout=120.0,
+                follow_redirects=True,
+                headers={"cache-control": "no-cache", "pragma": "no-cache"},
+            )
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"LITEA_ARTIFACT_DOWNLOAD_FAILED: {key} :: {exc}") from exc
         if response.status_code != 200:
