@@ -1,10 +1,15 @@
 """An estimated boundary strike must reach the real 60-feature score.
 
 These are integration properties of the shipped fallback policy
-(`strike-fallbacks-r1`): a fallback reference price is a normal input to the
-unchanged Version 1 feature build, engine and guard; the chosen source is
+(`strike-fallbacks-free-r1`): a fallback reference price is a normal input to
+the unchanged Version 1 feature build, engine and guard; the chosen source is
 frozen with the decision; a later official strike is audit evidence only; and
 settlement still comes from the official Kalshi result alone.
+
+Scope note, so the evidence is not overstated: the head used below is a
+ZERO-COEFFICIENT fixture, and "restart" here is a JSON round-trip of the frozen
+provenance. These are contract checks, not a private fitted head and not a real
+process restart.
 """
 from __future__ import annotations
 
@@ -36,8 +41,9 @@ from src.litea.strike_policy import (  # noqa: E402
     choose_strike,
     official_difference,
 )
-from src.reference import ReferenceBuffer  # noqa: E402
+from src.reference import CoinbaseMatchesCollector, ReferenceBuffer  # noqa: E402
 
+from tests.test_litea_strike_free_fallbacks import coinbase_match  # noqa: E402
 from tests.test_stage_empty_window import TARGET_MS, staged_row  # noqa: E402
 
 UTC = timezone.utc
@@ -45,15 +51,13 @@ TARGET = datetime.fromtimestamp(TARGET_MS / 1000, UTC)
 FREEZE_NS = (TARGET_MS + 5_000) * 1_000_000
 
 
-def cf_buffer(value: str) -> ReferenceBuffer:
-    buffer = ReferenceBuffer("cf_brti", source="cf_brti")
-    buffer.record_exact_average(
-        value,
-        window_size=60,
-        window_start_ms=TARGET_MS - 60_000,
-        window_end_ms=TARGET_MS,
-        receipt_ns=TARGET_MS * 1_000_000 + 400_000_000,
-    )
+def free_buffer(value: float) -> ReferenceBuffer:
+    """Sixty received public Coinbase BTC-USD prints in (T-60s, T]."""
+    buffer = ReferenceBuffer("coinbase_btcusd", source="coinbase_btcusd")
+    collector = CoinbaseMatchesCollector(buffer)
+    for index in range(60):
+        ms = TARGET_MS - (59 - index) * 1000
+        collector.ingest(coinbase_match(ms, value, 500_000 + index), (ms + 20) * 1_000_000)
     return buffer
 
 
@@ -149,17 +153,17 @@ class Packet:
 
 
 # -- the estimate is an ordinary input ----------------------------------------
-def test_a_cf_estimate_produces_a_real_sixty_feature_score():
-    """No official strike by freeze: the CF boundary average carries the build."""
+def test_a_free_source_estimate_produces_a_real_sixty_feature_score():
+    """No official strike by freeze: the public Coinbase estimate carries the build."""
     record = choose_strike(
         listed_market(None),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,
     )
     assert record["strike"] == pytest.approx(99_500.00)
-    assert record["strike_source"] == "cf_brti"
+    assert record["strike_source"] == "coinbase_btcusd"
     assert record["estimated"] is True
     assert record["input_policy_version"] == INPUT_POLICY_VERSION
 
@@ -185,7 +189,7 @@ def test_a_cf_estimate_produces_a_real_sixty_feature_score():
 def test_an_official_strike_still_wins_over_a_present_estimate():
     record = choose_strike(
         listed_market(77_313.34),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,
@@ -199,7 +203,7 @@ def test_an_official_strike_still_wins_over_a_present_estimate():
 def test_the_stored_row_keeps_the_chosen_source_and_policy():
     record = choose_strike(
         listed_market(None),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,
@@ -238,7 +242,7 @@ def test_the_stored_row_keeps_the_chosen_source_and_policy():
     )
     assert row["model_version"] == MODEL_ID
     assert row["features"]["input_policy_version"] == INPUT_POLICY_VERSION
-    assert row["features"]["strike_policy"]["strike_source"] == "cf_brti"
+    assert row["features"]["strike_policy"]["strike_source"] == "coinbase_btcusd"
     assert row["features"]["strike_policy"]["estimated"] is True
     assert row["features"]["execution_enabled"] is False
 
@@ -252,7 +256,7 @@ def test_the_stored_row_keeps_the_chosen_source_and_policy():
 def test_a_late_official_strike_is_audit_only():
     record = choose_strike(
         listed_market(None),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,
@@ -269,7 +273,7 @@ def test_a_late_official_strike_is_audit_only():
 def test_no_audit_difference_for_an_official_strike():
     record = choose_strike(
         listed_market(77_313.34),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,
@@ -282,7 +286,7 @@ def test_an_estimated_strike_never_becomes_a_settlement_input():
     """The stored row exposes no settlement/label field for the estimate."""
     record = choose_strike(
         listed_market(None),
-        {"cf_brti": cf_buffer("99500.00")},
+        {"coinbase_btcusd": free_buffer(99_500.00)},
         TARGET_MS,
         FREEZE_NS,
         official_conflict=False,

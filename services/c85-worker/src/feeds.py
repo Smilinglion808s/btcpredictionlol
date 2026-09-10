@@ -1416,8 +1416,8 @@ class FeedRegistry:
             "binance_cm_1m": KlineBuffer("binance_cm_1m"),
         }
         from .reference import (
-            CFBenchmarksCollector,
-            ChainlinkStreamsCollector,
+            CoinbaseMatchesCollector,
+            KrakenTradeCollector,
             ReferenceBuffer,
         )
 
@@ -1429,11 +1429,14 @@ class FeedRegistry:
         #: Boundary PRICE references. NOT required feeds: they are only ever
         #: consulted when the official strike is missing, and a disabled one
         #: must never affect readiness.
+        #: FREE public spot streams only. The paid CF Benchmarks / Chainlink
+        #: collectors remain in `reference.py` for provenance, but they are not
+        #: constructed and never started: no credential is required to run.
         self.references: dict[str, Any] = {
-            "cf_brti": ReferenceBuffer("cf_brti", source="cf_brti"),
-            "chainlink_streams": ReferenceBuffer(
-                "chainlink_streams", source="chainlink_streams"
+            "coinbase_btcusd": ReferenceBuffer(
+                "coinbase_btcusd", source="coinbase_btcusd"
             ),
+            "kraken_btcusd": ReferenceBuffer("kraken_btcusd", source="kraken_btcusd"),
         }
 
         self.buffers: dict[str, Any] = {
@@ -1516,22 +1519,15 @@ class FeedRegistry:
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
         )
         #: Both references are collected CONCURRENTLY and continuously, so the
-        #: freeze chooses among candidates already received. Neither has
-        #: credentials in this project today; each then reports
-        #: `credentials_missing` and produces nothing.
-        self._cf = CFBenchmarksCollector(
-            self.references["cf_brti"],
-            env.get("KALSHI_WS_URL", "wss://api.elections.kalshi.com/trade-api/ws/v2"),
-            env.get("KALSHI_API_KEY_ID"),
-            env.get("KALSHI_PRIVATE_KEY_PEM"),
+        #: freeze chooses among candidates already received. Both are public
+        #: market-data sockets: no key, no account, no purchase.
+        self._coinbase = CoinbaseMatchesCollector(
+            self.references["coinbase_btcusd"],
+            env.get("COINBASE_WS_URL", "wss://ws-feed.exchange.coinbase.com"),
         )
-        self._chainlink = ChainlinkStreamsCollector(
-            self.references["chainlink_streams"],
-            env.get("CHAINLINK_STREAMS_REST", "https://api.dataengine.chain.link"),
-            env.get("CHAINLINK_STREAMS_FEED_ID"),
-            env.get("CHAINLINK_STREAMS_USER_ID"),
-            env.get("CHAINLINK_STREAMS_SECRET"),
-            limiter=LIMITER,
+        self._kraken = KrakenTradeCollector(
+            self.references["kraken_btcusd"],
+            env.get("KRAKEN_WS_URL", "wss://ws.kraken.com/v2"),
         )
 
         self._tasks: list[asyncio.Task] = []
@@ -1588,8 +1584,8 @@ class FeedRegistry:
             self._tasks.append(asyncio.create_task(self._strikes.run()))
             self._tasks.append(asyncio.create_task(self._strikes_backup.run()))
             # Price references run alongside the official paths, not after them.
-            self._tasks.append(asyncio.create_task(self._cf.run()))
-            self._tasks.append(asyncio.create_task(self._chainlink.run()))
+            self._tasks.append(asyncio.create_task(self._coinbase.run()))
+            self._tasks.append(asyncio.create_task(self._kraken.run()))
 
     def _selected(self, group: dict[str, Any]) -> list[str]:
         if self.only is None:
