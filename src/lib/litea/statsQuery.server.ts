@@ -351,6 +351,38 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
   const graded = live.wins + live.losses;
   live.win_rate = graded > 0 ? live.wins / graded : null;
 
+  // Same grading, split by UTC day: "today" plus a short recent history.
+  const byDay = new Map<string, Row[]>();
+  for (const r of liveRows) {
+    const day = new Date(String(r.target_open_utc)).toISOString().slice(0, 10);
+    const bucket = byDay.get(day) ?? [];
+    bucket.push(r);
+    byDay.set(day, bucket);
+  }
+  const daily = [...byDay.keys()]
+    .sort()
+    .reverse()
+    .slice(0, 14)
+    .map((date) => {
+      const g = gradeLiveCalls(byDay.get(date)!, settlements);
+      const gGraded = g.wins + g.losses;
+      return {
+        date,
+        ...g,
+        win_rate: gGraded > 0 ? g.wins / gGraded : null,
+        net_units: netUnits(g.wins, g.losses),
+      };
+    });
+  const today = daily.find((d) => d.date === todayUtc()) ?? {
+    date: todayUtc(),
+    calls: 0,
+    wins: 0,
+    losses: 0,
+    pending: 0,
+    win_rate: null,
+    net_units: 0,
+  };
+
   const newestScored = scoredRows[0] ?? null;
   const newestScoredAge = newestScored ? ageSeconds(newestScored.target_open_utc) : null;
   const scoringRecently = newestScoredAge != null && newestScoredAge <= LIVE_DECISION_STALE_S;
