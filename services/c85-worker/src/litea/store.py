@@ -36,6 +36,17 @@ def _num(value: Any) -> Any:
     return value
 
 
+def _jsonable(value: Any) -> Any:
+    """JSON has no NaN. A missing input is recorded as null — never as 0.0."""
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def target_row(
     *,
     target_open: datetime,
