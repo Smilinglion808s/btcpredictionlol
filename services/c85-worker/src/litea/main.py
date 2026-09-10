@@ -33,6 +33,7 @@ from .remote import RemoteArtifacts
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload
 from .training import TrainingFrame
+from .bridge import StartupBridge
 from .worker import LiteAWorker
 
 
@@ -84,6 +85,7 @@ class LiteAService:
             lease_ttl_seconds=self.settings.lease_ttl_seconds,
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
+        self.bridge = StartupBridge(self)
 
     # -- startup ---------------------------------------------------------------
     def _restore_artifacts(self) -> dict:
@@ -200,6 +202,7 @@ class LiteAService:
         }
         report["feeds"] = self.feeds.watermarks()
         report["artifact_restore"] = self.restore_report
+        report["startup_bridge"] = self.bridge.report
         report["build_sha"] = self.settings.build_sha
         return report
 
@@ -268,8 +271,23 @@ class LiteAService:
             await asyncio.sleep(60)
 
     async def run(self) -> None:
+        # Feeds start FIRST and keep collecting while the gap is bridged, so
+        # the next future boundary has real raw windows of its own.
         await self.feeds.start()
         self._catch_up_fits()
+
+        # Everything between the restored checkpoint and this launch is
+        # recovered causally before the first scheduled target is scored. A gap
+        # that cannot be recovered blocks scoring instead of vanishing.
+        try:
+            bridged = await asyncio.to_thread(self.bridge.run)
+        except Exception as exc:  # noqa: BLE001
+            bridged = {"status": "ERROR", "reason": f"{type(exc).__name__}: {exc}"}
+            self.worker.external_scoring_block = (
+                f"LITEA_STARTUP_BRIDGE_FAILED: {type(exc).__name__}"
+            )
+            self.bridge.report = bridged
+        print(f"[{MODEL_ID}] startup bridge: {bridged}", flush=True)
 
         status, reason = self.worker.evaluate_readiness()
         if status in ("LOGGING_READY", "RECORDING_ONLY"):

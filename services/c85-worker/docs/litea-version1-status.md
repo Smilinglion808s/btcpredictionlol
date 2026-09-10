@@ -167,6 +167,47 @@ Signed-ops restrictions re-confirmed unchanged: exact-body HMAC, timestamp
 freshness, single-use nonce, write allowlist, and a hard dispatch prohibition
 for `lite-a-floor4-top10-r1`.
 
+## Startup bridge (worker hookup)
+
+`src/litea/bridge.py` (in the serving image — the Dockerfile copies `src/`,
+not `tools/`). `LiteAService.run()` now, after the feeds start and before the
+scheduler arms:
+
+1. plans every 15-minute target between the restored position and the last
+   fully observable target (`now - 120s`, floored),
+2. rebuilds them in 24-target chunks from the public venue with the unchanged
+   60-feature recipe (bounded reads only — never a historical replay),
+3. appends them to the frame, runs the day's due fit before scoring that day,
+   applies official settlements, advances engine and guard causally, and
+   commits each recovered decision as `run_mode = RESEARCH` with
+   `STARTUP_BRIDGE_RECOVERED`, so it can never be counted as a live forward
+   prediction,
+4. persists paired state/training and republishes the private artifacts.
+
+Planning starts from the EARLIER of the frame and checkpoint positions: when a
+restored checkpoint is newer than the training snapshot, the intervening
+targets are rebuilt for the frame only and are not re-decided, so a new rank
+state is never paired with a stale history.
+
+Failure is explicit, never silent: an unrecoverable source window records
+`LITEA_SOURCE_GAP`, and a gap over 672 targets records `LITEA_GAP_TOO_LARGE`.
+Both set `worker.external_scoring_block`, which blocks scoring while feed
+recording continues. Nothing is zero-filled or back-dated.
+
+Covered by `tests/test_litea_startup_bridge.py` (planning, idempotent restart,
+frame-behind-checkpoint reconciliation, both block paths). A live recovery
+smoke against the public venue rebuilt 2026-09-10 02:30 and 02:45 UTC with 60
+features, `input_valid = true`, and the official label for the settled one.
+
+## Production signed-ops check (2026-09-10, against the live site)
+
+`POST https://btcpredictionlol.lovable.app/api/public/hooks/c85-ops`:
+unsigned `401`, bad signature `401`, signed `checkpoint.latest` `200`
+returning `model_version = lite-a-floor4-top10-r1`,
+`settlements.pending` `200` (empty), `artifact.download_url` `200` scoped to
+`c85-artifacts`. No outbox op exists; no decision was dispatched and no
+webhook was sent.
+
 ## Remaining hookup action (one item)
 
 Deploy the worker service with the start command and environment above, once

@@ -93,6 +93,10 @@ class LiteAWorker:
         self.lease_ttl_seconds = lease_ttl_seconds
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
+        # Set by the startup bridge when a gap between the restored checkpoint
+        # and launch could NOT be recovered. Recording continues; scoring does
+        # not, because the rank window would contain a hole.
+        self.external_scoring_block: str | None = None
         # One-time migration from the single-slot pending file.
         legacy = self.state_path.with_name("pending_commit.json")
         if legacy.exists():
@@ -127,6 +131,8 @@ class LiteAWorker:
         runs and records the opportunity as unscored.
         """
         target = at or next_boundary()
+        if self.external_scoring_block:
+            return "BLOCKED", self.external_scoring_block
         stale = self.stale_feeds()
         if stale:
             return "BLOCKED", f"LITEA_FEEDS_STALE: {', '.join(stale)}"
