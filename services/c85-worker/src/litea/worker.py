@@ -527,21 +527,51 @@ class LiteAWorker:
         if observed < target + timedelta(seconds=5):
             observed = target + timedelta(seconds=5)
 
-        engine_output = self.state.engine.decide(
-            target=target,
-            ticker=ticker or label,
-            features=packet.as_engine_features(),
-            input_valid=packet.input_valid,
-            head=head,
-            observed_at=observed,
-        )
-        guard_output = self.state.guard.decide(
-            target=target,
-            ticker=ticker or label,
-            candidate=int(engine_output["candidate"]),
-            rank=engine_output["rank"],
-            observed_at=observed,
-        )
+        # Sole-writer validity is settled BEFORE the pair is touched, never
+        # after. Scoring mutates shared state: the engine's rank queue advances
+        # and the guard reserves the day's exposure. If the lease were only
+        # re-checked after that, a refusal would leave a rank advance and a
+        # reservation that no durable decision ever explains. So an aged or
+        # unevidenced lease is renewed here, while a refusal still costs
+        # nothing: the boundary is abandoned with the pair untouched and no row
+        # written over the real owner's.
+        lease_renewal_ns = 0
+        lease_status = self.lease_state(lease, time.time_ns())
+        if lease_status != "USABLE":
+            renewal_started = time.time_ns()
+            renewed = self.store.acquire_lease(self.lease_ttl_seconds)
+            lease_renewal_ns = time.time_ns() - renewal_started
+            if not renewed.get("granted"):
+                owner = renewed.get("owner_id", "other")
+                return BoundaryOutcome(target, "MISSED", f"lease lost to {owner}")
+            lease = renewed
+            lease_status = self.lease_state(lease, time.time_ns())
+
+        # ONE critical section for the whole decision: the engine's rank
+        # advance, the guard's reservation, the watermark cursor, the local
+        # paired save and the checkpoint payload. A settlement thread cannot
+        # land between the engine and the guard, and a heartbeat cannot publish
+        # a digest of a half-advanced pair. No network call is made while the
+        # lock is held.
+        with self.state_lock:
+            engine_output = self.state.engine.decide(
+                target=target,
+                ticker=ticker or label,
+                features=packet.as_engine_features(),
+                input_valid=packet.input_valid,
+                head=head,
+                observed_at=observed,
+            )
+            guard_output = self.state.guard.decide(
+                target=target,
+                ticker=ticker or label,
+                candidate=int(engine_output["candidate"]),
+                rank=engine_output["rank"],
+                observed_at=observed,
+            )
+            self.state.cursors.source_watermarks = packet.source.get("feed_watermarks") or {}
+            self.state.save(self.state_path)
+            checkpoint = checkpoint_payload(self.state, next_target=next_boundary(target))
         timing.compute_complete_ns = time.time_ns()
 
         measured = {
@@ -557,6 +587,10 @@ class LiteAWorker:
             # means the round trip happened before T instead of after the wake.
             "lease_reused": bool(reused),
             "lease_wait_ms": lease_wait_ns / 1_000_000,
+            "lease_renewal_ms": lease_renewal_ns / 1_000_000,
+            # Honest about the evidence: a granted lease with no reported
+            # expiry is UNEVIDENCED, not USABLE.
+            "lease_status": lease_status,
             "prepare_ms": (prepared or {}).get("prepare_ms"),
             "freeze_offset_ms": (freeze_ns - target_ns) / 1_000_000,
         }
@@ -569,28 +603,16 @@ class LiteAWorker:
             packet=packet,
             timing=measured,
         )
+        # The durable row's own columns carry only the published timing fields.
+        # The preparation breakdown is what a rollout comparison needs, so it
+        # rides inside the existing private `features` payload — no new public
+        # column, and nothing here is shown to a reader of the site.
+        row["features"]["timing_diagnostics"] = _timing_diagnostics(measured)
 
-        # Sole-writer validity must hold at the COMMIT, not merely at the wake.
-        # A lease that has aged out since it was prepared is renewed here, and a
-        # refusal fails closed: the row is not written by a process that no
-        # longer owns the boundary.
-        if not self._lease_usable({"lease": lease}, time.time_ns()):
-            renewed = self.store.acquire_lease(self.lease_ttl_seconds)
-            if not renewed.get("granted"):
-                owner = renewed.get("owner_id", "other")
-                self.store.mark_missed(label, target, f"LITEA_LEASE_LOST_TO:{owner}")
-                return BoundaryOutcome(target, "MISSED", f"lease lost to {owner}")
-            lease = renewed
-
-        # Local paired state first, then the durable transaction. A retry after
-        # a transport failure replays the SAME decision: the engine and guard
-        # both return their recorded output for an already decided target, so
-        # neither the rank queue nor the floor exposure can advance twice.
-        with self.state_lock:
-            self.state.cursors.source_watermarks = packet.source.get("feed_watermarks") or {}
-            self.state.save(self.state_path)
-            checkpoint = checkpoint_payload(self.state, next_target=next_boundary(target))
-            outcome = self._commit(row, checkpoint)
+        # The decision is durable-or-queued. `_commit` writes the pending file
+        # first, so a transport failure keeps the exact decided row for the
+        # recovery loop; the lock is not held across that round trip.
+        outcome = self._commit(row, checkpoint)
         if outcome["ok"]:
             # Durable acknowledgement is its own measurement; compute completion
             # is not a publication guarantee. The committed row is amended with
@@ -602,8 +624,13 @@ class LiteAWorker:
             with self.state_lock:
                 self.state.cursors.last_committed_target = target.isoformat()
                 self.state.save(self.state_path)
+            amended = {
+                **row,
+                "decision_durable_ns": str(outcome["ack_ns"]),
+                "features": {**row["features"], "timing_diagnostics": _timing_diagnostics(measured)},
+            }
             try:
-                self.store.commit({**row, "decision_durable_ns": str(outcome["ack_ns"])}, None)
+                self.store.commit(amended, None)
             except Exception:  # noqa: BLE001 - the decision itself is already durable
                 pass
 
