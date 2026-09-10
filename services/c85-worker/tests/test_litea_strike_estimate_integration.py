@@ -216,7 +216,13 @@ def test_the_stored_row_keeps_the_chosen_source_and_policy():
         head=head,
         observed_at=TARGET + timedelta(seconds=5),
     )
-    guard = DailyFloor(exception_rank=EXCEPTION_RANK).apply(out)
+    guard = DailyFloor(exception_rank=EXCEPTION_RANK).decide(
+        target=TARGET,
+        ticker="KXBTC15M-26SEP10H0545",
+        candidate=int(out.get("candidate") or 0),
+        rank=out.get("rank"),
+        observed_at=TARGET + timedelta(seconds=5),
+    )
     packet = Packet(
         features,
         {"strike_policy": record, "market_diagnostics": {}, "feed_watermarks": {}},
@@ -299,7 +305,13 @@ def test_an_estimated_strike_never_becomes_a_settlement_input():
         ticker="KXBTC15M-26SEP10H0545",
         packet=packet,
         engine_output=out,
-        guard_output=DailyFloor(exception_rank=EXCEPTION_RANK).apply(out),
+        guard_output=DailyFloor(exception_rank=EXCEPTION_RANK).decide(
+            target=TARGET,
+            ticker="KXBTC15M-26SEP10H0545",
+            candidate=int(out.get("candidate") or 0),
+            rank=out.get("rank"),
+            observed_at=TARGET + timedelta(seconds=5),
+        ),
         timing={"target_open_ns": TARGET_MS * 1_000_000},
         run_mode="LIVE",
     )
