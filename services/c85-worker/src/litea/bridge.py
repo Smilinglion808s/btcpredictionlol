@@ -387,16 +387,25 @@ class StartupBridge:
             filter(None, [payload.get("status_reason"), "STARTUP_BRIDGE_RECOVERED"])
         )
 
-        state.cursors.last_committed_target = target.isoformat()
+        # The decision is queued for durable delivery BEFORE the cursor moves.
+        # A failed commit used to advance `last_committed_target` and then be
+        # swallowed, so a row that never reached the ledger looked committed.
+        # It now goes through the worker's own retry queue and the cursor only
+        # follows a genuine acknowledgement.
         state.save(self.service.state_path)
-        ok = False
-        try:
-            result = self.service.store.commit(
-                payload, checkpoint_payload(state, next_target=target + INTERVAL)
+        checkpoint = checkpoint_payload(state, next_target=target + INTERVAL)
+        worker = self.service.worker
+        outcome = worker._commit(payload, checkpoint)  # noqa: SLF001 — same package
+        ok = bool(outcome.get("ok"))
+        if ok:
+            state.cursors.last_committed_target = target.isoformat()
+            state.save(self.service.state_path)
+        else:
+            print(
+                f"[{MODEL_ID}] bridge commit queued (not durable) at {target}: "
+                f"{outcome.get('error')}",
+                flush=True,
             )
-            ok = result.get("ok") is True
-        except Exception as exc:  # noqa: BLE001 — the local paired state stays authoritative
-            print(f"[{MODEL_ID}] bridge commit failed at {target}: {exc}", flush=True)
 
         # The recovered settlement, if it is already official, lands right after
         # its own target so the floor's day arithmetic matches a live run.
