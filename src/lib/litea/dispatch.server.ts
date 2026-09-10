@@ -194,13 +194,19 @@ export interface LiteADispatchDeps {
   isEnabledNow?(): boolean;
   allowedNow?(): ReadonlySet<string>;
   /**
-   * Existing transport. `guard` is re-evaluated immediately before every real
-   * attempt (first and retries); false cancels that attempt.
+   * Existing transport. `guard` is re-evaluated immediately before the single
+   * attempt this path allows per configured endpoint; false cancels it. No
+   * Version 1 response, timeout, exception or cancellation is ever resent.
    */
   deliver(
     payload: Record<string, unknown>,
     guard: () => Promise<boolean>,
   ): Promise<{ delivered: number }>;
+  /**
+   * Terminal write, conditional on this owner AND a still-PENDING row.
+   * `applied` is false when the condition matched nothing or the write errored;
+   * the caller must then NOT treat the signal as recorded-sent.
+   */
   settle(entry: {
     dedupeKey: string;
     owner: string;
@@ -208,9 +214,10 @@ export interface LiteADispatchDeps {
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
     publicationOffsetMs: number | null;
-  }): Promise<void>;
+  }): Promise<{ applied: boolean }>;
   now(): number;
 }
+
 
 export interface LiteADispatchResult {
   verdict: LiteADispatchVerdict | "SENT" | "FAILED" | "NOT_CLAIM_OWNER";
