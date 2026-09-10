@@ -141,14 +141,20 @@ class LivePacketSource:
         quotes = getattr(self.feeds, "quotes", None)
         return None if quotes is None else quotes.window(target_ms, freeze_ns)
 
-    # ------------------------------------------------------------------ build
-    def build(
+    # ------------------------------------------------- direction stage (1..6)
+    def direction_stage(
         self,
         target_open: datetime,
         cutoff_ns: int,
         freeze_ns: int | None = None,
-    ) -> TargetInputs:
-        """Assemble one target, frozen at ONE instant for every source.
+    ) -> "DirectionStage":
+        """Source stages 1-6 for one target, frozen at ONE instant.
+
+        This is the complete authentic direction-feature path: Binance spot/UM
+        aggregate-trade windows, the T+5 spot anchor and completeness, the Kalshi
+        strike/market window, the USDCUSDT quote-rate minute, the spot and index
+        prior minutes, the 16-minute COIN-M context, and the derived anchor /
+        quote / index blocks that produce the 60-column direction matrix.
 
         `cutoff_ns` is the model's immutable T+5 input deadline. `freeze_ns` is
         the instant this packet actually froze; it defaults to the deadline. A
@@ -157,7 +163,11 @@ class LivePacketSource:
         instant, and the returned `source` metadata carries `on_time=False`
         with the measured lateness. No source is ever read past the declared
         freeze, so a late REST body cannot leak into an earlier declared one.
+
+        Blockers are ACCUMULATED, never raised here: the caller decides what an
+        incomplete stage means for its own model.
         """
+
         target_open = target_open.astimezone(timezone.utc)
         target_ns = int(target_open.timestamp() * NS)
         target_ms = target_ns // 1_000_000
