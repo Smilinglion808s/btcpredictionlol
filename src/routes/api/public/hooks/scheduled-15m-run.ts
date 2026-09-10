@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { setB4x4RequestHost } from "@/lib/b4x4/build-identity";
 import { fetchAndUpsertCandles } from "@/lib/okx.server";
 import { resolvePredictionsServer, runAiPredictionServer } from "@/lib/prediction.server";
 import { waitForBtc15mPredictionWindow } from "@/lib/timing.server";
@@ -12,7 +11,6 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
     handlers: {
       POST: async ({ request }) => {
         const overallStart = Date.now();
-        setB4x4RequestHost(request.headers.get("host"));
         const apikey = request.headers.get("apikey");
         const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!expected || apikey !== expected) {
@@ -93,17 +91,7 @@ export const Route = createFileRoute("/api/public/hooks/scheduled-15m-run")({
           }
           timings.resolve_ms = Date.now() - t0;
 
-          // B4x4 watchdog: fill any target that never produced a row.
-          const cuStart = Date.now();
-          try {
-            const { catchUpMissingB4x4Rows } = await import("@/lib/b4x4/orchestrator");
-            results.b4x4_catchup = await catchUpMissingB4x4Rows(supabase, {
-              schedulerInvocationId: `cron-${overallStart}`,
-            });
-          } catch (e) {
-            results.b4x4_catchup_error = e instanceof Error ? e.message : String(e);
-          }
-          timings.b4x4_catchup_ms = Date.now() - cuStart;
+          // B4x4 retired (2026-09-10): no catch-up watchdog.
 
           // B4x4-ES1 retired: no warm, no catch-up, no resolution passes.
 
