@@ -452,6 +452,8 @@ class MarketBuffer(_BaseBuffer):
                 del self.markets[stale]
                 self.observations.pop(stale, None)
                 self.suppressed_overwrites.pop(stale, None)
+                self.sources.pop(stale, None)
+                self.conflicts.pop(stale, None)
 
     def observe(self, target_ms: int, entry: dict[str, Any]) -> None:
         """Log one poll outcome for a target. Never affects packet inputs."""
@@ -468,12 +470,37 @@ class MarketBuffer(_BaseBuffer):
     def note_poll(self, receipt_ns: int) -> None:
         self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
 
+    def chosen(self, target_ms: int, frozen_at_ns: int) -> tuple[dict[str, Any] | None, str]:
+        """The record this freeze may use, and why that one.
+
+        Preference is PRIMARY, then BACKUP — both are the venue's own official
+        answer for the same contract, and each is only eligible if the response
+        that carried it was received at or before the freeze. A disagreement
+        between the two paths yields no record at all.
+        """
+        if target_ms in self.conflicts:
+            return None, "conflict"
+        per_source = self.sources.get(target_ms, {})
+        fallback: dict[str, Any] | None = None
+        for name in ("primary", "backup"):
+            record = per_source.get(name)
+            if record is None or int(record.get("receipt_ns", 0)) > frozen_at_ns:
+                continue
+            if self._usable(record):
+                return record, name
+            fallback = fallback or record
+        if fallback is not None:
+            return fallback, "no_strike_by_freeze"
+        # Legacy callers may have written straight into `markets`.
+        legacy = self.markets.get(target_ms)
+        if legacy is not None and int(legacy.get("receipt_ns", 0)) <= frozen_at_ns:
+            return legacy, str(legacy.get("source") or "legacy")
+        return None, "none_by_freeze"
+
     def get(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any] | None:
         """This target's listed market, only if it was received by the freeze."""
-        found = self.markets.get(target_ms)
-        if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
-            return None
-        return found
+        return self.chosen(target_ms, frozen_at_ns)[0]
+
 
     def diagnostics(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any]:
         """A small, honest account of what the venue actually served.
