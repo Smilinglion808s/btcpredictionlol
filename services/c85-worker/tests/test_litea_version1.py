@@ -314,3 +314,80 @@ def test_checkpoint_carries_the_sealed_paired_envelope():
     restored = LiteAState.restore(envelope)
     assert restored.cursors.last_fit_cutoff == "2026-09-08T00:00:00+00:00"
     assert restored.snapshot()["sha256"] == envelope["sha256"]
+
+
+# --------------------------------------------------------------------------- #
+# Service lifecycle: recording must not depend on scoring, and an undelivered
+# decision must not stop the service forever.
+
+
+class FailingStore:
+    """Commits fail until `fail` is cleared."""
+
+    def __init__(self) -> None:
+        self.fail = True
+        self.committed: list[str] = []
+
+    def commit(self, row, checkpoint):
+        if self.fail:
+            raise RuntimeError("transport down")
+        self.committed.append(row["target_open_utc"])
+        return {"ok": True}
+
+
+def _worker(tmp_path: Path, store, head_cutoff: datetime | None = None):
+    from src.litea.heads import DailyHeadStore
+    from src.litea.worker import LiteAWorker
+
+    heads = DailyHeadStore(tmp_path / "heads")
+    if head_cutoff is not None:
+        heads.install(make_head(head_cutoff))
+    return LiteAWorker(
+        packet_source=FakePackets({}, ()),
+        store=store,
+        heads=heads,
+        state=LiteAState(),
+        state_path=tmp_path / "state.json",
+        ticker_resolver=object(),
+        feeds=object(),
+    )
+
+
+def test_expired_head_still_records_so_a_new_head_can_ever_be_fitted(tmp_path: Path):
+    # An August head on a September day: scoring is blocked, but the scheduler
+    # stays armed, which is what lets the midnight row be recorded at all.
+    worker = _worker(tmp_path, FailingStore(), datetime(2026, 8, 31, tzinfo=timezone.utc))
+    at = datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc)
+    assert worker.scoring_readiness(at)[0] == "BLOCKED"
+    assert worker.evaluate_readiness(at)[0] == "RECORDING_ONLY"
+    assert worker.recording_blockers() == []
+
+
+def test_undelivered_decision_is_queued_and_drains_without_a_boundary(tmp_path: Path):
+    store = FailingStore()
+    worker = _worker(tmp_path, store)
+    first = {"target_open_utc": "2026-09-10T00:00:00+00:00"}
+    second = {"target_open_utc": "2026-09-10T00:15:00+00:00"}
+
+    assert worker._commit(first, {})["ok"] is False
+    # The next target is still recorded rather than blocked by the failure.
+    assert worker._commit(second, {})["ok"] is False
+    assert len(worker.pending_targets()) == 2
+
+    store.fail = False
+    outcome = worker.reconcile_pending()
+    assert outcome["ok"] and outcome["delivered"] == 2
+    # Delivered in target order, and the cursor lands on the later target.
+    assert store.committed == [first["target_open_utc"], second["target_open_utc"]]
+    assert worker.state.cursors.last_committed_target == second["target_open_utc"]
+    assert worker.pending_targets() == []
+
+
+def test_a_late_delivery_never_rewinds_the_committed_cursor(tmp_path: Path):
+    store = FailingStore()
+    worker = _worker(tmp_path, store)
+    worker.state.cursors.last_committed_target = "2026-09-10T02:00:00+00:00"
+    store.fail = False
+    worker._commit({"target_open_utc": "2026-09-10T00:00:00+00:00"}, {})
+    worker.reconcile_pending()
+    assert worker.state.cursors.last_committed_target == "2026-09-10T02:00:00+00:00"
