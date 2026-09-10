@@ -391,6 +391,33 @@ export function LiteACard({
         )}
       </section>
 
+      {daily.length > 0 ? (
+        <section>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Daily net · last {daily.length} {daily.length === 1 ? "day" : "days"}
+            </span>
+            <span className="h-px flex-1 bg-gradient-to-r from-signal-orange/40 via-steel/20 to-transparent" />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {daily.map((d) => (
+              <span
+                key={String(d.date)}
+                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
+                  Number(d.net_units) >= 0
+                    ? "border-bull/30 text-bull"
+                    : "border-bear/30 text-bear"
+                }`}
+              >
+                {String(d.date).slice(5)} {Number(d.net_units) > 0 ? "+" : ""}
+                {Number(d.net_units).toFixed(2)}
+                {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {Number(stats?.research_rows ?? 0) > 0 ? (
         <p className="text-[11px] text-muted-foreground">
           {Number(stats.research_rows) === 1
