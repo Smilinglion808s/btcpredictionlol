@@ -266,12 +266,56 @@ def refit_check(reference: Path) -> dict:
     if produced is None:
         return {"status": "INELIGIBLE", "fit_cutoff": expected["fit_cutoff"]}
     differences = sorted(k for k in expected if canonical(produced.get(k)) != canonical(expected[k]))
+
+    # Row selection, weighting and solver behaviour must agree EXACTLY. The
+    # fitted arrays are compared numerically instead, because the only feature
+    # source shipped in the audit package is a CSV: a float64 text round trip
+    # perturbs the inputs at the last bit, which propagates into the fitted
+    # parameters. A deviation above the ULP scale would be a protocol defect,
+    # not a formatting artefact.
+    import numpy as np
+
+    deltas = {}
+    for key in ("imputation", "center", "scale", "coefficient"):
+        got = np.asarray(produced[key], dtype=float)
+        want = np.asarray(expected[key], dtype=float)
+        absolute = np.abs(got - want)
+        relative = absolute / np.maximum(np.abs(want), 1e-12)
+        deltas[key] = {"max_abs": float(absolute.max()), "max_rel": float(relative.max())}
+    intercept_delta = abs(produced["intercept"] - expected["intercept"])
+    deltas["intercept"] = {
+        "max_abs": intercept_delta,
+        "max_rel": intercept_delta / max(abs(expected["intercept"]), 1e-12),
+    }
+    worst_rel = max(d["max_rel"] for d in deltas.values())
+
+    exact_fields = [
+        "feature_order",
+        "fit_cutoff",
+        "train_rows",
+        "train_start",
+        "train_end",
+        "max_train_settlement",
+        "valid_until_exclusive",
+        "parameters",
+        "iterations",
+        "model",
+    ]
+    exact_mismatches = [
+        k for k in exact_fields if canonical(produced.get(k)) != canonical(expected.get(k))
+    ]
     return {
         "status": "COMPARED",
         "fit_cutoff": expected["fit_cutoff"],
         "train_rows": produced["train_rows"],
-        "identical": not differences,
+        "train_start": produced["train_start"],
+        "train_end": produced["train_end"],
+        "bit_identical": not differences,
         "differing_fields": differences,
+        "exact_field_mismatches": exact_mismatches,
+        "parameter_deltas": deltas,
+        "worst_relative_delta": worst_rel,
+        "within_float_tolerance": worst_rel < 1e-11,
     }
 
 
