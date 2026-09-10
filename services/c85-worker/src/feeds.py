@@ -1103,6 +1103,10 @@ class KalshiStrikeCollector:
     #: LATE the venue actually was, instead of silently reporting nothing.
     TAIL_MS = 20_000
 
+    #: Which official retrieval path this instance is. Both ask the venue for
+    #: the same contract; neither is a substitute source.
+    PATH = "primary"
+
     def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
                  poll_s: float = 0.25) -> None:
         self.buffer = buffer
@@ -1111,8 +1115,13 @@ class KalshiStrikeCollector:
         self.poll_s = poll_s
 
     def _has_strike(self, target_ms: int) -> bool:
-        record = self.buffer.markets.get(target_ms)
-        return bool(record and record.get("floor_strike") is not None)
+        """Has THIS path already got a usable strike for the target?
+
+        Per path, so a primary that is failing does not stop the backup from
+        asking, and a backup success does not silence the primary.
+        """
+        record = (self.buffer.sources.get(target_ms) or {}).get(self.PATH)
+        return MarketBuffer._usable(record)
 
     def ticker_for(self, target_ms: int) -> str:
         import datetime as _dt
@@ -1137,13 +1146,31 @@ class KalshiStrikeCollector:
             return "zero"
         return "finite" if value > 0 else "negative"
 
+    def request_url(self, ticker: str) -> str:
+        """The venue's single-market endpoint."""
+        return f"{self.base}/markets/{ticker}"
+
+    def extract(self, payload: dict[str, Any], ticker: str) -> dict[str, Any] | None:
+        """The one market this request asked about, or None."""
+        market = payload.get("market")
+        return market or None
+
     async def _poll_once(self, client: httpx.AsyncClient, target_ms: int) -> None:
         import datetime as _dt
 
         ticker = self.ticker_for(target_ms)
+        url = self.request_url(ticker)
+        # The two paths share ONE venue budget: a backup poll can never be used
+        # to out-run a refusal the venue already published.
+        await LIMITER.acquire(url)
         started = now_ns()
-        response = await client.get(f"{self.base}/markets/{ticker}")
+        try:
+            response = await client.get(url)
+        except Exception as exc:  # noqa: BLE001
+            LIMITER.note(url, None, exc)
+            raise
         receipt = now_ns()
+        LIMITER.note(url, response)
         self.buffer.note_poll(receipt)
 
         def note(kind: str, **extra: Any) -> None:
@@ -1153,6 +1180,7 @@ class KalshiStrikeCollector:
                     "poll_started_ns": started,
                     "receipt_ns": receipt,
                     "ticker": ticker,
+                    "path": self.PATH,
                     "kind": kind,
                     **extra,
                 },
@@ -1164,7 +1192,15 @@ class KalshiStrikeCollector:
         if response.status_code >= 400:
             note("http_error", http_status=response.status_code)
         response.raise_for_status()
-        market = response.json().get("market") or {}
+        market = self.extract(response.json() or {}, ticker) or {}
+        if not market:
+            note("no_market_in_response", http_status=response.status_code)
+            return
+        # The response must be about the contract we asked for.
+        served = market.get("ticker")
+        if served and str(served) != ticker:
+            note("ticker_mismatch", served_ticker=str(served))
+            return
         open_time = market.get("open_time")
         close_time = market.get("close_time")
         strike_state = self._strike_state(market.get("floor_strike"))
@@ -1197,8 +1233,25 @@ class KalshiStrikeCollector:
                 "status": market.get("status"),
                 "receipt_ns": receipt,
             },
+            source=self.PATH,
         )
 
+    def _publish_transport(self, error: str | None) -> None:
+        """Feed-level transport health across BOTH official paths.
+
+        One path failing while the other is serving the same official record is
+        not a dead source, so the buffer is only marked in error when no path
+        is currently succeeding.
+        """
+        self.buffer.path_errors[self.PATH] = error
+        if error is None:
+            self.buffer.connected_since_ns = self.buffer.connected_since_ns or now_ns()
+            self.buffer.transport = "rest"
+        errors = self.buffer.path_errors
+        live = [name for name, err in errors.items() if err is None]
+        self.buffer.error = None if live else "; ".join(
+            f"{name}: {err}" for name, err in sorted(errors.items()) if err
+        ) or None
 
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -1221,18 +1274,39 @@ class KalshiStrikeCollector:
 
                 try:
                     await self._poll_once(client, target_ms)
-                    self.buffer.connected_since_ns = (
-                        self.buffer.connected_since_ns or now_ns()
-                    )
-                    self.buffer.transport = "rest"
-                    self.buffer.error = None
+                    self._publish_transport(None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    self.buffer.error = f"{type(exc).__name__}: {exc}"
+                    self._publish_transport(f"{type(exc).__name__}: {exc}")
                 # Rapid only around the open itself; a keepalive otherwise.
                 rapid = offset < self.TAIL_MS or offset >= self.INTERVAL_MS - self.LEAD_MS
                 await asyncio.sleep(self.poll_s if rapid else 20.0)
+
+
+class KalshiStrikeBackupCollector(KalshiStrikeCollector):
+    """The SECOND official path to the SAME contract's own strike.
+
+    Version 1 needs the venue's `floor_strike` before the freeze, and a single
+    endpoint occasionally answers without one. Kalshi's documented list
+    endpoint accepts an exact `tickers` filter and returns the same
+    `floor_strike` field, so this path asks for exactly the target's contract —
+    no `status=open` lag, no series scan, no derived or borrowed value. It runs
+    concurrently with the primary and is only ever consulted when the primary
+    has no usable strike received by the freeze.
+    """
+
+    PATH = "backup"
+
+    def request_url(self, ticker: str) -> str:
+        return f"{self.base}/markets?tickers={urllib.parse.quote(ticker)}"
+
+    def extract(self, payload: dict[str, Any], ticker: str) -> dict[str, Any] | None:
+        for market in payload.get("markets") or []:
+            if str(market.get("ticker")) == ticker:
+                return market
+        return None
+
 
 
 
