@@ -541,21 +541,26 @@ export async function deliverWebhookNow(
   const t0 = Date.now();
   const first = await Promise.all(
     endpoints.map(async (ep, i) => {
+      const blank = {
+        ep,
+        i,
+        status: null as number | null,
+        ok: false,
+        resBody: null as string | null,
+        error: null as string | null,
+        cancelled: false,
+      };
+      // Immediately before the transport, not merely at intake.
+      if (!(await allowed())) return { ...blank, cancelled: true, error: "cancelled_before_send" };
       try {
         const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
-        return { ep, i, status: r.status, ok: r.ok, resBody: r.body, error: null as string | null };
+        return { ...blank, status: r.status, ok: r.ok, resBody: r.body };
       } catch (e) {
-        return {
-          ep,
-          i,
-          status: null as number | null,
-          ok: false,
-          resBody: null as string | null,
-          error: e instanceof Error ? e.message : String(e),
-        };
+        return { ...blank, error: e instanceof Error ? e.message : String(e) };
       }
     }),
   );
+
   const latencyMs = Date.now() - t0;
   const delivered = first.filter((r) => r.ok).length;
 
