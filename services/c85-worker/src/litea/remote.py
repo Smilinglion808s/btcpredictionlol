@@ -38,7 +38,7 @@ class RemoteArtifacts:
         self.root = Path(root)
 
     # -- transfer --------------------------------------------------------------
-    def _get(self, key: str, *, required: bool = False) -> bytes | None:
+    def _get(self, key: str, *, required: bool = False, bust: int = 0) -> bytes | None:
         """Absent and broken are DIFFERENT.
 
         An object the manifest lists is required: if the backend refuses, the
@@ -63,7 +63,7 @@ class RemoteArtifacts:
             # would silently rewind the serving position, so every read is
             # explicitly uncached.
             response = httpx.get(
-                url,
+                url + (f"&cb={bust}" if bust else ""),
                 timeout=120.0,
                 follow_redirects=True,
                 headers={"cache-control": "no-cache", "pragma": "no-cache"},
@@ -101,7 +101,7 @@ class RemoteArtifacts:
         body: bytes | None = None
         actual = ""
         for attempt in range(6):
-            body = self._get(key, required=expected is not None)
+            body = self._get(key, required=expected is not None, bust=attempt)
             if body is None:
                 return False
             actual = _sha256(body)
