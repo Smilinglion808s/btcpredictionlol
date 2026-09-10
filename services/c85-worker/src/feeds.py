@@ -973,11 +973,13 @@ class KalshiStrikeCollector:
                 elif offset < self.TAIL_MS and not self._has_strike(current_ms):
                     target_ms = current_ms        # the boundary just opened
                 else:
-                    wait_ms = self.INTERVAL_MS - self.LEAD_MS - offset
-                    if wait_ms <= 0:
-                        wait_ms = self.INTERVAL_MS - offset
-                    await asyncio.sleep(max(0.2, wait_ms / 1000))
-                    continue
+                    # MEASURED: sleeping between boundaries let this feed age
+                    # past its freshness budget, so readiness reported a stale
+                    # market source for most of every interval. A slow keepalive
+                    # poll of the CURRENT contract keeps the watermark honest —
+                    # it is a real received record, not a freshness assertion.
+                    target_ms = current_ms
+
                 try:
                     await self._poll_once(client, target_ms)
                     self.buffer.connected_since_ns = (
