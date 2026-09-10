@@ -335,45 +335,77 @@ export async function dispatchLiteaDecision(
 
 type MinimalClient = {
   from: (table: string) => any;
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: any; error: any }>;
 };
+
+/** The claim RPC prepared in supabase/prepared/. NOT applied in production yet. */
+export const LITEA_CLAIM_RPC = "c85_litea_claim_outbox";
+
+const CLAIM_OUTCOMES: ReadonlySet<string> = new Set([
+  "CLAIMED",
+  "HELD_BY_OTHER",
+  "ALREADY_SENT",
+  "TERMINAL",
+  "AMBIGUOUS",
+  "UNAVAILABLE",
+]);
 
 /** Supabase-backed deps. The tests never use this — they inject a fake. */
 export function supabaseLiteaDispatchDeps(
   supabase: MinimalClient,
-  deliver: (payload: Record<string, unknown>) => Promise<{ delivered: number }>,
+  deliver: (
+    payload: Record<string, unknown>,
+    guard: () => Promise<boolean>,
+  ) => Promise<{ delivered: number }>,
 ): LiteADispatchDeps {
   return {
     now: () => Date.now(),
     deliver,
-    async reserve(entry) {
-      const { error } = await supabase.from(C85_OUTBOX_TABLE).insert({
-        dedupe_key: entry.dedupeKey,
-        target_id: entry.targetId,
-        payload: entry.payload,
-        state: "PENDING",
-        expires_at: entry.expiresAt,
+    async claim(entry) {
+      // One atomic durable statement decides ownership. Anything unexpected —
+      // including the RPC not being installed — is treated as "not ours", so
+      // nothing is delivered.
+      const { data, error } = await supabase.rpc(LITEA_CLAIM_RPC, {
+        p_dedupe_key: entry.dedupeKey,
+        p_owner: entry.owner,
+        p_target_id: entry.targetId,
+        p_payload: entry.payload,
+        p_expires_at: entry.expiresAt,
       });
-      if (error && !String(error.message).includes("duplicate key")) {
-        throw new Error(`litea_reserve_outbox:${error.message}`);
-      }
-      if (!error) return { state: "PENDING" };
-      // Already reserved by an earlier attempt: reuse it, never take a second.
-      const { data } = await supabase
+      if (error) return { outcome: "UNAVAILABLE" };
+      const outcome = String((data as { outcome?: string } | null)?.outcome ?? "UNAVAILABLE");
+      return {
+        outcome: (CLAIM_OUTCOMES.has(outcome) ? outcome : "UNAVAILABLE") as LiteAClaimOutcome,
+      };
+    },
+    async ownsClaim(dedupeKey, owner) {
+      const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
-        .select("state")
-        .eq("dedupe_key", entry.dedupeKey)
+        .select("state,claim_owner,claim_expires_at")
+        .eq("dedupe_key", dedupeKey)
         .maybeSingle();
-      return { state: String((data as { state?: string } | null)?.state ?? "PENDING") };
+      if (error || !data) return false;
+      const row = data as {
+        state?: string;
+        claim_owner?: string;
+        claim_expires_at?: string;
+      };
+      if (row.state !== "PENDING" || row.claim_owner !== owner) return false;
+      const until = new Date(String(row.claim_expires_at)).getTime();
+      return Number.isFinite(until) && until > Date.now();
     },
     async settle(entry) {
+      // Only the owner may write the terminal state.
       await supabase
         .from(C85_OUTBOX_TABLE)
         .update({
           state: entry.status,
           sent_at: entry.status === "SENT" ? new Date().toISOString() : null,
           last_error: entry.error,
+          claim_owner: null,
         })
-        .eq("dedupe_key", entry.dedupeKey);
+        .eq("dedupe_key", entry.dedupeKey)
+        .eq("claim_owner", entry.owner);
       if (entry.targetId) {
         await supabase
           .from(C85_TARGETS_TABLE)
@@ -386,5 +418,6 @@ export function supabaseLiteaDispatchDeps(
           .eq("id", entry.targetId);
       }
     },
+
   };
 }
