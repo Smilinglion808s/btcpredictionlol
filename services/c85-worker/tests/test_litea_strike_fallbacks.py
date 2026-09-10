@@ -208,9 +208,9 @@ def test_a_window_for_a_different_boundary_is_not_this_targets_average():
         "68000.23", window_size=60, window_start_ms=other - 60_000,
         window_end_ms=other, receipt_ns=1,
     )
-    assert buffer.boundary_reference(TARGET_MS, FREEZE_NS)["method"] != (
-        "venue_60s_final_average"
-    )
+    candidate = buffer.boundary_reference(TARGET_MS, FREEZE_NS)
+    assert candidate.get("method") != "venue_60s_final_average"
+    assert candidate["usable"] is False
 
 
 # --------------------------------------------------------------------------- #
