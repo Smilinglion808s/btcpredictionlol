@@ -100,15 +100,15 @@ class RemoteArtifacts:
         # time before it is treated as a real mismatch and raised.
         body: bytes | None = None
         actual = ""
-        for attempt in range(6):
+        for attempt in range(10):
             body = self._get(key, required=expected is not None, bust=attempt)
             if body is None:
                 return False
             actual = _sha256(body)
             if not expected or actual == expected:
                 break
-            if attempt < 5:
-                time.sleep(2.0 * (attempt + 1))
+            if attempt < 9:
+                time.sleep(min(15.0, 3.0 * (attempt + 1)))
         if body is None:
             return False
         if expected and actual != expected:
