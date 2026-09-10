@@ -98,31 +98,48 @@ def test_paths_hit_distinct_documented_endpoints():
 
 
 def test_both_paths_run_concurrently():
-    """A slow answer on one path must not serialise the other."""
+    """A slow answer on one path must not hold the other one up.
+
+    The venue's shared minimum spacing still applies between requests — that
+    is the rate limit, not a dependency — but the two paths overlap in flight
+    and the quick one finishes while the slow one is still waiting.
+    """
     buffer = MarketBuffer("kalshi_markets")
     primary, backup = _collectors(buffer)
     ticker = primary.ticker_for(TARGET_MS)
+    finished: list[str] = []
 
     async def handler(url: str):
-        await asyncio.sleep(0.05)
         if "tickers=" in url:
+            await asyncio.sleep(0.05)
             return FakeResponse({"markets": [_market(ticker, 77_000.5)]})
+        await asyncio.sleep(2.0)  # primary is slow
         return FakeResponse({"market": _market(ticker, 77_000.5)})
 
     client = FakeClient(handler)
 
     async def run():
+        async def poll(name, collector):
+            await collector._poll_once(client, TARGET_MS)
+            finished.append(name)
+
         started = time.monotonic()
-        await asyncio.gather(
-            primary._poll_once(client, TARGET_MS),
-            backup._poll_once(client, TARGET_MS),
-        )
-        return time.monotonic() - started
+        tasks = [
+            asyncio.create_task(poll("primary", primary)),
+            asyncio.create_task(poll("backup", backup)),
+        ]
+        await asyncio.wait(tasks, timeout=1.5)
+        elapsed = time.monotonic() - started
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return elapsed
 
     elapsed = asyncio.run(run())
     assert client.max_in_flight == 2, "the two official paths did not overlap"
-    assert elapsed < 0.09
-    assert set(buffer.sources[TARGET_MS]) == {"primary", "backup"}
+    assert finished == ["backup"], "the backup waited on the slow primary"
+    assert elapsed < 1.5
+    assert MarketBuffer._usable(buffer.sources[TARGET_MS]["backup"])
 
 
 def test_primary_is_preferred_when_both_are_usable():
