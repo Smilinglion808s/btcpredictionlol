@@ -159,19 +159,48 @@ export function liteaPayloadFromRecord(row: LiteADecisionRecord) {
   });
 }
 
+/**
+ * Outcome of the exclusive durable claim on one event identity.
+ *
+ * Only `CLAIMED` entitles the caller to deliver. Merely observing a PENDING
+ * row does not: a competing request that finds a live claim held by someone
+ * else, a terminal entry, or an ambiguous one (a claim that lapsed after an
+ * attempt may already have reached the bot) gets no attempt at all.
+ */
+export type LiteAClaimOutcome =
+  | "CLAIMED"
+  | "HELD_BY_OTHER"
+  | "ALREADY_SENT"
+  | "TERMINAL"
+  | "AMBIGUOUS"
+  | "UNAVAILABLE";
+
 /** Everything this path touches, injectable so tests use an in-process receiver. */
 export interface LiteADispatchDeps {
-  /** Idempotent on `dedupe_key`. Returns the entry's current state. */
-  reserve(entry: {
+  /**
+   * Atomically create-or-take the exclusive claim for `dedupeKey`. Must be a
+   * single durable operation: two concurrent callers cannot both get CLAIMED.
+   */
+  claim(entry: {
     dedupeKey: string;
+    owner: string;
     targetId: string | null;
     payload: Record<string, unknown>;
     expiresAt: string;
-  }): Promise<{ state: string }>;
-  /** Existing transport. Returns how many endpoints accepted. */
-  deliver(payload: Record<string, unknown>): Promise<{ delivered: number }>;
+  }): Promise<{ outcome: LiteAClaimOutcome }>;
+  /** True only while THIS owner still holds an unexpired claim on the key. */
+  ownsClaim(dedupeKey: string, owner: string): Promise<boolean>;
+  /**
+   * Existing transport. `guard` is re-evaluated immediately before every real
+   * attempt (first and retries); false cancels that attempt.
+   */
+  deliver(
+    payload: Record<string, unknown>,
+    guard: () => Promise<boolean>,
+  ): Promise<{ delivered: number }>;
   settle(entry: {
     dedupeKey: string;
+    owner: string;
     targetId: string | null;
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
@@ -181,17 +210,23 @@ export interface LiteADispatchDeps {
 }
 
 export interface LiteADispatchResult {
-  verdict: LiteADispatchVerdict | "SENT" | "FAILED";
+  verdict: LiteADispatchVerdict | "SENT" | "FAILED" | "NOT_CLAIM_OWNER";
   dedupeKey: string | null;
+  claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
 }
 
+/** A per-request owner id; never reused across attempts. */
+export function newDispatchOwner(): string {
+  return `litea-dispatch-${globalThis.crypto.randomUUID()}`;
+}
+
 /**
- * Durable reservation first, then send, then record the outcome — in that
+ * Exclusive durable claim first, then send, then record the outcome — in that
  * order, so a crash leaves a replayable entry rather than an untracked signal.
- * A retry reuses the same event identity and takes NO new reservation, and the
- * ceiling is re-checked immediately before the send.
+ * A retry reuses the same event identity and takes NO new claim, and both the
+ * ceiling and claim ownership are re-checked immediately before every attempt.
  *
  * Dedupe here cannot promise exactly-once broker fills. It guarantees at most
  * one outbound signal per interval from this system; the external bot must
@@ -206,6 +241,7 @@ export async function dispatchLiteaDecision(
     allowedModels: ReadonlySet<string>;
     transportDeadlineMs: number;
     alreadySent?: boolean;
+    owner?: string;
   },
 ): Promise<LiteADispatchResult> {
   const intake = evaluateLiteaDispatch(row, {
@@ -223,14 +259,22 @@ export async function dispatchLiteaDecision(
   const dedupeKey = liteaDedupeKey(ticker, targetOpenIso);
   const expiresAt = new Date(openMs + args.transportDeadlineMs).toISOString();
   const payload = liteaPayloadFromRecord(row);
+  const owner = args.owner ?? newDispatchOwner();
 
-  const reserved = await deps.reserve({
+  const claimed = await deps.claim({
     dedupeKey,
+    owner,
     targetId: args.targetId,
     payload,
     expiresAt,
   });
-  if (reserved.state === "SENT") return { verdict: "ALREADY_SENT", dedupeKey };
+  if (claimed.outcome === "ALREADY_SENT") {
+    return { verdict: "ALREADY_SENT", dedupeKey, claim: claimed.outcome };
+  }
+  if (claimed.outcome !== "CLAIMED") {
+    return { verdict: "NOT_CLAIM_OWNER", dedupeKey, claim: claimed.outcome };
+  }
+
 
   // Re-check the ceiling with the clock as it is NOW, after the durable write.
   const preSend = evaluateLiteaDispatch(row, {
