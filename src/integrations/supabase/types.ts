@@ -3690,6 +3690,9 @@ export type Database = {
       c85_outbox: {
         Row: {
           attempts: number
+          claim_expires_at: string | null
+          claim_owner: string | null
+          claimed_at: string | null
           created_at: string
           dedupe_key: string
           expires_at: string
@@ -3705,6 +3708,9 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          claim_expires_at?: string | null
+          claim_owner?: string | null
+          claimed_at?: string | null
           created_at?: string
           dedupe_key: string
           expires_at: string
@@ -3720,6 +3726,9 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          claim_expires_at?: string | null
+          claim_owner?: string | null
+          claimed_at?: string | null
           created_at?: string
           dedupe_key?: string
           expires_at?: string
@@ -12187,6 +12196,16 @@ export type Database = {
           p_checkpoint?: Json
           p_model_version: string
           p_settlement_ids: string[]
+        }
+        Returns: Json
+      }
+      c85_litea_claim_outbox: {
+        Args: {
+          p_dedupe_key: string
+          p_expires_at: string
+          p_owner: string
+          p_payload: Json
+          p_target_id: string
         }
         Returns: Json
       }
