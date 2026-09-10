@@ -355,15 +355,17 @@ export async function runC85Op(
         }
         const dispatch = await dispatchLiteaDecision(
           supabaseLiteaDispatchDeps(supabase, async (payload, guard) => {
-            const delivery = await deliverWebhookNow(
-              supabase,
-              "prediction.created",
-              payload,
+            // Exactly ONE automatic attempt per configured endpoint. `settle`
+            // here is logging and endpoint bookkeeping only: with
+            // maxAttempts 1 it cannot schedule a Version 1 retransmission.
+            const delivery = await deliverWebhookNow(supabase, "prediction.created", payload, {
               guard,
-            );
+              maxAttempts: 1,
+            });
             void delivery.settle;
             return { delivered: delivery.delivered };
           }),
+
           persisted as LiteADecisionRecord,
           {
             targetId,

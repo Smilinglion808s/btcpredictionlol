@@ -71,10 +71,15 @@ function harness(opts: { failFirst?: boolean; ambiguous?: boolean } = {}) {
       return { delivered: 1 };
     },
     async settle(entry) {
+      // Conditional on owner AND still-PENDING, and the caller is told
+      // whether anything was actually amended.
       const row = rows.get(entry.dedupeKey);
-      if (!row || row.owner !== entry.owner) return; // only the owner settles
+      if (!row || row.owner !== entry.owner || row.state !== "PENDING") {
+        return { applied: false };
+      }
       row.state = entry.status;
       row.owner = null;
+      return { applied: true };
     },
   };
 
@@ -162,6 +167,41 @@ describe("Version 1 duplicate-send protection", () => {
       },
     };
     const out = await dispatchLiteaDecision(deps, row, ON);
+    expect(out.verdict).toBe("FAILED");
+    expect(h.received).toHaveLength(0);
+  });
+
+  it("re-checks clock and switch AFTER the awaited ownership read", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const h = harness();
+    const row = liveRow(Date.now() - 6_000);
+    // The ownership read is the only awaited gap before transport. While it is
+    // in flight the ceiling lapses AND the switch is turned off; both must be
+    // observed by the check that follows the await, not by a stale verdict.
+    const deps: LiteADispatchDeps = {
+      ...h.deps,
+      async ownsClaim(key, owner) {
+        const owns = await h.deps.ownsClaim(key, owner);
+        h.advance(5_000); // now well past the 8000 ms ceiling
+        delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
+        return owns;
+      },
+    };
+    const out = await dispatchLiteaDecision(deps, row, ON);
+    expect(out.verdict).toBe("FAILED");
+    expect(h.received).toHaveLength(0);
+  });
+
+  it("fails closed when the ownership read itself errors", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const h = harness();
+    const deps: LiteADispatchDeps = {
+      ...h.deps,
+      ownsClaim: async () => {
+        throw new Error("db unreachable");
+      },
+    };
+    const out = await dispatchLiteaDecision(deps, liveRow(Date.now() - 6_000), ON);
     expect(out.verdict).toBe("FAILED");
     expect(h.received).toHaveLength(0);
   });

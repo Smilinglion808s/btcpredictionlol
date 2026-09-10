@@ -39,24 +39,46 @@ the Version 1 suites, plus one pre-existing unrelated strike-policy failure
 (`test_non_finite_value_is_left_to_the_fitted_imputation`) that this release does
 not touch.
 
-## NOT ready — do not treat as activation-ready
+## Duplicate-send protection — resolved in software, still not activation-ready
 
-The dispatch path delivered under `9c711e...` remains default-OFF and unwired,
-and these defects are unresolved:
+The three defects reported against `9c711e...` are fixed in the current source.
+They were:
 
-1. **Duplicate `PENDING` on reserve.** `dispatch.reserve` returns `PENDING` for a
-   duplicate, and both callers can then proceed to deliver. This is not a
-   single-delivery guarantee.
-2. **Delivery uses the incoming body.** The ops path passes `body.target` rather
-   than re-reading the persisted row after the idempotent commit, so what is sent
-   is not provably what was durably recorded.
-3. **Unchecked retry.** The retry loop in `deliverWebhookNow` does not re-check
-   the Version 1 switch or the transport deadline before the POST, so a retry can
-   fire after the control has been turned off.
+1. **Duplicate `PENDING` on reserve** — replaced by an exclusive atomic claim.
+   Only `CLAIMED` entitles a caller to deliver; a competing caller gets
+   `HELD_BY_OTHER`, `ALREADY_SENT`, `TERMINAL`, `AMBIGUOUS` or `UNAVAILABLE`
+   and makes no attempt. A lapsed claim on a row that already had an attempt is
+   `AMBIGUOUS` and is never re-granted.
+2. **Delivery used the incoming body** — the payload is now rebuilt only from
+   the committed row, re-read by the returned target id under the exact model
+   identity. An altered replay body cannot change the destination signal.
+3. **Unchecked retry** — the Version 1 path now makes exactly **one** automatic
+   attempt per configured endpoint (`maxAttempts: 1`): no background resend for
+   any response, timeout, exception or cancellation. Legacy callers keep their
+   backoff behaviour. Immediately before that attempt, claim ownership is read
+   first and then the kill switch, allow-list and original (never extended)
+   ceiling are evaluated with nothing awaited in between; ownership errors fail
+   closed. The terminal write is conditional on owner AND `PENDING`, and its
+   affected rows are inspected before the version-scoped target row is amended.
+
+What this is and is not: one exclusive dispatch operation per event identity,
+and at most one attempt per configured endpoint. It is **not** a claim of a
+single global signal when several endpoints are configured, and **not**
+exactly-once broker execution — the bot must honour `dedupe_key` itself.
+
+Still not activation-ready: both human controls remain absent/false, nothing is
+deployed, and the claim RPC migration is **prepared but not applied** in
+`supabase/prepared/20260910_litea_outbox_exclusive_claim.sql`. Until it is
+applied the claim returns `UNAVAILABLE` and nothing is ever delivered. The SQL
+was exercised on a disposable local PostgreSQL 17.9 instance (create/compete/
+re-entrant/lapsed/terminal outcomes plus two genuinely concurrent sessions on
+one key returning `CLAIMED` + `HELD_BY_OTHER`); it has NOT been run against
+production.
 
 Also unresolved / unknown: the destination bot's fill, fee, order-ID and P&L
 capabilities are unknown; bid/ask/depth are unavailable. Measured publication
 sits at roughly 5.7–6.1s after the target opens.
+
 
 ## Standing constraints observed by this release
 

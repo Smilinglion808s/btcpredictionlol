@@ -36,12 +36,16 @@ const outboxRequest = {
  * Minimal in-memory stand-in for the service client. Records every write and
  * serves the COMMITTED row back — that is what the dispatch path must use.
  */
-function fakeDb(persisted?: Record<string, unknown> | null) {
+function fakeDb(
+  persisted?: Record<string, unknown> | null,
+  opts: { ownerUpdateMatches?: boolean } = {},
+) {
   const rpcCalls: any[] = [];
   const writes: Record<string, any[]> = {};
   const record = (table: string, op: string, value: unknown) => {
     (writes[table] ??= []).push({ op, value });
   };
+  const matched = opts.ownerUpdateMatches !== false;
   const client: any = {
     rpc: async (name: string, args: any) => {
       rpcCalls.push({ name, args });
@@ -61,6 +65,11 @@ function fakeDb(persisted?: Record<string, unknown> | null) {
           record(table, "update", value);
           const eq: any = () => eq;
           eq.eq = eq;
+          // The owner-and-PENDING conditional write reports affected rows.
+          eq.select = async () => ({
+            data: matched ? [{ dedupe_key: "fake-key" }] : [],
+            error: null,
+          });
           // Awaitable at any depth of `.eq()` chaining.
           eq.then = (resolve: any) => resolve({ error: null });
           return eq;
@@ -78,6 +87,7 @@ function fakeDb(persisted?: Record<string, unknown> | null) {
   };
   return { client, rpcCalls, writes };
 }
+
 
 afterEach(() => {
   delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
@@ -135,6 +145,22 @@ describe("decision.commit for Version 1", () => {
     expect(String(claims[0].value.p_owner)).toContain("litea-dispatch-");
     // No endpoint exists in this fake, so nothing was accepted anywhere.
     expect(out.result.dispatch).toBe("FAILED");
+  });
+
+  it("does not amend the target when the owner-conditional settle matches nothing", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const fresh = { ...admittedTarget, target_open_utc: new Date(Date.now() - 6_000).toISOString() };
+    const db = fakeDb(fresh, { ownerUpdateMatches: false });
+    const out = await runC85Op(
+      db.client,
+      "c85-worker-amsterdam-1",
+      { op: "decision.commit", target: fresh, checkpoint: null, outbox: outboxRequest } as any,
+      LITE_A_MODEL_VERSION,
+    );
+    // The claim was lost: nothing is recorded as ours and the version-scoped
+    // target row is never marked sent on our behalf.
+    expect(out.result.dispatch).toBe("OWNER_LOST");
+    expect(db.writes["c85_targets"] ?? []).toHaveLength(0);
   });
 
   it("delivers from the committed record, never from an altered replay body", async () => {

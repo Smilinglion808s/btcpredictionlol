@@ -194,13 +194,19 @@ export interface LiteADispatchDeps {
   isEnabledNow?(): boolean;
   allowedNow?(): ReadonlySet<string>;
   /**
-   * Existing transport. `guard` is re-evaluated immediately before every real
-   * attempt (first and retries); false cancels that attempt.
+   * Existing transport. `guard` is re-evaluated immediately before the single
+   * attempt this path allows per configured endpoint; false cancels it. No
+   * Version 1 response, timeout, exception or cancellation is ever resent.
    */
   deliver(
     payload: Record<string, unknown>,
     guard: () => Promise<boolean>,
   ): Promise<{ delivered: number }>;
+  /**
+   * Terminal write, conditional on this owner AND a still-PENDING row.
+   * `applied` is false when the condition matched nothing or the write errored;
+   * the caller must then NOT treat the signal as recorded-sent.
+   */
   settle(entry: {
     dedupeKey: string;
     owner: string;
@@ -208,16 +214,24 @@ export interface LiteADispatchDeps {
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
     publicationOffsetMs: number | null;
-  }): Promise<void>;
+  }): Promise<{ applied: boolean }>;
   now(): number;
 }
 
+
 export interface LiteADispatchResult {
-  verdict: LiteADispatchVerdict | "SENT" | "FAILED" | "NOT_CLAIM_OWNER";
+  verdict:
+    | LiteADispatchVerdict
+    | "SENT"
+    | "FAILED"
+    | "NOT_CLAIM_OWNER"
+    | "OWNER_LOST";
   dedupeKey: string | null;
   claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
+  /** False when the owner-and-PENDING conditional terminal write matched nothing. */
+  settled?: boolean;
 }
 
 /** A per-request owner id; never reused across attempts. */
@@ -226,15 +240,18 @@ export function newDispatchOwner(): string {
 }
 
 /**
- * Exclusive durable claim first, then send, then record the outcome — in that
- * order, so a crash leaves a replayable entry rather than an untracked signal.
- * A retry reuses the same event identity and takes NO new claim, and both the
- * ceiling and claim ownership are re-checked immediately before every attempt.
+ * Exclusive durable claim first, then ONE attempt per configured endpoint,
+ * then the conditional terminal write — in that order, so a crash leaves an
+ * inspectable entry rather than an untracked signal.
  *
- * Dedupe here cannot promise exactly-once broker fills. It guarantees at most
- * one outbound signal per interval from this system; the external bot must
- * honour `dedupe_key` for the end-to-end property.
+ * What this actually gives: one exclusive dispatch operation per event
+ * identity, and at most one automatic attempt per configured endpoint. It is
+ * NOT a claim of a single global signal (several endpoints may be configured)
+ * and NOT exactly-once broker execution — the external bot must honour
+ * `dedupe_key` for anything end-to-end. An unresolved or ambiguous response is
+ * recorded conservatively and never replayed or re-claimed.
  */
+
 export async function dispatchLiteaDecision(
   deps: LiteADispatchDeps,
   row: LiteADecisionRecord,
@@ -279,20 +296,30 @@ export async function dispatchLiteaDecision(
   }
 
   /**
-   * Re-evaluated immediately before EVERY real attempt, first and retries
-   * alike: current kill switch, allow-list, the ORIGINAL (never extended)
-   * ceiling, and this owner's claim still being live.
+   * Re-evaluated immediately before the single real attempt this path allows
+   * per endpoint. Ownership is read FIRST, because that read is the only
+   * awaited network gap here; the kill switch, allow-list and ORIGINAL
+   * (never extended) ceiling are then evaluated against the clock as it is
+   * after that wait, with nothing awaited between them and the transport.
+   * Any ownership error fails closed.
    */
   const guard = async (): Promise<boolean> => {
-    const verdict = evaluateLiteaDispatch(row, {
-      nowMs: deps.now(),
-      executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
-      allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
-      alreadySent: false,
-      transportDeadlineMs: args.transportDeadlineMs,
-    });
-    if (verdict !== "WOULD_SEND") return false;
-    return await deps.ownsClaim(dedupeKey, owner);
+    let owns = false;
+    try {
+      owns = await deps.ownsClaim(dedupeKey, owner);
+    } catch {
+      return false;
+    }
+    if (!owns) return false;
+    return (
+      evaluateLiteaDispatch(row, {
+        nowMs: deps.now(),
+        executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
+        allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
+        alreadySent: false,
+        transportDeadlineMs: args.transportDeadlineMs,
+      }) === "WOULD_SEND"
+    );
   };
 
   // Re-check the ceiling with the clock as it is NOW, after the durable write.
@@ -304,7 +331,7 @@ export async function dispatchLiteaDecision(
     transportDeadlineMs: args.transportDeadlineMs,
   });
   if (preSend !== "WOULD_SEND") {
-    await deps.settle({
+    const settled = await deps.settle({
       dedupeKey,
       owner,
       targetId: args.targetId,
@@ -312,13 +339,13 @@ export async function dispatchLiteaDecision(
       error: `pre_send_${preSend.toLowerCase()}`,
       publicationOffsetMs: null,
     });
-    return { verdict: preSend, dedupeKey, claim: claimed.outcome };
+    return { verdict: preSend, dedupeKey, claim: claimed.outcome, settled: settled.applied };
   }
 
   const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
-  await deps.settle({
+  const settled = await deps.settle({
     dedupeKey,
     owner,
     targetId: args.targetId,
@@ -327,11 +354,14 @@ export async function dispatchLiteaDecision(
     publicationOffsetMs: sentMs - openMs,
   });
   return {
-    verdict: status,
+    // The claim was lost or already terminal: the outcome is NOT recorded as
+    // ours, and no target row was amended on our behalf.
+    verdict: settled.applied ? status : "OWNER_LOST",
     dedupeKey,
     claim: claimed.outcome,
     delivered: delivery.delivered,
     publicationOffsetMs: sentMs - openMs,
+    settled: settled.applied,
   };
 }
 
@@ -398,8 +428,9 @@ export function supabaseLiteaDispatchDeps(
       return Number.isFinite(until) && until > Date.now();
     },
     async settle(entry) {
-      // Only the owner may write the terminal state.
-      await supabase
+      // Conditional on BOTH this owner and a still-PENDING row, and the
+      // affected rows are inspected: a lost claim writes nothing anywhere.
+      const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
         .update({
           state: entry.status,
@@ -408,8 +439,13 @@ export function supabaseLiteaDispatchDeps(
           claim_owner: null,
         })
         .eq("dedupe_key", entry.dedupeKey)
-        .eq("claim_owner", entry.owner);
-      if (entry.targetId) {
+        .eq("claim_owner", entry.owner)
+        .eq("state", "PENDING")
+        .select("dedupe_key");
+      const applied = !error && Array.isArray(data) && data.length > 0;
+      // Only the owner of the terminal write may amend the version-scoped
+      // target row, so a failed/zero-row update can never mark it sent.
+      if (applied && entry.targetId) {
         await supabase
           .from(C85_TARGETS_TABLE)
           .update({
@@ -418,8 +454,10 @@ export function supabaseLiteaDispatchDeps(
             dispatch_ns:
               entry.status === "SENT" ? String(BigInt(Date.now()) * 1_000_000n) : null,
           })
-          .eq("id", entry.targetId);
+          .eq("id", entry.targetId)
+          .eq("model_version", LITE_A_MODEL_VERSION);
       }
+      return { applied };
     },
 
   };
