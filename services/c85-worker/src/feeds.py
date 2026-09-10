@@ -33,18 +33,101 @@ from __future__ import annotations
 import asyncio
 import bisect
 import json
+import os
+import re
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
+
 import httpx
 import websockets
+
+from .tickers import EASTERN, format_ticker
 
 NS = 1_000_000_000
 
 
 def now_ns() -> int:
     return time.time_ns()
+
+
+# --------------------------------------------------------------------------- #
+# venue rate-limit discipline
+# --------------------------------------------------------------------------- #
+class HostLimiter:
+    """One shared, venue-respecting budget per REST host.
+
+    Binance answers an over-weight address with 429 and then 418 ("banned until
+    <epoch ms>"). Every collector in this process shares one address, so a ban
+    earned by one poller silently starves all the others — which is exactly how
+    a 16-minute COIN-M context ends up incomplete at a boundary. Retrying inside
+    the ban only extends it.
+
+    So each host gets: a minimum spacing between requests, and a hard deadline
+    published by the venue itself (`Retry-After`, or the epoch in the 418 body).
+    Nothing here bypasses a limit, rotates an address or hides a refusal.
+    """
+
+    MIN_INTERVAL_S = float(os.environ.get("LITEA_FEED_MIN_INTERVAL_S", "0.4"))
+
+    def __init__(self) -> None:
+        self._next_at: dict[str, float] = {}
+        self._banned_until: dict[str, float] = {}
+
+    @staticmethod
+    def _host(url: str) -> str:
+        return urllib.parse.urlsplit(url).netloc
+
+    def banned_for(self, url: str) -> float:
+        """Seconds still to wait for this host, 0 when free."""
+        return max(0.0, self._banned_until.get(self._host(url), 0.0) - time.time())
+
+    async def acquire(self, url: str) -> None:
+        host = self._host(url)
+        while True:
+            wait = max(
+                self._banned_until.get(host, 0.0) - time.time(),
+                self._next_at.get(host, 0.0) - time.monotonic(),
+            )
+            if wait <= 0:
+                break
+            await asyncio.sleep(min(wait, 30.0))
+        self._next_at[host] = time.monotonic() + self.MIN_INTERVAL_S
+
+    def note(self, url: str, response: "httpx.Response | None", exc: Exception | None = None) -> None:
+        """Record a venue refusal so every collector on this host backs off."""
+        host = self._host(url)
+        status = getattr(response, "status_code", None)
+        body = ""
+        if response is not None and status in (418, 429):
+            try:
+                body = response.text[:300]
+            except Exception:  # noqa: BLE001
+                body = ""
+        elif exc is not None:
+            body = str(exc)[:300]
+            match = re.search(r"'(418|429)[^']*'", body)
+            status = int(match.group(1)) if match else None
+        if status not in (418, 429):
+            return
+        until = None
+        deadline = re.search(r"banned until (\d+)", body)
+        if deadline:
+            until = int(deadline.group(1)) / 1000.0
+        elif response is not None:
+            retry_after = response.headers.get("retry-after")
+            if retry_after and retry_after.strip().isdigit():
+                until = time.time() + int(retry_after.strip())
+        if until is None:
+            until = time.time() + 120.0
+        self._banned_until[host] = max(self._banned_until.get(host, 0.0), until)
+
+
+#: Process-wide, because the venue counts the address, not the collector.
+LIMITER = HostLimiter()
+
 
 
 # --------------------------------------------------------------------------- #
@@ -215,6 +298,22 @@ class KlineBuffer(_BaseBuffer):
             cursor += 60_000
         return out
 
+    def missing_minutes(
+        self, first_open_ms: int, last_open_ms: int, frozen_at_ns: int | None = None
+    ) -> list[int]:
+        """Exactly which completed minutes in [first, last] are NOT held.
+
+        Named, not counted: "the context is incomplete" is not a diagnosis, and
+        the repair loop needs to know what to ask the venue for.
+        """
+        frozen_at_ns = now_ns() if frozen_at_ns is None else frozen_at_ns
+        return [
+            cursor
+            for cursor in range(first_open_ms, last_open_ms + 1, 60_000)
+            if self.minute(cursor, frozen_at_ns) is None
+        ]
+
+
 
 @dataclass
 class QuoteBuffer(_BaseBuffer):
@@ -378,11 +477,14 @@ class BinanceRestTradeCollector:
         async with httpx.AsyncClient(timeout=5.0) as client:
             last_id: int | None = None
             while True:
+                response = None
                 try:
                     params: dict[str, Any] = {"symbol": self.symbol, "limit": 1000}
                     if last_id is not None:
                         params["fromId"] = last_id + 1
+                    await LIMITER.acquire(self.url)
                     response = await client.get(self.url, params=params)
+                    LIMITER.note(self.url, response)
                     response.raise_for_status()
                     receipt = now_ns()
                     rows = response.json()
@@ -395,8 +497,10 @@ class BinanceRestTradeCollector:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
+                    LIMITER.note(self.url, response, exc)
                     self.buffer.error = f"rest:{type(exc).__name__}: {exc}"
                 await asyncio.sleep(self.interval_s)
+
 
 
 class KlineCollector:
@@ -475,13 +579,18 @@ class KlineCollector:
                 params = {**self.params, "limit": min(1000, remaining)}
                 if end_ms is not None:
                     params["endTime"] = end_ms
+                response = None
                 try:
+                    await LIMITER.acquire(self.rest_url)
                     response = await client.get(self.rest_url, params=params)
+                    LIMITER.note(self.rest_url, response)
                     response.raise_for_status()
                     rows = response.json()
                 except Exception as exc:  # noqa: BLE001 - warmup is best-effort
+                    LIMITER.note(self.rest_url, response, exc)
                     self.buffer.error = f"backfill {type(exc).__name__}: {exc}"
                     break
+
                 if not rows:
                     break
                 receipt = now_ns()
@@ -511,14 +620,27 @@ class KlineCollector:
         return stored
 
     async def run_rest(self, interval_s: float = 10.0) -> None:
-        """Poll closed klines. The newest returned candle may still be open."""
+        """Poll closed klines. The newest returned candle may still be open.
+
+        While the websocket is delivering closed minutes this poll adds nothing
+        but request weight, and request weight is what earns the venue ban that
+        empties the history everything else depends on. So it only polls when
+        the stream is not currently supplying the feed.
+        """
         async with httpx.AsyncClient(timeout=6.0) as client:
             while True:
+                if self.buffer.transport == "websocket" and self.buffer.is_fresh(now_ns()):
+                    await asyncio.sleep(interval_s)
+                    continue
+                response = None
                 try:
+                    await LIMITER.acquire(self.rest_url)
                     response = await client.get(
                         self.rest_url, params={**self.params, "limit": 10}
                     )
+                    LIMITER.note(self.rest_url, response)
                     response.raise_for_status()
+
                     receipt = now_ns()
                     now_ms = receipt // 1_000_000
                     for row in response.json():
@@ -547,8 +669,34 @@ class KlineCollector:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
+                    LIMITER.note(self.rest_url, response, exc)
                     self.buffer.error = f"rest:{type(exc).__name__}: {exc}"
                 await asyncio.sleep(interval_s)
+
+    async def repair_history(self, minutes: int, period_s: float = 60.0) -> None:
+        """Keep re-fetching until the last `minutes` completed minutes are held.
+
+        A single best-effort backfill at startup is not history acquisition: if
+        the venue refuses it once — a rate-limit ban, a transient error — the
+        buffer stays short and every boundary that needs the 16-minute context
+        fails with an incomplete set. This waits out the venue's own deadline
+        and asks again, and it stops as soon as the window is genuinely
+        complete. It never invents a minute.
+        """
+        while True:
+            now_ms = now_ns() // 1_000_000
+            last_open = (now_ms // 60_000) * 60_000 - 60_000
+            gaps = self.buffer.missing_minutes(last_open - (minutes - 1) * 60_000, last_open)
+            if not gaps:
+                await asyncio.sleep(period_s)
+                continue
+            wait = LIMITER.banned_for(self.rest_url)
+            if wait > 0:
+                await asyncio.sleep(min(wait + 1.0, 60.0))
+                continue
+            await self.backfill(min(minutes, len(gaps) + 60))
+            await asyncio.sleep(5.0)
+
 
 
 class KalshiWindowCollector:
@@ -732,26 +880,32 @@ class KalshiWindowCollector:
 
 
 class KalshiStrikeCollector:
-    """The target's own STRIKE, fetched the moment the contract opens.
+    """The target's own STRIKE, read from the target's own market record.
 
-    KXBTC15M contracts are listed ahead of time but their `floor_strike` is
-    only published when the market OPENS, which is the target instant T itself
-    (verified against the venue: an `initialized` future market returns a null
-    strike, the `active` current market returns a number). A 60-second market
-    refresh would therefore miss the strike for most targets, and the packet
-    that needs it freezes at T+5s.
+    MEASURED venue behaviour (2026-09-10, this address): the series listing
+    returns future contracts with `status: initialized` and a NULL
+    `floor_strike`, and the `status=open` filter lags by minutes — during the
+    04:30 boundary it still returned only the 04:15 contract. Polling that
+    listing is therefore not a way to obtain the current target's strike, which
+    is what produced `LITEA_MARKET_NOT_LISTED_BY_FREEZE` on the 04:00 and 04:15
+    rows.
 
-    So this collector polls the open-markets listing rapidly across `[T, T+4s)`
-    until the target's own strike appears, and records it with the measured
-    receipt instant. It stops as soon as the strike is held: no polling loop
-    runs while nothing is expected, and no value is ever guessed or carried
-    over from the neighbouring interval.
+    So this collector asks for the target's OWN market by ticker
+    (`KXBTC15M-YYMMMDDHHMM-MM`, close-stamped in US Eastern, the venue's
+    convention) and accepts it only when the record's own open/close instants
+    are exactly `[T, T+15m)`. Polling starts before T — a request made early is
+    not a value invented early: the record is stored with the receipt instant
+    at which the venue actually served a non-null strike, and a packet frozen
+    before that instant still refuses it.
     """
 
     INTERVAL_MS = 15 * 60_000
-    #: Stop trying inside the packet's own deadline; a later arrival is a
-    #: genuinely missing input, not something to backdate.
-    WINDOW_MS = 4_000
+    #: Start asking before the open, so the very first published strike is
+    #: caught rather than missed by a poll phase.
+    LEAD_MS = 120_000
+    #: Keep asking a little past the packet deadline so the row can record how
+    #: LATE the venue actually was, instead of silently reporting nothing.
+    TAIL_MS = 20_000
 
     def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
                  poll_s: float = 0.25) -> None:
@@ -764,57 +918,84 @@ class KalshiStrikeCollector:
         record = self.buffer.markets.get(target_ms)
         return bool(record and record.get("floor_strike") is not None)
 
-    async def _poll_once(self, client: httpx.AsyncClient) -> None:
-        response = await client.get(
-            f"{self.base}/markets",
-            params={"series_ticker": self.series, "status": "open", "limit": 20},
-        )
-        response.raise_for_status()
-        receipt = now_ns()
-        self.buffer.note_poll(receipt)
+    def ticker_for(self, target_ms: int) -> str:
         import datetime as _dt
 
-        for market in response.json().get("markets", []):
-            open_time = market.get("open_time")
-            strike = market.get("floor_strike")
-            if not open_time or strike is None:
-                continue
-            stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
-            self.buffer.record(
-                int(stamp.timestamp() * 1000),
-                {
-                    "ticker": market["ticker"],
-                    "floor_strike": float(strike),
-                    "open_time": open_time,
-                    "close_time": market.get("close_time"),
-                    "status": market.get("status"),
-                    "receipt_ns": receipt,
-                },
-            )
+        close = _dt.datetime.fromtimestamp(
+            (target_ms + self.INTERVAL_MS) / 1000, _dt.timezone.utc
+        )
+        return f"{format_ticker(self.series, close)}-{close.astimezone(EASTERN):%M}"
+
+    async def _poll_once(self, client: httpx.AsyncClient, target_ms: int) -> None:
+        import datetime as _dt
+
+        ticker = self.ticker_for(target_ms)
+        response = await client.get(f"{self.base}/markets/{ticker}")
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        if response.status_code == 404:
+            return  # not listed yet; nothing is assumed about it
+        response.raise_for_status()
+        market = response.json().get("market") or {}
+        open_time = market.get("open_time")
+        close_time = market.get("close_time")
+        if not open_time or not close_time:
+            return
+        opened = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+        closed = _dt.datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+        # The contract must be the one whose window IS this target's interval.
+        if int(opened.timestamp() * 1000) != target_ms:
+            return
+        if int(closed.timestamp() * 1000) != target_ms + self.INTERVAL_MS:
+            return
+        strike = market.get("floor_strike")
+        self.buffer.record(
+            target_ms,
+            {
+                "ticker": market.get("ticker", ticker),
+                "floor_strike": None if strike is None else float(strike),
+                "open_time": open_time,
+                "close_time": close_time,
+                "status": market.get("status"),
+                "receipt_ns": receipt,
+            },
+        )
 
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=3.0) as client:
             while True:
                 now_ms = now_ns() // 1_000_000
-                target_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
-                offset = now_ms - target_ms
-                if offset < self.WINDOW_MS and not self._has_strike(target_ms):
-                    try:
-                        await self._poll_once(client)
-                        self.buffer.connected_since_ns = (
-                            self.buffer.connected_since_ns or now_ns()
-                        )
-                        self.buffer.transport = "rest"
-                        self.buffer.error = None
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:  # noqa: BLE001
-                        self.buffer.error = f"{type(exc).__name__}: {exc}"
-                    await asyncio.sleep(self.poll_s)
-                    continue
-                # Nothing expected until the next boundary; wake just before it.
-                wait_ms = self.INTERVAL_MS - offset - 200
-                await asyncio.sleep(max(0.2, wait_ms / 1000))
+                current_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
+                offset = now_ms - current_ms
+                upcoming = current_ms + self.INTERVAL_MS
+                if offset >= self.INTERVAL_MS - self.LEAD_MS and not self._has_strike(upcoming):
+                    target_ms = upcoming          # the boundary about to open
+                elif offset < self.TAIL_MS and not self._has_strike(current_ms):
+                    target_ms = current_ms        # the boundary just opened
+                else:
+                    # MEASURED: sleeping between boundaries let this feed age
+                    # past its freshness budget, so readiness reported a stale
+                    # market source for most of every interval. A slow keepalive
+                    # poll of the CURRENT contract keeps the watermark honest —
+                    # it is a real received record, not a freshness assertion.
+                    target_ms = current_ms
+
+                try:
+                    await self._poll_once(client, target_ms)
+                    self.buffer.connected_since_ns = (
+                        self.buffer.connected_since_ns or now_ns()
+                    )
+                    self.buffer.transport = "rest"
+                    self.buffer.error = None
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    self.buffer.error = f"{type(exc).__name__}: {exc}"
+                # Rapid only around the open itself; a keepalive otherwise.
+                rapid = offset < self.TAIL_MS or offset >= self.INTERVAL_MS - self.LEAD_MS
+                await asyncio.sleep(self.poll_s if rapid else 20.0)
+
+
 
 
 # --------------------------------------------------------------------------- #
@@ -837,8 +1018,22 @@ class FeedRegistry:
     # dead even though its handshake succeeded, and REST takes over.
     WS_GRACE_NS = 20 * NS
 
-    def __init__(self, env: dict[str, str]) -> None:
+    #: Version 1 needs exactly these. Passing them keeps the process from
+    #: spending its shared request budget — and its ban risk — on trade streams
+    #: no selected model reads. `None` preserves the legacy full set.
+    V1_FEEDS = (
+        "binance_spot",
+        "binance_um",
+        "binance_1m",
+        "binance_usdcusdt_1m",
+        "binance_index",
+        "binance_cm_1m",
+        "kalshi_markets",
+    )
+
+    def __init__(self, env: dict[str, str], only: Iterable[str] | None = None) -> None:
         self.env = env
+        self.only = None if only is None else set(only)
         spot_ws = env.get("BINANCE_SPOT_WS", "wss://stream.binance.com:9443/stream")
         um_ws = env.get("BINANCE_UM_WS", "wss://fstream.binance.com/stream")
         cm_ws = env.get("BINANCE_CM_WS", "wss://dstream.binance.com/stream")
@@ -968,20 +1163,38 @@ class FeedRegistry:
             raise
 
     async def start(self) -> None:
-        for name in self.trades:
+        for name in self._selected(self.trades):
             self._tasks.append(asyncio.create_task(self._trade_feed(name)))
         # Minute history first: the auxiliary and COIN-M blocks are defined over
         # hundreds of completed minutes, so the streams alone would leave the
         # worker input-starved for hours after every restart.
-        await asyncio.gather(
-            *(c.backfill(c.buffer.retain_minutes) for c in self._klines.values()),
-            return_exceptions=True,
-        )
-        for collector in self._klines.values():
+        #
+        # SEQUENTIALLY, through the shared host budget. Firing every backfill at
+        # once is what earned the venue ban that left the COIN-M context short
+        # at the 04:00 and 04:15 boundaries; the limiter can only pace requests
+        # it sees one at a time.
+        klines = {k: v for k, v in self._klines.items() if k in self._selected(self._klines)}
+        for collector in klines.values():
+            try:
+                await collector.backfill(collector.buffer.retain_minutes)
+            except Exception as exc:  # noqa: BLE001 - a refusal is repaired below
+                collector.buffer.error = f"backfill {type(exc).__name__}: {exc}"
+        for collector in klines.values():
             self._tasks.append(asyncio.create_task(collector.run_ws()))
             self._tasks.append(asyncio.create_task(collector.run_rest()))
-        self._tasks.append(asyncio.create_task(self._kalshi.run()))
-        self._tasks.append(asyncio.create_task(self._strikes.run()))
+            # A one-shot backfill is not history: this keeps asking, after the
+            # venue's own deadline, until the recent window is genuinely held.
+            self._tasks.append(asyncio.create_task(collector.repair_history(30)))
+        if self.only is None or "kalshi" in self.only:
+            self._tasks.append(asyncio.create_task(self._kalshi.run()))
+        if self.only is None or "kalshi_markets" in self.only:
+            self._tasks.append(asyncio.create_task(self._strikes.run()))
+
+    def _selected(self, group: dict[str, Any]) -> list[str]:
+        if self.only is None:
+            return list(group)
+        return [name for name in group if name in self.only]
+
 
     async def stop(self) -> None:
         for task in self._tasks:
@@ -996,7 +1209,8 @@ class FeedRegistry:
 
     def missing(self, at_ns: int | None = None) -> list[str]:
         at_ns = at_ns or now_ns()
-        return [name for name in self.REQUIRED if not self.buffers[name].is_fresh(at_ns)]
+        required = self.REQUIRED if self.only is None else tuple(sorted(self.only))
+        return [name for name in required if not self.buffers[name].is_fresh(at_ns)]
 
     def ready(self, at_ns: int | None = None) -> bool:
         return not self.missing(at_ns)

@@ -139,6 +139,7 @@ class RemoteArtifacts:
         copy.
         """
         manifest = self.manifest()
+        self.state_digest_note: str | None = getattr(self, "state_digest_note", None)
         installed: list[str] = []
         for relative, expected in manifest.items():
             if not (
@@ -159,9 +160,40 @@ class RemoteArtifacts:
             if destination.exists() and _sha256(destination.read_bytes()) == expected:
                 continue
             key = f"datasets/lite-a-floor4-top10-r1/{relative}"
+            if relative == "checkpoints/state.json":
+                # MEASURED: a run can commit a newer checkpoint object and stop
+                # before the manifest entry is rewritten, so the stored snapshot
+                # legitimately runs AHEAD of its recorded digest. That is not
+                # corruption, and refusing to start on it strands the worker.
+                # The object is only a CANDIDATE here — it is staged beside the
+                # live state and the caller still picks the newest committed
+                # position — so it is admitted on structural validity and the
+                # disagreement is reported rather than hidden.
+                if self._install(key, destination, None):
+                    installed.append(relative)
+                    actual = _sha256(destination.read_bytes())
+                    if actual != expected:
+                        try:
+                            candidate = json.loads(destination.read_text())
+                        except Exception as exc:  # noqa: BLE001
+                            raise RuntimeError(
+                                f"LITEA_ARTIFACT_UNREADABLE: {key} ({type(exc).__name__})"
+                            ) from exc
+                        if candidate.get("model_version") not in (None, "lite-a-floor4-top10-r1"):
+                            raise RuntimeError(f"LITEA_ARTIFACT_IDENTITY_MISMATCH: {key}")
+                        self.state_digest_note = (
+                            f"stored checkpoint {actual[:12]} is ahead of manifest "
+                            f"entry {(expected or '')[:12]}; admitted as a candidate only"
+                        )
+                continue
             if self._install(key, destination, expected):
                 installed.append(relative)
-        return {"manifest_entries": len(manifest), "installed": installed}
+
+        return {
+            "manifest_entries": len(manifest),
+            "installed": installed,
+            "state_digest_note": self.state_digest_note,
+        }
 
     def publish(self, *, heads_root: Path, training: Path | None, state: Path | None) -> dict[str, str]:
         """Push the local position back, then record it in the manifest."""
