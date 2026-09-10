@@ -326,6 +326,7 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
     losses: 0,
     pending: 0,
     win_rate: null as number | null,
+    net_units: 0,
   };
 
   for (const r of liveRows) {
