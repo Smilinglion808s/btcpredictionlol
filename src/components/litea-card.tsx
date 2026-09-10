@@ -172,10 +172,22 @@ export function LiteACard({
   const phase = PHASES[(stats?.phase as keyof typeof PHASES) ?? "PREPARING"] ?? PHASES.PREPARING;
   const latest = stats?.latest ?? null;
   const live = stats?.live ?? {};
+  const today = stats?.today ?? {};
+  const daily: any[] = Array.isArray(stats?.daily) ? stats.daily : [];
   const liveOpportunities = Number(live.opportunities ?? 0);
   const graded = Number(live.wins ?? 0) + Number(live.losses ?? 0);
+  const winRate = live.win_rate == null ? null : Number(live.win_rate);
+  const netUnits = Number(live.net_units ?? 0);
+  const todayNet = Number(today.net_units ?? 0);
+  // +0.87 per win, −1 per loss → break-even at ~53.5%.
+  const BREAK_EVEN = 1 / 1.87;
+  const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
+
+  const gaugeR = 34;
+  const circumference = 2 * Math.PI * gaugeR;
+  const wrPct = winRate == null ? 0 : Math.max(0, Math.min(100, winRate * 100));
 
   return (
     <Card className="v1-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -210,6 +222,71 @@ export function LiteACard({
       </header>
 
       <p className="text-[13px] leading-relaxed text-muted-foreground">{stats?.phase_detail}</p>
+
+      <section className="relative flex items-center gap-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
+            <circle
+              cx="40"
+              cy="40"
+              r={gaugeR}
+              fill="none"
+              stroke={aboveBreakeven ? "var(--bull)" : "var(--signal-orange)"}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - wrPct / 100)}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">
+              {winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`}
+            </span>
+            <span className="mt-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
+              win rate
+            </span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Net units · shadow
+          </div>
+          <div
+            className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${
+              netUnits > 0 ? "text-bull" : netUnits < 0 ? "text-bear" : "text-foreground"
+            }`}
+          >
+            {netUnits > 0 ? "+" : ""}
+            {netUnits.toFixed(2)}
+          </div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
+            +0.87 per win · −1 per loss · break-even {(BREAK_EVEN * 100).toFixed(2)}%
+            {winRate != null ? (
+              <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
+                {aboveBreakeven ? "▲ above" : "▼ below"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <Field label="Wins" value={String(live.wins ?? 0)} />
+        <Field label="Losses" value={String(live.losses ?? 0)} />
+        <Field label="Pending" value={String(live.pending ?? 0)} />
+        <Field label="Today calls" value={String(today.calls ?? 0)} />
+        <Field
+          label="Today win rate"
+          value={today.win_rate == null ? "—" : `${(Number(today.win_rate) * 100).toFixed(0)}%`}
+        />
+        <Field
+          label="Today net"
+          value={`${todayNet > 0 ? "+" : ""}${todayNet.toFixed(2)}`}
+        />
+      </div>
 
       <section className="v1-chip relative p-4">
         <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -313,6 +390,33 @@ export function LiteACard({
           </>
         )}
       </section>
+
+      {daily.length > 0 ? (
+        <section>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Daily net · last {daily.length} {daily.length === 1 ? "day" : "days"}
+            </span>
+            <span className="h-px flex-1 bg-gradient-to-r from-signal-orange/40 via-steel/20 to-transparent" />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {daily.map((d) => (
+              <span
+                key={String(d.date)}
+                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
+                  Number(d.net_units) >= 0
+                    ? "border-bull/30 text-bull"
+                    : "border-bear/30 text-bear"
+                }`}
+              >
+                {String(d.date).slice(5)} {Number(d.net_units) > 0 ? "+" : ""}
+                {Number(d.net_units).toFixed(2)}
+                {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {Number(stats?.research_rows ?? 0) > 0 ? (
         <p className="text-[11px] text-muted-foreground">
