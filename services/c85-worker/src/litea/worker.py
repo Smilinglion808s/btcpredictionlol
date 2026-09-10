@@ -430,7 +430,10 @@ class LiteAWorker:
             self.store.mark_missed(label, target, f"LITEA_LEASE_HELD_BY:{owner}")
             return BoundaryOutcome(target, "MISSED", f"lease held by {owner}")
 
-        reused = self._lease_usable(prepared, cutoff_ns)
+        # Judged against the LATER of the cutoff and now: a boundary that is
+        # already running late needs a lease valid for the real decision time,
+        # not for a cutoff that has passed.
+        reused = self._lease_usable(prepared, max(cutoff_ns, time.time_ns()))
         lease = (prepared or {}).get("lease") or {}
         if not reused:
             lease_started = time.time_ns()
