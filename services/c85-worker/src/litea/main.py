@@ -130,11 +130,19 @@ class LiteAService:
         return response.json().get("markets", [])
 
     def _catch_up_fits(self) -> list[dict]:
-        """Every due UTC-midnight fit, chronologically, off the timed path."""
-        if not self.training_path.exists():
+        """Every due UTC-midnight fit, chronologically, off the timed path.
+
+        The cutoff to fit after is the LATEST HEAD that actually exists, not a
+        cursor: a head that was fitted and then lost would otherwise never be
+        refitted. A day with no available midnight opportunity simply has no
+        head, and the previous head still expires.
+        """
+        training = self.worker.training
+        if training.rows == 0:
             return []
-        training = TrainingFrame.load(self.training_path)
-        results = run_due_fits(training, self.heads, after=self.state.cursors.last_fit_cutoff)
+        latest = self.heads.latest_cutoff()
+        after = f"{latest}T00:00:00+00:00" if latest else self.state.cursors.last_fit_cutoff
+        results = run_due_fits(training, self.heads, after=after)
         if results:
             last = results[-1]
             self.state.cursors.last_fit_cutoff = last.cutoff
@@ -143,7 +151,25 @@ class LiteAService:
         self.state.cursors.training_rows = training.rows
         self.state.cursors.training_last_target = training.last_target
         self.state.save(self.state_path)
+        if results:
+            try:
+                self.remote.publish(
+                    heads_root=self.root / "heads",
+                    training=self.training_path,
+                    state=self.state_path,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] head publish failed: {exc}", flush=True)
         return [r.__dict__ for r in results]
+
+    async def fit_loop(self) -> None:
+        """Keep the daily heads current for as long as the process lives."""
+        while True:
+            await asyncio.sleep(300)
+            try:
+                await asyncio.to_thread(self._catch_up_fits)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] daily fit failed: {exc}", flush=True)
 
     # -- reporting -------------------------------------------------------------
     def snapshot(self) -> dict:
