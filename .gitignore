@@ -35,3 +35,7 @@ dist-ssr
 # services/c85-worker/artifacts/** IS tracked — the worker cannot start without it.
 services/c85-worker/evaluation-fixtures/*
 !services/c85-worker/evaluation-fixtures/README.md
+
+# Python build artifacts
+__pycache__/
+*.pyc
