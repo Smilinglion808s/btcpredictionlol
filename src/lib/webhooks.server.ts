@@ -435,21 +435,19 @@ async function postOnce(
 export const OUTBOUND_WEBHOOKS_ENABLED = true;
 
 /**
- * Single permitted outbound source. Every other model (B4x4, ES1, V6, TD1-RC,
- * A2, Model 3/6/7) may still call deliverWebhook — their payloads are dropped
- * here so exactly one model can ever reach the bot.
+ * Static permitted outbound sources. Every other model (T45, T30, T10, B4x4,
+ * ES1, V6, TD1-RC, A2, Model 3/6/7) may still call deliverWebhook — their
+ * payloads are dropped here.
+ *
+ * T45 Price Flow is intentionally NOT in this set: its sending is off.
  */
-// Only T45 emits outbound signals; T10 and T30 are shadow-only.
-export const WEBHOOK_ALLOWED_MODELS = new Set(["t45-priceflow"]);
+export const WEBHOOK_ALLOWED_MODELS = new Set<string>([]);
 
 /**
  * The effective sender allow-list.
  *
- * The static set above is unchanged: T45 Price Flow is the only model in it.
- * Version 1 joins it ONLY while its server-side human control
- * (`LITEA_SERVER_EXECUTION_ENABLED=true`) is on — absent today, so this returns
- * false for Version 1. It exists so activation is a configuration step rather
- * than a code edit. No other model's behaviour changes.
+ * Version 1 is the only model that can send, and only while its server-side
+ * human control (`LITEA_SERVER_EXECUTION_ENABLED=true`) is on.
  */
 export function isModelAllowedToSend(model: string): boolean {
   if (WEBHOOK_ALLOWED_MODELS.has(model)) return true;

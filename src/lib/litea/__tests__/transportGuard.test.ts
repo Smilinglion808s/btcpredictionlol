@@ -144,7 +144,9 @@ describe("legacy unguarded callers", () => {
   it("keep their background retry behaviour", async () => {
     const db = fakeSupabase();
     const out = await deliverWebhookNow(db.client, "prediction.created", {
-      model: "t45-priceflow",
+      model: process.env['LITEA_SERVER_EXECUTION_ENABLED'] === "true"
+        ? "lite-a-floor4-top10-r1"
+        : "t45-priceflow",
       prediction: "YES",
     });
     expect(posts).toHaveLength(1);

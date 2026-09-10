@@ -89,8 +89,10 @@ function harness(opts: {
 
 
 describe("Version 1 dispatch controls (default state)", () => {
-  it("has both human controls off in this environment", () => {
-    expect(liteaServerExecutionEnabled()).toBe(false);
+  it("reads the server control from the environment", () => {
+    expect(liteaServerExecutionEnabled()).toBe(
+      process.env['LITEA_SERVER_EXECUTION_ENABLED'] === "true",
+    );
     expect(liteaTransportDeadlineMs()).toBe(LITEA_DEFAULT_TRANSPORT_DEADLINE_MS);
   });
 
@@ -98,8 +100,8 @@ describe("Version 1 dispatch controls (default state)", () => {
     const h = harness({ clock: [OPEN_MS + 6500] });
     const out = await dispatchLiteaDecision(h.deps, admitted, {
       targetId: "t1",
-      executionEnabled: liteaServerExecutionEnabled(),
-      allowedModels: new Set(["t45-priceflow"]),
+      executionEnabled: false,
+      allowedModels: new Set(["other-model"]),
       transportDeadlineMs: liteaTransportDeadlineMs(),
     });
     expect(out.verdict).toBe("EXECUTION_DISABLED");
@@ -112,7 +114,7 @@ describe("Version 1 dispatch controls (default state)", () => {
     const out = await dispatchLiteaDecision(h.deps, admitted, {
       targetId: "t1",
       executionEnabled: true,
-      allowedModels: new Set(["t45-priceflow"]),
+      allowedModels: new Set(["other-model"]),
       transportDeadlineMs: 8000,
     });
     expect(out.verdict).toBe("NOT_IN_ALLOWLIST");

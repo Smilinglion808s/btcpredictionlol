@@ -95,6 +95,7 @@ afterEach(() => {
 
 describe("decision.commit for Version 1", () => {
   it("refuses a worker outbox request while the server control is off", async () => {
+    delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
     const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
@@ -232,6 +233,6 @@ describe("decision.commit for Version 1", () => {
     expect(db.rpcCalls[0].args.p_outbox).toEqual(outboxRequest);
     expect(out.result.dispatch).toBeUndefined();
     expect(isModelAllowedToSend("c85-multi-meta-r1")).toBe(false);
-    expect(isModelAllowedToSend("t45-priceflow")).toBe(true);
+    expect(isModelAllowedToSend("t45-priceflow")).toBe(false);
   });
 });
