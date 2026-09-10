@@ -659,33 +659,8 @@ async function runA2Policies(
       } catch { /* never block */ }
     })();
 
-    // ---- B4x4 — FIRST on the critical path. It is the only outbound webhook
-    // sender, so it is kicked off before any other persistence or model layer
-    // so its directional webhook ships with the least possible latency.
-    const b4x4Promise = (async () => {
-      try {
-        const { runB4x4ForA2Combined, maybeSendB4x4Webhook, captureB4x4ShadowForRow } =
-          await import("@/lib/b4x4/orchestrator");
-        const row = await runB4x4ForA2Combined(supabase, {
-          predictionId: predictionRow.id,
-          candleTs: predictionRow.candle_ts,
-          a2RowId: null,
-          probabilityGreen: probability,
-          timingStatus: (inherited.timing_status as string | null) ?? null,
-          leakageCheckPassed: (inherited.leakage_check_passed as boolean | null) ?? null,
-          a2ModelFitId: (inherited.model_fit_id as string | null) ?? null,
-          a2ProductionModelVersion:
-            (predictionRow as { model_version?: string | null }).model_version ?? null,
-          featureCutoffTs: (inherited.feature_cutoff_ts as string | null) ?? null,
-          latestSourceCandleTs: (inherited.latest_source_candle_ts as string | null) ?? null,
-          runMode: "LIVE",
-          // Order-book polling runs after the webhook so it can never delay it.
-          deferShadowCapture: true,
-        });
-        await maybeSendB4x4Webhook(supabase, row);
-        await captureB4x4ShadowForRow(supabase, row);
-      } catch { /* never block */ }
-    })();
+    // ---- B4x4 retired (2026-09-10): no scoring, webhook or shadow capture. ----
+    const b4x4Promise = Promise.resolve();
 
     // ---- B4x4-ES1 — runs OFF this pre-boundary pass. ES1 builds its feature
     // row from the fully closed source candle (target - 15m), which does not
