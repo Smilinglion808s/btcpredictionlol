@@ -18,7 +18,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.features import base_anchor_fields, binance_window_features  # noqa: E402
+from src.features import (  # noqa: E402
+    base_anchor_fields,
+    binance_cross_fields,
+    binance_window_features,
+)
+
 from src.feeds import MarketBuffer  # noqa: E402
 from src.litea.reconstruct import empty_window_template  # noqa: E402
 
