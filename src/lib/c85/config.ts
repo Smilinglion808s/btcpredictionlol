@@ -18,10 +18,24 @@ export const C85_SERIES_TICKER = "KXBTC15M";
  */
 export const C85_RECONSTRUCTION_VERSION = "c85-reconstruction-r1";
 
+/**
+ * Version 1 — a SEPARATE model, not a C85 variant. It shares this worker's feed
+ * adapters and this signed endpoint, and none of the C85 ancestry. It never
+ * dispatches: no outbox row is ever written under this identity, so it cannot
+ * reach the betting webhook. T45 remains the only executing model.
+ */
+export const LITE_A_MODEL_VERSION = "lite-a-floor4-top10-r1";
+
 /** The only identities a signed worker request may write under. */
 export const C85_WRITABLE_MODEL_VERSIONS = [
   C85_MODEL_VERSION,
   C85_RECONSTRUCTION_VERSION,
+  LITE_A_MODEL_VERSION,
+] as const;
+
+/** Identities that may never enqueue an outbox entry, regardless of payload. */
+export const C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS = [
+  LITE_A_MODEL_VERSION,
 ] as const;
 
 export const C85_TARGETS_TABLE = "c85_targets";
