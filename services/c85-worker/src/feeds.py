@@ -256,6 +256,41 @@ class QuoteBuffer(_BaseBuffer):
         return found
 
 
+@dataclass
+class MarketBuffer(_BaseBuffer):
+    """Listed KXBTC15M market metadata, keyed by the target's epoch milliseconds.
+
+    This is the strike source Version 1 actually needs. Unlike the `[T, T+5s)`
+    trade aggregate — which can only be REQUESTED after the T+5s deadline it
+    feeds — a market's `floor_strike` is published when the contract is LISTED,
+    so it is genuinely available before the freeze. Nothing here is derived
+    from a price: the strike, the ticker and the market's own open/close
+    instants are copied from the venue record, with the receipt time measured.
+    """
+
+    freshness_budget_ns: int = 300 * NS
+    markets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    retain: int = 192
+
+    def record(self, target_ms: int, market: dict[str, Any]) -> None:
+        self.markets[target_ms] = market
+        self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
+        self.last_receipt_ns = max(self.last_receipt_ns, int(market["receipt_ns"]))
+        if len(self.markets) > self.retain:
+            for stale in sorted(self.markets)[: len(self.markets) - self.retain]:
+                del self.markets[stale]
+
+    def note_poll(self, receipt_ns: int) -> None:
+        self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
+
+    def get(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any] | None:
+        """This target's listed market, only if it was received by the freeze."""
+        found = self.markets.get(target_ms)
+        if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
+            return None
+        return found
+
+
 # --------------------------------------------------------------------------- #
 # collectors
 # --------------------------------------------------------------------------- #
@@ -528,11 +563,12 @@ class KalshiWindowCollector:
     """
 
     def __init__(self, buffer: QuoteBuffer, api_base: str, series: str,
-                 poll_s: float = 5.0) -> None:
+                 poll_s: float = 5.0, markets: "MarketBuffer | None" = None) -> None:
         self.buffer = buffer
         self.base = api_base.rstrip("/")
         self.series = series
         self.poll_s = poll_s
+        self.markets = markets
         self._markets: dict[int, dict[str, Any]] = {}  # target_ms -> market
         self._markets_at_ns = -1
         self._fetched: set[int] = set()
@@ -543,7 +579,10 @@ class KalshiWindowCollector:
             params={"series_ticker": self.series, "status": "open", "limit": 200},
         )
         response.raise_for_status()
-        self.buffer.note_poll(now_ns())
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        if self.markets is not None:
+            self.markets.note_poll(receipt)
         for market in response.json().get("markets", []):
             open_time = market.get("open_time")
             if not open_time:
@@ -552,12 +591,27 @@ class KalshiWindowCollector:
 
             stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
             strike = market.get("floor_strike")
-            self._markets[int(stamp.timestamp() * 1000)] = {
+            target_ms = int(stamp.timestamp() * 1000)
+            record = {
                 "ticker": market["ticker"],
                 # floor_strike is target-native and comes from the market itself;
                 # a missing or non-numeric value stays None and fails the packet.
                 "floor_strike": None if strike is None else float(strike),
             }
+            self._markets[target_ms] = record
+            if self.markets is not None:
+                # The listed record, with its own window, so a Version 1 packet
+                # can verify the contract instead of formatting a ticker.
+                self.markets.record(
+                    target_ms,
+                    {
+                        **record,
+                        "open_time": open_time,
+                        "close_time": market.get("close_time"),
+                        "status": market.get("status"),
+                        "receipt_ns": receipt,
+                    },
+                )
         self._markets_at_ns = now_ns()
 
     async def _fetch_window(self, client: httpx.AsyncClient, target_ms: int,
@@ -717,12 +771,18 @@ class FeedRegistry:
             "binance_cm_1m": KlineBuffer("binance_cm_1m"),
         }
         self.quotes = QuoteBuffer("kalshi")
+        #: Listed contract metadata (ticker, floor_strike, window). Available
+        #: BEFORE T+5s, unlike the quote aggregate, so Version 1 reads it.
+        self.markets = MarketBuffer("kalshi_markets")
 
         self.buffers: dict[str, Any] = {
             **self.trades,
             "binance_1m": self.klines["binance_1m"],
             "binance_index": self.klines["binance_index"],
+            "binance_usdcusdt_1m": self.klines["binance_usdcusdt_1m"],
+            "binance_cm_1m": self.klines["binance_cm_1m"],
             "kalshi": self.quotes,
+            "kalshi_markets": self.markets,
         }
 
         self._trade_ws = {
@@ -762,9 +822,13 @@ class FeedRegistry:
                 self.klines["binance_usdcusdt_1m"], spot_ws, "usdcusdt@kline_1m",
                 spot_rest, "/api/v3/klines", {"symbol": "USDCUSDT", "interval": "1m"},
             ),
+            # The reference index minute is the COIN-M (dapi) BTCUSD index, which
+            # is what the offline recovery path reads and what the supplied
+            # feature recipe was fitted on. The UM (fapi) BTCUSDT index is a
+            # DIFFERENT series and was silently substituted here before.
             "binance_index": KlineCollector(
-                self.klines["binance_index"], um_ws, "btcusdt@indexPriceKline_1m",
-                um_rest, "/fapi/v1/indexPriceKlines", {"pair": "BTCUSDT", "interval": "1m"},
+                self.klines["binance_index"], cm_ws, "btcusd@indexPriceKline_1m",
+                cm_rest, "/dapi/v1/indexPriceKlines", {"pair": "BTCUSD", "interval": "1m"},
             ),
             "binance_cm_1m": KlineCollector(
                 self.klines["binance_cm_1m"], cm_ws, "btcusd_perp@kline_1m",
@@ -775,6 +839,7 @@ class FeedRegistry:
             self.quotes,
             env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
+            markets=self.markets,
         )
         self._tasks: list[asyncio.Task] = []
 
