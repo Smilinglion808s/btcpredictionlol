@@ -494,22 +494,38 @@ export interface FastDeliveryResult {
   settle: Promise<void>;
 }
 
+/** Optional per-call controls. Legacy callers pass nothing and are unchanged. */
+export interface FastDeliveryOptions {
+  /**
+   * Re-evaluated immediately before every real POST. False cancels that
+   * attempt; a cancelled attempt is terminal and is never revived.
+   */
+  guard?: () => Promise<boolean> | boolean;
+  /**
+   * Total automatic attempts per configured endpoint, including the first.
+   * Version 1 passes 1: no background resend for any response, timeout,
+   * exception or cancellation. Default keeps the legacy backoff behaviour.
+   */
+  maxAttempts?: number;
+}
+
 /**
- * Send now, log later. First attempt fires immediately with a short timeout;
- * delivery rows, retries and endpoint bookkeeping run afterwards in `settle`.
+ * Send now, log later. The first attempt fires immediately with a short
+ * timeout; delivery rows, endpoint bookkeeping and any permitted retries run
+ * afterwards in `settle`.
  *
- * `guard`, when supplied, is re-evaluated immediately before EVERY real POST —
- * the first attempt and each background retry. A false result cancels that
- * attempt and every remaining retry for that endpoint. It never extends or
- * resets a deadline; the caller owns the original one. Callers that pass no
- * guard behave exactly as before.
+ * With `maxAttempts: 1` (the Version 1 path) `settle` is logging only: it can
+ * never schedule a retransmission. Deadlines are never extended or reset —
+ * the caller owns the original one.
  */
 export async function deliverWebhookNow(
   supabase: SupabaseClient,
   event: WebhookEvent,
   payloadObj: Record<string, unknown>,
-  guard?: () => Promise<boolean> | boolean,
+  options?: FastDeliveryOptions,
 ): Promise<FastDeliveryResult> {
+  const guard = options?.guard;
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? BACKOFFS_MS.length);
   const noop: FastDeliveryResult = {
     delivered: 0,
     attempted: 0,
@@ -526,6 +542,7 @@ export async function deliverWebhookNow(
     return guard ? (await guard()) === true : true;
   };
   if (!(await allowed())) return noop;
+
 
 
   const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
