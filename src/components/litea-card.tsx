@@ -284,7 +284,7 @@ export function LiteACard({
         />
         <Field
           label="Today net"
-          value={`${todayNet > 0 ? "+" : ""}${todayNet.toFixed(2)}`}
+          value={`${todayNet > 0 ? "+" : ""}${todayNet}`}
         />
       </div>
 
