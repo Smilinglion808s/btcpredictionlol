@@ -497,11 +497,18 @@ export interface FastDeliveryResult {
 /**
  * Send now, log later. First attempt fires immediately with a short timeout;
  * delivery rows, retries and endpoint bookkeeping run afterwards in `settle`.
+ *
+ * `guard`, when supplied, is re-evaluated immediately before EVERY real POST —
+ * the first attempt and each background retry. A false result cancels that
+ * attempt and every remaining retry for that endpoint. It never extends or
+ * resets a deadline; the caller owns the original one. Callers that pass no
+ * guard behave exactly as before.
  */
 export async function deliverWebhookNow(
   supabase: SupabaseClient,
   event: WebhookEvent,
   payloadObj: Record<string, unknown>,
+  guard?: () => Promise<boolean> | boolean,
 ): Promise<FastDeliveryResult> {
   const noop: FastDeliveryResult = {
     delivered: 0,
@@ -513,6 +520,13 @@ export async function deliverWebhookNow(
   if (!OUTBOUND_WEBHOOKS_ENABLED) return noop;
   const source = String(payloadObj.model ?? payloadObj.model_name ?? "");
   if (!isModelAllowedToSend(source)) return noop;
+  const allowed = async () => {
+    if (!OUTBOUND_WEBHOOKS_ENABLED) return false;
+    if (!isModelAllowedToSend(source)) return false;
+    return guard ? (await guard()) === true : true;
+  };
+  if (!(await allowed())) return noop;
+
 
   const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
     e.events?.includes(event),
