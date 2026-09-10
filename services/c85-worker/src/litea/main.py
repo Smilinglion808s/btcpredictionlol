@@ -317,13 +317,6 @@ class LiteAService:
         # the next future boundary has real raw windows of its own.
         await self.feeds.start()
 
-        # Outcomes that became official while this container was down are
-        # applied BEFORE the gap is bridged, so the daily floor and the rank
-        # queues advance through the missed intervals in the real order.
-        try:
-            await asyncio.to_thread(self.drain_settlements)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[{MODEL_ID}] startup settlement drain failed: {exc}", flush=True)
         self._catch_up_fits()
 
         # Everything between the restored checkpoint and this launch is
@@ -331,6 +324,12 @@ class LiteAService:
         # that cannot be recovered blocks scoring instead of vanishing. The
         # residual gap the bridge itself takes to run is bridged too, so the
         # scheduler never arms one interval behind.
+        #
+        # The bridge runs BEFORE any outcome is applied: the engine's clock is
+        # monotonic in observed time, and settling a target with a present-day
+        # observation first would make every missed historical interval
+        # unreplayable. The bridge applies each interval's own official label
+        # as it walks forward, which is the causal order.
         try:
             bridged = await asyncio.to_thread(self.bridge.run_until_current)
         except Exception as exc:  # noqa: BLE001
@@ -340,6 +339,13 @@ class LiteAService:
             )
             self.bridge.report = bridged
         print(f"[{MODEL_ID}] startup bridge: {bridged}", flush=True)
+
+        # Outcomes that became official while this container was down are
+        # produced and applied once the bridge has walked the gap forward.
+        try:
+            await asyncio.to_thread(self.drain_settlements)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{MODEL_ID}] startup settlement drain failed: {exc}", flush=True)
 
         # A queued, undelivered bridge decision must drain before scoring.
         try:
