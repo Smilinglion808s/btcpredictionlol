@@ -48,6 +48,83 @@ def now_ns() -> int:
 
 
 # --------------------------------------------------------------------------- #
+# venue rate-limit discipline
+# --------------------------------------------------------------------------- #
+class HostLimiter:
+    """One shared, venue-respecting budget per REST host.
+
+    Binance answers an over-weight address with 429 and then 418 ("banned until
+    <epoch ms>"). Every collector in this process shares one address, so a ban
+    earned by one poller silently starves all the others — which is exactly how
+    a 16-minute COIN-M context ends up incomplete at a boundary. Retrying inside
+    the ban only extends it.
+
+    So each host gets: a minimum spacing between requests, and a hard deadline
+    published by the venue itself (`Retry-After`, or the epoch in the 418 body).
+    Nothing here bypasses a limit, rotates an address or hides a refusal.
+    """
+
+    MIN_INTERVAL_S = float(os.environ.get("LITEA_FEED_MIN_INTERVAL_S", "0.4"))
+
+    def __init__(self) -> None:
+        self._next_at: dict[str, float] = {}
+        self._banned_until: dict[str, float] = {}
+
+    @staticmethod
+    def _host(url: str) -> str:
+        return urllib.parse.urlsplit(url).netloc
+
+    def banned_for(self, url: str) -> float:
+        """Seconds still to wait for this host, 0 when free."""
+        return max(0.0, self._banned_until.get(self._host(url), 0.0) - time.time())
+
+    async def acquire(self, url: str) -> None:
+        host = self._host(url)
+        while True:
+            wait = max(
+                self._banned_until.get(host, 0.0) - time.time(),
+                self._next_at.get(host, 0.0) - time.monotonic(),
+            )
+            if wait <= 0:
+                break
+            await asyncio.sleep(min(wait, 30.0))
+        self._next_at[host] = time.monotonic() + self.MIN_INTERVAL_S
+
+    def note(self, url: str, response: "httpx.Response | None", exc: Exception | None = None) -> None:
+        """Record a venue refusal so every collector on this host backs off."""
+        host = self._host(url)
+        status = getattr(response, "status_code", None)
+        body = ""
+        if response is not None and status in (418, 429):
+            try:
+                body = response.text[:300]
+            except Exception:  # noqa: BLE001
+                body = ""
+        elif exc is not None:
+            body = str(exc)[:300]
+            match = re.search(r"'(418|429)[^']*'", body)
+            status = int(match.group(1)) if match else None
+        if status not in (418, 429):
+            return
+        until = None
+        deadline = re.search(r"banned until (\d+)", body)
+        if deadline:
+            until = int(deadline.group(1)) / 1000.0
+        elif response is not None:
+            retry_after = response.headers.get("retry-after")
+            if retry_after and retry_after.strip().isdigit():
+                until = time.time() + int(retry_after.strip())
+        if until is None:
+            until = time.time() + 120.0
+        self._banned_until[host] = max(self._banned_until.get(host, 0.0), until)
+
+
+#: Process-wide, because the venue counts the address, not the collector.
+LIMITER = HostLimiter()
+
+
+
+# --------------------------------------------------------------------------- #
 # records
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
