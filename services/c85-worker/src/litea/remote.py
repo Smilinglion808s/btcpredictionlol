@@ -37,16 +37,34 @@ class RemoteArtifacts:
         self.root = Path(root)
 
     # -- transfer --------------------------------------------------------------
-    def _get(self, key: str) -> bytes | None:
+    def _get(self, key: str, *, required: bool = False) -> bytes | None:
+        """Absent and broken are DIFFERENT.
+
+        An object the manifest lists is required: if the backend refuses, the
+        signed URL fails or the download errors, that is raised. Only a genuine
+        absence (no manifest yet, on a first run) returns None, so a partial
+        restore can never quietly become the serving position.
+        """
         try:
             signed = self.backend.call("artifact.download_url", key=key, ttl_seconds=120)
-        except Exception:  # noqa: BLE001 - a missing object is not a crash
+        except Exception as exc:  # noqa: BLE001
+            if required:
+                raise RuntimeError(f"LITEA_ARTIFACT_UNREACHABLE: {key} :: {exc}") from exc
             return None
         url = signed.get("url")
         if not url:
+            if required:
+                raise RuntimeError(f"LITEA_ARTIFACT_NO_URL: {key}")
             return None
-        response = httpx.get(url, timeout=120.0, follow_redirects=True)
+        try:
+            response = httpx.get(url, timeout=120.0, follow_redirects=True)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"LITEA_ARTIFACT_DOWNLOAD_FAILED: {key} :: {exc}") from exc
         if response.status_code != 200:
+            if required or response.status_code >= 500:
+                raise RuntimeError(
+                    f"LITEA_ARTIFACT_DOWNLOAD_FAILED: {key} -> {response.status_code}"
+                )
             return None
         return response.content
 
@@ -66,7 +84,7 @@ class RemoteArtifacts:
         return _sha256(body)
 
     def _install(self, key: str, destination: Path, expected: str | None) -> bool:
-        body = self._get(key)
+        body = self._get(key, required=expected is not None)
         if body is None:
             return False
         actual = _sha256(body)
@@ -105,9 +123,16 @@ class RemoteArtifacts:
                 or relative in ("training/training.parquet", "checkpoints/state.json")
             ):
                 continue
-            destination = self.root / relative.split("/", 1)[1] if relative.startswith(
-                ("training/", "checkpoints/")
-            ) else self.root / relative
+            if relative == "checkpoints/state.json":
+                # The bucket snapshot is only republished on a daily fit, so it
+                # can be older than both the local file and the signed decision
+                # checkpoint. It is staged BESIDE the live state and the caller
+                # picks the newest committed position; it never overwrites.
+                destination = self.root / "state.remote.json"
+            elif relative.startswith("training/"):
+                destination = self.root / relative.split("/", 1)[1]
+            else:
+                destination = self.root / relative
             if destination.exists() and _sha256(destination.read_bytes()) == expected:
                 continue
             key = f"datasets/lite-a-floor4-top10-r1/{relative}"
