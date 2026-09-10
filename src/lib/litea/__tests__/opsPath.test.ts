@@ -32,8 +32,11 @@ const outboxRequest = {
   expires_at: "2026-09-10T18:15:08.000Z",
 };
 
-/** Minimal in-memory stand-in for the service client. Records every write. */
-function fakeDb() {
+/**
+ * Minimal in-memory stand-in for the service client. Records every write and
+ * serves the COMMITTED row back — that is what the dispatch path must use.
+ */
+function fakeDb(persisted?: Record<string, unknown> | null) {
   const rpcCalls: any[] = [];
   const writes: Record<string, any[]> = {};
   const record = (table: string, op: string, value: unknown) => {
@@ -42,6 +45,10 @@ function fakeDb() {
   const client: any = {
     rpc: async (name: string, args: any) => {
       rpcCalls.push({ name, args });
+      if (name === "c85_litea_claim_outbox") {
+        record("c85_outbox", "claim", args);
+        return { data: { outcome: "CLAIMED" }, error: null };
+      }
       return { data: { ok: true, target_id: "fake-target-id" }, error: null };
     },
     from: (table: string) => {
@@ -52,11 +59,18 @@ function fakeDb() {
         },
         update: (value: unknown) => {
           record(table, "update", value);
-          return { eq: async () => ({ error: null }) };
+          const eq: any = () => eq;
+          eq.eq = eq;
+          // Awaitable at any depth of `.eq()` chaining.
+          eq.then = (resolve: any) => resolve({ error: null });
+          return eq;
         },
         select: () => chain,
         eq: () => chain,
-        maybeSingle: async () => ({ data: null }),
+        maybeSingle: async () => ({
+          data: table === "c85_targets" ? (persisted ?? null) : null,
+          error: null,
+        }),
         then: (resolve: any) => resolve({ data: [], error: null }),
       };
       return chain;
@@ -71,7 +85,7 @@ afterEach(() => {
 
 describe("decision.commit for Version 1", () => {
   it("refuses a worker outbox request while the server control is off", async () => {
-    const db = fakeDb();
+    const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
       "c85-worker-amsterdam-1",
@@ -86,7 +100,7 @@ describe("decision.commit for Version 1", () => {
   });
 
   it("still records the shadow decision normally with no outbox at all", async () => {
-    const db = fakeDb();
+    const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
       "c85-worker-amsterdam-1",
@@ -99,21 +113,15 @@ describe("decision.commit for Version 1", () => {
     expect(db.writes["c85_outbox"]).toBeUndefined();
   });
 
-  it("with the control on: durable first, then one reservation and the send attempt", async () => {
+  it("with the control on: durable first, then one claim and the send attempt", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
     expect(isModelAllowedToSend(LITE_A_MODEL_VERSION)).toBe(true);
-    const db = fakeDb();
+    const fresh = { ...admittedTarget, target_open_utc: new Date(Date.now() - 6_000).toISOString() };
+    const db = fakeDb(fresh);
     const out = await runC85Op(
       db.client,
       "c85-worker-amsterdam-1",
-      {
-        op: "decision.commit",
-        // A fresh decision: the transport ceiling is measured from target open,
-        // so the row is dated to "now" rather than to a historical interval.
-        target: { ...admittedTarget, target_open_utc: new Date(Date.now() - 6_000).toISOString() },
-        checkpoint: null,
-        outbox: outboxRequest,
-      } as any,
+      { op: "decision.commit", target: fresh, checkpoint: null, outbox: outboxRequest } as any,
       LITE_A_MODEL_VERSION,
     );
     expect(out.status).toBe(200);
@@ -121,18 +129,55 @@ describe("decision.commit for Version 1", () => {
     // and the Version 1 dispatch is a SEPARATE step afterwards.
     expect(db.rpcCalls[0].name).toBe("c85_commit_decision");
     expect(db.rpcCalls[0].args.p_outbox).toBeNull();
-    // Exactly one durable reservation, keyed on the stable event identity.
-    const reservations = db.writes["c85_outbox"].filter((w) => w.op === "insert");
-    expect(reservations).toHaveLength(1);
-    expect(reservations[0].value.state).toBe("PENDING");
+    // Exactly one exclusive claim, keyed on the stable event identity.
+    const claims = db.writes["c85_outbox"].filter((w) => w.op === "claim");
+    expect(claims).toHaveLength(1);
+    expect(String(claims[0].value.p_owner)).toContain("litea-dispatch-");
     // No endpoint exists in this fake, so nothing was accepted anywhere.
     expect(out.result.dispatch).toBe("FAILED");
   });
 
+  it("delivers from the committed record, never from an altered replay body", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const committed = {
+      ...admittedTarget,
+      target_open_utc: new Date(Date.now() - 6_000).toISOString(),
+    };
+    const db = fakeDb(committed);
+    // The wire body claims the opposite side; the persisted record wins.
+    await runC85Op(
+      db.client,
+      "c85-worker-amsterdam-1",
+      {
+        op: "decision.commit",
+        target: { ...committed, final_side: -1 },
+        checkpoint: null,
+        outbox: outboxRequest,
+      } as any,
+      LITE_A_MODEL_VERSION,
+    );
+    const claim = db.writes["c85_outbox"].find((w) => w.op === "claim");
+    expect(claim.value.p_payload.direction).toBe("GREEN");
+    expect(claim.value.p_payload.prediction).toBe("YES");
+  });
+
+  it("does not dispatch when the committed record cannot be read back", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const db = fakeDb(null);
+    const out = await runC85Op(
+      db.client,
+      "c85-worker-amsterdam-1",
+      { op: "decision.commit", target: admittedTarget, checkpoint: null, outbox: outboxRequest } as any,
+      LITE_A_MODEL_VERSION,
+    );
+    expect(out.result.dispatch).toBe("NO_PERSISTED_RECORD");
+    expect(db.writes["c85_outbox"]).toBeUndefined();
+  });
+
   it("never dispatches an old shadow row even with the control on", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
-    const db = fakeDb();
     const stale = { ...admittedTarget, target_open_utc: new Date(Date.now() - 86_400_000).toISOString() };
+    const db = fakeDb(stale);
     const out = await runC85Op(
       db.client,
       "c85-worker-amsterdam-1",
@@ -145,7 +190,7 @@ describe("decision.commit for Version 1", () => {
 
   it("leaves C85 identities exactly as they were", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
-    const db = fakeDb();
+    const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
       "c85-worker-1",
