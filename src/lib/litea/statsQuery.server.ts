@@ -172,8 +172,8 @@ function isScored(row: Row): boolean {
   if (features.input_valid !== true) return false;
   if (row.binance_complete !== true) return false;
 
-  // Head identity it scored under — engine records this alongside the score.
-  const headId = liteA.head_id ?? liteA.fit_id ?? liteA.head ?? null;
+  // Head identity it scored under — the engine records `head_id` with the score.
+  const headId = liteA.head_id ?? null;
   if (headId == null || String(headId).length === 0) return false;
 
   // Gate reasons that mean "no score was produced" disqualify regardless.
