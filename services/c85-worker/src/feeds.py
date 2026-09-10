@@ -991,7 +991,6 @@ class KalshiStrikeCollector:
                     raise
                 except Exception as exc:  # noqa: BLE001
                     self.buffer.error = f"{type(exc).__name__}: {exc}"
-                # Rapid only around the open itself; unhurried while waiting.
                 # Rapid only around the open itself; a keepalive otherwise.
                 rapid = offset < self.TAIL_MS or offset >= self.INTERVAL_MS - self.LEAD_MS
                 await asyncio.sleep(self.poll_s if rapid else 20.0)
