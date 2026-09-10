@@ -561,13 +561,18 @@ class KlineCollector:
                 params = {**self.params, "limit": min(1000, remaining)}
                 if end_ms is not None:
                     params["endTime"] = end_ms
+                response = None
                 try:
+                    await LIMITER.acquire(self.rest_url)
                     response = await client.get(self.rest_url, params=params)
+                    LIMITER.note(self.rest_url, response)
                     response.raise_for_status()
                     rows = response.json()
                 except Exception as exc:  # noqa: BLE001 - warmup is best-effort
+                    LIMITER.note(self.rest_url, response, exc)
                     self.buffer.error = f"backfill {type(exc).__name__}: {exc}"
                     break
+
                 if not rows:
                     break
                 receipt = now_ns()
