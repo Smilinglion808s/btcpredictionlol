@@ -97,14 +97,17 @@ V1 provenance: `probability_yes`, `admission_rank`, `decision_status`, `market_t
 - **Side**: `final_side` +1 → YES/GREEN, −1 → NO/RED, 0 → nothing emitted.
 - **Target**: the 15-minute interval open. The decision is taken at open from `[T, T+5s)` —
   not at candle close. That model window is unchanged and is not traded off against transport.
-- **Dedupe key**: `lite-a-floor4-top10-r1:<ticker>:<target_open_utc>`. One reservation per
-  contract per interval; every retry reuses it and never creates a second reservation.
+- **Dedupe key**: `lite-a-floor4-top10-r1:<ticker>:<target_open_utc>`. One exclusive claim per
+  contract per interval; only its owner may deliver, and the Version 1 path makes exactly one
+  automatic attempt per configured endpoint (no background resend for any response, timeout,
+  exception or cancellation).
 
 **Requirements on the external bot (unknown until confirmed by its owner):**
 1. it must accept `lite-a-floor4-top10-r1` in its own model allow-list — an HTTP 200 from the
    old T45 traffic does **not** prove this;
-2. it must honour `dedupe_key` itself. Our dedupe guarantees one *reservation*; it cannot
-   guarantee one *broker fill*.
+2. it must honour `dedupe_key` itself. Our dedupe gives one *exclusive dispatch operation* and
+   at most one attempt per configured endpoint; it cannot guarantee one *broker fill*, and with
+   several endpoints configured it is not a single global signal either.
 
 **Not available here, at all**: fill price, filled size, fees, order id, realised P/L. Those are
 owned by the betting bot. Also not persisted today: `yes_bid`, `yes_ask`, `last_price`, depth —
@@ -112,6 +115,9 @@ capturing practical odds would need a further worker change.
 
 ## 6. Activation (human only — do not perform automatically)
 
+0. Apply the prepared claim migration `supabase/prepared/20260910_litea_outbox_exclusive_claim.sql`.
+   Until it is applied the claim returns `UNAVAILABLE` and nothing is delivered. Verified on a
+   disposable local PostgreSQL 17.9 instance only; runtime against production is unverified.
 1. Deploy the **worker** release containing `src/litea/dispatch.py` to Railway (Railway stays
    sole writer), with `LITEA_EXECUTION_ENABLED` still unset. Verify shadow behaviour is unchanged.
 2. Deploy the **backend** release containing `src/lib/litea/dispatch.server.ts`, with
@@ -128,12 +134,22 @@ and no payload has been sent to any real endpoint.
 
 ## 7. Proof (software path only, no live betting or fill proof)
 
+- `src/lib/litea/__tests__/duplicateSend.test.ts` — 9 tests: default-off zero attempts, two
+  concurrent same-key requests yielding one claim and one delivery, terminal replay refused,
+  expiry during the wait, kill switch flipped between checks, clock/switch re-checked after the
+  awaited ownership read, ownership error failing closed, owner-only terminal write.
+- `src/lib/litea/__tests__/transportGuard.test.ts` — 7 tests against an in-process receiver:
+  no post when the guard is false, no post with the control absent, no resend after HTTP 500,
+  after a timeout/thrown error, or after a cancelled attempt; one delivery on success; legacy
+  unguarded callers keep their retries.
 - `src/lib/litea/__tests__/dispatch.test.ts` — 9 tests: both controls off, allow-list separation,
   admitted send to an in-process fake receiver, failed delivery, duplicate/replay, expiry between
   reservation and send, disable-before-retry, abstention, wrong identity/head/input/timing.
 - `src/lib/litea/__tests__/opsPath.test.ts` — 5 tests through the real `decision.commit` handler
   with a fake database and clock: refusal while off, unchanged shadow recording, durable-then-
-  reserve when on, stale row refused, C85/T45 unaffected.
+  claim when on, delivery built from the committed record rather than an altered replay body,
+  no dispatch when the committed record cannot be read back, no target amendment when the
+  owner-conditional settle matches nothing, stale row refused, C85/T45 unaffected.
 - `src/lib/litea/__tests__/activation.test.ts` — 9 tests (payload/gate, incl. NaN timing).
 - `services/c85-worker/tests/test_litea_dispatch.py` — 6 tests: default-off preparation, admitted
   outbox identity, stable retry identity, row-level rejection, bounded deadline, and that the
