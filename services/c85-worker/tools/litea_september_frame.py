@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import time
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -261,12 +262,16 @@ def load_agg(kind: str, day: str) -> pd.DataFrame:
 
 
 def load_klines(kind: str, day: str) -> pd.DataFrame:
-    frame = _csv(
+    frame = (
+        rest_klines(kind, day)
+        if not _archive_available(kind, day)
+        else _csv(
         fetch(kind, day),
         [
             "open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
             "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote", "ignore",
         ],
+        )
     )
     frame["open_ms"] = _to_us(frame["open_ms"]) // 1000
     frame["close_ms"] = _to_us(frame["close_ms"]) // 1000
