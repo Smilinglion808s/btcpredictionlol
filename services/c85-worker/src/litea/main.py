@@ -29,6 +29,7 @@ from ..tickers import KalshiTickerResolver
 from .fit_service import run_due_fits
 from .heads import DailyHeadStore
 from .identity import MODEL_ID
+from .remote import RemoteArtifacts
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload
 from .training import TrainingFrame
@@ -181,6 +182,7 @@ class LiteAService:
             "sha256": self.state.cursors.training_sha256,
         }
         report["feeds"] = self.feeds.watermarks()
+        report["artifact_restore"] = self.restore_report
         report["build_sha"] = self.settings.build_sha
         return report
 
@@ -240,6 +242,7 @@ class LiteAService:
 
         asyncio.create_task(self.heartbeat_loop())
         asyncio.create_task(self.settlement_loop())
+        asyncio.create_task(self.fit_loop())
 
         config = uvicorn.Config(
             create_app(self.snapshot),
