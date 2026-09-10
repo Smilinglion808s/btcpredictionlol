@@ -22,6 +22,16 @@ const PHASES = {
     dot: "bg-sky-400",
     chip: "border-sky-400/40 text-sky-300 bg-sky-400/10",
   },
+  STALE: {
+    label: "Paused",
+    dot: "bg-amber-400",
+    chip: "border-amber-400/40 text-amber-300 bg-amber-400/10",
+  },
+  RECORDING_ONLY: {
+    label: "Warming up",
+    dot: "bg-sky-400",
+    chip: "border-sky-400/40 text-sky-300 bg-sky-400/10",
+  },
   PREPARING: {
     label: "Preparing",
     dot: "bg-muted-foreground",
@@ -42,18 +52,18 @@ const DECISIONS: Record<string, { title: string; note: string; tone: string }> =
     tone: "text-emerald-300",
   },
   DAILY_FLOOR_ABSTAIN: {
-    title: "Held back",
-    note: "The day's running result hit the stop-for-the-day rule.",
+    title: "Held by the daily risk rule",
+    note: "The rule reserves room for what is still open today. It can allow predictions again after wins, and top-confidence reads can still come through.",
     tone: "text-amber-300",
   },
   BASE_NO_CALL: {
-    title: "No call",
-    note: "Not confident enough on this close.",
+    title: "No prediction",
+    note: "Not confident enough on this interval.",
     tone: "text-muted-foreground",
   },
   CONFIDENCE_ABSTAIN: {
-    title: "No call",
-    note: "Not confident enough on this close.",
+    title: "No prediction",
+    note: "Not confident enough on this interval.",
     tone: "text-muted-foreground",
   },
   RANK_WARMUP: {
@@ -61,12 +71,35 @@ const DECISIONS: Record<string, { title: string; note: string; tone: string }> =
     note: "Still building enough recent history to judge confidence.",
     tone: "text-sky-300",
   },
+  FIT_UNAVAILABLE: {
+    title: "No prediction made",
+    note: "The daily model for this interval was not in place, so nothing was scored.",
+    tone: "text-amber-300",
+  },
   INPUT_UNAVAILABLE: {
-    title: "Skipped",
-    note: "Market data for this close was incomplete, so no guess was made.",
+    title: "No prediction made",
+    note: "Market data for this interval was incomplete, so nothing was scored.",
     tone: "text-amber-300",
   },
 };
+
+/**
+ * The engine's own reason wins when it explains WHY there was no prediction.
+ * A `BASE_NO_CALL` caused by missing data or by warm-up must never read as
+ * "not confident enough".
+ */
+function describe(latest: any) {
+  const reason = latest?.engine_reason as string | undefined;
+  if (reason && DECISIONS[reason] && reason !== "MODEL_CALL" && reason !== "DAILY_RISK_ABSTAIN") {
+    if (latest?.status === "DAILY_FLOOR_ABSTAIN" && reason === "CONFIDENCE_ABSTAIN") {
+      return DECISIONS.DAILY_FLOOR_ABSTAIN;
+    }
+    if (["INPUT_UNAVAILABLE", "FIT_UNAVAILABLE", "RANK_WARMUP"].includes(reason)) {
+      return DECISIONS[reason];
+    }
+  }
+  return DECISIONS[latest?.status] ?? DECISIONS.BASE_NO_CALL;
+}
 
 function ago(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(Number(seconds))) return "—";
@@ -138,7 +171,7 @@ export function LiteACard({
   const live = stats?.live ?? {};
   const liveOpportunities = Number(live.opportunities ?? 0);
   const graded = Number(live.wins ?? 0) + Number(live.losses ?? 0);
-  const decision = latest ? (DECISIONS[latest.status] ?? DECISIONS.BASE_NO_CALL) : null;
+  const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
 
   return (
@@ -149,7 +182,7 @@ export function LiteACard({
             Version 1
           </h3>
           <p className="mt-1.5 text-xs sm:text-[13px] text-muted-foreground">
-            BTC 15-minute · shadow only
+            BTC 15-minute · predicts at the open · shadow only
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -169,7 +202,7 @@ export function LiteACard({
 
       <section className="rounded-xl border border-border/60 bg-background/40 p-4">
         <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          Latest recorded 15-minute close
+          Latest 15-minute interval
         </div>
         {latest ? (
           <>
@@ -200,7 +233,7 @@ export function LiteACard({
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Nothing recorded yet — the first close will appear here.
+            Nothing recorded yet — the first prediction will appear here.
           </p>
         )}
       </section>
@@ -214,7 +247,13 @@ export function LiteACard({
         <Field
           label="Daily model"
           value={stats?.head_cutoff_utc ? String(stats.head_cutoff_utc).slice(0, 10) : "—"}
-          hint={stats?.head_cutoff_utc ? `refreshed ${ago(stats?.head_age_s)}` : "not reported yet"}
+          hint={
+            stats?.head_cutoff_utc
+              ? stats?.head_current
+                ? "current"
+                : "not current"
+              : "not reported yet"
+          }
         />
       </div>
 
@@ -227,13 +266,14 @@ export function LiteACard({
         </div>
         {liveOpportunities === 0 ? (
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            No live results yet. Results start counting from the first close it records while
+            No live results yet. Results start counting from the first prediction it makes while
             running — nothing from testing is carried over.
           </p>
         ) : (
           <>
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <Field label="Closes seen" value={String(liveOpportunities)} />
+              <Field label="Intervals seen" value={String(liveOpportunities)}
+                hint={`${live.scored ?? 0} scored`} />
               <Field
                 label="Calls"
                 value={String(live.calls ?? 0)}
@@ -242,7 +282,7 @@ export function LiteACard({
               <Field
                 label="Passed"
                 value={String((live.confidence_abstains ?? 0) + (live.floor_holds ?? 0))}
-                hint={`${live.floor_holds ?? 0} held back by the daily rule`}
+                hint={`${live.floor_holds ?? 0} held by the daily risk rule`}
               />
               <Field
                 label="Settled"
@@ -257,7 +297,7 @@ export function LiteACard({
               />
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Counted only from closes recorded live. Passes never count as wins.
+              Counted only from intervals predicted live. Passes never count as wins.
             </p>
           </>
         )}
@@ -266,8 +306,8 @@ export function LiteACard({
       {Number(stats?.research_rows ?? 0) > 0 ? (
         <p className="text-[11px] text-muted-foreground">
           {Number(stats.research_rows) === 1
-            ? "1 earlier close was rebuilt after the fact during testing and is kept out of the results above."
-            : `${stats.research_rows} earlier closes were rebuilt after the fact during testing and are kept out of the results above.`}
+            ? "1 earlier interval was rebuilt after the fact during testing and is kept out of the results above."
+            : `${stats.research_rows} earlier intervals were rebuilt after the fact during testing and are kept out of the results above.`}
         </p>
       ) : null}
     </Card>
