@@ -79,6 +79,7 @@ def build_worker(tmp_path, store, *, freeze_time: bool = True) -> LiteAWorker:
         ),
         state=_state(),
         state_path=tmp_path / "state.json",
+        training_path=tmp_path / "training.parquet",
         ticker_resolver=FakeResolver(),
         feeds=SimpleNamespace(),
     )
@@ -476,10 +477,12 @@ def test_fit_runs_outside_the_lock_on_a_coherent_snapshot(tmp_path):
     assert snapshot.rows == rows_at_snapshot
     assert worker.training.rows == rows_at_snapshot + 1
 
-    # Cursors describe the frame that was actually fitted, not the live one.
+    # The fit's input is recorded as such; the live cursors keep up with the
+    # live frame (covered in detail by the cursor-identity test below).
     worker.install_fit_cursors(snapshot)
-    assert worker.state.cursors.training_rows == rows_at_snapshot
-    assert worker.state.cursors.training_sha256 == snapshot.sha256
+    assert worker.state.cursors.fit_input_rows == rows_at_snapshot
+    assert worker.state.cursors.fit_input_sha256 == snapshot.sha256
+    assert worker.state.cursors.training_rows == worker.training.rows
 
 
 # -- durable diagnostics -------------------------------------------------------
@@ -503,13 +506,16 @@ def test_timing_diagnostics_ride_in_the_private_features_payload(tmp_path):
     assert "commit_latency_ms" in amended and "durable_ack_offset_ms" in amended
 
 
-def test_unevidenced_lease_is_reported_as_such(tmp_path):
+def test_unevidenced_lease_never_reaches_the_decision(tmp_path):
     store = FakeStore(lease={"granted": True, "owner_id": "me"})
     worker = build_worker(tmp_path, store)
+    before = worker.state.snapshot()["sha256"]
     outcome = run_boundary(worker, past_target())
-    # Granted, but with nothing to evidence it: never called USABLE.
-    assert outcome.timing["lease_status"] == "UNEVIDENCED"
-    assert outcome.timing["lease_reused"] is False
+    # Granted, but with nothing to evidence it: never treated as ownership.
+    assert outcome.status == "MISSED"
+    assert "unevidenced" in (outcome.reason or "")
+    assert worker.state.snapshot()["sha256"] == before
+    assert store.commits == [] and store.missed == []
 
 
 # -- the ACTUAL service loops --------------------------------------------------
@@ -603,3 +609,135 @@ def test_actual_settlement_loop_keeps_the_loop_responsive(tmp_path):
     ticks = asyncio.run(scenario())
     assert appended, "the real checkpoint append did not run"
     assert ticks > 40
+
+
+# -- a grant is not evidence of ownership -------------------------------------
+@pytest.mark.parametrize(
+    ("renewed", "expected"),
+    [
+        ({"granted": True, "owner_id": "me"}, "unevidenced"),
+        ({"granted": True, "owner_id": "me", "expires_at": "not-a-timestamp"}, "unevidenced"),
+        ({"granted": True, "owner_id": "me", "expires_at": iso(-30)}, "expired"),
+        ({"granted": True, "owner_id": "me", "expires_at": iso(0.2)}, "expired"),
+    ],
+)
+def test_renewed_grant_without_real_evidence_leaves_the_pair_untouched(
+    tmp_path, renewed, expected
+):
+    """Granted, but unprovable: the decision must not proceed anyway."""
+    store = FakeStore()
+    worker = build_worker(tmp_path, store)
+    target = past_target()
+
+    asyncio.run(worker.prepare_boundary(target))
+    worker.prepared["lease"]["expires_at"] = iso(1)  # forces the renewal
+    store.lease_response = renewed
+
+    before = worker.state.snapshot()["sha256"]
+    outcome = run_boundary(worker, target)
+
+    assert outcome.status == "MISSED"
+    assert expected in (outcome.reason or "")
+    assert worker.state.engine.last_target is None
+    assert worker.state.guard.last_target is None
+    assert worker.state.guard.pending == {}
+    assert worker.state.snapshot()["sha256"] == before
+    assert store.commits == [] and store.missed == []
+    assert worker.pending_targets() == []
+
+
+def test_settlement_during_a_slow_renewal_does_not_strand_the_decision(tmp_path):
+    """The decision's observation is taken after whatever settled first.
+
+    A settlement lands while the lease renewal is deliberately slow, advancing
+    the pair's clock. Because the observation is captured inside the serialized
+    section rather than before the renewal, the decision still records rather
+    than being refused as out of order.
+    """
+    store = FakeStore()
+    worker = build_worker(tmp_path, store)
+    target = past_target()
+
+    asyncio.run(worker.prepare_boundary(target))
+    worker.prepared["lease"]["expires_at"] = iso(1)  # forces the renewal
+
+    import threading
+
+    settled = threading.Event()
+    original_acquire = store.acquire_lease
+
+    def slow_acquire(ttl_seconds: int) -> dict:
+        # A real settlement, concurrently, while the renewal is in flight.
+        def settle() -> None:
+            worker.apply_settlements(
+                [
+                    {
+                        "ticker": "OTHER",
+                        "target_open_utc": (target - timedelta(hours=1)).isoformat(),
+                        "label": 1,
+                        "settlement_ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                ]
+            )
+            settled.set()
+
+        thread = threading.Thread(target=settle, daemon=True)
+        thread.start()
+        time.sleep(0.4)
+        thread.join(timeout=2)
+        return original_acquire(ttl_seconds)
+
+    store.acquire_lease = slow_acquire
+    outcome = run_boundary(worker, target)
+
+    assert settled.is_set()
+    assert outcome.status != "MISSED"
+    assert store.commits, "the decision was not recorded"
+    assert worker.state.engine.last_target is not None
+    worker.state._assert_pair_consistent()  # noqa: SLF001
+
+
+# -- live training identity is never regressed to a fitted copy ---------------
+def test_installing_fit_cursors_keeps_the_live_training_identity(tmp_path):
+    """A fit consumes a copy; the live cursors must still describe the file.
+
+    Those cursors are what a restart verifies its restored frame against, so
+    rewriting them with an older snapshot's identity would make a perfectly
+    good restore look wrong.
+    """
+    store = FakeStore()
+    worker = build_worker(tmp_path, store)
+    rows = [
+        {
+            "ts": past_target() + timedelta(minutes=15 * i),
+            "ticker": f"T{i}",
+            "input_valid": True,
+            "label": float("nan"),
+            "settlement_ts": None,
+        }
+        for i in range(3)
+    ]
+    worker.training.append(rows[:2])
+    worker.state.cursors.training_sha256 = worker.training.save(worker.training_path)
+    worker.state.cursors.training_rows = worker.training.rows
+    worker.state.cursors.training_last_target = worker.training.last_target
+
+    snapshot = worker.training_snapshot()
+
+    # A row arrives while the fit is running on the copy.
+    worker.training.append(rows[2:])
+    live_sha = worker.training.save(worker.training_path)
+    worker.state.cursors.training_sha256 = live_sha
+
+    worker.install_fit_cursors(snapshot, SimpleNamespace(cutoff="2026-09-10", fitted=True, reason=None))
+
+    cursors = worker.state.cursors
+    # Live identity still describes the frame on disk...
+    assert cursors.training_rows == worker.training.rows == 3
+    assert cursors.training_sha256 == live_sha
+    assert cursors.training_last_target == worker.training.last_target
+    # ...and the fit's input is recorded distinctly.
+    assert cursors.fit_input_rows == snapshot.rows == 2
+    assert cursors.fit_input_sha256 == snapshot.sha256
+    assert cursors.fit_input_sha256 != cursors.training_sha256
+    assert cursors.last_fit_cutoff == "2026-09-10"
