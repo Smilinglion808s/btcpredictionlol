@@ -101,6 +101,31 @@ def _kline_row(kline: Any) -> dict[str, float]:
 
 
 @dataclass
+class DirectionStage:
+    """Result of the authentic source stages 1-6 for one target.
+
+    `reasons` is the complete accumulated blocker list for those stages. A
+    direction-only consumer (Version 1) treats a non-empty list as INPUT
+    UNAVAILABLE; the full C85 build continues into the ancestor/meta/aux stages
+    only when it is empty.
+    """
+
+    target_open: datetime
+    target_ns: int
+    target_ms: int
+    cutoff_ns: int
+    freeze_ns: int
+    reasons: list[str]
+    row: dict[str, Any]
+    frame: Any
+    direction_features: dict[str, float] | None
+    market_q1: bool | None
+    last_yes_price: float | None
+
+
+
+
+@dataclass
 class LivePacketSource:
     """Builds one target's inputs from the live collectors and the expert chain.
 
