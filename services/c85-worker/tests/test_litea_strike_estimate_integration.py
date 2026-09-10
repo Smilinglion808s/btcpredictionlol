@@ -1,10 +1,15 @@
 """An estimated boundary strike must reach the real 60-feature score.
 
 These are integration properties of the shipped fallback policy
-(`strike-fallbacks-r1`): a fallback reference price is a normal input to the
-unchanged Version 1 feature build, engine and guard; the chosen source is
+(`strike-fallbacks-free-r1`): a fallback reference price is a normal input to
+the unchanged Version 1 feature build, engine and guard; the chosen source is
 frozen with the decision; a later official strike is audit evidence only; and
 settlement still comes from the official Kalshi result alone.
+
+Scope note, so the evidence is not overstated: the head used below is a
+ZERO-COEFFICIENT fixture, and "restart" here is a JSON round-trip of the frozen
+provenance. These are contract checks, not a private fitted head and not a real
+process restart.
 """
 from __future__ import annotations
 
@@ -36,8 +41,9 @@ from src.litea.strike_policy import (  # noqa: E402
     choose_strike,
     official_difference,
 )
-from src.reference import ReferenceBuffer  # noqa: E402
+from src.reference import CoinbaseMatchesCollector, ReferenceBuffer  # noqa: E402
 
+from tests.test_litea_strike_free_fallbacks import coinbase_match  # noqa: E402
 from tests.test_stage_empty_window import TARGET_MS, staged_row  # noqa: E402
 
 UTC = timezone.utc
@@ -45,15 +51,13 @@ TARGET = datetime.fromtimestamp(TARGET_MS / 1000, UTC)
 FREEZE_NS = (TARGET_MS + 5_000) * 1_000_000
 
 
-def cf_buffer(value: str) -> ReferenceBuffer:
-    buffer = ReferenceBuffer("cf_brti", source="cf_brti")
-    buffer.record_exact_average(
-        value,
-        window_size=60,
-        window_start_ms=TARGET_MS - 60_000,
-        window_end_ms=TARGET_MS,
-        receipt_ns=TARGET_MS * 1_000_000 + 400_000_000,
-    )
+def free_buffer(value: float) -> ReferenceBuffer:
+    """Sixty received public Coinbase BTC-USD prints in (T-60s, T]."""
+    buffer = ReferenceBuffer("coinbase_btcusd", source="coinbase_btcusd")
+    collector = CoinbaseMatchesCollector(buffer)
+    for index in range(60):
+        ms = TARGET_MS - (59 - index) * 1000
+        collector.ingest(coinbase_match(ms, value, 500_000 + index), (ms + 20) * 1_000_000)
     return buffer
 
 
