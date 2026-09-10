@@ -178,5 +178,8 @@ def checkpoint_payload(state: Any, *, next_target: datetime | None) -> dict[str,
             "training_last_target": cursors["training_last_target"],
         },
         "source_watermarks": cursors["source_watermarks"],
+        # The complete, digest-sealed paired envelope. This is what a clean
+        # container restores from.
+        "expert_state": {"litea_paired_envelope": envelope},
         "state_sha256": envelope["sha256"],
     }
