@@ -42,6 +42,7 @@ class Direction60Packet:
     blockers: list[str] = field(default_factory=list)
     source: dict[str, Any] = field(default_factory=dict)
     market: dict[str, Any] | None = None
+    strike_policy: dict[str, Any] | None = None
 
     @property
     def feature_window_end(self) -> datetime:
@@ -111,6 +112,7 @@ class Direction60Source:
                 None if stage.market is None else str(stage.market.get("receipt_ns"))
             ),
             "market_diagnostics": stage.market_diagnostics,
+            "strike_policy": stage.strike_policy,
         }
 
 
@@ -128,6 +130,7 @@ class Direction60Source:
             blockers=blockers,
             source=source,
             market=stage.market,
+            strike_policy=stage.strike_policy,
         )
 
     def blocking_reasons(self, at_ns: int) -> list[str]:

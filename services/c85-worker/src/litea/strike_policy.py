@@ -79,7 +79,11 @@ def choose_strike(
             failures[name] = str(candidate.get("reason") or "unusable")
 
     chosen: dict[str, Any] | None = None
-    for name in PRIORITY:
+    # A genuine PRE-FREEZE disagreement between the two official readings of the
+    # same contract is a contract-identity defect. It is refused outright — an
+    # estimate is a substitute for a MISSING strike, never a tiebreaker between
+    # two contradictory official ones.
+    for name in () if official_conflict else PRIORITY:
         candidate = candidates.get(name)
         if candidate and candidate.get("usable"):
             chosen = {**candidate, "source": name}
@@ -98,6 +102,7 @@ def choose_strike(
         "source_age_ms": None if chosen is None else chosen.get("source_age_ms"),
         "tick_count": None if chosen is None else chosen.get("tick_count"),
         "official_conflict": bool(official_conflict),
+        "refused": "official_paths_disagree" if official_conflict else None,
         "source_failures": failures,
         "candidates": {
             name: {k: v for k, v in candidate.items() if k != "event_window_ms"}

@@ -54,6 +54,7 @@ from ..features import (
 )
 from ..packets import _events, _kline_row
 from .reconstruct import empty_window_template
+from .strike_policy import choose_strike
 
 
 NS = 1_000_000_000
@@ -87,6 +88,10 @@ class V1Stage:
     #: Small, secret-free record of what the venue actually served for this
     #: target's contract, so a late publication can be told from a defect.
     market_diagnostics: dict[str, Any] | None = None
+    #: Which price became `floor_strike`, and under which input policy. Every
+    #: record carries it, so no earlier performance is ever read as covering
+    #: an estimated-strike decision.
+    strike_policy: dict[str, Any] | None = None
 
 
 
@@ -251,36 +256,56 @@ class V1DirectionStage:
             else None
         )
 
-        conflicted = bool(
-            markets is not None
-            and target_ms in getattr(markets, "conflicts", {})
+        conflict = (
+            markets.eligible_conflict(target_ms, freeze_ns)
+            if markets is not None and hasattr(markets, "eligible_conflict")
+            else None
         )
-        if conflicted:
-            # Two OFFICIAL readings of the same contract disagreed. Preferring
-            # one would be a guess, so the boundary is refused pending
+        strike_policy = choose_strike(
+            market,
+            {name: self._buffer(name) for name in ("cf_brti", "chainlink_streams")},
+            target_ms,
+            freeze_ns,
+            official_conflict=bool(conflict),
+        )
+        if market_diagnostics is not None:
+            market_diagnostics["strike_policy"] = strike_policy
+            if conflict:
+                market_diagnostics["eligible_conflict"] = conflict
+
+        if conflict:
+            # Two OFFICIAL readings of the same contract, BOTH received before
+            # this freeze, disagreed. Preferring one would be a guess and an
+            # estimate is not a tiebreaker, so the boundary is refused pending
             # diagnosis rather than scored against an unverified strike.
             reasons.append(
                 "LITEA_FLOOR_STRIKE_CONFLICT: the venue's two official market readings "
-                "for this contract reported different floor_strike values; no strike is "
-                "chosen and the boundary is not scored"
+                "for this contract reported different floor_strike values before the "
+                "freeze; no strike is chosen and the boundary is not scored"
             )
         elif market is None:
+            # Listing METADATA is required even when a reference price could
+            # stand in for the strike: without it the contract identity and its
+            # window are unverified, and nothing here invents them.
             reasons.append(
                 "LITEA_MARKET_NOT_LISTED_BY_FREEZE: no KXBTC15M contract opening at this "
-                "target had been received at the declared freeze; the strike is taken "
-                "from the venue's own market record and is never derived from a price"
+                "target had been received at the declared freeze; the contract identity "
+                "and window are never invented"
             )
-
-        else:
-            strike = market.get("floor_strike")
-            if strike is None or not np.isfinite(float(strike)) or float(strike) <= 0:
-                reasons.append(
-                    "LITEA_FLOOR_STRIKE_MISSING: the target market did not supply a finite "
-                    "positive floor_strike"
+        elif strike_policy.get("strike") is None:
+            reasons.append(
+                "LITEA_STRIKE_UNAVAILABLE: the target market supplied no finite positive "
+                "floor_strike and no boundary price reference was usable by the freeze "
+                "("
+                + "; ".join(
+                    f"{name}: {reason}"
+                    for name, reason in sorted(strike_policy["source_failures"].items())
                 )
-            else:
-                row["floor_strike"] = float(strike)
-                row["anchor_valid"] = True
+                + ")"
+            )
+        else:
+            row["floor_strike"] = float(strike_policy["strike"])
+            row["anchor_valid"] = True
 
         # 4. Reference minutes: USDCUSDT rate, spot prior, COIN-M index prior.
         prior_open = target_ms - MINUTE_MS
@@ -407,5 +432,6 @@ class V1DirectionStage:
             market=market,
             watermarks=self.watermarks(freeze_ns),
             market_diagnostics=market_diagnostics,
+            strike_policy=strike_policy,
         )
 

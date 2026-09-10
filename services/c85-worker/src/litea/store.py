@@ -107,6 +107,13 @@ def target_row(
             "blockers": packet.blockers or None,
             "model_id": MODEL_ID,
             "market_diagnostics": _jsonable(packet.source.get("market_diagnostics")),
+            # WHICH price became the strike, and under which input policy. A
+            # frozen decision keeps this forever; a late official strike is
+            # audit evidence and never rewrites it.
+            "strike_policy": _jsonable(packet.source.get("strike_policy")),
+            "input_policy_version": (packet.source.get("strike_policy") or {}).get(
+                "input_policy_version"
+            ),
             "execution_enabled": False,
 
         },

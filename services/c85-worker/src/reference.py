@@ -18,34 +18,43 @@ opening boundary, rounded to two decimals. So a usable reference must be:
 Two independent references are collected continuously and concurrently, so the
 choice at freeze is made from candidates already in hand:
 
-  ``cf_brti``            CF Benchmarks BRTI, through Kalshi's authenticated
-                         `cfbenchmarks_value` websocket. When the venue itself
-                         publishes the completed windowed average for the
-                         boundary (`last_60s_windowed_average_15min`, final
-                         count 60) that exact value is reused and tagged
-                         `venue_60s_final_average`. Otherwise the causal mean of
-                         the received ticks is used and tagged
-                         `causal_approx_60s_mean` — a partially built trailing
-                         average is never presented as the final one.
+  ``cf_brti``            CF Benchmarks BRTI through Kalshi's authenticated
+                         `cfbenchmarks_value` channel, decoded from the
+                         DOCUMENTED envelope: `msg.index_id == "BRTI"`,
+                         `msg.data` a JSON STRING carrying `id`/`time`/`value`,
+                         and the quarter-hour field
+                         `last_60s_windowed_average_15min` with
+                         `window_size` / `window_start_ts_ms` /
+                         `window_end_ts_exclusive`. Only a window whose
+                         `window_size` is 60 and whose accumulation window is
+                         exactly `(T-60s, T]` is the COMPLETED average; the
+                         partial second-indexed counts published earlier in the
+                         final minute are never presented as final. When no
+                         completed window is held, the causal mean of received
+                         ticks is used and tagged `causal_approx_60s_mean`.
 
-  ``chainlink_streams``  Chainlink Data Streams BTC/USD, v3 reports. The
+  ``chainlink_streams``  Chainlink Data Streams BTC/USD v3 reports, decoded
+                         from the report blob and validated for feed id,
+                         timestamp consistency, units and expiry. The
                          low-latency stream only; an on-chain heartbeat oracle
-                         is NOT substituted for it.
+                         is NOT substituted for it. Reports are DECODED over an
+                         authenticated TLS channel — their signatures are not
+                         cryptographically verified here, and nothing claims
+                         otherwise.
 
 Both are estimates. They are labelled as such at every layer, they never feed
 settlement (official Kalshi results alone grade a decision), and they never
 rewrite a frozen decision.
 
 Neither feed has credentials in this project today. Without them each collector
-reports `credentials_missing` and produces nothing: a disabled collector is
-never reported as operational.
+reports `credentials_missing`, produces nothing and never counts as connected:
+a disabled collector is never reported as operational.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import contextlib
-import datetime as _dt
 import json
 import math
 import time
@@ -58,10 +67,14 @@ import websockets
 from .feeds import NS, HostLimiter, _BaseBuffer, now_ns
 
 MINUTE_MS = 60_000
+QUARTER_MS = 15 * MINUTE_MS
 
 #: A reference tick older than this at the boundary cannot describe it.
 MAX_TICK_AGE_MS = 5_000
-#: Largest tolerated hole inside the 60-second window for an approximation.
+#: Largest tolerated hole ANYWHERE in the 60-second window — including the
+#: leading edge (window start -> first tick) and the trailing edge
+#: (last tick -> boundary). Thirty ticks crammed into the final half minute is
+#: not a 60-second average and must not pass.
 MAX_GAP_MS = 5_000
 #: Fewest ticks an approximation may be built from (of the ~60 expected).
 MIN_TICKS = 30
@@ -69,6 +82,8 @@ MIN_TICKS = 30
 #: error (wei, cents, basis points), not a price, and is refused.
 MIN_PRICE = 1_000.0
 MAX_PRICE = 10_000_000.0
+#: How far after the boundary the completed window's own end stamp may sit.
+EXACT_END_TOLERANCE_MS = 2_000
 
 
 def _finite_price(value: Any) -> float | None:
@@ -81,6 +96,13 @@ def _finite_price(value: Any) -> float | None:
     return number
 
 
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass
 class ReferenceBuffer(_BaseBuffer):
     """Per-second boundary reference ticks from ONE named source."""
@@ -88,49 +110,76 @@ class ReferenceBuffer(_BaseBuffer):
     #: Stable source id recorded on every decision that uses it.
     source: str = "reference"
     unit: str = "USD"
-    #: (source_ts_ms, value, receipt_ns), append-ordered by receipt.
-    ticks: list[tuple[int, float, int]] = field(default_factory=list)
-    #: boundary_ms -> the venue's own completed 60s average for that boundary.
+    #: (source_ts_ms, value, receipt_ns, expires_at_ms|None), by receipt order.
+    ticks: list[tuple[int, float, int, int | None]] = field(default_factory=list)
+    #: boundary_ms -> the venue's own COMPLETED 60-tick average for it.
     exact_averages: dict[int, dict[str, Any]] = field(default_factory=dict)
     retain_ms: int = 10 * MINUTE_MS
     credentials_missing: bool = False
     freshness_budget_ns: int = 10 * NS
 
-    def append(self, source_ts_ms: int, value: Any, receipt_ns: int) -> bool:
+    def append(
+        self,
+        source_ts_ms: Any,
+        value: Any,
+        receipt_ns: int,
+        expires_at_ms: int | None = None,
+    ) -> bool:
         price = _finite_price(value)
-        if price is None:
+        stamp = _int(source_ts_ms)
+        if price is None or stamp is None or stamp <= 0:
             return False
-        source_ts_ms = int(source_ts_ms)
-        if source_ts_ms <= 0:
-            return False
-        self.ticks.append((source_ts_ms, price, int(receipt_ns)))
-        self.last_event_ns = source_ts_ms * 1_000_000
-        self.last_receipt_ns = int(receipt_ns)
+        if expires_at_ms is not None and expires_at_ms <= stamp:
+            return False  # already expired when it was observed
+        self.ticks.append((stamp, price, int(receipt_ns), expires_at_ms))
+        self.last_event_ns = max(self.last_event_ns, stamp * 1_000_000)
+        self.last_receipt_ns = max(self.last_receipt_ns, int(receipt_ns))
         self.connected_since_ns = self.connected_since_ns or int(receipt_ns)
-        cutoff = source_ts_ms - self.retain_ms
         if len(self.ticks) > 4096:
+            cutoff = stamp - self.retain_ms
             self.ticks = [t for t in self.ticks if t[0] >= cutoff]
         return True
 
     def record_exact_average(
-        self, boundary_ms: int, value: Any, count: Any, receipt_ns: int
-    ) -> bool:
-        """Only a COMPLETED 60-tick window may be stored as the exact average."""
+        self,
+        value: Any,
+        *,
+        window_size: Any,
+        window_start_ms: Any,
+        window_end_ms: Any,
+        receipt_ns: int,
+    ) -> int | None:
+        """Store a COMPLETED quarter-hour window. Returns its boundary, or None.
+
+        Completed means exactly what the channel documents: `window_size == 60`
+        over the accumulation window `(boundary - 60s, boundary]`, whose start
+        stamp is therefore `boundary - 60000` and whose boundary lands on a
+        quarter hour. A partial final-minute count is rejected. The FIRST
+        eligible version received is kept; a later frame never replaces it.
+        """
         price = _finite_price(value)
-        try:
-            ticks = int(count)
-        except (TypeError, ValueError):
-            return False
-        if price is None or ticks != 60:
-            return False
-        self.exact_averages[int(boundary_ms)] = {
+        size = _int(window_size)
+        start = _int(window_start_ms)
+        end = _int(window_end_ms)
+        if price is None or size != 60 or start is None or end is None:
+            return None
+        boundary = start + MINUTE_MS
+        if boundary % QUARTER_MS != 0:
+            return None
+        if not boundary <= end <= boundary + EXACT_END_TOLERANCE_MS:
+            return None
+        if boundary in self.exact_averages:
+            return boundary  # earliest eligible version is retained
+        self.exact_averages[boundary] = {
             "value": price,
-            "count": ticks,
+            "count": size,
             "receipt_ns": int(receipt_ns),
+            "window_start_ms": start,
+            "window_end_ts_exclusive": end,
         }
-        for key in [k for k in self.exact_averages if k < int(boundary_ms) - self.retain_ms]:
+        for key in [k for k in self.exact_averages if k < boundary - self.retain_ms]:
             self.exact_averages.pop(key, None)
-        return True
+        return boundary
 
     # -- candidate selection ------------------------------------------------ #
     def boundary_reference(self, target_ms: int, freeze_ns: int) -> dict[str, Any]:
@@ -160,28 +209,30 @@ class ReferenceBuffer(_BaseBuffer):
             }
 
         usable = [
-            (ts, value, receipt)
-            for ts, value, receipt in self.ticks
-            if window_start < ts <= target_ms and receipt <= freeze_ns
+            (ts, value, receipt, expires)
+            for ts, value, receipt, expires in self.ticks
+            if window_start < ts <= target_ms
+            and receipt <= freeze_ns
+            and (expires is None or expires > target_ms)
         ]
         if not usable:
             return {**base, "usable": False, "reason": "no_ticks_in_window"}
-        usable.sort(key=lambda item: item[0])
         # De-duplicate on source second; the last received wins.
-        by_second: dict[int, tuple[int, float, int]] = {}
-        for ts, value, receipt in usable:
-            by_second[ts // 1000] = (ts, value, receipt)
+        by_second: dict[int, tuple[int, float, int, int | None]] = {}
+        for row in sorted(usable, key=lambda item: (item[0], item[2])):
+            by_second[row[0] // 1000] = row
         rows = sorted(by_second.values(), key=lambda item: item[0])
         count = len(rows)
-        newest_ts = rows[-1][0]
-        age_ms = target_ms - newest_ts
-        gaps = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
-        worst_gap = max(gaps) if gaps else target_ms - rows[0][0]
+        age_ms = target_ms - rows[-1][0]
+        interior = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
+        leading = rows[0][0] - window_start
+        worst_gap = max([leading, age_ms, *interior])
         detail = {
             **base,
             "tick_count": count,
             "source_age_ms": age_ms,
             "max_gap_ms": worst_gap,
+            "leading_gap_ms": leading,
             "receipt_ns": max(row[2] for row in rows),
         }
         if count < MIN_TICKS:
@@ -243,24 +294,39 @@ class CFBenchmarksCollector:
         self.private_key_pem = private_key_pem or ""
         self.buffer.credentials_missing = not (self.key_id and self.private_key_pem)
 
-    def ingest(self, message: dict[str, Any], receipt_ns: int) -> bool:
-        """One decoded frame -> buffered tick(s). Pure; unit-tested directly."""
-        payload = message.get("msg") if isinstance(message.get("msg"), dict) else message
-        if not isinstance(payload, dict):
+    def ingest(self, frame: dict[str, Any], receipt_ns: int) -> bool:
+        """One decoded websocket frame, in the channel's DOCUMENTED shape.
+
+        Required: `msg.index_id == "BRTI"` (never assumed), and `msg.data` a
+        JSON STRING whose `id` is also BRTI, carrying `time` (ms) and `value`.
+        """
+        message = frame.get("msg")
+        if not isinstance(message, dict):
             return False
-        if str(payload.get("index_id") or self.INDEX_ID).upper() != self.INDEX_ID:
+        if message.get("index_id") != self.INDEX_ID:
             return False
-        source_ts = payload.get("source_ts_ms") or payload.get("ts_ms")
+
         stored = False
-        if source_ts:
-            stored = self.buffer.append(int(source_ts), payload.get("value"), receipt_ns)
-        window = payload.get("last_60s_windowed_average_15min")
+        raw = message.get("data")
+        payload: Any = None
+        if isinstance(raw, str):
+            with contextlib.suppress(Exception):
+                payload = json.loads(raw)
+        elif isinstance(raw, dict):
+            payload = raw
+        if isinstance(payload, dict) and payload.get("id") == self.INDEX_ID:
+            stored = self.buffer.append(payload.get("time"), payload.get("value"), receipt_ns)
+
+        window = message.get("last_60s_windowed_average_15min")
         if isinstance(window, dict):
-            boundary = window.get("quarter_close_ts_ms") or window.get("boundary_ts_ms")
-            if boundary:
-                stored |= self.buffer.record_exact_average(
-                    int(boundary), window.get("value"), window.get("count"), receipt_ns
-                )
+            recorded = self.buffer.record_exact_average(
+                window.get("value"),
+                window_size=window.get("window_size"),
+                window_start_ms=window.get("window_start_ts_ms"),
+                window_end_ms=window.get("window_end_ts_exclusive"),
+                receipt_ns=receipt_ns,
+            )
+            stored = stored or recorded is not None
         return stored
 
     async def run(self) -> None:
@@ -301,36 +367,43 @@ class CFBenchmarksCollector:
 # --------------------------------------------------------------------------- #
 # Chainlink Data Streams
 # --------------------------------------------------------------------------- #
+#: A v3 report blob is nine 32-byte words. A shorter blob is a different schema
+#: (or a truncated payload) and is refused rather than read positionally.
+V3_WORDS = 9
+
+
 def decode_v3_report(full_report_hex: str) -> dict[str, Any] | None:
     """Decode a Data Streams v3 report blob into its documented fields.
 
-    Layout (schema v3): the outer payload is
-    `abi.encode(bytes32[3] reportContext, bytes reportBlob, ...)`; the blob is a
-    fixed sequence of 32-byte words: feedId, validFromTimestamp,
-    observationsTimestamp, nativeFee, linkFee, expiresAt, benchmarkPrice, bid,
-    ask. Prices are signed 192-bit integers scaled by 1e18.
+    Layout: the outer payload is
+    `abi.encode(bytes32[3] reportContext, bytes reportBlob, bytes32[] rs,
+    bytes32[] ss, bytes32 rawVs)`; the blob is nine 32-byte words: feedId,
+    validFromTimestamp, observationsTimestamp, nativeFee, linkFee, expiresAt,
+    benchmarkPrice, bid, ask. Prices are signed 192-bit integers scaled 1e18.
+
+    This DECODES a report. It does not verify the report's signatures; the
+    transport's authentication and TLS are the only assurances in play.
     """
     text = full_report_hex[2:] if full_report_hex.startswith("0x") else full_report_hex
     try:
         raw = bytes.fromhex(text)
     except ValueError:
         return None
-    if len(raw) < 32 * 5:
+    if len(raw) < 32:
         return None
 
     def word(source: bytes, index: int) -> int:
         return int.from_bytes(source[index * 32 : (index + 1) * 32], "big")
 
     blob = raw
-    # Outer encoding: word 3 is the offset to the report blob's length word.
     if len(raw) >= 32 * 6:
         offset = word(raw, 3)
-        if 0 < offset < len(raw) - 32:
+        if 0 < offset < len(raw) - 32 and offset % 32 == 0:
             length = word(raw, offset // 32)
             start = offset + 32
             if 0 < length <= len(raw) - start:
                 blob = raw[start : start + length]
-    if len(blob) < 32 * 7:
+    if len(blob) < 32 * V3_WORDS:
         return None
 
     def signed(index: int) -> int:
@@ -343,6 +416,8 @@ def decode_v3_report(full_report_hex: str) -> dict[str, Any] | None:
         "observations_ts": word(blob, 2),
         "expires_at": word(blob, 5),
         "benchmark_price": signed(6) / 1e18,
+        "bid": signed(7) / 1e18,
+        "ask": signed(8) / 1e18,
     }
 
 
@@ -391,28 +466,43 @@ class ChainlinkStreamsCollector:
         }
 
     def ingest(self, payload: dict[str, Any], receipt_ns: int) -> bool:
+        """One `/reports/latest` body. The DECODED report is authoritative."""
         report = payload.get("report") if isinstance(payload.get("report"), dict) else payload
         if not isinstance(report, dict):
-            return False
-        served = str(report.get("feedID") or report.get("feed_id") or "").lower()
-        if self.feed_id and served and served != self.feed_id:
             return False
         decoded = decode_v3_report(str(report.get("fullReport") or ""))
         if decoded is None:
             return False
-        if self.feed_id and decoded["feed_id"].lower() != self.feed_id:
+        if not self.feed_id or decoded["feed_id"].lower() != self.feed_id:
             return False
-        observed = int(report.get("observationsTimestamp") or decoded["observations_ts"] or 0)
-        if observed <= 0:
+        served = str(report.get("feedID") or report.get("feed_id") or "").lower()
+        if served and served != decoded["feed_id"].lower():
+            return False
+
+        observed = int(decoded["observations_ts"] or 0)
+        valid_from = int(decoded["valid_from_ts"] or 0)
+        expires = int(decoded["expires_at"] or 0)
+        if observed <= 0 or valid_from <= 0 or valid_from > observed:
+            return False
+        if expires <= observed:
+            return False  # already expired when observed
+        # The envelope's own stamp must agree with the report it wraps.
+        outer = _int(report.get("observationsTimestamp"))
+        if outer is not None and abs(outer - observed) > 1:
             return False
         # Data Streams timestamps are UNIX SECONDS; the buffer stores ms.
-        return self.buffer.append(observed * 1000, decoded["benchmark_price"], receipt_ns)
+        return self.buffer.append(
+            observed * 1000,
+            decoded["benchmark_price"],
+            receipt_ns,
+            expires_at_ms=expires * 1000,
+        )
 
     async def run(self) -> None:
         if self.buffer.credentials_missing:
             self.buffer.error = (
-                "chainlink_streams disabled: CHAINLINK_STREAMS_FEED_ID / _USER_ID / "
-                "_SECRET not configured"
+                "chainlink_streams disabled: CHAINLINK_STREAMS_FEED_ID / "
+                "CHAINLINK_STREAMS_USER_ID / CHAINLINK_STREAMS_SECRET not configured"
             )
             return
         path = f"/api/v1/reports/latest?feedID={self.feed_id}"
@@ -434,7 +524,3 @@ class ChainlinkStreamsCollector:
                 except Exception as exc:  # noqa: BLE001
                     self.buffer.error = f"{type(exc).__name__}: {exc}"
                 await asyncio.sleep(self.poll_s)
-
-
-def utc_ms(moment: _dt.datetime) -> int:
-    return int(moment.astimezone(_dt.timezone.utc).timestamp() * 1000)
