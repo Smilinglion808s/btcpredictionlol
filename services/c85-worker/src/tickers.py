@@ -32,17 +32,30 @@ class TickerResolutionError(RuntimeError):
     """The target's contract could not be confirmed against market metadata."""
 
 
-def format_ticker(series: str, stamp: datetime) -> str:
-    """KXBTC15M-YYMMMDDHHMM in US Eastern, the venue's own convention."""
+def format_ticker(series: str, stamp: datetime, *, suffix: bool = False) -> str:
+    """KXBTC15M-YYMMMDDHHMM in US Eastern, the venue's own convention.
+
+    The listed KXBTC15M contracts carry a trailing `-MM` group (the stamp's own
+    minute). A ticker without it is not the listed identifier, which is why the
+    resolver forms BOTH shapes and lets the venue's market metadata decide.
+    """
     local = stamp.astimezone(EASTERN)
-    return f"{series}-{local:%y}{MONTHS[local.month - 1]}{local:%d%H%M}"
+    base = f"{series}-{local:%y}{MONTHS[local.month - 1]}{local:%d%H%M}"
+    return f"{base}-{local:%M}" if suffix else base
 
 
 def candidates(series: str, target_open: datetime) -> dict[str, str]:
-    """Both readings of the stamp, labelled by what they assume it means."""
+    """Every reading of the stamp, labelled by what it assumes.
+
+    Ordered most-likely first: the observed listed form is the CLOSE stamp with
+    the trailing minute group.
+    """
     target_open = target_open.astimezone(timezone.utc)
+    close = target_open + INTERVAL
     return {
-        "close": format_ticker(series, target_open + INTERVAL),
+        "close-suffixed": format_ticker(series, close, suffix=True),
+        "close": format_ticker(series, close),
+        "open-suffixed": format_ticker(series, target_open, suffix=True),
         "open": format_ticker(series, target_open),
     }
 
@@ -85,17 +98,25 @@ class StaticTickerResolver:
 
 
 class KalshiTickerResolver:
-    """Resolve and verify with the venue. `fetch` returns market metadata dicts."""
+    """Resolve and verify with the venue. `fetch` returns market metadata dicts.
+
+    `listed` is an optional callable taking the target and returning the market
+    record the collector ALREADY received from the venue's open-markets listing.
+    That record is the venue's own answer, so it is preferred over any formatted
+    candidate; the formatted candidates remain as a verified fallback.
+    """
 
     def __init__(
         self,
         series: str,
         fetch: Callable[[str], list[dict[str, Any]]],
         *,
+        listed: Callable[[datetime], dict[str, Any] | None] | None = None,
         cache_size: int = 64,
     ) -> None:
         self.series = series
         self.fetch = fetch
+        self.listed = listed
         self.cache_size = cache_size
         self._cache: dict[str, str] = {}
 
@@ -104,13 +125,29 @@ class KalshiTickerResolver:
 
         Prefixed so it can never be mistaken for a confirmed listed contract.
         """
-        return "UNVERIFIED-" + candidates(self.series, target_open)["close"]
+        return "UNVERIFIED-" + candidates(self.series, target_open)["close-suffixed"]
+
+    def _remember(self, key: str, ticker: str) -> str:
+        if len(self._cache) >= self.cache_size:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[key] = ticker
+        return ticker
 
     def resolve(self, target_open: datetime) -> str:
         target_open = target_open.astimezone(timezone.utc)
         key = target_open.isoformat()
         if key in self._cache:
             return self._cache[key]
+
+        # 1. The contract the venue itself listed for this target, if the
+        #    collector has already received it. Its window is still verified.
+        if self.listed is not None:
+            try:
+                record = self.listed(target_open)
+            except Exception:  # noqa: BLE001 — fall through to the lookup
+                record = None
+            if record and record.get("ticker") and window_matches(record, target_open):
+                return self._remember(key, str(record["ticker"]))
 
         tried: list[str] = []
         for meaning, ticker in candidates(self.series, target_open).items():
@@ -122,11 +159,8 @@ class KalshiTickerResolver:
                 ) from exc
             for market in markets:
                 if window_matches(market, target_open):
-                    if len(self._cache) >= self.cache_size:
-                        self._cache.pop(next(iter(self._cache)))
-                    self._cache[key] = ticker
-                    return ticker
-            tried.append(f"{ticker} ({meaning}-stamped)")
+                    return self._remember(key, ticker)
+            tried.append(f"{ticker} ({meaning})")
         raise TickerResolutionError(
             "no listed market with window "
             f"[{target_open.isoformat()}, {(target_open + INTERVAL).isoformat()}); tried "

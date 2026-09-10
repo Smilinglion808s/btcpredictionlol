@@ -276,9 +276,12 @@ def market_ticker(target: pd.Timestamp | datetime) -> str:
     return f"KXBTC15M-{close.strftime('%y%b%d%H%M').upper()}-{close.strftime('%M')}"
 
 
-def kalshi_market(target: pd.Timestamp | datetime) -> dict:
-    """One official market record: floor strike, result and settlement instant."""
-    ticker = market_ticker(target)
+def kalshi_market_record(ticker: str) -> dict:
+    """One official market record for an ALREADY KNOWN contract identifier.
+
+    Used by the live outcome producer, which holds the ticker the venue itself
+    listed for the target and must not re-derive it from a format assumption.
+    """
     url = f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}"
     try:
         with urllib.request.urlopen(url, timeout=30) as response:
@@ -292,6 +295,11 @@ def kalshi_market(target: pd.Timestamp | datetime) -> dict:
         "settlement_ts": market.get("settlement_ts"),
         "label": {"yes": 1, "no": -1}.get(market.get("result")),
     }
+
+
+def kalshi_market(target: pd.Timestamp | datetime) -> dict:
+    """One official market record: floor strike, result and settlement instant."""
+    return kalshi_market_record(market_ticker(target))
 
 
 # --------------------------------------------------------------------------- #

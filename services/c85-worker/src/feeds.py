@@ -256,6 +256,51 @@ class QuoteBuffer(_BaseBuffer):
         return found
 
 
+@dataclass
+class MarketBuffer(_BaseBuffer):
+    """Listed KXBTC15M market metadata, keyed by the target's epoch milliseconds.
+
+    This is the strike source Version 1 actually needs. Unlike the `[T, T+5s)`
+    trade aggregate — which can only be REQUESTED after the T+5s deadline it
+    feeds — a market's `floor_strike` is published when the contract is LISTED,
+    so it is genuinely available before the freeze. Nothing here is derived
+    from a price: the strike, the ticker and the market's own open/close
+    instants are copied from the venue record, with the receipt time measured.
+    """
+
+    freshness_budget_ns: int = 300 * NS
+    markets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    retain: int = 192
+
+    def record(self, target_ms: int, market: dict[str, Any]) -> None:
+        # A contract is LISTED before it opens but its floor_strike is only
+        # published AT the open, so an early strike-less listing must never
+        # overwrite the record that actually carries the strike.
+        existing = self.markets.get(target_ms)
+        if (
+            existing is not None
+            and existing.get("floor_strike") is not None
+            and market.get("floor_strike") is None
+        ):
+            return
+        self.markets[target_ms] = market
+        self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
+        self.last_receipt_ns = max(self.last_receipt_ns, int(market["receipt_ns"]))
+        if len(self.markets) > self.retain:
+            for stale in sorted(self.markets)[: len(self.markets) - self.retain]:
+                del self.markets[stale]
+
+    def note_poll(self, receipt_ns: int) -> None:
+        self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
+
+    def get(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any] | None:
+        """This target's listed market, only if it was received by the freeze."""
+        found = self.markets.get(target_ms)
+        if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
+            return None
+        return found
+
+
 # --------------------------------------------------------------------------- #
 # collectors
 # --------------------------------------------------------------------------- #
@@ -528,11 +573,12 @@ class KalshiWindowCollector:
     """
 
     def __init__(self, buffer: QuoteBuffer, api_base: str, series: str,
-                 poll_s: float = 5.0) -> None:
+                 poll_s: float = 5.0, markets: "MarketBuffer | None" = None) -> None:
         self.buffer = buffer
         self.base = api_base.rstrip("/")
         self.series = series
         self.poll_s = poll_s
+        self.markets = markets
         self._markets: dict[int, dict[str, Any]] = {}  # target_ms -> market
         self._markets_at_ns = -1
         self._fetched: set[int] = set()
@@ -543,7 +589,10 @@ class KalshiWindowCollector:
             params={"series_ticker": self.series, "status": "open", "limit": 200},
         )
         response.raise_for_status()
-        self.buffer.note_poll(now_ns())
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        if self.markets is not None:
+            self.markets.note_poll(receipt)
         for market in response.json().get("markets", []):
             open_time = market.get("open_time")
             if not open_time:
@@ -552,12 +601,27 @@ class KalshiWindowCollector:
 
             stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
             strike = market.get("floor_strike")
-            self._markets[int(stamp.timestamp() * 1000)] = {
+            target_ms = int(stamp.timestamp() * 1000)
+            record = {
                 "ticker": market["ticker"],
                 # floor_strike is target-native and comes from the market itself;
                 # a missing or non-numeric value stays None and fails the packet.
                 "floor_strike": None if strike is None else float(strike),
             }
+            self._markets[target_ms] = record
+            if self.markets is not None:
+                # The listed record, with its own window, so a Version 1 packet
+                # can verify the contract instead of formatting a ticker.
+                self.markets.record(
+                    target_ms,
+                    {
+                        **record,
+                        "open_time": open_time,
+                        "close_time": market.get("close_time"),
+                        "status": market.get("status"),
+                        "receipt_ns": receipt,
+                    },
+                )
         self._markets_at_ns = now_ns()
 
     async def _fetch_window(self, client: httpx.AsyncClient, target_ms: int,
@@ -667,6 +731,92 @@ class KalshiWindowCollector:
                 await asyncio.sleep(self.poll_s)
 
 
+class KalshiStrikeCollector:
+    """The target's own STRIKE, fetched the moment the contract opens.
+
+    KXBTC15M contracts are listed ahead of time but their `floor_strike` is
+    only published when the market OPENS, which is the target instant T itself
+    (verified against the venue: an `initialized` future market returns a null
+    strike, the `active` current market returns a number). A 60-second market
+    refresh would therefore miss the strike for most targets, and the packet
+    that needs it freezes at T+5s.
+
+    So this collector polls the open-markets listing rapidly across `[T, T+4s)`
+    until the target's own strike appears, and records it with the measured
+    receipt instant. It stops as soon as the strike is held: no polling loop
+    runs while nothing is expected, and no value is ever guessed or carried
+    over from the neighbouring interval.
+    """
+
+    INTERVAL_MS = 15 * 60_000
+    #: Stop trying inside the packet's own deadline; a later arrival is a
+    #: genuinely missing input, not something to backdate.
+    WINDOW_MS = 4_000
+
+    def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
+                 poll_s: float = 0.25) -> None:
+        self.buffer = buffer
+        self.base = api_base.rstrip("/")
+        self.series = series
+        self.poll_s = poll_s
+
+    def _has_strike(self, target_ms: int) -> bool:
+        record = self.buffer.markets.get(target_ms)
+        return bool(record and record.get("floor_strike") is not None)
+
+    async def _poll_once(self, client: httpx.AsyncClient) -> None:
+        response = await client.get(
+            f"{self.base}/markets",
+            params={"series_ticker": self.series, "status": "open", "limit": 20},
+        )
+        response.raise_for_status()
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        import datetime as _dt
+
+        for market in response.json().get("markets", []):
+            open_time = market.get("open_time")
+            strike = market.get("floor_strike")
+            if not open_time or strike is None:
+                continue
+            stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+            self.buffer.record(
+                int(stamp.timestamp() * 1000),
+                {
+                    "ticker": market["ticker"],
+                    "floor_strike": float(strike),
+                    "open_time": open_time,
+                    "close_time": market.get("close_time"),
+                    "status": market.get("status"),
+                    "receipt_ns": receipt,
+                },
+            )
+
+    async def run(self) -> None:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            while True:
+                now_ms = now_ns() // 1_000_000
+                target_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
+                offset = now_ms - target_ms
+                if offset < self.WINDOW_MS and not self._has_strike(target_ms):
+                    try:
+                        await self._poll_once(client)
+                        self.buffer.connected_since_ns = (
+                            self.buffer.connected_since_ns or now_ns()
+                        )
+                        self.buffer.transport = "rest"
+                        self.buffer.error = None
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
+                        self.buffer.error = f"{type(exc).__name__}: {exc}"
+                    await asyncio.sleep(self.poll_s)
+                    continue
+                # Nothing expected until the next boundary; wake just before it.
+                wait_ms = self.INTERVAL_MS - offset - 200
+                await asyncio.sleep(max(0.2, wait_ms / 1000))
+
+
 # --------------------------------------------------------------------------- #
 # registry
 # --------------------------------------------------------------------------- #
@@ -717,12 +867,18 @@ class FeedRegistry:
             "binance_cm_1m": KlineBuffer("binance_cm_1m"),
         }
         self.quotes = QuoteBuffer("kalshi")
+        #: Listed contract metadata (ticker, floor_strike, window). Available
+        #: BEFORE T+5s, unlike the quote aggregate, so Version 1 reads it.
+        self.markets = MarketBuffer("kalshi_markets")
 
         self.buffers: dict[str, Any] = {
             **self.trades,
             "binance_1m": self.klines["binance_1m"],
             "binance_index": self.klines["binance_index"],
+            "binance_usdcusdt_1m": self.klines["binance_usdcusdt_1m"],
+            "binance_cm_1m": self.klines["binance_cm_1m"],
             "kalshi": self.quotes,
+            "kalshi_markets": self.markets,
         }
 
         self._trade_ws = {
@@ -762,9 +918,13 @@ class FeedRegistry:
                 self.klines["binance_usdcusdt_1m"], spot_ws, "usdcusdt@kline_1m",
                 spot_rest, "/api/v3/klines", {"symbol": "USDCUSDT", "interval": "1m"},
             ),
+            # The reference index minute is the COIN-M (dapi) BTCUSD index, which
+            # is what the offline recovery path reads and what the supplied
+            # feature recipe was fitted on. The UM (fapi) BTCUSDT index is a
+            # DIFFERENT series and was silently substituted here before.
             "binance_index": KlineCollector(
-                self.klines["binance_index"], um_ws, "btcusdt@indexPriceKline_1m",
-                um_rest, "/fapi/v1/indexPriceKlines", {"pair": "BTCUSDT", "interval": "1m"},
+                self.klines["binance_index"], cm_ws, "btcusd@indexPriceKline_1m",
+                cm_rest, "/dapi/v1/indexPriceKlines", {"pair": "BTCUSD", "interval": "1m"},
             ),
             "binance_cm_1m": KlineCollector(
                 self.klines["binance_cm_1m"], cm_ws, "btcusd_perp@kline_1m",
@@ -773,6 +933,12 @@ class FeedRegistry:
         }
         self._kalshi = KalshiWindowCollector(
             self.quotes,
+            env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
+            env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
+            markets=self.markets,
+        )
+        self._strikes = KalshiStrikeCollector(
+            self.markets,
             env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
         )
@@ -815,6 +981,7 @@ class FeedRegistry:
             self._tasks.append(asyncio.create_task(collector.run_ws()))
             self._tasks.append(asyncio.create_task(collector.run_rest()))
         self._tasks.append(asyncio.create_task(self._kalshi.run()))
+        self._tasks.append(asyncio.create_task(self._strikes.run()))
 
     async def stop(self) -> None:
         for task in self._tasks:

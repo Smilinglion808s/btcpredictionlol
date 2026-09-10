@@ -141,6 +141,23 @@ class LiteAStore:
     def pending_settlements(self) -> list[dict[str, Any]]:
         return self.backend.call("settlements.pending").get("settlements") or []
 
+    def recorded_targets(
+        self, from_utc: datetime, to_utc: datetime, limit: int = 700
+    ) -> list[dict[str, Any]]:
+        """The rows this identity already recorded in one bounded range.
+
+        Used to repair a training frame that lags a newer checkpoint from the
+        inputs that were ACTUALLY frozen at each target, rather than from a
+        later public read that could differ.
+        """
+        return self.backend.call(
+            "targets.recorded",
+            from_utc=from_utc.astimezone(timezone.utc).isoformat(),
+            to_utc=to_utc.astimezone(timezone.utc).isoformat(),
+            limit=limit,
+        ).get("targets") or []
+
+
     # -- writes ----------------------------------------------------------------
     def commit(
         self, row: dict[str, Any], checkpoint: dict[str, Any] | None
@@ -158,6 +175,12 @@ class LiteAStore:
             target_open_utc=target.astimezone(timezone.utc).isoformat(),
             reason=reason[:500],
         )
+
+    def record_settlements(self, settlements: list[dict[str, Any]]) -> dict[str, Any]:
+        """Persist official outcomes. Idempotent on the settlement's own key."""
+        if not settlements:
+            return {"ok": True, "recorded": 0}
+        return self.backend.call("settlements.record", settlements=settlements)
 
     def heartbeat(self, **payload: Any) -> None:
         self.backend.call("health.heartbeat", **payload)

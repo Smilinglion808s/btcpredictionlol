@@ -27,6 +27,7 @@ from ..scheduler import RunTiming, next_boundary
 from .heads import DailyHeadStore, HeadUnavailable
 from .identity import MODEL_ID
 from .packet import Direction60Source
+from .stage import REQUIRED_FEEDS
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload, target_row
 from .training import TrainingFrame
@@ -34,18 +35,11 @@ from .training import TrainingFrame
 NS = 1_000_000_000
 CUTOFF_MS = 5_000
 
-#: Exactly the feeds the 60 direction inputs are built from. The C85 aggregate
-#: readiness (market Q1, auxiliary bundles, ancestor experts) is NOT consulted:
-#: those belong to a model this process does not run.
-REQUIRED_FEEDS = (
-    "binance_spot",
-    "binance_um",
-    "binance_cm",
-    "binance_usdc",
-    "binance_index",
-    "binance_1m",
-    "kalshi",
-)
+#: `REQUIRED_FEEDS` is imported from the Version 1 stage so there is one
+#: definition of what this model actually consumes. The C85 aggregate readiness
+#: (market Q1, auxiliary bundles, ancestor experts) is NOT consulted, and
+#: neither are the BTCUSDC / COIN-M aggregate-trade streams: they are not
+#: Version 1 inputs.
 
 
 @dataclass
@@ -69,18 +63,18 @@ class LiteAWorker:
     def __init__(
         self,
         *,
-        packet_source: Any,
         store: LiteAStore,
         heads: DailyHeadStore,
         state: LiteAState,
         state_path: Path,
         ticker_resolver: Any,
         feeds: Any,
+        packet_source: Any = None,  # unused; Version 1 sources its own stage
         training: TrainingFrame | None = None,
         training_path: Path | None = None,
         lease_ttl_seconds: int = 60,
     ) -> None:
-        self.direction = Direction60Source(packet_source)
+        self.direction = Direction60Source(feeds)
         self.store = store
         self.heads = heads
         self.state = state
@@ -107,12 +101,7 @@ class LiteAWorker:
     # -- readiness -------------------------------------------------------------
     def stale_feeds(self, at_ns: int | None = None) -> list[str]:
         at_ns = at_ns or time.time_ns()
-        buffers = getattr(self.feeds, "buffers", {})
-        return [
-            name
-            for name in REQUIRED_FEEDS
-            if name in buffers and not buffers[name].is_fresh(at_ns)
-        ]
+        return self.direction.stage.stale_feeds(at_ns)
 
     def recording_blockers(self) -> list[str]:
         """What stops the target being RECORDED at all — normally nothing.

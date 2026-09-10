@@ -23,12 +23,12 @@ from ..backend import BackendClient
 from ..config import load_settings
 from ..feeds import FeedRegistry
 from ..health import create_app
-from ..packets import LivePacketSource
 from ..scheduler import BoundaryScheduler, next_boundary
 from ..tickers import KalshiTickerResolver
 from .fit_service import run_due_fits
 from .heads import DailyHeadStore
 from .identity import MODEL_ID
+from .outcomes import OfficialOutcomes
 from .remote import RemoteArtifacts
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload
@@ -51,9 +51,14 @@ class LiteAService:
         )
         self.store = LiteAStore(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
-        self.packets = LivePacketSource(feeds=self.feeds, experts=None, artifacts=None)
+        # Version 1 sources its own direction stage from the feed registry; the
+        # shared C85 packet source is deliberately NOT constructed here — its
+        # Kalshi stage needs a [T, T+5s) trade aggregate that only exists after
+        # the deadline it feeds.
         self.ticker_resolver = KalshiTickerResolver(
-            self.settings.kalshi_series, self._fetch_market_metadata
+            self.settings.kalshi_series,
+            self._fetch_market_metadata,
+            listed=self._listed_market,
         )
 
         root = Path(os.environ.get("LITEA_STATE_DIR", "/var/lib/litea"))
@@ -73,7 +78,6 @@ class LiteAService:
         )
 
         self.worker = LiteAWorker(
-            packet_source=self.packets,
             store=self.store,
             heads=self.heads,
             state=self.state,
@@ -86,6 +90,8 @@ class LiteAService:
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
         self.bridge = StartupBridge(self)
+        # The only thing in this process that writes an official outcome.
+        self.outcomes = OfficialOutcomes(self)
 
     # -- startup ---------------------------------------------------------------
     def _restore_artifacts(self) -> dict:
@@ -149,6 +155,11 @@ class LiteAService:
         response.raise_for_status()
         return response.json().get("markets", [])
 
+    def _listed_market(self, target_open: datetime) -> dict | None:
+        """The contract the venue itself listed for this target, if received."""
+        target_ms = int(target_open.timestamp() * 1000)
+        return self.feeds.markets.markets.get(target_ms)
+
     def _catch_up_fits(self) -> list[dict]:
         """Every due UTC-midnight fit, chronologically, off the timed path.
 
@@ -203,6 +214,7 @@ class LiteAService:
         report["feeds"] = self.feeds.watermarks()
         report["artifact_restore"] = self.restore_report
         report["startup_bridge"] = self.bridge.report
+        report["official_outcomes"] = self.outcomes.last_report
         report["build_sha"] = self.settings.build_sha
         return report
 
@@ -251,10 +263,26 @@ class LiteAService:
             except Exception as exc:  # noqa: BLE001
                 print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
 
+    def drain_settlements(self) -> int:
+        """Produce official outcomes, then apply every unconsumed one.
+
+        Producing comes first: `settlements.pending` can only return what has
+        actually been recorded, and nothing else in this process records an
+        outcome.
+        """
+        try:
+            self.outcomes.poll()
+        except Exception as exc:  # noqa: BLE001 — retried on the next pass
+            print(f"[{MODEL_ID}] outcome poll failed: {exc}", flush=True)
+        applied = self.worker.apply_settlements(self.store.pending_settlements())
+        if applied:
+            self.state.save(self.state_path)
+        return applied
+
     async def settlement_loop(self) -> None:
         while True:
             try:
-                applied = self.worker.apply_settlements(self.store.pending_settlements())
+                applied = await asyncio.to_thread(self.drain_settlements)
                 if applied:
                     # Local paired state first, then the durable checkpoint, so
                     # a crash in between replays settlements that the consumed
@@ -274,13 +302,23 @@ class LiteAService:
         # Feeds start FIRST and keep collecting while the gap is bridged, so
         # the next future boundary has real raw windows of its own.
         await self.feeds.start()
+
+        # Outcomes that became official while this container was down are
+        # applied BEFORE the gap is bridged, so the daily floor and the rank
+        # queues advance through the missed intervals in the real order.
+        try:
+            await asyncio.to_thread(self.drain_settlements)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{MODEL_ID}] startup settlement drain failed: {exc}", flush=True)
         self._catch_up_fits()
 
         # Everything between the restored checkpoint and this launch is
         # recovered causally before the first scheduled target is scored. A gap
-        # that cannot be recovered blocks scoring instead of vanishing.
+        # that cannot be recovered blocks scoring instead of vanishing. The
+        # residual gap the bridge itself takes to run is bridged too, so the
+        # scheduler never arms one interval behind.
         try:
-            bridged = await asyncio.to_thread(self.bridge.run)
+            bridged = await asyncio.to_thread(self.bridge.run_until_current)
         except Exception as exc:  # noqa: BLE001
             bridged = {"status": "ERROR", "reason": f"{type(exc).__name__}: {exc}"}
             self.worker.external_scoring_block = (
@@ -288,6 +326,16 @@ class LiteAService:
             )
             self.bridge.report = bridged
         print(f"[{MODEL_ID}] startup bridge: {bridged}", flush=True)
+
+        # A queued, undelivered bridge decision must drain before scoring.
+        try:
+            await asyncio.to_thread(self.worker.reconcile_pending)
+            if not self.worker.pending_targets() and str(
+                self.worker.external_scoring_block or ""
+            ).startswith("LITEA_BRIDGE_COMMIT_UNDELIVERED"):
+                self.worker.external_scoring_block = None
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{MODEL_ID}] startup pending drain failed: {exc}", flush=True)
 
         status, reason = self.worker.evaluate_readiness()
         if status in ("LOGGING_READY", "RECORDING_ONLY"):
