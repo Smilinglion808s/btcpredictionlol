@@ -15,23 +15,23 @@ type Stats = Record<string, any>;
 const PHASES = {
   LIVE_SHADOW: {
     label: "Live shadow",
-    dot: "bg-emerald-400",
-    chip: "border-emerald-400/40 text-emerald-300 bg-emerald-400/10",
+    dot: "bg-signal-orange v1-live-dot",
+    chip: "border-signal-orange/45 text-signal-orange bg-signal-orange/10",
   },
   WAITING_FOR_LIVE_DATA: {
     label: "Waiting for live data",
-    dot: "bg-sky-400",
-    chip: "border-sky-400/40 text-sky-300 bg-sky-400/10",
+    dot: "bg-steel",
+    chip: "border-steel/40 text-steel bg-steel/10",
   },
   STALE: {
     label: "Paused",
-    dot: "bg-amber-400",
-    chip: "border-amber-400/40 text-amber-300 bg-amber-400/10",
+    dot: "bg-signal-orange",
+    chip: "border-signal-orange/40 text-signal-orange bg-signal-orange/10",
   },
   RECORDING_ONLY: {
     label: "Warming up",
-    dot: "bg-sky-400",
-    chip: "border-sky-400/40 text-sky-300 bg-sky-400/10",
+    dot: "bg-steel",
+    chip: "border-steel/40 text-steel bg-steel/10",
   },
   PREPARING: {
     label: "Preparing",
@@ -125,7 +125,7 @@ function clock(iso: string | null | undefined): string {
 
 function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-background/40 px-3 py-2.5">
+    <div className="v1-chip px-3 py-2.5">
       <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
       <div className="mt-1 text-sm font-medium tabular-nums truncate">{value}</div>
       {hint ? <div className="mt-0.5 text-[10px] text-muted-foreground truncate">{hint}</div> : null}
@@ -144,8 +144,9 @@ export function LiteACard({
 }) {
   if (error) {
     return (
-      <Card className="rounded-2xl p-6">
-        <h3 className="text-2xl font-heading font-semibold tracking-tight">Version 1</h3>
+      <Card className="v1-shell self-start rounded-2xl p-6">
+        <span className="v1-orbit-ring" aria-hidden />
+        <h3 className="v1-title relative text-4xl font-heading font-bold tracking-tight">Version 1</h3>
         <p className="mt-2 text-sm text-muted-foreground">
           Couldn't load this model's status just now. It will retry on its own.
         </p>
@@ -155,7 +156,8 @@ export function LiteACard({
 
   if (loading && !stats?.phase) {
     return (
-      <Card className="rounded-2xl p-6 space-y-4">
+      <Card className="v1-shell self-start rounded-2xl p-6 space-y-4">
+        <span className="v1-orbit-ring" aria-hidden />
         <div className="h-7 w-40 rounded bg-muted/50 animate-pulse" />
         <div className="h-4 w-56 rounded bg-muted/40 animate-pulse" />
         <div className="grid grid-cols-2 gap-2.5">
@@ -176,24 +178,32 @@ export function LiteACard({
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
 
   return (
-    <Card className="rounded-2xl border-border/70 bg-gradient-to-b from-primary/[0.05] to-transparent p-5 sm:p-6 space-y-5">
-      <header className="flex items-start justify-between gap-3">
+    <Card className="v1-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
+      <span className="v1-orbit-ring" aria-hidden />
+
+      <header className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-2xl sm:text-3xl font-heading font-semibold tracking-tight leading-none">
+          <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-signal-orange/85">
+            Shadow model · betting disabled
+          </div>
+          <h3 className="v1-title text-4xl font-heading font-bold tracking-tight leading-none">
             Version 1
           </h3>
-          <p className="mt-1.5 text-xs sm:text-[13px] text-muted-foreground">
-            BTC 15-minute · predicts at the open · shadow only
-          </p>
+          <div className="mt-1 text-[10px] font-mono text-muted-foreground">
+            BTC 15-minute · first 5s after open · daily fit
+          </div>
+          <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-mono text-muted-foreground/80 sm:max-w-none">
+            lite-a-floor4-top10-r1
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${phase.chip}`}
+            className={`inline-flex max-w-[138px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-right text-[10px] font-bold uppercase leading-tight tracking-[0.12em] ${phase.chip}`}
           >
-            <span className={`size-1.5 rounded-full ${phase.dot}`} />
+            <span className={`size-1.5 shrink-0 rounded-full ${phase.dot}`} />
             {phase.label}
           </span>
-          <span className="rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="rounded-full border border-steel/25 bg-steel/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-steel/80">
             Betting off
           </span>
         </div>
@@ -201,7 +211,7 @@ export function LiteACard({
 
       <p className="text-[13px] leading-relaxed text-muted-foreground">{stats?.phase_detail}</p>
 
-      <section className="rounded-xl border border-border/60 bg-background/40 p-4">
+      <section className="v1-chip relative p-4">
         <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           Latest 15-minute interval
         </div>
@@ -263,7 +273,7 @@ export function LiteACard({
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             Live shadow results
           </span>
-          <span className="h-px flex-1 bg-border/60" />
+          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange/40 via-steel/20 to-transparent" />
         </div>
         {liveOpportunities === 0 ? (
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">

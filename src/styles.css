@@ -43,6 +43,8 @@
   --color-voltgreen: var(--voltgreen);
   --color-hotpink: var(--hotpink);
   --color-magenta: var(--magenta);
+  --color-steel: var(--steel);
+  --color-signal-orange: var(--signal-orange);
 
 
 
@@ -102,6 +104,8 @@
   --voltgreen: oklch(0.80 0.23 145);
   --hotpink: oklch(0.72 0.30 350);
   --magenta: oklch(0.65 0.29 325);
+  --steel: oklch(0.72 0.035 240);
+  --signal-orange: oklch(0.76 0.18 55);
 
   --grid: oklch(0.28 0.02 250);
 
@@ -640,4 +644,95 @@
 
 @utility t10-live-dot {
   animation: t10-pulse-ring 2.4s ease-out infinite;
+}
+
+/* ---- Version 1 model card visuals (steel + signal orange) ---- */
+@keyframes v1-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--signal-orange) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--signal-orange) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--signal-orange) 0%, transparent); }
+}
+
+@utility v1-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--signal-orange) 30%, var(--steel));
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in oklab, var(--steel) 20%, transparent) 0%, transparent 58%),
+    radial-gradient(110% 80% at 105% 0%, color-mix(in oklab, var(--signal-orange) 17%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 94%, var(--steel)) 0%, var(--card) 64%);
+  box-shadow:
+    0 26px 60px -30px color-mix(in oklab, var(--signal-orange) 48%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, var(--steel) 18%, transparent);
+  transition: box-shadow 320ms ease, border-color 320ms ease, transform 320ms ease;
+
+  &:hover {
+    border-color: color-mix(in oklab, var(--signal-orange) 52%, var(--steel));
+    box-shadow:
+      0 34px 76px -28px color-mix(in oklab, var(--signal-orange) 58%, transparent),
+      inset 0 1px 0 0 color-mix(in oklab, var(--steel) 24%, transparent);
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--steel) 12%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--steel) 12%, transparent) 1px, transparent 1px);
+    background-size: 34px 34px;
+    mask-image: radial-gradient(120% 90% at 50% 0%, black 0%, transparent 72%);
+    opacity: 0.62;
+  }
+}
+
+@utility v1-title {
+  background: linear-gradient(100deg, color-mix(in oklab, white 94%, var(--steel)) 0%, var(--steel) 44%, var(--signal-orange) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility v1-orbit-ring {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in oklab, var(--steel) 34%, transparent) 48deg,
+    transparent 124deg,
+    color-mix(in oklab, var(--signal-orange) 34%, transparent) 205deg,
+    transparent 304deg
+  );
+  animation: v6-orbit 20s linear infinite;
+  opacity: 0.32;
+  mask-image: radial-gradient(closest-side, transparent 62%, black 76%, transparent 92%);
+}
+
+@utility v1-chip {
+  position: relative;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--steel) 20%, var(--border));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--steel) 7%, transparent), color-mix(in oklab, var(--card) 90%, transparent));
+  transition: border-color 220ms ease, transform 220ms ease, background 220ms ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--signal-orange) 38%, var(--steel));
+  }
+}
+
+@utility v1-live-dot {
+  animation: v1-pulse-ring 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v1-orbit-ring,
+  .v1-live-dot {
+    animation: none;
+  }
 }
