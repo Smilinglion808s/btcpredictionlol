@@ -419,13 +419,12 @@ class ChainlinkStreamsCollector:
         async with httpx.AsyncClient(timeout=3.0) as client:
             while True:
                 try:
+                    url = self.rest_url + path
                     if self.limiter is not None:
-                        await self.limiter.acquire()
-                    response = await client.get(
-                        self.rest_url + path, headers=self.headers("GET", path)
-                    )
+                        await self.limiter.acquire(url)
+                    response = await client.get(url, headers=self.headers("GET", path))
                     if self.limiter is not None:
-                        self.limiter.observe(response.status_code, response.headers)
+                        self.limiter.note(url, response)
                     response.raise_for_status()
                     self.buffer.transport = "rest"
                     self.buffer.error = None
