@@ -30,84 +30,113 @@ Newest delivery evidence (`webhook_deliveries`, times UTC):
 - nothing was in flight at disablement (16:45 completed on attempt 1, 200, nine minutes earlier),
   so no delivery had to be reported as partially sent, and no row was deleted.
 
-## 2. Version 1 today: decision → storage (no dispatch)
+## 2. Version 1 today: decision → storage (dispatch built, switched off)
 
 Live worker: SHA `19a0eb72af970b4bb857dd8d9293490d3e831af9`, Railway deployment
-`7e5f4c14-d2fc-4fe9-b1ac-8e218ad3f69e`, sole writer.
+`7e5f4c14-d2fc-4fe9-b1ac-8e218ad3f69e`, sole writer. It does **not** contain the
+dispatch code below — that ships only with a new worker release.
 
-Path actually in use:
+Path in use today, and the prepared extension (both switches off):
 
 ```
-worker decision  ->  signed POST /api/public/hooks/c85-ops  (op "decision.commit")
-                 ->  RPC c85_commit_decision  ->  c85_targets row (+ paired checkpoint)
+worker decision -> signed POST /api/public/hooks/c85-ops ("decision.commit")
+                -> RPC c85_commit_decision -> c85_targets row (+ paired checkpoint)   [always]
+                -> [only if BOTH switches are true]
+                   c85_outbox reservation (idempotent, dedupe_key) -> deliverWebhookNow -> bot
 ```
 
-The betting path (`/api/public/hooks/c85-decision` -> `c85_outbox` -> `deliverWebhookNow`
--> bot endpoint) is **not** used by Version 1 at all.
+Durability is unchanged and comes first: the decision row is committed by the same
+transactional RPC before any dispatch step is even considered. A failed or refused
+dispatch never affects the recorded decision.
 
-## 3. Exact controls that keep it off (four independent gates)
+## 3. Controls (all default OFF; nothing turns on by deploy or restart)
 
-1. **Worker**: `src/litea/main.py` constructs no gateway client for this identity;
-   `src/litea/worker.py` stamps `execution_enabled: False` on every decision.
-2. **Server trust boundary**: `C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS` contains
-   `lite-a-floor4-top10-r1`; `decision.commit` rejects any outbox entry under it (HTTP 400).
-3. **Allow-list**: `WEBHOOK_ALLOWED_MODELS = { "t45-priceflow" }` — both delivery
-   functions drop any other model's payload before a POST is built.
-4. **New, default-OFF**: `liteaExecutionEnabled()` returns true only when
-   `LITEA_EXECUTION_ENABLED === "true"`. The variable is unset, so a deploy or restart
-   cannot come up enabled.
+| Layer | Control | Default | Effect when unset |
+|---|---|---|---|
+| Worker | `LITEA_EXECUTION_ENABLED` | unset (off) | `prepare_outbox` returns `EXECUTION_DISABLED`; the signed commit carries no `outbox` field at all |
+| Backend | `LITEA_SERVER_EXECUTION_ENABLED` | unset (off) | `decision.commit` rejects any V1 outbox with HTTP 400 "shadow-only"; V1 is not in the effective send allow-list |
+| Transport | `LITEA_TRANSPORT_DEADLINE_MS` | 8000 (bounded 1–60000) | V1-only send ceiling measured from target open. Not an order-placement guarantee; adjust before activation |
 
-## 4. Remaining blockers (measured, not assumed)
+`C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS` still lists `lite-a-floor4-top10-r1`; it is now
+waived **only** while `LITEA_SERVER_EXECUTION_ENABLED=true`, so no code edit is needed to
+activate and no edit is needed to revoke. `WEBHOOK_ALLOWED_MODELS` still statically contains
+only `t45-priceflow`; V1 is added dynamically by the same switch. C85 and T45 behaviour,
+and the old 5000 ms `C85_PUBLICATION_DEADLINE_MS`, are untouched.
 
-- **Worker cannot dispatch.** No gateway client exists for Version 1. A worker code change
-  plus a Railway deploy is required. This is not a flag.
-- **Publication offset exceeds the existing T+5s ceiling.** Measured
-  `publication_offset_ms` on the newest live rows: 5774.8, 5877.1, 6073.9, 5811.7, 5747.7 ms.
-  `C85_PUBLICATION_DEADLINE_MS` is 5000, so every one of these decisions would be recorded
-  `EXPIRED` by the existing gateway. Either the timing budget or the ceiling must be resolved
-  before any live send is meaningful.
-- **No executable odds captured.** The worker persists strike diagnostics only
-  (`features.market_diagnostics`: polls, receipts, source chosen, conflict, freeze timing).
-  It does **not** persist `yes_bid`, `yes_ask`, `last_price`, or depth, and `last_yes_price`
-  is null on every Version 1 row. Capturing them needs a worker change + deploy.
-- **Fill price, filled size, fees, order id and realised P/L do not exist in this project.**
-  They are owned by the separate betting bot and must be read from it. They are not modelled,
-  estimated or invented here.
-- Strikes may be approximate under `strike-fallbacks-free-r1` (official Kalshi first, then
-  Coinbase, then Kraken). No historical win rate, odds figure or profitability is implied.
+**Kill switch**: unset `LITEA_SERVER_EXECUTION_ENABLED` (backend, immediate — stops sends
+even for already-reserved retries), and/or unset `LITEA_EXECUTION_ENABLED` (worker, stops
+requests at source), and/or set `webhook_endpoints.is_active = false`. Records are preserved
+in every case.
 
-## 5. Decision payload and semantics prepared for activation
+## 4. What is admitted, and what can never be
 
-`src/lib/litea/webhook.server.ts` (not called from any live path):
+Source of truth is the persisted decision row, re-checked on the server, not the worker's word:
 
-- `buildLiteAWebhookPayload()` — same field names the bot already accepts from T45
-  (`model`, `prediction` YES/NO, `direction` GREEN/RED, `trade`, `confidence`,
-  `candle_starts_at` / `candle_ends_at`, `dedupe_key`), plus Version 1 provenance
-  (`probability_yes`, `admission_rank`, `decision_status`, `market_ticker`, `strike`,
-  `strike_source`, `strike_estimated`, `packet_freeze_ns`, `decision_durable_ns`,
-  `publication_offset_ms`).
-- **Side**: `final_side` +1 -> YES/GREEN, -1 -> NO/RED, 0 -> never emits.
-- **Target**: the 15-minute interval open; the decision is taken at open from `[T, T+5s)`.
-- **Dedupe**: `lite-a-floor4-top10-r1:<ticker>:<target_open_utc>` — one per contract
-  per interval; retries and duplicate workers collapse onto it.
-- `liteaExecutionGate()` returns the verdict a send would produce. With today's constants
-  it returns `EXECUTION_DISABLED` for every input.
+- model identity `lite-a-floor4-top10-r1`, `run_mode = LIVE`
+- `final_side` is +1 or -1 (0 = abstention: never reserved, never sent, never graded as a call)
+- `features.input_valid === true` and a present `features.lite_a.head_id` (current head)
+- valid ticker and target interval
+- `publication_offset_ms` present, finite and non-negative (NaN/∞/negative are rejected —
+  this was a real hole in the earlier gate and is now closed)
+- wall-clock age from target open is re-measured at intake **and again immediately before
+  each send/retry**, and must be under the V1 transport ceiling
 
-Proof: `src/lib/litea/__tests__/activation.test.ts`, 9 tests, in-process fake receiver,
-no network, no real endpoint. It asserts that nothing is delivered while the gates hold.
+Consequences: historical rows, shadow/research rows, queued pending rows that age out, and
+rows committed before activation can never turn into orders. Activation affects only fresh
+decisions that are still inside the ceiling.
 
-## 6. What a human would do to activate (do not perform now)
+## 5. Payload, dedupe and what the bot must do
 
-1. Add worker-side dispatch for this identity and deploy it to Railway (code + deploy).
-2. Resolve the T+5s publication budget, or change the ceiling deliberately.
-3. Remove `lite-a-floor4-top10-r1` from `C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS`.
-4. Add `lite-a-floor4-top10-r1` to `WEBHOOK_ALLOWED_MODELS` (and decide whether T45 keeps
-   its slot — the bot endpoint is shared).
-5. Set `LITEA_EXECUTION_ENABLED=true` in the app environment.
+Payload is rebuilt on the server from the persisted row (`liteaPayloadFromRecord`), using the
+field names the bot already accepts from T45: `model`, `prediction` (YES/NO), `direction`
+(GREEN/RED), `trade`, `confidence`, `candle_starts_at` / `candle_ends_at`, `dedupe_key`, plus
+V1 provenance: `probability_yes`, `admission_rank`, `decision_status`, `market_ticker`,
+`strike`, `strike_source`, `strike_estimated`, `packet_freeze_ns`, `decision_durable_ns`,
+`publication_offset_ms`.
 
-**To stop it again**, any one of these is sufficient and takes effect on the next boundary:
-unset `LITEA_EXECUTION_ENABLED`, remove the model from `WEBHOOK_ALLOWED_MODELS`, or set
-`webhook_endpoints.is_active = false` for the bot endpoint. Records are preserved in all
-three cases.
+- **Side**: `final_side` +1 → YES/GREEN, −1 → NO/RED, 0 → nothing emitted.
+- **Target**: the 15-minute interval open. The decision is taken at open from `[T, T+5s)` —
+  not at candle close. That model window is unchanged and is not traded off against transport.
+- **Dedupe key**: `lite-a-floor4-top10-r1:<ticker>:<target_open_utc>`. One reservation per
+  contract per interval; every retry reuses it and never creates a second reservation.
 
-Steps 1 and 2 mean activation genuinely requires code and a deploy; it is not a flag flip.
+**Requirements on the external bot (unknown until confirmed by its owner):**
+1. it must accept `lite-a-floor4-top10-r1` in its own model allow-list — an HTTP 200 from the
+   old T45 traffic does **not** prove this;
+2. it must honour `dedupe_key` itself. Our dedupe guarantees one *reservation*; it cannot
+   guarantee one *broker fill*.
+
+**Not available here, at all**: fill price, filled size, fees, order id, realised P/L. Those are
+owned by the betting bot. Also not persisted today: `yes_bid`, `yes_ask`, `last_price`, depth —
+capturing practical odds would need a further worker change.
+
+## 6. Activation (human only — do not perform automatically)
+
+1. Deploy the **worker** release containing `src/litea/dispatch.py` to Railway (Railway stays
+   sole writer), with `LITEA_EXECUTION_ENABLED` still unset. Verify shadow behaviour is unchanged.
+2. Deploy the **backend** release containing `src/lib/litea/dispatch.server.ts`, with
+   `LITEA_SERVER_EXECUTION_ENABLED` still unset.
+3. Confirm the bot accepts the V1 model id and honours `dedupe_key`.
+4. Decide the transport ceiling: measured publication offsets are ~5.7–6.1 s, so the default
+   8000 ms admits them; the old C85 5000 ms gate would have rejected all of them. This is a
+   transport choice, not a model change, and it does not promise a fill.
+5. Set `LITEA_EXECUTION_ENABLED=true` on the worker, then `LITEA_SERVER_EXECUTION_ENABLED=true`
+   on the backend. Only fresh decisions after that take effect.
+
+No step above has been performed. Both switches are absent, nothing is deployed by this change,
+and no payload has been sent to any real endpoint.
+
+## 7. Proof (software path only, no live betting or fill proof)
+
+- `src/lib/litea/__tests__/dispatch.test.ts` — 9 tests: both controls off, allow-list separation,
+  admitted send to an in-process fake receiver, failed delivery, duplicate/replay, expiry between
+  reservation and send, disable-before-retry, abstention, wrong identity/head/input/timing.
+- `src/lib/litea/__tests__/opsPath.test.ts` — 5 tests through the real `decision.commit` handler
+  with a fake database and clock: refusal while off, unchanged shadow recording, durable-then-
+  reserve when on, stale row refused, C85/T45 unaffected.
+- `src/lib/litea/__tests__/activation.test.ts` — 9 tests (payload/gate, incl. NaN timing).
+- `services/c85-worker/tests/test_litea_dispatch.py` — 6 tests: default-off preparation, admitted
+  outbox identity, stable retry identity, row-level rejection, bounded deadline, and that the
+  signed commit omits `outbox` entirely when off.
+
+None of these make a network request, write production state, or start a worker.

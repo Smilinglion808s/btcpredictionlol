@@ -131,7 +131,14 @@ export function liteaExecutionGate(i: LiteAGateInputs): LiteAGateVerdict {
   if (i.runMode !== "LIVE") return "NOT_LIVE";
   if (i.finalSide !== 1 && i.finalSide !== -1) return "ABSTAIN";
   if (i.alreadyDispatched) return "ALREADY_DISPATCHED";
-  if (i.publicationOffsetMs == null || i.publicationOffsetMs >= i.publicationDeadlineMs) {
+  // NaN fails every comparison, so `NaN >= deadline` is false and would have
+  // slipped through. Timing must be present, finite and non-negative.
+  if (
+    i.publicationOffsetMs == null ||
+    !Number.isFinite(i.publicationOffsetMs) ||
+    i.publicationOffsetMs < 0 ||
+    i.publicationOffsetMs >= i.publicationDeadlineMs
+  ) {
     return "DEADLINE_MISSED";
   }
   return "WOULD_SEND";

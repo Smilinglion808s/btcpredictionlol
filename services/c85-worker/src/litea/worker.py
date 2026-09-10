@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from ..scheduler import RunTiming, next_boundary
+from .dispatch import prepare_outbox
 from .heads import DailyHeadStore, HeadUnavailable
 from .identity import MODEL_ID
 from .packet import Direction60Source
@@ -86,6 +87,9 @@ class LiteAWorker:
         self.pending_dir = self.state_path.with_name("pending")
         self.lease_ttl_seconds = lease_ttl_seconds
         self.readiness = "WARMING"
+        # Why the last commit did or did not carry a dispatch request. Default
+        # OFF: with no execution control set this stays EXECUTION_DISABLED.
+        self.last_dispatch_reason = "EXECUTION_DISABLED"
         self.blocking_reason: str | None = None
         # Set by the startup bridge when a gap between the restored checkpoint
         # and launch could NOT be recovered. Recording continues; scoring does
@@ -246,18 +250,37 @@ class LiteAWorker:
         The backend answers `ok: true` on success and `ok: false` with an error
         on refusal, so an ABSENT `ok` is treated as a failure rather than as
         consent.
+
+        Dispatch eligibility is evaluated HERE, on every attempt including
+        retries, against the wall clock at that attempt. So a queued decision
+        that ages past the Version-1 transport ceiling — or one whose execution
+        control was switched off meanwhile — is still committed durably, just
+        with no outbox request attached. Historical and shadow rows can never
+        acquire one on a later replay.
         """
         self._remember_pending(row, checkpoint or {})
+        outbox, dispatch_reason = prepare_outbox(row, now_ms=time.time() * 1000.0)
+        self.last_dispatch_reason = dispatch_reason
         started = time.time_ns()
         try:
-            result = self.store.commit(row, checkpoint)
+            result = (
+                self.store.commit(row, checkpoint)
+                if outbox is None
+                else self.store.commit(row, checkpoint, outbox)
+            )
         except Exception as exc:  # noqa: BLE001 - transport/refusal both stay queued
             return {"ok": False, "error": str(exc), "ack_ns": None}
         acked = time.time_ns()
         if result.get("ok") is not True:
             return {"ok": False, "error": str(result.get("error") or result), "ack_ns": None}
         self._pending_file(str(row["target_open_utc"])).unlink(missing_ok=True)
-        return {"ok": True, "ack_ns": acked, "ack_latency_ms": (acked - started) / 1_000_000}
+        return {
+            "ok": True,
+            "ack_ns": acked,
+            "ack_latency_ms": (acked - started) / 1_000_000,
+            "dispatch": result.get("dispatch") or dispatch_reason,
+        }
+
 
     def reconcile_pending(self) -> dict[str, Any] | None:
         """Re-submit undelivered decisions in target order.

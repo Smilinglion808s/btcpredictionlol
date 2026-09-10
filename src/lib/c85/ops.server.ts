@@ -16,7 +16,17 @@ import {
   C85_MODEL_VERSION,
   C85_RECONSTRUCTION_VERSION,
   C85_WRITABLE_MODEL_VERSIONS,
+  LITE_A_MODEL_VERSION,
 } from "./config";
+import {
+  dispatchLiteaDecision,
+  liteaEffectiveAllowlist,
+  liteaServerExecutionEnabled,
+  liteaTransportDeadlineMs,
+  supabaseLiteaDispatchDeps,
+  type LiteADecisionRecord,
+} from "@/lib/litea/dispatch.server";
+import { deliverWebhookNow } from "@/lib/webhooks.server";
 
 // The identity a signed worker request writes under. Restricted to a closed
 // allow-list so a reconstruction worker can never overwrite archived rows and
@@ -285,10 +295,15 @@ export async function runC85Op(
       // A shadow-only identity may never enqueue a dispatch, whatever the
       // worker sends. Enforced here, at the trust boundary, instead of relying
       // on the worker to omit the field.
-      if (
-        body.outbox &&
-        (C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS as readonly string[]).includes(mv)
-      ) {
+      //
+      // Version 1 is on that forbidden list and STAYS on it unless the server's
+      // own human control (LITEA_SERVER_EXECUTION_ENABLED=true) is set. It is
+      // absent today, so a worker outbox request is refused exactly as before.
+      const liteaExecution = mv === LITE_A_MODEL_VERSION && liteaServerExecutionEnabled();
+      const forbidden = (C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS as readonly string[]).filter(
+        (v) => !(v === LITE_A_MODEL_VERSION && liteaExecution),
+      );
+      if (body.outbox && forbidden.includes(mv)) {
         return {
           status: 400,
           result: {
@@ -298,10 +313,13 @@ export async function runC85Op(
         };
       }
       const target = { ...body.target, model_version: mv };
+      // Version 1 dispatch is handled after the decision is durable, by the
+      // Version-1-only path with its own transport ceiling. The transactional
+      // C85 outbox row is not written for it.
       const { data, error } = await supabase.rpc("c85_commit_decision", {
         p_target: target,
         p_checkpoint: body.checkpoint ? { ...body.checkpoint, model_version: mv } : null,
-        p_outbox: body.outbox ?? null,
+        p_outbox: liteaExecution ? null : (body.outbox ?? null),
       });
       if (error) {
         // 409 only for genuine conflicts (stale parent, serialization, unique);
@@ -310,8 +328,31 @@ export async function runC85Op(
         return { status: conflict ? 409 : 400, result: { ok: false, error: error.message } };
       }
       const res = (data ?? {}) as Record<string, unknown>;
-      return { status: res.ok === false ? 409 : 200, result: res };
+      if (res.ok === false) return { status: 409, result: res };
+
+      // Durable first, then — and only then — the prepared Version 1 dispatch.
+      // With the control off this returns EXECUTION_DISABLED and sends nothing.
+      if (mv === LITE_A_MODEL_VERSION && body.outbox) {
+        const dispatch = await dispatchLiteaDecision(
+          supabaseLiteaDispatchDeps(supabase, async (payload) => {
+            const delivery = await deliverWebhookNow(supabase, "prediction.created", payload);
+            void delivery.settle;
+            return { delivered: delivery.delivered };
+          }),
+          target as LiteADecisionRecord,
+          {
+            targetId: (res.target_id as string | undefined) ?? (res.id as string | undefined) ?? null,
+            executionEnabled: liteaExecution,
+            allowedModels: liteaEffectiveAllowlist(),
+            transportDeadlineMs: liteaTransportDeadlineMs(),
+          },
+        );
+        return { status: 200, result: { ...res, dispatch: dispatch.verdict } };
+      }
+      return { status: 200, result: res };
     }
+
+
 
     case "target.missed": {
       const open = new Date(body.target_open_utc);

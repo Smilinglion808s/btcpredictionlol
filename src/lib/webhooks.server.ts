@@ -1,6 +1,7 @@
 // Server-only outbound webhook delivery for predictions.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHmac } from "crypto";
+import { LITE_A_MODEL_VERSION } from "@/lib/c85/config";
 
 export type WebhookEvent = "prediction.created" | "prediction.resolved";
 
@@ -441,6 +442,23 @@ export const OUTBOUND_WEBHOOKS_ENABLED = true;
 // Only T45 emits outbound signals; T10 and T30 are shadow-only.
 export const WEBHOOK_ALLOWED_MODELS = new Set(["t45-priceflow"]);
 
+/**
+ * The effective sender allow-list.
+ *
+ * The static set above is unchanged: T45 Price Flow is the only model in it.
+ * Version 1 joins it ONLY while its server-side human control
+ * (`LITEA_SERVER_EXECUTION_ENABLED=true`) is on — absent today, so this returns
+ * false for Version 1. It exists so activation is a configuration step rather
+ * than a code edit. No other model's behaviour changes.
+ */
+export function isModelAllowedToSend(model: string): boolean {
+  if (WEBHOOK_ALLOWED_MODELS.has(model)) return true;
+  return (
+    model === LITE_A_MODEL_VERSION &&
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] === "true"
+  );
+}
+
 // ── Latency-critical delivery path ───────────────────────────────────────────
 // The active model must reach the bot the instant the decision exists, so the
 // endpoint list is cached (and pre-warmed before the boundary) and the first
@@ -494,7 +512,7 @@ export async function deliverWebhookNow(
   };
   if (!OUTBOUND_WEBHOOKS_ENABLED) return noop;
   const source = String(payloadObj.model ?? payloadObj.model_name ?? "");
-  if (!WEBHOOK_ALLOWED_MODELS.has(source)) return noop;
+  if (!isModelAllowedToSend(source)) return noop;
 
   const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
     e.events?.includes(event),
