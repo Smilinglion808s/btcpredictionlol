@@ -497,11 +497,18 @@ export interface FastDeliveryResult {
 /**
  * Send now, log later. First attempt fires immediately with a short timeout;
  * delivery rows, retries and endpoint bookkeeping run afterwards in `settle`.
+ *
+ * `guard`, when supplied, is re-evaluated immediately before EVERY real POST —
+ * the first attempt and each background retry. A false result cancels that
+ * attempt and every remaining retry for that endpoint. It never extends or
+ * resets a deadline; the caller owns the original one. Callers that pass no
+ * guard behave exactly as before.
  */
 export async function deliverWebhookNow(
   supabase: SupabaseClient,
   event: WebhookEvent,
   payloadObj: Record<string, unknown>,
+  guard?: () => Promise<boolean> | boolean,
 ): Promise<FastDeliveryResult> {
   const noop: FastDeliveryResult = {
     delivered: 0,
@@ -513,6 +520,13 @@ export async function deliverWebhookNow(
   if (!OUTBOUND_WEBHOOKS_ENABLED) return noop;
   const source = String(payloadObj.model ?? payloadObj.model_name ?? "");
   if (!isModelAllowedToSend(source)) return noop;
+  const allowed = async () => {
+    if (!OUTBOUND_WEBHOOKS_ENABLED) return false;
+    if (!isModelAllowedToSend(source)) return false;
+    return guard ? (await guard()) === true : true;
+  };
+  if (!(await allowed())) return noop;
+
 
   const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
     e.events?.includes(event),
@@ -527,21 +541,26 @@ export async function deliverWebhookNow(
   const t0 = Date.now();
   const first = await Promise.all(
     endpoints.map(async (ep, i) => {
+      const blank = {
+        ep,
+        i,
+        status: null as number | null,
+        ok: false,
+        resBody: null as string | null,
+        error: null as string | null,
+        cancelled: false,
+      };
+      // Immediately before the transport, not merely at intake.
+      if (!(await allowed())) return { ...blank, cancelled: true, error: "cancelled_before_send" };
       try {
         const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
-        return { ep, i, status: r.status, ok: r.ok, resBody: r.body, error: null as string | null };
+        return { ...blank, status: r.status, ok: r.ok, resBody: r.body };
       } catch (e) {
-        return {
-          ep,
-          i,
-          status: null as number | null,
-          ok: false,
-          resBody: null as string | null,
-          error: e instanceof Error ? e.message : String(e),
-        };
+        return { ...blank, error: e instanceof Error ? e.message : String(e) };
       }
     }),
   );
+
   const latencyMs = Date.now() - t0;
   const delivered = first.filter((r) => r.ok).length;
 
@@ -560,9 +579,16 @@ export async function deliverWebhookNow(
           attempt: 1,
         });
 
-        if (!r.ok) {
+        // An attempt that produced no HTTP status may still have reached the
+        // bot. For guarded (Version 1) deliveries that ambiguity is resolved
+        // conservatively: no retry, rather than a possible second order.
+        const ambiguous = guard != null && !r.cancelled && r.status === null;
+        if (!r.ok && !ambiguous) {
           for (let attempt = 2; attempt <= BACKOFFS_MS.length; attempt++) {
             await new Promise((res) => setTimeout(res, BACKOFFS_MS[attempt - 1] ?? 2_000));
+            // The kill switch, allow-list, original deadline and claim
+            // ownership are re-checked before this retry actually posts.
+            if (!(await allowed())) break;
             try {
               const retry = await postOnce(r.ep.url, body, signatures[r.i], event);
               lastStatus = retry.status;
@@ -575,6 +601,7 @@ export async function deliverWebhookNow(
                 attempt,
               });
               if (retry.ok) break;
+              if (guard != null && retry.status === null) break;
             } catch (e) {
               await supabase.from("webhook_deliveries").insert({
                 endpoint_id: r.ep.id,
@@ -583,9 +610,11 @@ export async function deliverWebhookNow(
                 error: e instanceof Error ? e.message : String(e),
                 attempt,
               });
+              if (guard != null) break;
             }
           }
         }
+
 
         await supabase
           .from("webhook_endpoints")

@@ -159,19 +159,51 @@ export function liteaPayloadFromRecord(row: LiteADecisionRecord) {
   });
 }
 
+/**
+ * Outcome of the exclusive durable claim on one event identity.
+ *
+ * Only `CLAIMED` entitles the caller to deliver. Merely observing a PENDING
+ * row does not: a competing request that finds a live claim held by someone
+ * else, a terminal entry, or an ambiguous one (a claim that lapsed after an
+ * attempt may already have reached the bot) gets no attempt at all.
+ */
+export type LiteAClaimOutcome =
+  | "CLAIMED"
+  | "HELD_BY_OTHER"
+  | "ALREADY_SENT"
+  | "TERMINAL"
+  | "AMBIGUOUS"
+  | "UNAVAILABLE";
+
 /** Everything this path touches, injectable so tests use an in-process receiver. */
 export interface LiteADispatchDeps {
-  /** Idempotent on `dedupe_key`. Returns the entry's current state. */
-  reserve(entry: {
+  /**
+   * Atomically create-or-take the exclusive claim for `dedupeKey`. Must be a
+   * single durable operation: two concurrent callers cannot both get CLAIMED.
+   */
+  claim(entry: {
     dedupeKey: string;
+    owner: string;
     targetId: string | null;
     payload: Record<string, unknown>;
     expiresAt: string;
-  }): Promise<{ state: string }>;
-  /** Existing transport. Returns how many endpoints accepted. */
-  deliver(payload: Record<string, unknown>): Promise<{ delivered: number }>;
+  }): Promise<{ outcome: LiteAClaimOutcome }>;
+  /** True only while THIS owner still holds an unexpired claim on the key. */
+  ownsClaim(dedupeKey: string, owner: string): Promise<boolean>;
+  /** Live kill-switch / allow-list readers; default to the real environment. */
+  isEnabledNow?(): boolean;
+  allowedNow?(): ReadonlySet<string>;
+  /**
+   * Existing transport. `guard` is re-evaluated immediately before every real
+   * attempt (first and retries); false cancels that attempt.
+   */
+  deliver(
+    payload: Record<string, unknown>,
+    guard: () => Promise<boolean>,
+  ): Promise<{ delivered: number }>;
   settle(entry: {
     dedupeKey: string;
+    owner: string;
     targetId: string | null;
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
@@ -181,17 +213,23 @@ export interface LiteADispatchDeps {
 }
 
 export interface LiteADispatchResult {
-  verdict: LiteADispatchVerdict | "SENT" | "FAILED";
+  verdict: LiteADispatchVerdict | "SENT" | "FAILED" | "NOT_CLAIM_OWNER";
   dedupeKey: string | null;
+  claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
 }
 
+/** A per-request owner id; never reused across attempts. */
+export function newDispatchOwner(): string {
+  return `litea-dispatch-${globalThis.crypto.randomUUID()}`;
+}
+
 /**
- * Durable reservation first, then send, then record the outcome — in that
+ * Exclusive durable claim first, then send, then record the outcome — in that
  * order, so a crash leaves a replayable entry rather than an untracked signal.
- * A retry reuses the same event identity and takes NO new reservation, and the
- * ceiling is re-checked immediately before the send.
+ * A retry reuses the same event identity and takes NO new claim, and both the
+ * ceiling and claim ownership are re-checked immediately before every attempt.
  *
  * Dedupe here cannot promise exactly-once broker fills. It guarantees at most
  * one outbound signal per interval from this system; the external bot must
@@ -206,6 +244,7 @@ export async function dispatchLiteaDecision(
     allowedModels: ReadonlySet<string>;
     transportDeadlineMs: number;
     alreadySent?: boolean;
+    owner?: string;
   },
 ): Promise<LiteADispatchResult> {
   const intake = evaluateLiteaDispatch(row, {
@@ -223,14 +262,38 @@ export async function dispatchLiteaDecision(
   const dedupeKey = liteaDedupeKey(ticker, targetOpenIso);
   const expiresAt = new Date(openMs + args.transportDeadlineMs).toISOString();
   const payload = liteaPayloadFromRecord(row);
+  const owner = args.owner ?? newDispatchOwner();
 
-  const reserved = await deps.reserve({
+  const claimed = await deps.claim({
     dedupeKey,
+    owner,
     targetId: args.targetId,
     payload,
     expiresAt,
   });
-  if (reserved.state === "SENT") return { verdict: "ALREADY_SENT", dedupeKey };
+  if (claimed.outcome === "ALREADY_SENT") {
+    return { verdict: "ALREADY_SENT", dedupeKey, claim: claimed.outcome };
+  }
+  if (claimed.outcome !== "CLAIMED") {
+    return { verdict: "NOT_CLAIM_OWNER", dedupeKey, claim: claimed.outcome };
+  }
+
+  /**
+   * Re-evaluated immediately before EVERY real attempt, first and retries
+   * alike: current kill switch, allow-list, the ORIGINAL (never extended)
+   * ceiling, and this owner's claim still being live.
+   */
+  const guard = async (): Promise<boolean> => {
+    const verdict = evaluateLiteaDispatch(row, {
+      nowMs: deps.now(),
+      executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
+      allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
+      alreadySent: false,
+      transportDeadlineMs: args.transportDeadlineMs,
+    });
+    if (verdict !== "WOULD_SEND") return false;
+    return await deps.ownsClaim(dedupeKey, owner);
+  };
 
   // Re-check the ceiling with the clock as it is NOW, after the durable write.
   const preSend = evaluateLiteaDispatch(row, {
@@ -243,19 +306,21 @@ export async function dispatchLiteaDecision(
   if (preSend !== "WOULD_SEND") {
     await deps.settle({
       dedupeKey,
+      owner,
       targetId: args.targetId,
       status: preSend === "EXPIRED" ? "EXPIRED" : "FAILED",
       error: `pre_send_${preSend.toLowerCase()}`,
       publicationOffsetMs: null,
     });
-    return { verdict: preSend, dedupeKey };
+    return { verdict: preSend, dedupeKey, claim: claimed.outcome };
   }
 
-  const delivery = await deps.deliver(payload);
+  const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
   await deps.settle({
     dedupeKey,
+    owner,
     targetId: args.targetId,
     status,
     error: status === "SENT" ? null : "no_endpoint_accepted",
@@ -264,52 +329,86 @@ export async function dispatchLiteaDecision(
   return {
     verdict: status,
     dedupeKey,
+    claim: claimed.outcome,
     delivered: delivery.delivered,
     publicationOffsetMs: sentMs - openMs,
   };
 }
 
+
 type MinimalClient = {
   from: (table: string) => any;
+  rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: any; error: any }>;
 };
+
+/** The claim RPC prepared in supabase/prepared/. NOT applied in production yet. */
+export const LITEA_CLAIM_RPC = "c85_litea_claim_outbox";
+
+const CLAIM_OUTCOMES: ReadonlySet<string> = new Set([
+  "CLAIMED",
+  "HELD_BY_OTHER",
+  "ALREADY_SENT",
+  "TERMINAL",
+  "AMBIGUOUS",
+  "UNAVAILABLE",
+]);
 
 /** Supabase-backed deps. The tests never use this — they inject a fake. */
 export function supabaseLiteaDispatchDeps(
   supabase: MinimalClient,
-  deliver: (payload: Record<string, unknown>) => Promise<{ delivered: number }>,
+  deliver: (
+    payload: Record<string, unknown>,
+    guard: () => Promise<boolean>,
+  ) => Promise<{ delivered: number }>,
 ): LiteADispatchDeps {
   return {
     now: () => Date.now(),
     deliver,
-    async reserve(entry) {
-      const { error } = await supabase.from(C85_OUTBOX_TABLE).insert({
-        dedupe_key: entry.dedupeKey,
-        target_id: entry.targetId,
-        payload: entry.payload,
-        state: "PENDING",
-        expires_at: entry.expiresAt,
+    async claim(entry) {
+      // One atomic durable statement decides ownership. Anything unexpected —
+      // including the RPC not being installed — is treated as "not ours", so
+      // nothing is delivered.
+      const { data, error } = await supabase.rpc(LITEA_CLAIM_RPC, {
+        p_dedupe_key: entry.dedupeKey,
+        p_owner: entry.owner,
+        p_target_id: entry.targetId,
+        p_payload: entry.payload,
+        p_expires_at: entry.expiresAt,
       });
-      if (error && !String(error.message).includes("duplicate key")) {
-        throw new Error(`litea_reserve_outbox:${error.message}`);
-      }
-      if (!error) return { state: "PENDING" };
-      // Already reserved by an earlier attempt: reuse it, never take a second.
-      const { data } = await supabase
+      if (error) return { outcome: "UNAVAILABLE" };
+      const outcome = String((data as { outcome?: string } | null)?.outcome ?? "UNAVAILABLE");
+      return {
+        outcome: (CLAIM_OUTCOMES.has(outcome) ? outcome : "UNAVAILABLE") as LiteAClaimOutcome,
+      };
+    },
+    async ownsClaim(dedupeKey, owner) {
+      const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
-        .select("state")
-        .eq("dedupe_key", entry.dedupeKey)
+        .select("state,claim_owner,claim_expires_at")
+        .eq("dedupe_key", dedupeKey)
         .maybeSingle();
-      return { state: String((data as { state?: string } | null)?.state ?? "PENDING") };
+      if (error || !data) return false;
+      const row = data as {
+        state?: string;
+        claim_owner?: string;
+        claim_expires_at?: string;
+      };
+      if (row.state !== "PENDING" || row.claim_owner !== owner) return false;
+      const until = new Date(String(row.claim_expires_at)).getTime();
+      return Number.isFinite(until) && until > Date.now();
     },
     async settle(entry) {
+      // Only the owner may write the terminal state.
       await supabase
         .from(C85_OUTBOX_TABLE)
         .update({
           state: entry.status,
           sent_at: entry.status === "SENT" ? new Date().toISOString() : null,
           last_error: entry.error,
+          claim_owner: null,
         })
-        .eq("dedupe_key", entry.dedupeKey);
+        .eq("dedupe_key", entry.dedupeKey)
+        .eq("claim_owner", entry.owner);
       if (entry.targetId) {
         await supabase
           .from(C85_TARGETS_TABLE)
@@ -322,5 +421,6 @@ export function supabaseLiteaDispatchDeps(
           .eq("id", entry.targetId);
       }
     },
+
   };
 }

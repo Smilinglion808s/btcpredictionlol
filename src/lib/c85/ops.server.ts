@@ -17,6 +17,7 @@ import {
   C85_RECONSTRUCTION_VERSION,
   C85_WRITABLE_MODEL_VERSIONS,
   LITE_A_MODEL_VERSION,
+  C85_TARGETS_TABLE,
 } from "./config";
 import {
   dispatchLiteaDecision,
@@ -333,15 +334,39 @@ export async function runC85Op(
       // Durable first, then — and only then — the prepared Version 1 dispatch.
       // With the control off this returns EXECUTION_DISABLED and sends nothing.
       if (mv === LITE_A_MODEL_VERSION && body.outbox) {
+        const targetId =
+          (res.target_id as string | undefined) ?? (res.id as string | undefined) ?? null;
+        // The delivered signal is built ONLY from the committed immutable
+        // record identified by the returned id under this exact model
+        // identity. A replayed request whose body was altered after the
+        // original commit cannot change what would be sent.
+        const persisted = targetId
+          ? (
+              await supabase
+                .from(C85_TARGETS_TABLE)
+                .select("*")
+                .eq("id", targetId)
+                .eq("model_version", LITE_A_MODEL_VERSION)
+                .maybeSingle()
+            ).data
+          : null;
+        if (!persisted) {
+          return { status: 200, result: { ...res, dispatch: "NO_PERSISTED_RECORD" } };
+        }
         const dispatch = await dispatchLiteaDecision(
-          supabaseLiteaDispatchDeps(supabase, async (payload) => {
-            const delivery = await deliverWebhookNow(supabase, "prediction.created", payload);
+          supabaseLiteaDispatchDeps(supabase, async (payload, guard) => {
+            const delivery = await deliverWebhookNow(
+              supabase,
+              "prediction.created",
+              payload,
+              guard,
+            );
             void delivery.settle;
             return { delivered: delivery.delivered };
           }),
-          target as LiteADecisionRecord,
+          persisted as LiteADecisionRecord,
           {
-            targetId: (res.target_id as string | undefined) ?? (res.id as string | undefined) ?? null,
+            targetId,
             executionEnabled: liteaExecution,
             allowedModels: liteaEffectiveAllowlist(),
             transportDeadlineMs: liteaTransportDeadlineMs(),
@@ -349,6 +374,7 @@ export async function runC85Op(
         );
         return { status: 200, result: { ...res, dispatch: dispatch.verdict } };
       }
+
       return { status: 200, result: res };
     }
 
