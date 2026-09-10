@@ -190,6 +190,9 @@ export interface LiteADispatchDeps {
   }): Promise<{ outcome: LiteAClaimOutcome }>;
   /** True only while THIS owner still holds an unexpired claim on the key. */
   ownsClaim(dedupeKey: string, owner: string): Promise<boolean>;
+  /** Live kill-switch / allow-list readers; default to the real environment. */
+  isEnabledNow?(): boolean;
+  allowedNow?(): ReadonlySet<string>;
   /**
    * Existing transport. `guard` is re-evaluated immediately before every real
    * attempt (first and retries); false cancels that attempt.
