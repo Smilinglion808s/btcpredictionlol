@@ -102,13 +102,45 @@ def empty_window_template() -> dict:
 
 # --------------------------------------------------------------------------- #
 # transport
+class RestBanned(RecoveryUnavailable):
+    """The venue has rate-limit BANNED this address until `until_ms`.
+
+    Distinguished from an ordinary failure because retrying inside the ban only
+    extends it: the caller must wait, not try harder.
+    """
+
+    def __init__(self, message: str, until_ms: int | None) -> None:
+        super().__init__(message)
+        self.until_ms = until_ms
+
+
+def _ban_deadline_ms(body: str) -> int | None:
+    match = re.search(r"banned until (\d+)", body)
+    return int(match.group(1)) if match else None
+
+
 def _rest(url: str, params: dict) -> list:
     query = urllib.parse.urlencode(params)
     for attempt in range(6):
         try:
             with urllib.request.urlopen(f"{url}?{query}", timeout=30) as response:
                 return json.load(response)
-        except Exception as exc:  # noqa: BLE001 - transient rate limit / network
+        except urllib.error.HTTPError as exc:
+            if exc.code in (418, 429):
+                # Hammering an IP ban is what makes it longer. Surface it with
+                # its deadline and let the caller wait it out.
+                try:
+                    body = exc.read().decode("utf-8", "replace")
+                except Exception:  # noqa: BLE001
+                    body = ""
+                raise RestBanned(
+                    f"LITEA_REST_RATE_LIMITED: {url} :: HTTP {exc.code} {body[:200]}",
+                    _ban_deadline_ms(body),
+                ) from exc
+            if attempt == 5:
+                raise RecoveryUnavailable(f"LITEA_REST_FAILED: {url} :: {exc}") from exc
+            time.sleep(1.5 * (attempt + 1))
+        except Exception as exc:  # noqa: BLE001 - transient network
             if attempt == 5:
                 raise RecoveryUnavailable(f"LITEA_REST_FAILED: {url} :: {exc}") from exc
             time.sleep(1.5 * (attempt + 1))
