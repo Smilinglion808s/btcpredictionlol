@@ -82,6 +82,14 @@ MIN_TICKS = 30
 #: error (wei, cents, basis points), not a price, and is refused.
 MIN_PRICE = 1_000.0
 MAX_PRICE = 10_000_000.0
+#: TRADE tapes are irregular by nature: a quiet minute on a thinner venue has
+#: real multi-second holes between prints even while the socket is healthy.
+#: These sampling budgets apply ONLY to the free public trade backups, are
+#: recorded on every decision that uses them, and never loosen the checks used
+#: for an index-grade reference.
+TRADE_MAX_TICK_AGE_MS = 10_000
+TRADE_MAX_GAP_MS = 20_000
+TRADE_MIN_TICKS = 20
 #: How far after the boundary the completed window's own end stamp may sit.
 EXACT_END_TOLERANCE_MS = 2_000
 
@@ -121,6 +129,10 @@ class ReferenceBuffer(_BaseBuffer):
     #: TRADE prints are not the index's evenly spaced per-second readings, and
     #: the difference is disclosed on every decision rather than smoothed over.
     approx_method: str = "causal_approx_60s_mean"
+    #: Sampling budgets for THIS source, reported with every estimate.
+    max_tick_age_ms: int = MAX_TICK_AGE_MS
+    max_gap_ms: int = MAX_GAP_MS
+    min_ticks: int = MIN_TICKS
     #: Venue event ids already stored, so a repeated print is never counted
     #: twice and a replayed frame cannot change a second's chosen value.
     seen_events: set = field(default_factory=set)
@@ -252,12 +264,15 @@ class ReferenceBuffer(_BaseBuffer):
             "max_gap_ms": worst_gap,
             "leading_gap_ms": leading,
             "receipt_ns": max(row[2] for row in rows),
+            "min_ticks": self.min_ticks,
+            "max_gap_budget_ms": self.max_gap_ms,
+            "max_age_budget_ms": self.max_tick_age_ms,
         }
-        if count < MIN_TICKS:
+        if count < self.min_ticks:
             return {**detail, "usable": False, "reason": "too_few_ticks"}
-        if age_ms > MAX_TICK_AGE_MS:
+        if age_ms > self.max_tick_age_ms:
             return {**detail, "usable": False, "reason": "stale_at_boundary"}
-        if worst_gap > MAX_GAP_MS:
+        if worst_gap > self.max_gap_ms:
             return {**detail, "usable": False, "reason": "window_gap"}
         mean = sum(row[1] for row in rows) / count
         return {
@@ -598,6 +613,9 @@ class CoinbaseMatchesCollector:
         self.buffer = buffer
         self.ws_url = ws_url
         self.buffer.approx_method = "causal_approx_60s_trade_mean"
+        self.buffer.max_tick_age_ms = TRADE_MAX_TICK_AGE_MS
+        self.buffer.max_gap_ms = TRADE_MAX_GAP_MS
+        self.buffer.min_ticks = TRADE_MIN_TICKS
         self.buffer.credentials_missing = False
         self.heartbeats = 0
 
@@ -662,6 +680,9 @@ class KrakenTradeCollector:
         self.buffer = buffer
         self.ws_url = ws_url
         self.buffer.approx_method = "causal_approx_60s_trade_mean"
+        self.buffer.max_tick_age_ms = TRADE_MAX_TICK_AGE_MS
+        self.buffer.max_gap_ms = TRADE_MAX_GAP_MS
+        self.buffer.min_ticks = TRADE_MIN_TICKS
         self.buffer.credentials_missing = False
 
     def ingest(self, frame: dict[str, Any], receipt_ns: int) -> bool:
