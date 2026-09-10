@@ -400,20 +400,21 @@ export function LiteACard({
             <span className="h-px flex-1 bg-gradient-to-r from-signal-orange/40 via-steel/20 to-transparent" />
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
-            {daily.map((d) => (
-              <span
-                key={String(d.date)}
-                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
-                  Number(d.net_units) >= 0
-                    ? "border-bull/30 text-bull"
-                    : "border-bear/30 text-bear"
-                }`}
-              >
-                {String(d.date).slice(5)} {Number(d.net_units) > 0 ? "+" : ""}
-                {Number(d.net_units).toFixed(2)}
-                {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
-              </span>
-            ))}
+            {daily.map((d) => {
+              const dNet = Number(d.wins ?? 0) - Number(d.losses ?? 0);
+              return (
+                <span
+                  key={String(d.date)}
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
+                    dNet >= 0 ? "border-bull/30 text-bull" : "border-bear/30 text-bear"
+                  }`}
+                >
+                  {String(d.date).slice(5)} {dNet > 0 ? "+" : ""}
+                  {dNet}
+                  {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
+                </span>
+              );
+            })}
           </div>
         </section>
       ) : null}
