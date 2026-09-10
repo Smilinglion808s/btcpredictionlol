@@ -33,9 +33,13 @@ from __future__ import annotations
 import asyncio
 import bisect
 import json
+import os
+import re
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
+
 
 import httpx
 import websockets
