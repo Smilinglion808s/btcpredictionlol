@@ -84,6 +84,7 @@ class StartupBridge:
     def __init__(self, service: Any) -> None:
         self.service = service
         self.report: dict[str, Any] = {"status": "NOT_RUN"}
+        self._pending: list[dict] = []
 
     # -- planning --------------------------------------------------------------
     def _resume_from(self) -> tuple[datetime | None, datetime | None]:
@@ -315,8 +316,6 @@ class StartupBridge:
         }
 
     # -- settlement interleaving ----------------------------------------------
-    _pending: list[dict] = []
-
     def _remember_settlement(self, row: dict) -> None:
         if pd.notna(row.get("label")) and pd.notna(row.get("settlement_ts")):
             self._pending.append(row)
