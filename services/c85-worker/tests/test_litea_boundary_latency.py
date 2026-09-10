@@ -139,7 +139,9 @@ def test_denied_prepared_lease_fails_closed(tmp_path):
     assert outcome.status == "MISSED"
     assert "other-worker" in (outcome.reason or "")
     assert store.commits == []
-    assert store.missed and "LITEA_LEASE_HELD_BY:other-worker" in store.missed[0][1]
+    # Nothing is written over the real owner's interval: a process that has
+    # just been told it is not the writer records no row at all.
+    assert store.missed == []
 
 
 def test_expired_prepared_lease_is_re_acquired(tmp_path):
