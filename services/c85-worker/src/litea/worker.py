@@ -333,16 +333,22 @@ class LiteAWorker:
         pre-boundary preparation, so a transport outage drains by itself.
         Delivery stops at the first still-failing target: the ledger stays in
         order.
+
+        The lock is NEVER held across the network round trip. Each delivery
+        happens outside it, and only the cursor advance that follows a
+        successful delivery is serialised — otherwise a slow backend would
+        block the settlement thread, the heartbeat snapshot and the boundary
+        for the whole request.
         """
         outcomes: list[dict[str, Any]] = []
-        with self.state_lock:
-            for path in self.pending_targets():
-                saved = json.loads(path.read_text())
-                outcome = self._commit(saved["target"], saved["checkpoint"] or None)
-                outcomes.append({"target": saved["target"]["target_open_utc"], **outcome})
-                if not outcome["ok"]:
-                    break
-                committed = str(saved["target"]["target_open_utc"])
+        for path in self.pending_targets():
+            saved = json.loads(path.read_text())
+            outcome = self._commit(saved["target"], saved["checkpoint"] or None)
+            outcomes.append({"target": saved["target"]["target_open_utc"], **outcome})
+            if not outcome["ok"]:
+                break
+            committed = str(saved["target"]["target_open_utc"])
+            with self.state_lock:
                 # The cursor only ever moves forward: a late delivery of an older
                 # target must not rewind the committed position.
                 if (self.state.cursors.last_committed_target or "") < committed:
@@ -357,20 +363,62 @@ class LiteAWorker:
             "error": failed[0]["error"] if failed else None,
         }
 
+    # -- training snapshot -------------------------------------------------------
+    def training_snapshot(self) -> TrainingFrame:
+        """An IMMUTABLE copy of the rolling frame, taken coherently.
+
+        A daily fit reads thousands of rows and takes seconds. Reading the live
+        frame while a boundary appends to it, or a settlement labels a row in
+        it, would fit a frame that never existed at any instant. The copy is
+        taken under the lock; the fit itself runs outside it.
+        """
+        with self.state_lock:
+            return TrainingFrame(self.training.frame.copy(deep=True))
+
+    def install_fit_cursors(self, training: TrainingFrame, last: Any = None) -> None:
+        """Record what the fit actually consumed, coherently.
+
+        The FITTED FRAME's identity is installed — not the live frame's, which
+        may already have moved on. The cursors then describe a frame that
+        genuinely produced these heads.
+        """
+        with self.state_lock:
+            if last is not None:
+                self.state.cursors.last_fit_cutoff = last.cutoff
+                self.state.cursors.last_fit_result = (
+                    "FITTED" if last.fitted else (last.reason or "")
+                )
+            self.state.cursors.training_sha256 = training.sha256
+            self.state.cursors.training_rows = training.rows
+            self.state.cursors.training_last_target = training.last_target
+            self.state.save(self.state_path)
+
     # -- pre-boundary ----------------------------------------------------------
+    def lease_state(self, lease: dict[str, Any] | None, at_ns: int) -> str:
+        """How this lease stands at `at_ns` — never a bare 'probably ours'.
+
+        `USABLE`      granted, with a reported expiry that still covers the
+                      decision with the safety margin.
+        `UNEVIDENCED` granted, but with no parsable `expires_at`. The lease RPC
+                      does return `expires_at` and `fence`, so this is an
+                      unexpected response shape, not a normal case: it is never
+                      treated as evidence of ownership and never reused.
+        `EXPIRED`     granted once, but no longer covers the decision.
+        `DENIED`      another owner holds the boundary, or nothing was granted.
+        """
+        lease = lease or {}
+        if not lease.get("granted"):
+            return "DENIED"
+        expiry = _lease_expiry_ns(lease)
+        if expiry is None:
+            return "UNEVIDENCED"
+        return "USABLE" if expiry > at_ns + LEASE_SAFETY_MS * 1_000_000 else "EXPIRED"
+
     def _lease_usable(self, prepared: dict[str, Any] | None, at_ns: int) -> bool:
         """A prepared lease is only reused while it still covers the decision."""
         if not prepared:
             return False
-        lease = prepared.get("lease") or {}
-        if not lease.get("granted"):
-            return False
-        expiry = _lease_expiry_ns(lease)
-        if expiry is None:
-            # No expiry reported: treat it as unusable rather than assume
-            # ownership we cannot evidence.
-            return False
-        return expiry > at_ns + LEASE_SAFETY_MS * 1_000_000
+        return self.lease_state(prepared.get("lease"), at_ns) == "USABLE"
 
     async def prepare_boundary(self, target: datetime) -> dict[str, Any]:
         """Do the remote work BEFORE T, never between the wake and the freeze.
