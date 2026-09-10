@@ -262,10 +262,26 @@ class LiteAService:
             except Exception as exc:  # noqa: BLE001
                 print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
 
+    def drain_settlements(self) -> int:
+        """Produce official outcomes, then apply every unconsumed one.
+
+        Producing comes first: `settlements.pending` can only return what has
+        actually been recorded, and nothing else in this process records an
+        outcome.
+        """
+        try:
+            self.outcomes.poll()
+        except Exception as exc:  # noqa: BLE001 — retried on the next pass
+            print(f"[{MODEL_ID}] outcome poll failed: {exc}", flush=True)
+        applied = self.worker.apply_settlements(self.store.pending_settlements())
+        if applied:
+            self.state.save(self.state_path)
+        return applied
+
     async def settlement_loop(self) -> None:
         while True:
             try:
-                applied = self.worker.apply_settlements(self.store.pending_settlements())
+                applied = await asyncio.to_thread(self.drain_settlements)
                 if applied:
                     # Local paired state first, then the durable checkpoint, so
                     # a crash in between replays settlements that the consumed
