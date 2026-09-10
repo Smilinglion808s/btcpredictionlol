@@ -51,7 +51,7 @@ DATASETS = {
     "um_agg": "futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-{d}.zip",
     "spot_1m": "spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-{d}.zip",
     "usdc_1m": "spot/daily/klines/USDCUSDT/1m/USDCUSDT-1m-{d}.zip",
-    "index_1m": "futures/um/daily/indexPriceKlines/BTCUSDT/1m/BTCUSDT-1m-{d}.zip",
+    "index_1m": "futures/cm/daily/indexPriceKlines/BTCUSD/1m/BTCUSD-1m-{d}.zip",
     "cm_1m": "futures/cm/daily/klines/BTCUSD_PERP/1m/BTCUSD_PERP-1m-{d}.zip",
 }
 
@@ -83,6 +83,26 @@ def _to_us(series: pd.Series) -> pd.Series:
     """Binance moved these archives to microseconds; older days are ms."""
     values = series.astype("int64")
     return np.where(values > 10**15, values, values * 1000)
+
+
+AGG_FIELDS = [
+    "event_count", "underlying_trade_count", "base_volume", "quote_volume", "signed_quote",
+    "signed_event_count", "buy_quote", "sell_quote", "flow_imbalance", "aggressive_buy_share",
+    "trade_hhi", "max_trade_share", "return_bps", "range_bps", "price_flow_alignment",
+    "first_event_us", "last_event_us", "max_events_one_second", "max_abs_flow_one_second",
+]
+
+
+def empty_window_template() -> dict:
+    """An unobserved sub-window is NaN in every aggregate, exactly as the
+    archive builder leaves it after reindexing; it is never zero-filled."""
+    out: dict[str, float] = {}
+    for venue in ("binance_spot", "binance_um"):
+        for horizon, windows in (("t0", (5, 15, 30, 60, 180, 900)), ("t5", (1, 2, 3, 5))):
+            for seconds in windows:
+                for field in AGG_FIELDS:
+                    out[f"{venue}_{horizon}_w{seconds:03d}_{field}"] = float("nan")
+    return out
 
 
 def load_agg(kind: str, day: str) -> pd.DataFrame:
@@ -216,7 +236,7 @@ def _target_row(
     window_start = target_us - 15 * 60 * 1_000_000
     cutoff = target_us + 5 * 1_000_000
     blockers: list[str] = []
-    row: dict = {"ts": target, "target_ms": target_ms}
+    row: dict = {"ts": target, "target_ms": target_ms, **empty_window_template()}
 
     for name, events in (("binance_spot", spot), ("binance_um", um)):
         slice_ = events[(events.ts_us >= window_start) & (events.ts_us < cutoff)]
