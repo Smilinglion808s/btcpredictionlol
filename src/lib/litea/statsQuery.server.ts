@@ -126,17 +126,25 @@ async function loadRows(): Promise<Row[]> {
   return (data ?? []) as unknown as Row[];
 }
 
-async function loadSettlements(): Promise<Map<string, string>> {
+/**
+ * Official labels are keyed by ticker + target: a same-time row from another
+ * market or another model can never grade this model's call. The worker
+ * writes the venue's official `label` (±1); rows without a valid label are
+ * not evidence and leave the call pending.
+ */
+async function loadSettlements(): Promise<Map<string, number>> {
   const { data } = await sb()
     .from("c85_settlements")
-    .select("target_open_utc, outcome")
+    .select("target_open_utc, ticker, label")
     .eq("model_version", LITE_A_MODEL_VERSION)
     .order("target_open_utc", { ascending: false })
     .limit(2000);
-  const map = new Map<string, string>();
+  const map = new Map<string, number>();
   for (const r of (data ?? []) as Row[]) {
-    const key = new Date(String(r.target_open_utc)).toISOString();
-    if (!map.has(key)) map.set(key, String(r.outcome ?? ""));
+    const label = Number(r.label);
+    if (label !== 1 && label !== -1) continue; // absent/invalid — stays pending
+    const key = `${String(r.ticker ?? "")}@${new Date(String(r.target_open_utc)).toISOString()}`;
+    if (!map.has(key)) map.set(key, label);
   }
   return map;
 }
