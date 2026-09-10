@@ -392,4 +392,6 @@ class V1DirectionStage:
             direction_features=direction_features,
             market=market,
             watermarks=self.watermarks(freeze_ns),
+            market_diagnostics=market_diagnostics,
         )
+
