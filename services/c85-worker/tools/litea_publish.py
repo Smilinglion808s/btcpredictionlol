@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,7 +26,15 @@ def _sha256(path: Path) -> str:
 
 def main() -> None:
     root = Path(sys.argv[1])
-    remote = RemoteArtifacts(BackendClient(), root)
+    from src.litea.identity import MODEL_ID
+
+    backend = BackendClient(
+        os.environ["LITEA_OPS_URL"],
+        os.environ["C85_GATEWAY_SECRET"],
+        os.environ.get("WORKER_ID", "litea-publish"),
+        model_version=MODEL_ID,
+    )
+    remote = RemoteArtifacts(backend, root)
     manifest = remote.publish(
         heads_root=root / "heads",
         training=root / "training.parquet",
