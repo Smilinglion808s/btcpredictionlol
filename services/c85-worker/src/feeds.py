@@ -371,6 +371,13 @@ class MarketBuffer(_BaseBuffer):
 
     freshness_budget_ns: int = 300 * NS
     markets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: Per-target, per-official-path first usable record. Both paths ask the
+    #: SAME venue for the SAME contract; neither invents a value and neither
+    #: can overwrite the other. `markets` stays the chosen view.
+    sources: dict[int, dict[str, dict[str, Any]]] = field(default_factory=dict)
+    #: Targets where the two official paths disagreed about the same contract.
+    #: A disagreement is never resolved by preference — the boundary is refused.
+    conflicts: dict[int, dict[str, Any]] = field(default_factory=dict)
     #: Per-target poll observations, kept ONLY to distinguish a genuinely late
     #: venue publication from a parsing/buffer defect. Small, secret-free and
     #: account-free: request/receipt instants, the record's own window match and
@@ -380,23 +387,66 @@ class MarketBuffer(_BaseBuffer):
     retain: int = 192
     observe_retain: int = 12
 
-    def record(self, target_ms: int, market: dict[str, Any]) -> None:
-        # A contract is LISTED before it opens but its floor_strike is only
-        # published AT the open, so an early strike-less listing must never
-        # overwrite the record that actually carries the strike.
-        existing = self.markets.get(target_ms)
-        if (
-            existing is not None
-            and existing.get("floor_strike") is not None
-            and market.get("floor_strike") is None
+    @staticmethod
+    def _usable(record: dict[str, Any] | None) -> bool:
+        """A record that actually carries a finite positive strike."""
+        if not record:
+            return False
+        raw = record.get("floor_strike")
+        try:
+            value = float(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+        return math.isfinite(value) and value > 0
+
+    def _note_conflict(self, target_ms: int, primary: dict, backup: dict) -> None:
+        self.conflicts[target_ms] = {
+            "primary_strike": float(primary["floor_strike"]),
+            "backup_strike": float(backup["floor_strike"]),
+            "primary_ticker": primary.get("ticker"),
+            "backup_ticker": backup.get("ticker"),
+            "primary_receipt_ns": int(primary.get("receipt_ns", 0)),
+            "backup_receipt_ns": int(backup.get("receipt_ns", 0)),
+        }
+
+    def record(self, target_ms: int, market: dict[str, Any], source: str = "primary") -> None:
+        per_source = self.sources.setdefault(target_ms, {})
+        held = per_source.get(source)
+        # The first usable version a path served is kept: a later refresh — or a
+        # response that arrives after the freeze — must never erase it, and a
+        # null/error refresh must never replace a real strike.
+        if self._usable(held) and not (
+            self._usable(market) and float(market["floor_strike"]) == float(held["floor_strike"])
         ):
             self.suppressed_overwrites[target_ms] = (
                 self.suppressed_overwrites.get(target_ms, 0) + 1
             )
-            return
-        self.markets[target_ms] = market
+        elif not self._usable(held):
+            per_source[source] = dict(market, source=source)
+
+        # Both official paths describe the same contract, so a genuine
+        # disagreement is a diagnosis question, not a choice.
+        primary, backup = per_source.get("primary"), per_source.get("backup")
+        if self._usable(primary) and self._usable(backup):
+            same = float(primary["floor_strike"]) == float(backup["floor_strike"]) and (
+                primary.get("ticker") == backup.get("ticker")
+            )
+            if same:
+                self.conflicts.pop(target_ms, None)
+            else:
+                self._note_conflict(target_ms, primary, backup)
+
+        # `markets` remains the chosen view: primary when usable, otherwise the
+        # usable backup, otherwise the most informative record received.
+        chosen = next(
+            (r for r in (primary, backup) if self._usable(r)),
+            primary or backup,
+        )
+        if chosen is not None:
+            self.markets[target_ms] = chosen
         self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
         self.last_receipt_ns = max(self.last_receipt_ns, int(market["receipt_ns"]))
+
         if len(self.markets) > self.retain:
             for stale in sorted(self.markets)[: len(self.markets) - self.retain]:
                 del self.markets[stale]
