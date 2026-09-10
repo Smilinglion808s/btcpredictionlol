@@ -53,6 +53,8 @@ from ..features import (
     quote_fields,
 )
 from ..packets import _events, _kline_row
+from .reconstruct import empty_window_template
+
 
 NS = 1_000_000_000
 MINUTE_MS = 60_000
