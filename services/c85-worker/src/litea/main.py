@@ -168,8 +168,10 @@ class LiteAService:
             try:
                 applied = self.worker.apply_settlements(self.store.pending_settlements())
                 if applied:
+                    # Local paired state first, then the durable checkpoint, so
+                    # a crash in between replays settlements that the consumed
+                    # cursor has already recorded — never double-counts them.
                     self.state.save(self.state_path)
-                    self.store.commit_checkpoint = None  # no-op marker; see store
                     self.backend.call(
                         "checkpoint.append",
                         checkpoint=checkpoint_payload(self.state, next_target=next_boundary()),
