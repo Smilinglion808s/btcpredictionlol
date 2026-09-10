@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -93,10 +94,23 @@ class RemoteArtifacts:
         return _sha256(body)
 
     def _install(self, key: str, destination: Path, expected: str | None) -> bool:
-        body = self._get(key, required=expected is not None)
+        # A just-replaced object can still be served from the storage edge for a
+        # few seconds. That is a STALE READ, not a corrupt artifact, so the
+        # digest disagreement is retried with a fresh signed URL for a bounded
+        # time before it is treated as a real mismatch and raised.
+        body: bytes | None = None
+        actual = ""
+        for attempt in range(6):
+            body = self._get(key, required=expected is not None)
+            if body is None:
+                return False
+            actual = _sha256(body)
+            if not expected or actual == expected:
+                break
+            if attempt < 5:
+                time.sleep(2.0 * (attempt + 1))
         if body is None:
             return False
-        actual = _sha256(body)
         if expected and actual != expected:
             raise RuntimeError(
                 f"LITEA_ARTIFACT_DIGEST_MISMATCH: {key} expected {expected} got {actual}"
