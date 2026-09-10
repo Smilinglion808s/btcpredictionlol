@@ -7,7 +7,6 @@ import {
   listPredictions,
 } from "@/lib/predictions.functions";
 
-import { listB4x4Recent } from "@/lib/b4x4.functions";
 
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
@@ -174,14 +173,6 @@ function StatsPage() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  const b4x4RecentFn = useServerFn(listB4x4Recent);
-  const listQ = useQuery({
-    queryKey: ["b4x4-recent-stats"],
-    queryFn: () => b4x4RecentFn(),
-    refetchInterval: PENDING_REFRESH_MS,
-    staleTime: 5_000,
-  });
-
   useEffect(() => {
     const ch = supabase
       .channel("stats-realtime")
@@ -194,11 +185,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
         qc.invalidateQueries({ queryKey: ["b2-recent"] });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "b4x4_predictions" }, () => {
-        qc.invalidateQueries({ queryKey: ["b4x4-stats"] });
-        qc.invalidateQueries({ queryKey: ["b4x4-pending"] });
-        qc.invalidateQueries({ queryKey: ["b4x4-recent-stats"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -292,50 +278,6 @@ function StatsPage() {
 
 
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2 font-heading">
-            Recent History
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
-              B4x4 · Outcome follows B4x4
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b border-border">
-                <tr>
-                  <th className="text-left px-3 py-2">Candle</th>
-                  <th className="text-left px-3 py-2">B4x4</th>
-                  <th className="text-left px-3 py-2">Raw</th>
-                  <th className="text-left px-3 py-2">Cell</th>
-                  <th className="text-left px-3 py-2">p</th>
-                  <th className="text-left px-3 py-2">Close</th>
-                  <th className="text-left px-3 py-2">Outcome</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono">
-                {(listQ.data ?? []).slice(0, 25).map((p: any) => (
-                  <tr key={p.id} className="border-b border-border/50 align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">{new Date(p.candle_ts).toLocaleString()}</td>
-                    <td className="px-3 py-2"><PredictionBadge value={p.prediction} /></td>
-                    <td className="px-3 py-2"><PredictionBadge value={p.raw_direction ?? "—"} /></td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{p.grid_cell ?? "—"}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {p.p_correct != null ? Number(p.p_correct).toFixed(3) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {p.actual_close != null ? `$${Number(p.actual_close).toLocaleString()}` : "—"}
-                    </td>
-                    <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
