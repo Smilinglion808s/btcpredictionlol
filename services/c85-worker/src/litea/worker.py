@@ -299,11 +299,6 @@ class LiteAWorker:
             "deadline_met": timing.compute_complete_ns < target_ns + CUTOFF_MS * 1_000_000,
         }
 
-        # The recorded opportunity enters the rolling training frame with the
-        # features that were ACTUALLY frozen at this target's own cutoff, valid
-        # or not, unlabelled until its settlement arrives.
-        self._record_training_row(target, ticker or label, packet)
-
         row = target_row(
             target_open=target,
             ticker=ticker or label,
@@ -329,6 +324,12 @@ class LiteAWorker:
             measured["commit_latency_ms"] = outcome["ack_latency_ms"]
             self.state.cursors.last_committed_target = target.isoformat()
             self.state.save(self.state_path)
+
+        # The recorded opportunity enters the rolling training frame with the
+        # features that were ACTUALLY frozen at this target's own cutoff, valid
+        # or not, unlabelled until its settlement arrives. Kept off the timed
+        # path: it runs after the durable commit.
+        self._record_training_row(target, ticker or label, packet)
 
         return BoundaryOutcome(
             target=target,
