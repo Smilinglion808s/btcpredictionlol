@@ -296,6 +296,22 @@ class KlineBuffer(_BaseBuffer):
             cursor += 60_000
         return out
 
+    def missing_minutes(
+        self, first_open_ms: int, last_open_ms: int, frozen_at_ns: int | None = None
+    ) -> list[int]:
+        """Exactly which completed minutes in [first, last] are NOT held.
+
+        Named, not counted: "the context is incomplete" is not a diagnosis, and
+        the repair loop needs to know what to ask the venue for.
+        """
+        frozen_at_ns = now_ns() if frozen_at_ns is None else frozen_at_ns
+        return [
+            cursor
+            for cursor in range(first_open_ms, last_open_ms + 1, 60_000)
+            if self.minute(cursor, frozen_at_ns) is None
+        ]
+
+
 
 @dataclass
 class QuoteBuffer(_BaseBuffer):
