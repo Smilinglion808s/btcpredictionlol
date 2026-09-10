@@ -23,12 +23,12 @@ from ..backend import BackendClient
 from ..config import load_settings
 from ..feeds import FeedRegistry
 from ..health import create_app
-from ..packets import LivePacketSource
 from ..scheduler import BoundaryScheduler, next_boundary
 from ..tickers import KalshiTickerResolver
 from .fit_service import run_due_fits
 from .heads import DailyHeadStore
 from .identity import MODEL_ID
+from .outcomes import OfficialOutcomes
 from .remote import RemoteArtifacts
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload
@@ -51,9 +51,14 @@ class LiteAService:
         )
         self.store = LiteAStore(self.backend, self.settings.worker_id)
         self.feeds = FeedRegistry(dict(os.environ))
-        self.packets = LivePacketSource(feeds=self.feeds, experts=None, artifacts=None)
+        # Version 1 sources its own direction stage from the feed registry; the
+        # shared C85 packet source is deliberately NOT constructed here — its
+        # Kalshi stage needs a [T, T+5s) trade aggregate that only exists after
+        # the deadline it feeds.
         self.ticker_resolver = KalshiTickerResolver(
-            self.settings.kalshi_series, self._fetch_market_metadata
+            self.settings.kalshi_series,
+            self._fetch_market_metadata,
+            listed=self._listed_market,
         )
 
         root = Path(os.environ.get("LITEA_STATE_DIR", "/var/lib/litea"))
@@ -73,7 +78,6 @@ class LiteAService:
         )
 
         self.worker = LiteAWorker(
-            packet_source=self.packets,
             store=self.store,
             heads=self.heads,
             state=self.state,
@@ -86,6 +90,8 @@ class LiteAService:
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
         self.bridge = StartupBridge(self)
+        # The only thing in this process that writes an official outcome.
+        self.outcomes = OfficialOutcomes(self)
 
     # -- startup ---------------------------------------------------------------
     def _restore_artifacts(self) -> dict:
@@ -148,6 +154,11 @@ class LiteAService:
         response = httpx.get(url, params={"tickers": ticker}, timeout=3.0)
         response.raise_for_status()
         return response.json().get("markets", [])
+
+    def _listed_market(self, target_open: datetime) -> dict | None:
+        """The contract the venue itself listed for this target, if received."""
+        target_ms = int(target_open.timestamp() * 1000)
+        return self.feeds.markets.markets.get(target_ms)
 
     def _catch_up_fits(self) -> list[dict]:
         """Every due UTC-midnight fit, chronologically, off the timed path.
