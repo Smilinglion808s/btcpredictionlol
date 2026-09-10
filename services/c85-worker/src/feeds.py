@@ -651,8 +651,34 @@ class KlineCollector:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
+                    LIMITER.note(self.rest_url, response, exc)
                     self.buffer.error = f"rest:{type(exc).__name__}: {exc}"
                 await asyncio.sleep(interval_s)
+
+    async def repair_history(self, minutes: int, period_s: float = 60.0) -> None:
+        """Keep re-fetching until the last `minutes` completed minutes are held.
+
+        A single best-effort backfill at startup is not history acquisition: if
+        the venue refuses it once — a rate-limit ban, a transient error — the
+        buffer stays short and every boundary that needs the 16-minute context
+        fails with an incomplete set. This waits out the venue's own deadline
+        and asks again, and it stops as soon as the window is genuinely
+        complete. It never invents a minute.
+        """
+        while True:
+            now_ms = now_ns() // 1_000_000
+            last_open = (now_ms // 60_000) * 60_000 - 60_000
+            gaps = self.buffer.missing_minutes(last_open - (minutes - 1) * 60_000, last_open)
+            if not gaps:
+                await asyncio.sleep(period_s)
+                continue
+            wait = LIMITER.banned_for(self.rest_url)
+            if wait > 0:
+                await asyncio.sleep(min(wait + 1.0, 60.0))
+                continue
+            await self.backfill(min(minutes, len(gaps) + 60))
+            await asyncio.sleep(5.0)
+
 
 
 class KalshiWindowCollector:
