@@ -39,7 +39,7 @@ def fit_daily(frame, features, start):
     scaler = RobustScaler(quantile_range=(10,90))
     z = scaler.fit_transform(a)
     days = frame.ts.iloc[ix].dt.strftime('%Y-%m-%d')
-    weights = days.map(1.0/days.value_counts()).to_numpy(float)
+    weights = np.array(days.map(1.0/days.value_counts()).to_numpy(float), dtype=float)
     weights /= weights.mean()
     labels = frame.label.iloc[ix].eq(1).to_numpy(float)
     model = LogisticRegression(C=.003,solver='lbfgs',max_iter=5000,random_state=57)
