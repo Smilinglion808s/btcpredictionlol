@@ -174,7 +174,9 @@ def test_lease_without_expiry_is_never_assumed_valid(tmp_path):
 
     asyncio.run(worker.prepare_boundary(target))
     run_boundary(worker, target)
-    assert store.lease_calls == 2
+    # Prepared, then acquired on the boundary, then re-checked before the
+    # commit: an unevidenced lease is never trusted, at any of the three points.
+    assert store.lease_calls == 3
 
 
 def test_lease_expiry_parsing():
