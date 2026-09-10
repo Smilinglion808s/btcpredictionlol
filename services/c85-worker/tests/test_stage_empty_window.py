@@ -50,7 +50,10 @@ def staged_row(offsets_us: list[int]) -> dict:
                  "target_ms": TARGET_MS, **empty_window_template()}
     row.update(binance_window_features(events(offsets_us), TARGET_MS, "binance_spot"))
     row.update(binance_window_features(events(offsets_us), TARGET_MS, "binance_um"))
+    # The live stage derives the cross fields from the same row.
+    row.update(binance_cross_fields(row))
     return row
+
 
 
 def test_empty_first_second_is_nan_not_absent():
