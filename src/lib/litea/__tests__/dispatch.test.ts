@@ -42,33 +42,48 @@ const admitted: LiteADecisionRecord = {
 const allowed = new Set([LITE_A_MODEL_VERSION]);
 
 /** Local stand-in for the bot and the outbox. Nothing leaves the process. */
-function harness(opts: { clock: number[]; accept?: boolean; existing?: string }) {
+function harness(opts: {
+  clock: number[];
+  accept?: boolean;
+  existing?: string;
+  enabledNow?: () => boolean;
+}) {
   const reserved: any[] = [];
   const settled: any[] = [];
   const received: any[] = [];
   const clock = [...opts.clock];
-  const table = new Map<string, string>();
-  if (opts.existing) table.set(opts.existing, "SENT");
+  const table = new Map<string, { state: string; owner: string | null }>();
+  if (opts.existing) table.set(opts.existing, { state: "SENT", owner: null });
   const deps: LiteADispatchDeps = {
     now: () => (clock.length > 1 ? clock.shift()! : clock[0]!),
-    async reserve(entry) {
+    isEnabledNow: opts.enabledNow ?? (() => true),
+    allowedNow: () => allowed,
+    async claim(entry) {
       reserved.push(entry);
       const prior = table.get(entry.dedupeKey);
-      if (prior) return { state: prior };
-      table.set(entry.dedupeKey, "PENDING");
-      return { state: "PENDING" };
+      if (prior?.state === "SENT") return { outcome: "ALREADY_SENT" as const };
+      if (prior && prior.state !== "PENDING") return { outcome: "TERMINAL" as const };
+      if (prior && prior.owner !== entry.owner) return { outcome: "HELD_BY_OTHER" as const };
+      table.set(entry.dedupeKey, { state: "PENDING", owner: entry.owner });
+      return { outcome: "CLAIMED" as const };
     },
-    async deliver(payload) {
+    async ownsClaim(key, owner) {
+      const row = table.get(key);
+      return !!row && row.state === "PENDING" && row.owner === owner;
+    },
+    async deliver(payload, guard) {
+      if (!(await guard())) return { delivered: 0 };
       received.push(payload);
       return { delivered: opts.accept === false ? 0 : 1 };
     },
     async settle(entry) {
       settled.push(entry);
-      table.set(entry.dedupeKey, entry.status);
+      table.set(entry.dedupeKey, { state: entry.status, owner: null });
     },
   };
   return { deps, reserved, settled, received, table };
 }
+
 
 describe("Version 1 dispatch controls (default state)", () => {
   it("has both human controls off in this environment", () => {
