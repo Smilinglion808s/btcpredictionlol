@@ -134,6 +134,32 @@ class StartupBridge:
             "targets": targets,
         }
 
+    def _frame_rows(self, targets: list[datetime]) -> dict[str, dict]:
+        """Targets whose authentic inputs are already in the local frame.
+
+        A previous bridge pass can record a target and then stop before the
+        decision (a venue refusal further down the chunk list, a restart). The
+        inputs are the frozen ones this identity already reconstructed, so the
+        second pass decides from them instead of asking the venue again.
+        """
+        frame = getattr(getattr(self.service, "training", None), "frame", None)
+        if frame is None or frame.empty or not targets:
+            return {}
+        wanted = {pd.Timestamp(t).tz_convert("UTC").isoformat() for t in targets}
+        out: dict[str, dict] = {}
+        for row in frame.to_dict("records"):
+            stamp = pd.Timestamp(row["ts"])
+            if stamp.tzinfo is None:
+                stamp = stamp.tz_localize("UTC")
+            key = stamp.tz_convert("UTC").isoformat()
+            if key not in wanted:
+                continue
+            built = dict(row)
+            built["ts"] = stamp.tz_convert("UTC")
+            built.setdefault("blockers", None)
+            out[key] = built
+        return out
+
     # -- already-recorded rows --------------------------------------------------
     def _recorded_rows(self, targets: list[datetime]) -> dict[str, dict]:
         """The rows this identity ALREADY committed, keyed by target ISO.
