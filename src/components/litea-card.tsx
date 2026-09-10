@@ -7,7 +7,7 @@ type Stats = Record<string, any>;
  *
  * Deliberate omissions: no bankroll, no stake, no execution toggle, no
  * artifact paths, no feature internals. The status badge is driven by the
- * server's phase, which needs a live heartbeat AND a recent scheduled close —
+ * server’s phase, which needs a live heartbeat, current daily model and a
  * a fresh daily head or a saved research row never reads as live.
  */
 
