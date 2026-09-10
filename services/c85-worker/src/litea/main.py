@@ -87,40 +87,57 @@ class LiteAService:
 
     # -- startup ---------------------------------------------------------------
     def _restore_artifacts(self) -> dict:
-        """Install the durable training frame, heads and state, hash-checked."""
-        try:
-            return self.remote.restore()
-        except Exception as exc:  # noqa: BLE001 - reported, never silently ignored
-            return {"error": str(exc)}
+        """Install the durable training frame, heads and state, hash-checked.
+
+        A required object that the manifest lists but the bucket cannot serve
+        is a HARD failure: scoring cold from a partial restore would silently
+        re-warm the rank queues and reset the daily floor.
+        """
+        return self.remote.restore()
 
     def _restore_state(self) -> LiteAState:
-        """Local snapshot first, then the durable backend checkpoint.
+        """The NEWEST coherent position wins — never simply the local file.
 
-        The checkpoint carries the ORIGINAL sealed envelope, so restoring
-        re-verifies the digest that was actually written — every cursor, the
-        consumed settlements and the publication position included. Nothing is
-        re-hashed over reassembled parts, and a restore failure is never
-        repaired by starting fresh: a blank state would re-warm the rank queues
-        and reset the daily floor, which is a silent behaviour change.
+        The bucket snapshot is only republished when a fit happens (daily), so
+        it can be almost a day behind the signed decision checkpoints. Both
+        candidates are restored through their own sealed digest, and the one
+        whose committed position is later is adopted. Neither is ever repaired
+        by starting fresh.
         """
+        candidates: list[tuple[str, LiteAState]] = []
         if self.state_path.exists():
-            return LiteAState.load(self.state_path)
-        checkpoint = self.store.latest_checkpoint()
-        if not checkpoint:
-            return LiteAState()
-        expert_state = checkpoint.get("expert_state") or {}
-        envelope = expert_state.get("litea_paired_envelope")
+            candidates.append(("LOCAL_SNAPSHOT", LiteAState.load(self.state_path)))
+
+        bucket = self.state_path.with_name("state.remote.json")
+        if bucket.exists():
+            candidates.append(("BUCKET_SNAPSHOT", LiteAState.load(bucket)))
+
+        checkpoint = self.store.latest_checkpoint() or {}
+        envelope = (checkpoint.get("expert_state") or {}).get("litea_paired_envelope")
         if envelope:
-            state = LiteAState.restore(envelope)
-            state.save(self.state_path)
-            return state
-        if checkpoint.get("admission_rank_state"):
+            candidates.append(("BACKEND_CHECKPOINT", LiteAState.restore(envelope)))
+        elif checkpoint.get("admission_rank_state"):
             raise RuntimeError(
                 "LITEA_CHECKPOINT_UNRESTORABLE: the latest durable checkpoint predates "
                 "the sealed paired envelope; refusing to manufacture a state digest over "
                 "reassembled parts"
             )
-        return LiteAState()
+
+        def position(state: LiteAState) -> str:
+            return str(state.cursors.last_committed_target or state.engine.last_target or "")
+
+        chosen: LiteAState | None = None
+        self.state_origin = "COLD_START"
+        for origin, state in candidates:
+            if chosen is None or position(state) > position(chosen):
+                chosen, self.state_origin = state, origin
+
+        if chosen is None:
+            self.state_origin = "COLD_START"
+            return LiteAState()
+        chosen.save(self.state_path)
+        return chosen
+
 
     def _fetch_market_metadata(self, ticker: str) -> list[dict]:
         import httpx
@@ -192,7 +209,9 @@ class LiteAService:
             report = {}
             try:
                 report = self.snapshot()
-                armed = report["readiness"] == "LOGGING_READY"
+                # RECORDING_ONLY still arms the scheduler. Only a genuine
+                # recording blocker disarms it.
+                armed = report["readiness"] in ("LOGGING_READY", "RECORDING_ONLY")
                 if armed and self.scheduler._task is None:  # noqa: SLF001
                     self.scheduler.start()
                 elif not armed and self.scheduler._task is not None:  # noqa: SLF001
@@ -213,6 +232,22 @@ class LiteAService:
                 pass
             await asyncio.sleep(self.settings.heartbeat_seconds)
 
+    async def recovery_loop(self) -> None:
+        """Drain undelivered decisions away from the boundary path.
+
+        Delivery failures used to be retried only at the next boundary, which
+        the same failure had already blocked. This loop is what makes a
+        transport outage self-healing.
+        """
+        while True:
+            await asyncio.sleep(30)
+            try:
+                outcome = await asyncio.to_thread(self.worker.reconcile_pending)
+                if outcome and outcome.get("delivered"):
+                    self.state.save(self.state_path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
+
     async def settlement_loop(self) -> None:
         while True:
             try:
@@ -226,6 +261,8 @@ class LiteAService:
                         "checkpoint.append",
                         checkpoint=checkpoint_payload(self.state, next_target=next_boundary()),
                     )
+                    # Newly known labels can make a due daily fit eligible.
+                    await asyncio.to_thread(self._catch_up_fits)
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(60)
@@ -235,14 +272,18 @@ class LiteAService:
         self._catch_up_fits()
 
         status, reason = self.worker.evaluate_readiness()
-        if status == "LOGGING_READY":
+        if status in ("LOGGING_READY", "RECORDING_ONLY"):
             self.scheduler.start()
+            if reason:
+                print(f"[{MODEL_ID}] recording without scoring: {reason}", flush=True)
         else:
-            print(f"[{MODEL_ID}] not logging yet: {reason}", flush=True)
+            print(f"[{MODEL_ID}] not recording yet: {reason}", flush=True)
 
         asyncio.create_task(self.heartbeat_loop())
+        asyncio.create_task(self.recovery_loop())
         asyncio.create_task(self.settlement_loop())
         asyncio.create_task(self.fit_loop())
+
 
         config = uvicorn.Config(
             create_app(self.snapshot),

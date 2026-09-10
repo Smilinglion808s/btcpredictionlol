@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import time
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -105,7 +106,144 @@ def empty_window_template() -> dict:
     return out
 
 
+# --------------------------------------------------------------------------- #
+# Live REST fallback for days Binance has not yet published as a daily archive.
+#
+# This is the SAME exchange data from the same venue, read from the public
+# market endpoints instead of the archive mirror. It is reconstruction, not a
+# live capture: the rows are built after the target, so they are RESEARCH.
+REST = {
+    "spot_agg": ("https://api.binance.com/api/v3/aggTrades", {"symbol": "BTCUSDT"}),
+    "um_agg": ("https://fapi.binance.com/fapi/v1/aggTrades", {"symbol": "BTCUSDT"}),
+    "spot_1m": ("https://api.binance.com/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1m"}),
+    "usdc_1m": ("https://api.binance.com/api/v3/klines", {"symbol": "USDCUSDT", "interval": "1m"}),
+    "index_1m": (
+        "https://dapi.binance.com/dapi/v1/indexPriceKlines",
+        {"pair": "BTCUSD", "interval": "1m"},
+    ),
+    "cm_1m": (
+        "https://dapi.binance.com/dapi/v1/klines",
+        {"symbol": "BTCUSD_PERP", "interval": "1m"},
+    ),
+}
+
+
+def _rest(url: str, params: dict) -> list:
+    import urllib.parse
+
+    query = urllib.parse.urlencode(params)
+    for attempt in range(6):
+        try:
+            with urllib.request.urlopen(f"{url}?{query}", timeout=30) as response:
+                return json.load(response)
+        except Exception:  # noqa: BLE001 - transient rate limit / network
+            if attempt == 5:
+                raise
+            time.sleep(1.5 * (attempt + 1))
+    return []
+
+
+def _day_bounds(day: str) -> tuple[int, int]:
+    start = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return int(start.timestamp() * 1000), int((start + timedelta(days=1)).timestamp() * 1000)
+
+
+def rest_agg(kind: str, day: str) -> pd.DataFrame:
+    cache = CACHE / kind / f"{day}-rest.parquet"
+    if cache.exists():
+        return pd.read_parquet(cache)
+    url, params = REST[kind]
+    start, end = _day_bounds(day)
+    batches: list[pd.DataFrame] = []
+    first = _rest(url, {**params, "startTime": start, "endTime": start + 60_000, "limit": 1000})
+    if not first:
+        raise RuntimeError(f"LITEA_REST_EMPTY: {kind} {day}")
+    cursor = int(first[0]["a"])
+    seen: set[int] = set()
+    while True:
+        page = _rest(url, {**params, "fromId": cursor, "limit": 1000})
+        if not page:
+            break
+        frame = pd.DataFrame(page)
+        batches.append(frame)
+        last_id = int(frame["a"].iloc[-1])
+        if last_id in seen:
+            break
+        seen.add(last_id)
+        if int(frame["T"].iloc[-1]) >= end or len(page) < 1000:
+            break
+        cursor = last_id + 1
+    raw = pd.concat(batches, ignore_index=True).drop_duplicates("a")
+    raw = raw[(raw["T"].astype("int64") >= start) & (raw["T"].astype("int64") < end)]
+    out = pd.DataFrame(
+        {
+            "ts": raw["T"].astype("int64"),
+            "price": raw["p"].astype(float),
+            "quantity": raw["q"].astype(float),
+            "first_id": raw["f"].astype("int64"),
+            "last_id": raw["l"].astype("int64"),
+            "buyer_maker": raw["m"].astype(bool),
+        }
+    )
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(cache, index=False)
+    return out
+
+
+def rest_klines(kind: str, day: str) -> pd.DataFrame:
+    cache = CACHE / kind / f"{day}-rest.parquet"
+    if cache.exists():
+        return pd.read_parquet(cache)
+    url, params = REST[kind]
+    start, end = _day_bounds(day)
+    rows: list[list] = []
+    cursor = start
+    while cursor < end:
+        page = _rest(url, {**params, "startTime": cursor, "endTime": end, "limit": 1000})
+        if not page:
+            break
+        rows.extend(page)
+        cursor = int(page[-1][0]) + MINUTE_MS
+        if len(page) < 1000:
+            break
+    frame = pd.DataFrame(
+        rows,
+        columns=[
+            "open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
+            "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote", "ignore",
+        ],
+    ).drop_duplicates("open_ms")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(cache, index=False)
+    return frame
+
+
+def _archive_available(kind: str, day: str) -> bool:
+    if (CACHE / kind / f"{day}.zip").exists():
+        return True
+    request = urllib.request.Request(f"{BASE}/{DATASETS[kind].format(d=day)}", method="HEAD")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status == 200
+    except Exception:  # noqa: BLE001 - absent archive
+        return False
+
+
 def load_agg(kind: str, day: str) -> pd.DataFrame:
+    if not _archive_available(kind, day):
+        frame = rest_agg(kind, day)
+        out = pd.DataFrame(
+            {
+                "ts_us": _to_us(frame["ts"]),
+                "price": frame["price"].astype(float),
+                "quantity": frame["quantity"].astype(float),
+                "underlying_n": (frame["last_id"] - frame["first_id"] + 1).astype(float),
+                "signed": np.where(frame["buyer_maker"].astype(bool), -1.0, 1.0),
+            }
+        )
+        out["quote"] = out.price * out.quantity
+        return out.sort_values("ts_us", kind="stable").reset_index(drop=True)
+
     frame = _csv(
         fetch(kind, day),
         ["agg_id", "price", "quantity", "first_id", "last_id", "ts", "buyer_maker", "best"],
@@ -124,12 +262,16 @@ def load_agg(kind: str, day: str) -> pd.DataFrame:
 
 
 def load_klines(kind: str, day: str) -> pd.DataFrame:
-    frame = _csv(
+    frame = (
+        rest_klines(kind, day)
+        if not _archive_available(kind, day)
+        else _csv(
         fetch(kind, day),
         [
             "open_ms", "open", "high", "low", "close", "base_volume", "close_ms",
             "quote_volume", "trade_count", "taker_buy_base", "taker_buy_quote", "ignore",
         ],
+        )
     )
     frame["open_ms"] = _to_us(frame["open_ms"]) // 1000
     frame["close_ms"] = _to_us(frame["close_ms"]) // 1000

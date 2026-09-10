@@ -89,10 +89,16 @@ class LiteAWorker:
         self.feeds = feeds
         self.training = training if training is not None else TrainingFrame.empty()
         self.training_path = Path(training_path) if training_path else None
-        self.pending_path = self.state_path.with_name("pending_commit.json")
+        self.pending_dir = self.state_path.with_name("pending")
         self.lease_ttl_seconds = lease_ttl_seconds
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
+        # One-time migration from the single-slot pending file.
+        legacy = self.state_path.with_name("pending_commit.json")
+        if legacy.exists():
+            saved = json.loads(legacy.read_text())
+            self._remember_pending(saved["target"], saved.get("checkpoint") or {})
+            legacy.unlink()
 
     # -- readiness -------------------------------------------------------------
     def stale_feeds(self, at_ns: int | None = None) -> list[str]:
@@ -104,7 +110,22 @@ class LiteAWorker:
             if name in buffers and not buffers[name].is_fresh(at_ns)
         ]
 
-    def evaluate_readiness(self, at: datetime | None = None) -> tuple[str, str | None]:
+    def recording_blockers(self) -> list[str]:
+        """What stops the target being RECORDED at all — normally nothing.
+
+        A stale feed, an unbuildable packet or a missing head does NOT stop
+        recording: the opportunity is written with its honest status. This is
+        what keeps the ledger continuous, and it is what lets the next
+        UTC-midnight row exist so a new daily head can ever be fitted.
+        """
+        return []
+
+    def scoring_readiness(self, at: datetime | None = None) -> tuple[str, str | None]:
+        """Whether the NEXT target can be scored by a valid head.
+
+        Separate from scheduling. When this says BLOCKED the boundary still
+        runs and records the opportunity as unscored.
+        """
         target = at or next_boundary()
         stale = self.stale_feeds()
         if stale:
@@ -116,9 +137,23 @@ class LiteAWorker:
             self.heads.head_for(target)
         except HeadUnavailable as exc:
             return "BLOCKED", str(exc)
-        if self.pending_path.exists():
-            return "BLOCKED", "LITEA_COMMIT_UNRECONCILED: a prior decision is not durable"
         return "LOGGING_READY", None
+
+    def evaluate_readiness(self, at: datetime | None = None) -> tuple[str, str | None]:
+        """Scheduling readiness: recording is the floor, scoring is the ceiling.
+
+        The scheduler is armed for RECORDING_ONLY too. An expired head used to
+        stop the scheduler, which stopped the midnight row being recorded,
+        which meant the next head could never be fitted — a permanent, silent
+        stall. Recording now continues through that gap.
+        """
+        blocked = self.recording_blockers()
+        if blocked:
+            return "BLOCKED", "LITEA_RECORDING_BLOCKED :: " + " || ".join(blocked)
+        status, reason = self.scoring_readiness(at)
+        if status == "LOGGING_READY":
+            return status, None
+        return "RECORDING_ONLY", reason
 
     def dispatch_status(self) -> str:
         """Structurally absent, not merely disabled."""
@@ -126,21 +161,26 @@ class LiteAWorker:
 
     def snapshot(self) -> dict[str, Any]:
         status, reason = self.evaluate_readiness()
+        scoring, scoring_reason = self.scoring_readiness()
+        pending = self.pending_targets()
         return {
             "model_version": MODEL_ID,
             "readiness": status,
             "blocking_reason": reason,
+            "scoring": scoring,
+            "scoring_blocked_reason": scoring_reason,
             "dispatch": self.dispatch_status(),
             "execution_enabled": False,
             "heads": self.heads.inventory(),
             "state_sha256": self.state.snapshot()["sha256"],
             "cursors": self.state.cursors.as_dict(),
-            "pending_commit": self.pending_path.exists(),
+            "pending_commits": [p.name for p in pending],
             "training_rows": self.training.rows,
             "training_last_target": self.training.last_target,
             "next_target_utc": next_boundary().isoformat(),
             "at": datetime.now(timezone.utc).isoformat(),
         }
+
 
     # -- settlement ------------------------------------------------------------
     def apply_settlements(self, settlements: list[dict[str, Any]]) -> int:
@@ -184,41 +224,74 @@ class LiteAWorker:
         return applied
 
     # -- durable commit --------------------------------------------------------
+    def _pending_file(self, target_open_utc: str) -> Path:
+        safe = target_open_utc.replace(":", "").replace("+", "_")
+        return self.pending_dir / f"{safe}.json"
+
+    def pending_targets(self) -> list[Path]:
+        if not self.pending_dir.exists():
+            return []
+        return sorted(self.pending_dir.glob("*.json"))
+
     def _remember_pending(self, row: dict[str, Any], checkpoint: dict[str, Any]) -> None:
-        self.pending_path.parent.mkdir(parents=True, exist_ok=True)
-        self.pending_path.write_text(
+        """A queue, not a single slot.
+
+        One transport failure must not stop the next target from being
+        recorded: the undelivered decision stays queued in target order and is
+        retried off the boundary path until the backend accepts it.
+        """
+        self.pending_dir.mkdir(parents=True, exist_ok=True)
+        self._pending_file(str(row["target_open_utc"])).write_text(
             json.dumps({"target": row, "checkpoint": checkpoint}, default=str)
         )
 
-    def _commit(self, row: dict[str, Any], checkpoint: dict[str, Any]) -> dict[str, Any]:
-        """Durable or pending — never optimistically 'probably fine'.
+    def _commit(self, row: dict[str, Any], checkpoint: dict[str, Any] | None) -> dict[str, Any]:
+        """Durable or queued — never optimistically 'probably fine'.
 
         The backend answers `ok: true` on success and `ok: false` with an error
         on refusal, so an ABSENT `ok` is treated as a failure rather than as
         consent.
         """
-        self._remember_pending(row, checkpoint)
+        self._remember_pending(row, checkpoint or {})
         started = time.time_ns()
         try:
             result = self.store.commit(row, checkpoint)
-        except Exception as exc:  # noqa: BLE001 - transport/refusal both stay pending
+        except Exception as exc:  # noqa: BLE001 - transport/refusal both stay queued
             return {"ok": False, "error": str(exc), "ack_ns": None}
         acked = time.time_ns()
         if result.get("ok") is not True:
             return {"ok": False, "error": str(result.get("error") or result), "ack_ns": None}
-        self.pending_path.unlink(missing_ok=True)
+        self._pending_file(str(row["target_open_utc"])).unlink(missing_ok=True)
         return {"ok": True, "ack_ns": acked, "ack_latency_ms": (acked - started) / 1_000_000}
 
     def reconcile_pending(self) -> dict[str, Any] | None:
-        """Re-submit the exact retained row+checkpoint before deciding again."""
-        if not self.pending_path.exists():
+        """Re-submit undelivered decisions in target order.
+
+        Called off the boundary path by the recovery loop as well as at the
+        start of a boundary, so a transport outage drains by itself. Delivery
+        stops at the first still-failing target: the ledger stays in order.
+        """
+        outcomes: list[dict[str, Any]] = []
+        for path in self.pending_targets():
+            saved = json.loads(path.read_text())
+            outcome = self._commit(saved["target"], saved["checkpoint"] or None)
+            outcomes.append({"target": saved["target"]["target_open_utc"], **outcome})
+            if not outcome["ok"]:
+                break
+            committed = str(saved["target"]["target_open_utc"])
+            # The cursor only ever moves forward: a late delivery of an older
+            # target must not rewind the committed position.
+            if (self.state.cursors.last_committed_target or "") < committed:
+                self.state.cursors.last_committed_target = committed
+                self.state.save(self.state_path)
+        if not outcomes:
             return None
-        saved = json.loads(self.pending_path.read_text())
-        outcome = self._commit(saved["target"], saved["checkpoint"])
-        if outcome["ok"]:
-            self.state.cursors.last_committed_target = saved["target"]["target_open_utc"]
-            self.state.save(self.state_path)
-        return outcome
+        failed = [o for o in outcomes if not o["ok"]]
+        return {
+            "ok": not failed,
+            "delivered": len(outcomes) - len(failed),
+            "error": failed[0]["error"] if failed else None,
+        }
 
     # -- boundary --------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> BoundaryOutcome:
@@ -227,11 +300,11 @@ class LiteAWorker:
         cutoff_ns = target_ns + CUTOFF_MS * 1_000_000
         label = self.ticker_resolver.unverified_label(target)
 
-        reconciled = self.reconcile_pending()
-        if reconciled is not None and not reconciled["ok"]:
-            reason = f"LITEA_COMMIT_UNRECONCILED: {reconciled.get('error')}"
-            self.store.mark_missed(label, target, reason)
-            return BoundaryOutcome(target, "MISSED", reason)
+        # An undelivered earlier decision is retried, but it never suppresses
+        # this target: the opportunity is recorded either way, and the queue
+        # preserves ordering for delivery.
+        self.reconcile_pending()
+
 
         lease = self.store.acquire_lease(self.lease_ttl_seconds)
         if not lease.get("granted"):
