@@ -579,9 +579,16 @@ export async function deliverWebhookNow(
           attempt: 1,
         });
 
-        if (!r.ok) {
+        // An attempt that produced no HTTP status may still have reached the
+        // bot. For guarded (Version 1) deliveries that ambiguity is resolved
+        // conservatively: no retry, rather than a possible second order.
+        const ambiguous = guard != null && !r.cancelled && r.status === null;
+        if (!r.ok && !ambiguous) {
           for (let attempt = 2; attempt <= BACKOFFS_MS.length; attempt++) {
             await new Promise((res) => setTimeout(res, BACKOFFS_MS[attempt - 1] ?? 2_000));
+            // The kill switch, allow-list, original deadline and claim
+            // ownership are re-checked before this retry actually posts.
+            if (!(await allowed())) break;
             try {
               const retry = await postOnce(r.ep.url, body, signatures[r.i], event);
               lastStatus = retry.status;
@@ -594,6 +601,7 @@ export async function deliverWebhookNow(
                 attempt,
               });
               if (retry.ok) break;
+              if (guard != null && retry.status === null) break;
             } catch (e) {
               await supabase.from("webhook_deliveries").insert({
                 endpoint_id: r.ep.id,
@@ -602,9 +610,11 @@ export async function deliverWebhookNow(
                 error: e instanceof Error ? e.message : String(e),
                 attempt,
               });
+              if (guard != null) break;
             }
           }
         }
+
 
         await supabase
           .from("webhook_endpoints")
