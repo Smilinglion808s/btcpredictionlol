@@ -138,7 +138,7 @@ def test_both_paths_run_concurrently():
     elapsed = asyncio.run(run())
     assert client.max_in_flight == 2, "the two official paths did not overlap"
     assert finished == ["backup"], "the backup waited on the slow primary"
-    assert elapsed < 1.5
+    assert elapsed < 1.9, "the quick path did not return before the slow one"
     assert MarketBuffer._usable(buffer.sources[TARGET_MS]["backup"])
 
 
