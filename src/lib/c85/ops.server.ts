@@ -11,7 +11,12 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { C85_MODEL_VERSION, C85_RECONSTRUCTION_VERSION, C85_WRITABLE_MODEL_VERSIONS } from "./config";
+import {
+  C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS,
+  C85_MODEL_VERSION,
+  C85_RECONSTRUCTION_VERSION,
+  C85_WRITABLE_MODEL_VERSIONS,
+} from "./config";
 
 // The identity a signed worker request writes under. Restricted to a closed
 // allow-list so a reconstruction worker can never overwrite archived rows and
