@@ -69,7 +69,7 @@ class TrainingFrame:
         for name in COLUMNS:
             column = self.frame[name]
             if name in ("ts", "settlement_ts"):
-                values = column.view("int64").to_numpy()
+                values = column.astype("int64").to_numpy()
             elif name == "ticker":
                 digest.update("\u0000".join(column.astype(str)).encode())
                 continue

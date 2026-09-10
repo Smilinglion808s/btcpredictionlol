@@ -2,7 +2,7 @@
 
 Independent of the C85 worker's readiness. The only things Version 1 needs are
 
-  * fresh feeds for the direction stage,
+  * the feeds the 60 direction inputs are actually built from,
   * a daily head whose own validity window covers the next target,
   * restored paired state.
 
@@ -16,6 +16,7 @@ record they return.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -28,9 +29,23 @@ from .identity import MODEL_ID
 from .packet import Direction60Source
 from .state import LiteAState
 from .store import LiteAStore, checkpoint_payload, target_row
+from .training import TrainingFrame
 
 NS = 1_000_000_000
 CUTOFF_MS = 5_000
+
+#: Exactly the feeds the 60 direction inputs are built from. The C85 aggregate
+#: readiness (market Q1, auxiliary bundles, ancestor experts) is NOT consulted:
+#: those belong to a model this process does not run.
+REQUIRED_FEEDS = (
+    "binance_spot",
+    "binance_um",
+    "binance_cm",
+    "binance_usdc",
+    "binance_index",
+    "binance_1m",
+    "kalshi",
+)
 
 
 @dataclass
@@ -42,6 +57,10 @@ class BoundaryOutcome:
     guard_output: dict[str, Any] | None = None
     committed: bool = False
     timing: dict[str, Any] = field(default_factory=dict)
+
+
+class CommitUnreconciled(RuntimeError):
+    """A previous decision is not durable yet. Version 1 fails closed."""
 
 
 class LiteAWorker:
@@ -57,6 +76,8 @@ class LiteAWorker:
         state_path: Path,
         ticker_resolver: Any,
         feeds: Any,
+        training: TrainingFrame | None = None,
+        training_path: Path | None = None,
         lease_ttl_seconds: int = 60,
     ) -> None:
         self.direction = Direction60Source(packet_source)
@@ -66,16 +87,28 @@ class LiteAWorker:
         self.state_path = Path(state_path)
         self.ticker_resolver = ticker_resolver
         self.feeds = feeds
+        self.training = training if training is not None else TrainingFrame.empty()
+        self.training_path = Path(training_path) if training_path else None
+        self.pending_path = self.state_path.with_name("pending_commit.json")
         self.lease_ttl_seconds = lease_ttl_seconds
         self.readiness = "WARMING"
         self.blocking_reason: str | None = None
 
     # -- readiness -------------------------------------------------------------
+    def stale_feeds(self, at_ns: int | None = None) -> list[str]:
+        at_ns = at_ns or time.time_ns()
+        buffers = getattr(self.feeds, "buffers", {})
+        return [
+            name
+            for name in REQUIRED_FEEDS
+            if name in buffers and not buffers[name].is_fresh(at_ns)
+        ]
+
     def evaluate_readiness(self, at: datetime | None = None) -> tuple[str, str | None]:
         target = at or next_boundary()
-        missing = self.feeds.missing() if hasattr(self.feeds, "missing") else []
-        if missing:
-            return "BLOCKED", f"LITEA_FEEDS_STALE: {', '.join(missing)}"
+        stale = self.stale_feeds()
+        if stale:
+            return "BLOCKED", f"LITEA_FEEDS_STALE: {', '.join(stale)}"
         packet_reasons = self.direction.blocking_reasons(time.time_ns())
         if packet_reasons:
             return "BLOCKED", "LITEA_SOURCE_UNAVAILABLE :: " + " || ".join(packet_reasons)
@@ -83,6 +116,8 @@ class LiteAWorker:
             self.heads.head_for(target)
         except HeadUnavailable as exc:
             return "BLOCKED", str(exc)
+        if self.pending_path.exists():
+            return "BLOCKED", "LITEA_COMMIT_UNRECONCILED: a prior decision is not durable"
         return "LOGGING_READY", None
 
     def dispatch_status(self) -> str:
@@ -100,16 +135,21 @@ class LiteAWorker:
             "heads": self.heads.inventory(),
             "state_sha256": self.state.snapshot()["sha256"],
             "cursors": self.state.cursors.as_dict(),
+            "pending_commit": self.pending_path.exists(),
+            "training_rows": self.training.rows,
+            "training_last_target": self.training.last_target,
             "next_target_utc": next_boundary().isoformat(),
             "at": datetime.now(timezone.utc).isoformat(),
         }
 
     # -- settlement ------------------------------------------------------------
     def apply_settlements(self, settlements: list[dict[str, Any]]) -> int:
-        """Feed settled outcomes to BOTH members, exactly once each.
+        """Feed settled outcomes to BOTH members and the training frame, once.
 
         A late settlement keeps its original entry day because the guard's own
-        pending record carries that day; nothing here re-dates it.
+        pending record carries that day; nothing here re-dates it. The training
+        label is attached idempotently to the row that was actually recorded at
+        that target, with the settlement's own observed availability.
         """
         applied = 0
         consumed = set(self.state.cursors.consumed_settlements)
@@ -132,10 +172,53 @@ class LiteAWorker:
             self.state.guard.settle(
                 row["ticker"], int(label), available_at=available, observed_at=now
             )
+            if row.get("target_open_utc"):
+                self.training.apply_label(row["target_open_utc"], int(label), available)
             consumed.add(key)
             applied += 1
         self.state.cursors.consumed_settlements = sorted(consumed)
+        if applied and self.training_path:
+            self.state.cursors.training_sha256 = self.training.save(self.training_path)
+            self.state.cursors.training_rows = self.training.rows
+            self.state.cursors.training_last_target = self.training.last_target
         return applied
+
+    # -- durable commit --------------------------------------------------------
+    def _remember_pending(self, row: dict[str, Any], checkpoint: dict[str, Any]) -> None:
+        self.pending_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pending_path.write_text(
+            json.dumps({"target": row, "checkpoint": checkpoint}, default=str)
+        )
+
+    def _commit(self, row: dict[str, Any], checkpoint: dict[str, Any]) -> dict[str, Any]:
+        """Durable or pending — never optimistically 'probably fine'.
+
+        The backend answers `ok: true` on success and `ok: false` with an error
+        on refusal, so an ABSENT `ok` is treated as a failure rather than as
+        consent.
+        """
+        self._remember_pending(row, checkpoint)
+        started = time.time_ns()
+        try:
+            result = self.store.commit(row, checkpoint)
+        except Exception as exc:  # noqa: BLE001 - transport/refusal both stay pending
+            return {"ok": False, "error": str(exc), "ack_ns": None}
+        acked = time.time_ns()
+        if result.get("ok") is not True:
+            return {"ok": False, "error": str(result.get("error") or result), "ack_ns": None}
+        self.pending_path.unlink(missing_ok=True)
+        return {"ok": True, "ack_ns": acked, "ack_latency_ms": (acked - started) / 1_000_000}
+
+    def reconcile_pending(self) -> dict[str, Any] | None:
+        """Re-submit the exact retained row+checkpoint before deciding again."""
+        if not self.pending_path.exists():
+            return None
+        saved = json.loads(self.pending_path.read_text())
+        outcome = self._commit(saved["target"], saved["checkpoint"])
+        if outcome["ok"]:
+            self.state.cursors.last_committed_target = saved["target"]["target_open_utc"]
+            self.state.save(self.state_path)
+        return outcome
 
     # -- boundary --------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> BoundaryOutcome:
@@ -144,10 +227,10 @@ class LiteAWorker:
         cutoff_ns = target_ns + CUTOFF_MS * 1_000_000
         label = self.ticker_resolver.unverified_label(target)
 
-        status, reason = self.evaluate_readiness(target)
-        if status != "LOGGING_READY" and "NO_APPLICABLE_HEAD" not in (reason or ""):
-            # A sourcing/feed failure means there is no packet at all.
-            self.store.mark_missed(label, target, reason or "not_ready")
+        reconciled = self.reconcile_pending()
+        if reconciled is not None and not reconciled["ok"]:
+            reason = f"LITEA_COMMIT_UNRECONCILED: {reconciled.get('error')}"
+            self.store.mark_missed(label, target, reason)
             return BoundaryOutcome(target, "MISSED", reason)
 
         lease = self.store.acquire_lease(self.lease_ttl_seconds)
@@ -172,6 +255,9 @@ class LiteAWorker:
 
         timing.packet_freeze_ns = freeze_ns
         timing.compute_started_ns = time.time_ns()
+        # A stale feed does not skip the target: the packet is built anyway and
+        # fails closed, so the opportunity is RECORDED as INPUT_UNAVAILABLE
+        # rather than silently vanishing from the ledger.
         packet = self.direction.build(target, cutoff_ns, freeze_ns, ticker=ticker or label)
         timing.last_receipt_ns = packet.source.get("last_receipt_ns")
 
@@ -229,11 +315,21 @@ class LiteAWorker:
         self.state.cursors.source_watermarks = packet.source.get("feed_watermarks") or {}
         self.state.save(self.state_path)
         checkpoint = checkpoint_payload(self.state, next_target=next_boundary(target))
-        result = self.store.commit(row, checkpoint)
-        committed = bool(result.get("ok", True))
-        if committed:
+        outcome = self._commit(row, checkpoint)
+        if outcome["ok"]:
+            # Durable acknowledgement is its own measurement; compute completion
+            # is not a publication guarantee.
+            measured["durable_ack_ns"] = outcome["ack_ns"]
+            measured["durable_ack_offset_ms"] = (outcome["ack_ns"] - target_ns) / 1_000_000
+            measured["commit_latency_ms"] = outcome["ack_latency_ms"]
             self.state.cursors.last_committed_target = target.isoformat()
             self.state.save(self.state_path)
+
+        # The recorded opportunity enters the rolling training frame with the
+        # features that were ACTUALLY frozen at this target's own cutoff, valid
+        # or not, unlabelled until its settlement arrives. Kept off the timed
+        # path: it runs after the durable commit.
+        self._record_training_row(target, ticker or label, packet)
 
         return BoundaryOutcome(
             target=target,
@@ -241,6 +337,25 @@ class LiteAWorker:
             reason=row["status_reason"],
             engine_output=engine_output,
             guard_output=guard_output,
-            committed=committed,
+            committed=bool(outcome["ok"]),
             timing=measured,
         )
+
+    def _record_training_row(self, target: datetime, ticker: str, packet: Any) -> None:
+        features = packet.as_engine_features()
+        self.training.append(
+            [
+                {
+                    "ts": target,
+                    "ticker": ticker,
+                    "input_valid": bool(packet.input_valid),
+                    "label": float("nan"),
+                    "settlement_ts": None,
+                    **features,
+                }
+            ]
+        )
+        if self.training_path:
+            self.state.cursors.training_sha256 = self.training.save(self.training_path)
+            self.state.cursors.training_rows = self.training.rows
+            self.state.cursors.training_last_target = self.training.last_target

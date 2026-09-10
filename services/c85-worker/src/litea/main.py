@@ -55,10 +55,20 @@ class LiteAService:
         )
 
         root = Path(os.environ.get("LITEA_STATE_DIR", "/var/lib/litea"))
+        self.root = root
         self.heads = DailyHeadStore(root / "heads")
         self.state_path = root / "state.json"
         self.training_path = root / "training.parquet"
+        # The container has no persistent volume: the private bucket is the
+        # durability. Restore BEFORE reading any local file.
+        self.remote = RemoteArtifacts(self.backend, root)
+        self.restore_report = self._restore_artifacts()
         self.state = self._restore_state()
+        self.training = (
+            TrainingFrame.load(self.training_path)
+            if self.training_path.exists()
+            else TrainingFrame.empty()
+        )
 
         self.worker = LiteAWorker(
             packet_source=self.packets,
@@ -68,35 +78,47 @@ class LiteAService:
             state_path=self.state_path,
             ticker_resolver=self.ticker_resolver,
             feeds=self.feeds,
+            training=self.training,
+            training_path=self.training_path,
             lease_ttl_seconds=self.settings.lease_ttl_seconds,
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
 
     # -- startup ---------------------------------------------------------------
+    def _restore_artifacts(self) -> dict:
+        """Install the durable training frame, heads and state, hash-checked."""
+        try:
+            return self.remote.restore()
+        except Exception as exc:  # noqa: BLE001 - reported, never silently ignored
+            return {"error": str(exc)}
+
     def _restore_state(self) -> LiteAState:
         """Local snapshot first, then the durable backend checkpoint.
 
-        A restore failure is never repaired by starting fresh: a blank state
-        would re-warm the rank queues and reset the daily floor, which is a
-        silent behaviour change. It raises.
+        The checkpoint carries the ORIGINAL sealed envelope, so restoring
+        re-verifies the digest that was actually written — every cursor, the
+        consumed settlements and the publication position included. Nothing is
+        re-hashed over reassembled parts, and a restore failure is never
+        repaired by starting fresh: a blank state would re-warm the rank queues
+        and reset the daily floor, which is a silent behaviour change.
         """
         if self.state_path.exists():
             return LiteAState.load(self.state_path)
         checkpoint = self.store.latest_checkpoint()
-        if checkpoint and checkpoint.get("admission_rank_state"):
-            envelope = {
-                "state": {
-                    "schema": 1,
-                    "model_id": MODEL_ID,
-                    "engine": checkpoint["admission_rank_state"],
-                    "guard": checkpoint["deterioration_state"],
-                    "cursors": checkpoint.get("cursors") or {},
-                },
-            }
-            from .engine import digest
-
-            envelope["sha256"] = digest(envelope["state"])
-            return LiteAState.restore(envelope)
+        if not checkpoint:
+            return LiteAState()
+        expert_state = checkpoint.get("expert_state") or {}
+        envelope = expert_state.get("litea_paired_envelope")
+        if envelope:
+            state = LiteAState.restore(envelope)
+            state.save(self.state_path)
+            return state
+        if checkpoint.get("admission_rank_state"):
+            raise RuntimeError(
+                "LITEA_CHECKPOINT_UNRESTORABLE: the latest durable checkpoint predates "
+                "the sealed paired envelope; refusing to manufacture a state digest over "
+                "reassembled parts"
+            )
         return LiteAState()
 
     def _fetch_market_metadata(self, ticker: str) -> list[dict]:
@@ -108,11 +130,19 @@ class LiteAService:
         return response.json().get("markets", [])
 
     def _catch_up_fits(self) -> list[dict]:
-        """Every due UTC-midnight fit, chronologically, off the timed path."""
-        if not self.training_path.exists():
+        """Every due UTC-midnight fit, chronologically, off the timed path.
+
+        The cutoff to fit after is the LATEST HEAD that actually exists, not a
+        cursor: a head that was fitted and then lost would otherwise never be
+        refitted. A day with no available midnight opportunity simply has no
+        head, and the previous head still expires.
+        """
+        training = self.worker.training
+        if training.rows == 0:
             return []
-        training = TrainingFrame.load(self.training_path)
-        results = run_due_fits(training, self.heads, after=self.state.cursors.last_fit_cutoff)
+        latest = self.heads.latest_cutoff()
+        after = f"{latest}T00:00:00+00:00" if latest else self.state.cursors.last_fit_cutoff
+        results = run_due_fits(training, self.heads, after=after)
         if results:
             last = results[-1]
             self.state.cursors.last_fit_cutoff = last.cutoff
@@ -121,7 +151,25 @@ class LiteAService:
         self.state.cursors.training_rows = training.rows
         self.state.cursors.training_last_target = training.last_target
         self.state.save(self.state_path)
+        if results:
+            try:
+                self.remote.publish(
+                    heads_root=self.root / "heads",
+                    training=self.training_path,
+                    state=self.state_path,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] head publish failed: {exc}", flush=True)
         return [r.__dict__ for r in results]
+
+    async def fit_loop(self) -> None:
+        """Keep the daily heads current for as long as the process lives."""
+        while True:
+            await asyncio.sleep(300)
+            try:
+                await asyncio.to_thread(self._catch_up_fits)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[{MODEL_ID}] daily fit failed: {exc}", flush=True)
 
     # -- reporting -------------------------------------------------------------
     def snapshot(self) -> dict:
