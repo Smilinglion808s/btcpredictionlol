@@ -371,37 +371,91 @@ class MarketBuffer(_BaseBuffer):
 
     freshness_budget_ns: int = 300 * NS
     markets: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: Per-target, per-official-path first usable record. Both paths ask the
+    #: SAME venue for the SAME contract; neither invents a value and neither
+    #: can overwrite the other. `markets` stays the chosen view.
+    sources: dict[int, dict[str, dict[str, Any]]] = field(default_factory=dict)
+    #: Targets where the two official paths disagreed about the same contract.
+    #: A disagreement is never resolved by preference — the boundary is refused.
+    conflicts: dict[int, dict[str, Any]] = field(default_factory=dict)
     #: Per-target poll observations, kept ONLY to distinguish a genuinely late
     #: venue publication from a parsing/buffer defect. Small, secret-free and
     #: account-free: request/receipt instants, the record's own window match and
     #: the STATE of the strike field — never credentials and never a price.
     observations: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
     suppressed_overwrites: dict[int, int] = field(default_factory=dict)
+    #: Last transport outcome per official path; None means that path is fine.
+    path_errors: dict[str, str | None] = field(default_factory=dict)
     retain: int = 192
     observe_retain: int = 12
 
-    def record(self, target_ms: int, market: dict[str, Any]) -> None:
-        # A contract is LISTED before it opens but its floor_strike is only
-        # published AT the open, so an early strike-less listing must never
-        # overwrite the record that actually carries the strike.
-        existing = self.markets.get(target_ms)
-        if (
-            existing is not None
-            and existing.get("floor_strike") is not None
-            and market.get("floor_strike") is None
+    @staticmethod
+    def _usable(record: dict[str, Any] | None) -> bool:
+        """A record that actually carries a finite positive strike."""
+        if not record:
+            return False
+        raw = record.get("floor_strike")
+        try:
+            value = float(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+        return math.isfinite(value) and value > 0
+
+    def _note_conflict(self, target_ms: int, primary: dict, backup: dict) -> None:
+        self.conflicts[target_ms] = {
+            "primary_strike": float(primary["floor_strike"]),
+            "backup_strike": float(backup["floor_strike"]),
+            "primary_ticker": primary.get("ticker"),
+            "backup_ticker": backup.get("ticker"),
+            "primary_receipt_ns": int(primary.get("receipt_ns", 0)),
+            "backup_receipt_ns": int(backup.get("receipt_ns", 0)),
+        }
+
+    def record(self, target_ms: int, market: dict[str, Any], source: str = "primary") -> None:
+        per_source = self.sources.setdefault(target_ms, {})
+        held = per_source.get(source)
+        # The first usable version a path served is kept: a later refresh — or a
+        # response that arrives after the freeze — must never erase it, and a
+        # null/error refresh must never replace a real strike.
+        if self._usable(held) and not (
+            self._usable(market) and float(market["floor_strike"]) == float(held["floor_strike"])
         ):
             self.suppressed_overwrites[target_ms] = (
                 self.suppressed_overwrites.get(target_ms, 0) + 1
             )
-            return
-        self.markets[target_ms] = market
+        elif not self._usable(held):
+            per_source[source] = dict(market, source=source)
+
+        # Both official paths describe the same contract, so a genuine
+        # disagreement is a diagnosis question, not a choice.
+        primary, backup = per_source.get("primary"), per_source.get("backup")
+        if self._usable(primary) and self._usable(backup):
+            same = float(primary["floor_strike"]) == float(backup["floor_strike"]) and (
+                primary.get("ticker") == backup.get("ticker")
+            )
+            if same:
+                self.conflicts.pop(target_ms, None)
+            else:
+                self._note_conflict(target_ms, primary, backup)
+
+        # `markets` remains the chosen view: primary when usable, otherwise the
+        # usable backup, otherwise the most informative record received.
+        chosen = next(
+            (r for r in (primary, backup) if self._usable(r)),
+            primary or backup,
+        )
+        if chosen is not None:
+            self.markets[target_ms] = chosen
         self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
         self.last_receipt_ns = max(self.last_receipt_ns, int(market["receipt_ns"]))
+
         if len(self.markets) > self.retain:
             for stale in sorted(self.markets)[: len(self.markets) - self.retain]:
                 del self.markets[stale]
                 self.observations.pop(stale, None)
                 self.suppressed_overwrites.pop(stale, None)
+                self.sources.pop(stale, None)
+                self.conflicts.pop(stale, None)
 
     def observe(self, target_ms: int, entry: dict[str, Any]) -> None:
         """Log one poll outcome for a target. Never affects packet inputs."""
@@ -418,12 +472,37 @@ class MarketBuffer(_BaseBuffer):
     def note_poll(self, receipt_ns: int) -> None:
         self.last_receipt_ns = max(self.last_receipt_ns, receipt_ns)
 
+    def chosen(self, target_ms: int, frozen_at_ns: int) -> tuple[dict[str, Any] | None, str]:
+        """The record this freeze may use, and why that one.
+
+        Preference is PRIMARY, then BACKUP — both are the venue's own official
+        answer for the same contract, and each is only eligible if the response
+        that carried it was received at or before the freeze. A disagreement
+        between the two paths yields no record at all.
+        """
+        if target_ms in self.conflicts:
+            return None, "conflict"
+        per_source = self.sources.get(target_ms, {})
+        fallback: dict[str, Any] | None = None
+        for name in ("primary", "backup"):
+            record = per_source.get(name)
+            if record is None or int(record.get("receipt_ns", 0)) > frozen_at_ns:
+                continue
+            if self._usable(record):
+                return record, name
+            fallback = fallback or record
+        if fallback is not None:
+            return fallback, "no_strike_by_freeze"
+        # Legacy callers may have written straight into `markets`.
+        legacy = self.markets.get(target_ms)
+        if legacy is not None and int(legacy.get("receipt_ns", 0)) <= frozen_at_ns:
+            return legacy, str(legacy.get("source") or "legacy")
+        return None, "none_by_freeze"
+
     def get(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any] | None:
         """This target's listed market, only if it was received by the freeze."""
-        found = self.markets.get(target_ms)
-        if found is None or int(found.get("receipt_ns", 0)) > frozen_at_ns:
-            return None
-        return found
+        return self.chosen(target_ms, frozen_at_ns)[0]
+
 
     def diagnostics(self, target_ms: int, frozen_at_ns: int) -> dict[str, Any]:
         """A small, honest account of what the venue actually served.
@@ -440,6 +519,33 @@ class MarketBuffer(_BaseBuffer):
         kinds: dict[str, int] = {}
         for entry in log:
             kinds[str(entry.get("kind"))] = kinds.get(str(entry.get("kind")), 0) + 1
+        chosen, why = self.chosen(target_ms, frozen_at_ns)
+        per_source = self.sources.get(target_ms, {})
+
+        def path(name: str) -> dict[str, Any]:
+            record = per_source.get(name)
+            polls = [o for o in log if str(o.get("path") or "primary") == name]
+            first = min((int(o["receipt_ns"]) for o in polls
+                         if o.get("strike_state") == "finite"), default=None)
+            return {
+                "polls": len(polls),
+                "last_kind": polls[-1].get("kind") if polls else None,
+                "last_http_status": polls[-1].get("http_status") if polls else None,
+                "held_strike_state": (
+                    None if record is None
+                    else ("finite" if self._usable(record) else "null")
+                ),
+                "held_receipt_ns": None if record is None else int(record.get("receipt_ns", 0)),
+                "held_by_freeze": (
+                    None if record is None
+                    else int(record.get("receipt_ns", 0)) <= int(frozen_at_ns)
+                ),
+                "first_finite_receipt_ns": first,
+                "ticker": None if record is None else record.get("ticker"),
+                "window_verified": None if record is None else True,
+            }
+
+        primary_path, backup_path = path("primary"), path("backup")
         return {
             "target_ms": target_ms,
             "freeze_ns": int(frozen_at_ns),
@@ -469,8 +575,29 @@ class MarketBuffer(_BaseBuffer):
             ),
             "stored_status": None if stored is None else stored.get("status"),
             "suppressed_overwrites": self.suppressed_overwrites.get(target_ms, 0),
+            # Which OFFICIAL path this freeze actually used, and what each path
+            # had to offer. Both ask the venue for the same contract.
+            "source_chosen": why if self._usable(chosen) else None,
+            "no_source_reason": None if self._usable(chosen) else why,
+            "primary": primary_path,
+            "backup": backup_path,
+            "same_contract_verified": (
+                None
+                if not (
+                    primary_path["held_strike_state"] == "finite"
+                    and backup_path["held_strike_state"] == "finite"
+                )
+                else target_ms not in self.conflicts
+            ),
+            "conflict": self.conflicts.get(target_ms),
+            "backup_rescued": bool(
+                why == "backup"
+                and not (primary_path["held_strike_state"] == "finite"
+                         and primary_path["held_by_freeze"])
+            ),
             "last_observation": log[-1] if log else None,
         }
+
 
 
 
@@ -981,6 +1108,10 @@ class KalshiStrikeCollector:
     #: LATE the venue actually was, instead of silently reporting nothing.
     TAIL_MS = 20_000
 
+    #: Which official retrieval path this instance is. Both ask the venue for
+    #: the same contract; neither is a substitute source.
+    PATH = "primary"
+
     def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
                  poll_s: float = 0.25) -> None:
         self.buffer = buffer
@@ -989,8 +1120,13 @@ class KalshiStrikeCollector:
         self.poll_s = poll_s
 
     def _has_strike(self, target_ms: int) -> bool:
-        record = self.buffer.markets.get(target_ms)
-        return bool(record and record.get("floor_strike") is not None)
+        """Has THIS path already got a usable strike for the target?
+
+        Per path, so a primary that is failing does not stop the backup from
+        asking, and a backup success does not silence the primary.
+        """
+        record = (self.buffer.sources.get(target_ms) or {}).get(self.PATH)
+        return MarketBuffer._usable(record)
 
     def ticker_for(self, target_ms: int) -> str:
         import datetime as _dt
@@ -1015,13 +1151,31 @@ class KalshiStrikeCollector:
             return "zero"
         return "finite" if value > 0 else "negative"
 
+    def request_url(self, ticker: str) -> str:
+        """The venue's single-market endpoint."""
+        return f"{self.base}/markets/{ticker}"
+
+    def extract(self, payload: dict[str, Any], ticker: str) -> dict[str, Any] | None:
+        """The one market this request asked about, or None."""
+        market = payload.get("market")
+        return market or None
+
     async def _poll_once(self, client: httpx.AsyncClient, target_ms: int) -> None:
         import datetime as _dt
 
         ticker = self.ticker_for(target_ms)
+        url = self.request_url(ticker)
+        # The two paths share ONE venue budget: a backup poll can never be used
+        # to out-run a refusal the venue already published.
+        await LIMITER.acquire(url)
         started = now_ns()
-        response = await client.get(f"{self.base}/markets/{ticker}")
+        try:
+            response = await client.get(url)
+        except Exception as exc:  # noqa: BLE001
+            LIMITER.note(url, None, exc)
+            raise
         receipt = now_ns()
+        LIMITER.note(url, response)
         self.buffer.note_poll(receipt)
 
         def note(kind: str, **extra: Any) -> None:
@@ -1031,6 +1185,7 @@ class KalshiStrikeCollector:
                     "poll_started_ns": started,
                     "receipt_ns": receipt,
                     "ticker": ticker,
+                    "path": self.PATH,
                     "kind": kind,
                     **extra,
                 },
@@ -1042,7 +1197,15 @@ class KalshiStrikeCollector:
         if response.status_code >= 400:
             note("http_error", http_status=response.status_code)
         response.raise_for_status()
-        market = response.json().get("market") or {}
+        market = self.extract(response.json() or {}, ticker) or {}
+        if not market:
+            note("no_market_in_response", http_status=response.status_code)
+            return
+        # The response must be about the contract we asked for.
+        served = market.get("ticker")
+        if served and str(served) != ticker:
+            note("ticker_mismatch", served_ticker=str(served))
+            return
         open_time = market.get("open_time")
         close_time = market.get("close_time")
         strike_state = self._strike_state(market.get("floor_strike"))
@@ -1075,8 +1238,25 @@ class KalshiStrikeCollector:
                 "status": market.get("status"),
                 "receipt_ns": receipt,
             },
+            source=self.PATH,
         )
 
+    def _publish_transport(self, error: str | None) -> None:
+        """Feed-level transport health across BOTH official paths.
+
+        One path failing while the other is serving the same official record is
+        not a dead source, so the buffer is only marked in error when no path
+        is currently succeeding.
+        """
+        self.buffer.path_errors[self.PATH] = error
+        if error is None:
+            self.buffer.connected_since_ns = self.buffer.connected_since_ns or now_ns()
+            self.buffer.transport = "rest"
+        errors = self.buffer.path_errors
+        live = [name for name, err in errors.items() if err is None]
+        self.buffer.error = None if live else "; ".join(
+            f"{name}: {err}" for name, err in sorted(errors.items()) if err
+        ) or None
 
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -1099,18 +1279,39 @@ class KalshiStrikeCollector:
 
                 try:
                     await self._poll_once(client, target_ms)
-                    self.buffer.connected_since_ns = (
-                        self.buffer.connected_since_ns or now_ns()
-                    )
-                    self.buffer.transport = "rest"
-                    self.buffer.error = None
+                    self._publish_transport(None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    self.buffer.error = f"{type(exc).__name__}: {exc}"
+                    self._publish_transport(f"{type(exc).__name__}: {exc}")
                 # Rapid only around the open itself; a keepalive otherwise.
                 rapid = offset < self.TAIL_MS or offset >= self.INTERVAL_MS - self.LEAD_MS
                 await asyncio.sleep(self.poll_s if rapid else 20.0)
+
+
+class KalshiStrikeBackupCollector(KalshiStrikeCollector):
+    """The SECOND official path to the SAME contract's own strike.
+
+    Version 1 needs the venue's `floor_strike` before the freeze, and a single
+    endpoint occasionally answers without one. Kalshi's documented list
+    endpoint accepts an exact `tickers` filter and returns the same
+    `floor_strike` field, so this path asks for exactly the target's contract —
+    no `status=open` lag, no series scan, no derived or borrowed value. It runs
+    concurrently with the primary and is only ever consulted when the primary
+    has no usable strike received by the freeze.
+    """
+
+    PATH = "backup"
+
+    def request_url(self, ticker: str) -> str:
+        return f"{self.base}/markets?tickers={urllib.parse.quote(ticker)}"
+
+    def extract(self, payload: dict[str, Any], ticker: str) -> dict[str, Any] | None:
+        for market in payload.get("markets") or []:
+            if str(market.get("ticker")) == ticker:
+                return market
+        return None
+
 
 
 
@@ -1254,6 +1455,13 @@ class FeedRegistry:
             env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
         )
+        #: Second OFFICIAL path to the same contract, run concurrently so a
+        #: slow or strike-less answer on one path cannot cost the boundary.
+        self._strikes_backup = KalshiStrikeBackupCollector(
+            self.markets,
+            env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
+            env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
+        )
         self._tasks: list[asyncio.Task] = []
 
     async def _trade_feed(self, name: str) -> None:
@@ -1306,6 +1514,7 @@ class FeedRegistry:
             self._tasks.append(asyncio.create_task(self._kalshi.run()))
         if self.only is None or "kalshi_markets" in self.only:
             self._tasks.append(asyncio.create_task(self._strikes.run()))
+            self._tasks.append(asyncio.create_task(self._strikes_backup.run()))
 
     def _selected(self, group: dict[str, Any]) -> list[str]:
         if self.only is None:
