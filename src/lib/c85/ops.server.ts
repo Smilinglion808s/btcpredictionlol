@@ -120,6 +120,17 @@ export const opSchema = z.discriminatedUnion("op", [
     target_open_utc: z.string().min(10),
     reason: z.string().max(500),
   }),
+  // Read back the rows this identity already recorded, for one bounded target
+  // range. The startup bridge uses it so a frame that lags a newer checkpoint
+  // is repaired from the inputs that were ACTUALLY frozen at each target,
+  // instead of being rebuilt from a later public read that may differ.
+  // Version-scoped, range-bounded, no generic SQL, no other model's rows.
+  z.object({
+    op: z.literal("targets.recorded"),
+    from_utc: z.string().min(10),
+    to_utc: z.string().min(10),
+    limit: z.number().int().min(1).max(1000).default(700),
+  }),
   z.object({ op: z.literal("settlements.record"), settlements: z.array(settlementSchema).max(500) }),
   z.object({
     op: z.literal("settlements.pending"),
@@ -320,6 +331,22 @@ export async function runC85Op(
       );
       if (error) throw new Error(error.message);
       return ok({ recorded: true });
+    }
+
+    case "targets.recorded": {
+      const { data, error } = await supabase
+        .from("c85_targets")
+        .select(
+          "ticker,target_open_utc,status,status_reason,run_mode,base_side,final_side," +
+            "binance_complete,anchor_valid,probability_yes,admission_rank,features",
+        )
+        .eq("model_version", mv)
+        .gte("target_open_utc", new Date(body.from_utc).toISOString())
+        .lte("target_open_utc", new Date(body.to_utc).toISOString())
+        .order("target_open_utc", { ascending: true })
+        .limit(body.limit);
+      if (error) throw new Error(error.message);
+      return ok({ targets: data ?? [] });
     }
 
     case "settlements.record": {
