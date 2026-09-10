@@ -223,6 +223,71 @@ export function LiteACard({
 
       <p className="text-[13px] leading-relaxed text-muted-foreground">{stats?.phase_detail}</p>
 
+      <section className="relative flex items-center gap-5">
+        <div className="relative size-[86px] shrink-0">
+          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
+            <circle
+              cx="40"
+              cy="40"
+              r={gaugeR}
+              fill="none"
+              stroke={aboveBreakeven ? "var(--bull)" : "var(--signal-orange)"}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - wrPct / 100)}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-lg font-bold tabular-nums leading-none">
+              {winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`}
+            </span>
+            <span className="mt-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
+              win rate
+            </span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Net units · shadow
+          </div>
+          <div
+            className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${
+              netUnits > 0 ? "text-bull" : netUnits < 0 ? "text-bear" : "text-foreground"
+            }`}
+          >
+            {netUnits > 0 ? "+" : ""}
+            {netUnits.toFixed(2)}
+          </div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
+            +0.87 per win · −1 per loss · break-even {(BREAK_EVEN * 100).toFixed(2)}%
+            {winRate != null ? (
+              <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
+                {aboveBreakeven ? "▲ above" : "▼ below"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <Field label="Wins" value={String(live.wins ?? 0)} />
+        <Field label="Losses" value={String(live.losses ?? 0)} />
+        <Field label="Pending" value={String(live.pending ?? 0)} />
+        <Field label="Today calls" value={String(today.calls ?? 0)} />
+        <Field
+          label="Today win rate"
+          value={today.win_rate == null ? "—" : `${(Number(today.win_rate) * 100).toFixed(0)}%`}
+        />
+        <Field
+          label="Today net"
+          value={`${todayNet > 0 ? "+" : ""}${todayNet.toFixed(2)}`}
+        />
+      </div>
+
       <section className="v1-chip relative p-4">
         <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           Latest 15-minute interval
