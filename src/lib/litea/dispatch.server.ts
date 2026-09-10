@@ -296,20 +296,30 @@ export async function dispatchLiteaDecision(
   }
 
   /**
-   * Re-evaluated immediately before EVERY real attempt, first and retries
-   * alike: current kill switch, allow-list, the ORIGINAL (never extended)
-   * ceiling, and this owner's claim still being live.
+   * Re-evaluated immediately before the single real attempt this path allows
+   * per endpoint. Ownership is read FIRST, because that read is the only
+   * awaited network gap here; the kill switch, allow-list and ORIGINAL
+   * (never extended) ceiling are then evaluated against the clock as it is
+   * after that wait, with nothing awaited between them and the transport.
+   * Any ownership error fails closed.
    */
   const guard = async (): Promise<boolean> => {
-    const verdict = evaluateLiteaDispatch(row, {
-      nowMs: deps.now(),
-      executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
-      allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
-      alreadySent: false,
-      transportDeadlineMs: args.transportDeadlineMs,
-    });
-    if (verdict !== "WOULD_SEND") return false;
-    return await deps.ownsClaim(dedupeKey, owner);
+    let owns = false;
+    try {
+      owns = await deps.ownsClaim(dedupeKey, owner);
+    } catch {
+      return false;
+    }
+    if (!owns) return false;
+    return (
+      evaluateLiteaDispatch(row, {
+        nowMs: deps.now(),
+        executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
+        allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
+        alreadySent: false,
+        transportDeadlineMs: args.transportDeadlineMs,
+      }) === "WOULD_SEND"
+    );
   };
 
   // Re-check the ceiling with the clock as it is NOW, after the durable write.
@@ -321,7 +331,7 @@ export async function dispatchLiteaDecision(
     transportDeadlineMs: args.transportDeadlineMs,
   });
   if (preSend !== "WOULD_SEND") {
-    await deps.settle({
+    const settled = await deps.settle({
       dedupeKey,
       owner,
       targetId: args.targetId,
@@ -329,13 +339,13 @@ export async function dispatchLiteaDecision(
       error: `pre_send_${preSend.toLowerCase()}`,
       publicationOffsetMs: null,
     });
-    return { verdict: preSend, dedupeKey, claim: claimed.outcome };
+    return { verdict: preSend, dedupeKey, claim: claimed.outcome, settled: settled.applied };
   }
 
   const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
-  await deps.settle({
+  const settled = await deps.settle({
     dedupeKey,
     owner,
     targetId: args.targetId,
@@ -344,11 +354,14 @@ export async function dispatchLiteaDecision(
     publicationOffsetMs: sentMs - openMs,
   });
   return {
-    verdict: status,
+    // The claim was lost or already terminal: the outcome is NOT recorded as
+    // ours, and no target row was amended on our behalf.
+    verdict: settled.applied ? status : "OWNER_LOST",
     dedupeKey,
     claim: claimed.outcome,
     delivered: delivery.delivered,
     publicationOffsetMs: sentMs - openMs,
+    settled: settled.applied,
   };
 }
 
