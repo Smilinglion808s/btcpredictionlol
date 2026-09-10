@@ -214,6 +214,7 @@ class LiteAService:
         report["feeds"] = self.feeds.watermarks()
         report["artifact_restore"] = self.restore_report
         report["startup_bridge"] = self.bridge.report
+        report["official_outcomes"] = self.outcomes.last_report
         report["build_sha"] = self.settings.build_sha
         return report
 
