@@ -245,6 +245,12 @@ class V1DirectionStage:
         #    The [T, T+5s) quote aggregate is deliberately not consulted.
         markets = self._buffer("kalshi_markets")
         market = markets.get(target_ms, freeze_ns) if markets is not None else None
+        market_diagnostics = (
+            markets.diagnostics(target_ms, freeze_ns)
+            if markets is not None and hasattr(markets, "diagnostics")
+            else None
+        )
+
         if market is None:
             reasons.append(
                 "LITEA_MARKET_NOT_LISTED_BY_FREEZE: no KXBTC15M contract opening at this "
