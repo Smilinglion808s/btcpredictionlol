@@ -55,8 +55,16 @@ def target_row(
     guard_output: dict[str, Any] | None,
     packet: Any,
     timing: dict[str, Any],
+    run_mode: str = "LIVE",
 ) -> dict[str, Any]:
-    """The exact `c85_targets` payload for one Version 1 decision."""
+    """The exact `c85_targets` payload for one Version 1 decision.
+
+    `run_mode` is the honesty flag: `LIVE` is a decision taken at the target's
+    own T+5s cutoff from the live feeds. A target recovered after the fact by
+    the startup bridge is `RESEARCH` — same recipe, same engine and guard, but
+    the inputs were read from the public venue afterwards, so it must never be
+    counted as a live forward prediction.
+    """
     open_utc = target_open.astimezone(timezone.utc)
     reasons = [engine_output.get("reason")]
     if guard_output:
@@ -71,7 +79,8 @@ def target_row(
         "ticker": ticker,
         "target_open_utc": open_utc.isoformat(),
         "deadline_utc": (open_utc + timedelta(seconds=5)).isoformat(),
-        "run_mode": "LIVE",
+        "run_mode": run_mode,
+
         "status": status,
         "status_reason": " -> ".join(reasons) or None,
 
