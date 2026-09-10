@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.litea.heads import HeadUnavailable
 from src.litea.worker import LEASE_SAFETY_MS, LiteAWorker, _lease_expiry_ns
 from src.scheduler import RunTiming
 
@@ -72,7 +73,7 @@ def build_worker(tmp_path, store, *, freeze_time: bool = True) -> LiteAWorker:
     worker = LiteAWorker(
         store=store,
         heads=SimpleNamespace(
-            head_for=lambda target: (_ for _ in ()).throw(KeyError()),
+            head_for=lambda target: (_ for _ in ()).throw(HeadUnavailable('no head in this suite')),
             inventory=lambda: {},
             latest_cutoff=lambda: None,
         ),
