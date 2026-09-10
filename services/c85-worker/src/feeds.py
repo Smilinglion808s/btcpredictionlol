@@ -459,11 +459,14 @@ class BinanceRestTradeCollector:
         async with httpx.AsyncClient(timeout=5.0) as client:
             last_id: int | None = None
             while True:
+                response = None
                 try:
                     params: dict[str, Any] = {"symbol": self.symbol, "limit": 1000}
                     if last_id is not None:
                         params["fromId"] = last_id + 1
+                    await LIMITER.acquire(self.url)
                     response = await client.get(self.url, params=params)
+                    LIMITER.note(self.url, response)
                     response.raise_for_status()
                     receipt = now_ns()
                     rows = response.json()
@@ -476,8 +479,10 @@ class BinanceRestTradeCollector:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
+                    LIMITER.note(self.url, response, exc)
                     self.buffer.error = f"rest:{type(exc).__name__}: {exc}"
                 await asyncio.sleep(self.interval_s)
+
 
 
 class KlineCollector:
