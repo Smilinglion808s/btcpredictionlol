@@ -87,40 +87,57 @@ class LiteAService:
 
     # -- startup ---------------------------------------------------------------
     def _restore_artifacts(self) -> dict:
-        """Install the durable training frame, heads and state, hash-checked."""
-        try:
-            return self.remote.restore()
-        except Exception as exc:  # noqa: BLE001 - reported, never silently ignored
-            return {"error": str(exc)}
+        """Install the durable training frame, heads and state, hash-checked.
+
+        A required object that the manifest lists but the bucket cannot serve
+        is a HARD failure: scoring cold from a partial restore would silently
+        re-warm the rank queues and reset the daily floor.
+        """
+        return self.remote.restore()
 
     def _restore_state(self) -> LiteAState:
-        """Local snapshot first, then the durable backend checkpoint.
+        """The NEWEST coherent position wins — never simply the local file.
 
-        The checkpoint carries the ORIGINAL sealed envelope, so restoring
-        re-verifies the digest that was actually written — every cursor, the
-        consumed settlements and the publication position included. Nothing is
-        re-hashed over reassembled parts, and a restore failure is never
-        repaired by starting fresh: a blank state would re-warm the rank queues
-        and reset the daily floor, which is a silent behaviour change.
+        The bucket snapshot is only republished when a fit happens (daily), so
+        it can be almost a day behind the signed decision checkpoints. Both
+        candidates are restored through their own sealed digest, and the one
+        whose committed position is later is adopted. Neither is ever repaired
+        by starting fresh.
         """
+        local: LiteAState | None = None
         if self.state_path.exists():
-            return LiteAState.load(self.state_path)
-        checkpoint = self.store.latest_checkpoint()
-        if not checkpoint:
-            return LiteAState()
-        expert_state = checkpoint.get("expert_state") or {}
-        envelope = expert_state.get("litea_paired_envelope")
+            local = LiteAState.load(self.state_path)
+
+        remote: LiteAState | None = None
+        checkpoint = self.store.latest_checkpoint() or {}
+        envelope = (checkpoint.get("expert_state") or {}).get("litea_paired_envelope")
         if envelope:
-            state = LiteAState.restore(envelope)
-            state.save(self.state_path)
-            return state
-        if checkpoint.get("admission_rank_state"):
+            remote = LiteAState.restore(envelope)
+        elif checkpoint.get("admission_rank_state"):
             raise RuntimeError(
                 "LITEA_CHECKPOINT_UNRESTORABLE: the latest durable checkpoint predates "
                 "the sealed paired envelope; refusing to manufacture a state digest over "
                 "reassembled parts"
             )
-        return LiteAState()
+
+        def position(state: LiteAState | None) -> str:
+            if state is None:
+                return ""
+            return str(
+                state.cursors.last_committed_target or state.engine.last_target or ""
+            )
+
+        chosen = local
+        self.state_origin = "LOCAL_SNAPSHOT"
+        if remote is not None and position(remote) > position(local):
+            chosen = remote
+            self.state_origin = "BACKEND_CHECKPOINT"
+        if chosen is None:
+            self.state_origin = "COLD_START"
+            return LiteAState()
+        chosen.save(self.state_path)
+        return chosen
+
 
     def _fetch_market_metadata(self, ticker: str) -> list[dict]:
         import httpx
