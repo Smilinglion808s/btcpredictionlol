@@ -134,6 +134,53 @@ class StartupBridge:
             "targets": targets,
         }
 
+    # -- already-recorded rows --------------------------------------------------
+    def _recorded_rows(self, targets: list[datetime]) -> dict[str, dict]:
+        """The rows this identity ALREADY committed, keyed by target ISO.
+
+        A frame that lags a newer checkpoint must be repaired from the inputs
+        that were actually frozen at each target. Rebuilding them from a public
+        read taken hours later can produce different numbers for a target the
+        engine has already decided on, which would pair a new rank state with a
+        history that never happened.
+        """
+        if not targets:
+            return {}
+        store = getattr(self.service, "store", None)
+        if store is None or not hasattr(store, "recorded_targets"):
+            return {}
+        try:
+            rows = store.recorded_targets(targets[0], targets[-1], limit=MAX_BRIDGE_TARGETS + 8)
+        except Exception as exc:  # noqa: BLE001 — fall back to recovery
+            print(f"[{MODEL_ID}] recorded-row read failed: {exc}", flush=True)
+            return {}
+
+        wanted = {pd.Timestamp(t).tz_convert("UTC").isoformat() for t in targets}
+        out: dict[str, dict] = {}
+        for row in rows:
+            stamp = pd.Timestamp(row.get("target_open_utc"))
+            if stamp.tzinfo is None:
+                stamp = stamp.tz_localize("UTC")
+            stamp = stamp.tz_convert("UTC")
+            if stamp.isoformat() not in wanted:
+                continue
+            features = ((row.get("features") or {}).get("direction60")) or {}
+            if not features:
+                continue  # nothing frozen was stored; treat as unrecorded
+            built = {
+                "ts": stamp,
+                "ticker": row.get("ticker"),
+                "input_valid": bool(row.get("binance_complete")),
+                "label": float("nan"),
+                "settlement_ts": pd.NaT,
+                "blockers": None,
+            }
+            for name in DIRECTION_ORDER:
+                value = features.get(name)
+                built[name] = float("nan") if value is None else float(value)
+            out[stamp.isoformat()] = built
+        return out
+
     # -- execution -------------------------------------------------------------
     def run(self, now: datetime | None = None) -> dict[str, Any]:
         plan = self.plan(now)
@@ -163,13 +210,25 @@ class StartupBridge:
         decided_at = plan["decided_last_target"]
         decided_after = pd.Timestamp(decided_at) if decided_at else None
 
-        recovered: list[dict] = []
+        # Targets at or before the decided position are FRAME REPAIR only. Their
+        # authentic frozen inputs are read back from the durable ledger; only a
+        # genuinely unrecorded target is reconstructed from the public venue.
+        settled = [t for t in targets
+                   if decided_after is not None and pd.Timestamp(t) <= decided_after]
+        recorded = self._recorded_rows(settled)
+        reused = [recorded[pd.Timestamp(t).tz_convert("UTC").isoformat()]
+                  for t in settled
+                  if pd.Timestamp(t).tz_convert("UTC").isoformat() in recorded]
+        to_recover = [t for t in targets
+                      if pd.Timestamp(t).tz_convert("UTC").isoformat() not in recorded]
+
+        recovered: list[dict] = list(reused)
         gap: str | None = None
-        for index in range(0, len(targets), CHUNK):
-            chunk = targets[index:index + CHUNK]
+        for index in range(0, len(to_recover), CHUNK):
+            chunk = to_recover[index:index + CHUNK]
             try:
                 recovered.extend(recover_targets(chunk))
-            except (RecoveryUnavailable, Exception) as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 gap = (
                     f"LITEA_SOURCE_GAP: {chunk[0].isoformat()}..{chunk[-1].isoformat()} "
                     f"could not be recovered ({type(exc).__name__})"
@@ -178,8 +237,15 @@ class StartupBridge:
 
         decisions: list[dict] = []
         committed = 0
+        undelivered: list[str] = []
         if recovered:
-            decisions, committed = self._apply(recovered, decided_after)
+            decisions, committed, undelivered = self._apply(recovered, decided_after)
+
+        if undelivered and not gap:
+            gap = (
+                f"LITEA_BRIDGE_COMMIT_UNDELIVERED: {len(undelivered)} recovered decision(s) "
+                f"from {undelivered[0]} are queued but not durable"
+            )
 
         report = {
             "status": "BLOCKED" if gap else "BRIDGED",
@@ -187,9 +253,11 @@ class StartupBridge:
             "bridge_to": plan["bridge_to"],
             "targets": len(targets),
             "recovered": len(recovered),
+            "reused_recorded": len(reused),
             "recorded_only": max(0, len(recovered) - len(decisions)),
             "decided": len(decisions),
             "committed": committed,
+            "undelivered": len(undelivered),
             "calls": sum(1 for d in decisions if d["floor_prediction"] != 0),
             "input_unavailable": sum(1 for r in recovered if not r["input_valid"]),
             "labelled": sum(1 for r in recovered if pd.notna(r["label"])),
@@ -204,6 +272,23 @@ class StartupBridge:
         self.report = report
         return report
 
+    def run_until_current(self, now: datetime | None = None, passes: int = 3) -> dict[str, Any]:
+        """Bridge, then bridge the residual gap the bridge itself took to run.
+
+        Recovering hundreds of targets can cross a 15-minute boundary; without
+        this the freshly armed scheduler would start one interval behind and
+        that interval would silently vanish.
+        """
+        report = self.run(now)
+        for _ in range(passes - 1):
+            if report.get("status") not in ("BRIDGED",):
+                break
+            follow_up = self.plan(None if now is None else now)
+            if not (follow_up.get("targets") or []):
+                break
+            report = self.run(None if now is None else now)
+        return report
+
     def _block(self, reason: str) -> None:
         """Record the gap and stop scoring. Recording keeps running."""
         self.service.worker.external_scoring_block = reason
@@ -212,13 +297,14 @@ class StartupBridge:
     # -- the causal pass -------------------------------------------------------
     def _apply(
         self, recovered: list[dict], decided_after: pd.Timestamp | None
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict], int, list[str]]:
         service = self.service
         state, training, heads = service.state, service.training, service.heads
         frame = pd.DataFrame(recovered).sort_values("ts")
 
         decisions: list[dict] = []
         committed = 0
+        undelivered: list[str] = []
         for _, day_rows in frame.groupby(frame.ts.dt.date, sort=True):
             training.append(day_rows.drop(columns=["blockers"], errors="ignore")
                             .to_dict("records"))
@@ -230,6 +316,8 @@ class StartupBridge:
                 outcome = self._decide(row)
                 decisions.append(outcome["decision"])
                 committed += int(outcome["committed"])
+                if not outcome["committed"]:
+                    undelivered.append(pd.Timestamp(row["ts"]).isoformat())
 
         state.cursors.training_sha256 = training.save(service.training_path)
         state.cursors.training_rows = training.rows
@@ -243,7 +331,7 @@ class StartupBridge:
             )
         except Exception as exc:  # noqa: BLE001 — local position is already durable
             print(f"[{MODEL_ID}] bridge publish failed: {exc}", flush=True)
-        return decisions, committed
+        return decisions, committed, undelivered
 
     def _decide(self, row: dict) -> dict[str, Any]:
         state, heads = self.service.state, self.service.heads
