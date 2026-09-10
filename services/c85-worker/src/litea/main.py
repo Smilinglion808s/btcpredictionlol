@@ -14,6 +14,7 @@ from .. import runtime_env  # noqa: F401  isort:skip
 
 import asyncio
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -90,6 +91,8 @@ class LiteAService:
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
         self.bridge = StartupBridge(self)
+        #: earliest wall-clock second at which a blocked bridge may retry
+        self._bridge_retry_after = 0.0
         # The only thing in this process that writes an official outcome.
         self.outcomes = OfficialOutcomes(self)
 
@@ -263,6 +266,28 @@ class LiteAService:
             except Exception as exc:  # noqa: BLE001
                 print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
 
+            # A source gap blocks scoring, and a public venue can refuse reads
+            # for a few minutes (an IP rate-limit ban is the observed case).
+            # Retrying the bridge here is what turns a transient refusal into a
+            # delay instead of a dead process: the intervals stay missing and
+            # unscored until they are genuinely recovered, and nothing about
+            # the gap is assumed away in the meantime.
+            block = str(self.worker.external_scoring_block or "")
+            retryable = "LITEA_SOURCE_GAP" in block or "LITEA_STARTUP_BRIDGE_FAILED" in block
+            if retryable and time.time() >= self._bridge_retry_after:
+                try:
+                    report = await asyncio.to_thread(self.bridge.run_until_current)
+                    print(f"[{MODEL_ID}] bridge retry: {report}", flush=True)
+                except Exception as exc:  # noqa: BLE001
+                    report = {"gap": f"{type(exc).__name__}: {exc}"}
+                    print(f"[{MODEL_ID}] bridge retry failed: {exc}", flush=True)
+                # A rate-limit ban is only made longer by retrying inside it,
+                # so back off for minutes rather than seconds.
+                gap = str((report or {}).get("gap") or "")
+                self._bridge_retry_after = time.time() + (
+                    300.0 if "RATE_LIMITED" in gap else 60.0
+                )
+
     def drain_settlements(self) -> int:
         """Produce official outcomes, then apply every unconsumed one.
 
@@ -303,13 +328,6 @@ class LiteAService:
         # the next future boundary has real raw windows of its own.
         await self.feeds.start()
 
-        # Outcomes that became official while this container was down are
-        # applied BEFORE the gap is bridged, so the daily floor and the rank
-        # queues advance through the missed intervals in the real order.
-        try:
-            await asyncio.to_thread(self.drain_settlements)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[{MODEL_ID}] startup settlement drain failed: {exc}", flush=True)
         self._catch_up_fits()
 
         # Everything between the restored checkpoint and this launch is
@@ -317,6 +335,12 @@ class LiteAService:
         # that cannot be recovered blocks scoring instead of vanishing. The
         # residual gap the bridge itself takes to run is bridged too, so the
         # scheduler never arms one interval behind.
+        #
+        # The bridge runs BEFORE any outcome is applied: the engine's clock is
+        # monotonic in observed time, and settling a target with a present-day
+        # observation first would make every missed historical interval
+        # unreplayable. The bridge applies each interval's own official label
+        # as it walks forward, which is the causal order.
         try:
             bridged = await asyncio.to_thread(self.bridge.run_until_current)
         except Exception as exc:  # noqa: BLE001
@@ -326,6 +350,13 @@ class LiteAService:
             )
             self.bridge.report = bridged
         print(f"[{MODEL_ID}] startup bridge: {bridged}", flush=True)
+
+        # Outcomes that became official while this container was down are
+        # produced and applied once the bridge has walked the gap forward.
+        try:
+            await asyncio.to_thread(self.drain_settlements)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{MODEL_ID}] startup settlement drain failed: {exc}", flush=True)
 
         # A queued, undelivered bridge decision must drain before scoring.
         try:

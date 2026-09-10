@@ -20,7 +20,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -102,13 +104,64 @@ def empty_window_template() -> dict:
 
 # --------------------------------------------------------------------------- #
 # transport
+class RestBanned(RecoveryUnavailable):
+    """The venue has rate-limit BANNED this address until `until_ms`.
+
+    Distinguished from an ordinary failure because retrying inside the ban only
+    extends it: the caller must wait, not try harder.
+    """
+
+    def __init__(self, message: str, until_ms: int | None) -> None:
+        super().__init__(message)
+        self.until_ms = until_ms
+
+
+def _ban_deadline_ms(body: str) -> int | None:
+    match = re.search(r"banned until (\d+)", body)
+    return int(match.group(1)) if match else None
+
+
+#: Minimum spacing between recovery reads, per host. Gap recovery pages an
+#: aggregate-trade window and the venue's weight limit is per address, so an
+#: unpaced burst earns an IP ban that makes the gap UNRECOVERABLE for minutes.
+#: Pacing keeps recovery slow rather than self-defeating; it never changes what
+#: is fetched. `LITEA_REST_MIN_INTERVAL_S` tunes it for a deployment whose own
+#: address has a different budget.
+REST_MIN_INTERVAL_S = float(os.environ.get("LITEA_REST_MIN_INTERVAL_S", "0.35"))
+_LAST_REST_AT: dict[str, float] = {}
+
+
+def _pace(url: str) -> None:
+    host = urllib.parse.urlsplit(url).netloc
+    wait = REST_MIN_INTERVAL_S - (time.monotonic() - _LAST_REST_AT.get(host, 0.0))
+    if wait > 0:
+        time.sleep(wait)
+    _LAST_REST_AT[host] = time.monotonic()
+
+
 def _rest(url: str, params: dict) -> list:
+    _pace(url)
     query = urllib.parse.urlencode(params)
     for attempt in range(6):
         try:
             with urllib.request.urlopen(f"{url}?{query}", timeout=30) as response:
                 return json.load(response)
-        except Exception as exc:  # noqa: BLE001 - transient rate limit / network
+        except urllib.error.HTTPError as exc:
+            if exc.code in (418, 429):
+                # Hammering an IP ban is what makes it longer. Surface it with
+                # its deadline and let the caller wait it out.
+                try:
+                    body = exc.read().decode("utf-8", "replace")
+                except Exception:  # noqa: BLE001
+                    body = ""
+                raise RestBanned(
+                    f"LITEA_REST_RATE_LIMITED: {url} :: HTTP {exc.code} {body[:200]}",
+                    _ban_deadline_ms(body),
+                ) from exc
+            if attempt == 5:
+                raise RecoveryUnavailable(f"LITEA_REST_FAILED: {url} :: {exc}") from exc
+            time.sleep(1.5 * (attempt + 1))
+        except Exception as exc:  # noqa: BLE001 - transient network
             if attempt == 5:
                 raise RecoveryUnavailable(f"LITEA_REST_FAILED: {url} :: {exc}") from exc
             time.sleep(1.5 * (attempt + 1))

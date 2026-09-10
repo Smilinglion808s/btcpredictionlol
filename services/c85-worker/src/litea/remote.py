@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ class RemoteArtifacts:
         self.root = Path(root)
 
     # -- transfer --------------------------------------------------------------
-    def _get(self, key: str, *, required: bool = False) -> bytes | None:
+    def _get(self, key: str, *, required: bool = False, bust: int = 0) -> bytes | None:
         """Absent and broken are DIFFERENT.
 
         An object the manifest lists is required: if the backend refuses, the
@@ -62,7 +63,7 @@ class RemoteArtifacts:
             # would silently rewind the serving position, so every read is
             # explicitly uncached.
             response = httpx.get(
-                url,
+                url + (f"&cb={bust}" if bust else ""),
                 timeout=120.0,
                 follow_redirects=True,
                 headers={"cache-control": "no-cache", "pragma": "no-cache"},
@@ -93,10 +94,23 @@ class RemoteArtifacts:
         return _sha256(body)
 
     def _install(self, key: str, destination: Path, expected: str | None) -> bool:
-        body = self._get(key, required=expected is not None)
+        # A just-replaced object can still be served from the storage edge for a
+        # few seconds. That is a STALE READ, not a corrupt artifact, so the
+        # digest disagreement is retried with a fresh signed URL for a bounded
+        # time before it is treated as a real mismatch and raised.
+        body: bytes | None = None
+        actual = ""
+        for attempt in range(10):
+            body = self._get(key, required=expected is not None, bust=attempt)
+            if body is None:
+                return False
+            actual = _sha256(body)
+            if not expected or actual == expected:
+                break
+            if attempt < 9:
+                time.sleep(min(15.0, 3.0 * (attempt + 1)))
         if body is None:
             return False
-        actual = _sha256(body)
         if expected and actual != expected:
             raise RuntimeError(
                 f"LITEA_ARTIFACT_DIGEST_MISMATCH: {key} expected {expected} got {actual}"

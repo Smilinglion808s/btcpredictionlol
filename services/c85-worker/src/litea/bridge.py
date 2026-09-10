@@ -134,6 +134,32 @@ class StartupBridge:
             "targets": targets,
         }
 
+    def _frame_rows(self, targets: list[datetime]) -> dict[str, dict]:
+        """Targets whose authentic inputs are already in the local frame.
+
+        A previous bridge pass can record a target and then stop before the
+        decision (a venue refusal further down the chunk list, a restart). The
+        inputs are the frozen ones this identity already reconstructed, so the
+        second pass decides from them instead of asking the venue again.
+        """
+        frame = getattr(getattr(self.service, "training", None), "frame", None)
+        if frame is None or frame.empty or not targets:
+            return {}
+        wanted = {pd.Timestamp(t).tz_convert("UTC").isoformat() for t in targets}
+        out: dict[str, dict] = {}
+        for row in frame.to_dict("records"):
+            stamp = pd.Timestamp(row["ts"])
+            if stamp.tzinfo is None:
+                stamp = stamp.tz_localize("UTC")
+            key = stamp.tz_convert("UTC").isoformat()
+            if key not in wanted:
+                continue
+            built = dict(row)
+            built["ts"] = stamp.tz_convert("UTC")
+            built.setdefault("blockers", None)
+            out[key] = built
+        return out
+
     # -- already-recorded rows --------------------------------------------------
     def _recorded_rows(self, targets: list[datetime]) -> dict[str, dict]:
         """The rows this identity ALREADY committed, keyed by target ISO.
@@ -216,8 +242,19 @@ class StartupBridge:
         settled = [t for t in targets
                    if decided_after is not None and pd.Timestamp(t) <= decided_after]
         recorded = self._recorded_rows(settled)
+        # A target this process already reconstructed and wrote into the local
+        # frame is not fetched again: those are the same authentic inputs, and
+        # re-reading the venue for them is what turns a transient rate-limit
+        # refusal into a bridge that can never finish.
+        recorded.update(
+            {
+                key: row
+                for key, row in self._frame_rows(targets).items()
+                if key not in recorded
+            }
+        )
         reused = [recorded[pd.Timestamp(t).tz_convert("UTC").isoformat()]
-                  for t in settled
+                  for t in targets
                   if pd.Timestamp(t).tz_convert("UTC").isoformat() in recorded]
         to_recover = [t for t in targets
                       if pd.Timestamp(t).tz_convert("UTC").isoformat() not in recorded]
@@ -231,7 +268,7 @@ class StartupBridge:
             except Exception as exc:  # noqa: BLE001
                 gap = (
                     f"LITEA_SOURCE_GAP: {chunk[0].isoformat()}..{chunk[-1].isoformat()} "
-                    f"could not be recovered ({type(exc).__name__})"
+                    f"could not be recovered ({type(exc).__name__}: {str(exc)[:160]})"
                 )
                 break
 
@@ -336,7 +373,7 @@ class StartupBridge:
     def _decide(self, row: dict) -> dict[str, Any]:
         state, heads = self.service.state, self.service.heads
         target = pd.Timestamp(row["ts"]).to_pydatetime()
-        observed = target + timedelta(seconds=5)
+        observed = self._observed(target + timedelta(seconds=5))
 
         # An official settlement that became available BEFORE this target is
         # applied first, so the daily floor sees the exposure in real order.
@@ -420,6 +457,23 @@ class StartupBridge:
             },
         }
 
+    def _observed(self, at: datetime) -> datetime:
+        """When THIS process observes a recovered event.
+
+        `available_at` stays the venue's true availability instant, but the
+        engine's observed-time clock is monotonic: a container that starts
+        after an outcome has already been applied cannot honestly claim to have
+        seen an older interval earlier. Recovered events are therefore observed
+        in chronological order at or after the current clock, and the row keeps
+        its RESEARCH/recovered marking so it is never mistaken for a decision
+        taken at its own boundary.
+        """
+        clock = self.service.state.engine.clock
+        if not clock:
+            return at
+        current = pd.Timestamp(clock).to_pydatetime()
+        return max(at, current)
+
     # -- settlement interleaving ----------------------------------------------
     def _remember_settlement(self, row: dict) -> None:
         if pd.notna(row.get("label")) and pd.notna(row.get("settlement_ts")):
@@ -438,11 +492,12 @@ class StartupBridge:
             if key in consumed:
                 continue
             label = int(row["label"])
+            seen = self._observed(available)
             state.engine.settle(
-                row["ticker"], label, available_at=available, observed_at=available
+                row["ticker"], label, available_at=available, observed_at=seen
             )
             state.guard.settle(
-                row["ticker"], label, available_at=available, observed_at=available
+                row["ticker"], label, available_at=available, observed_at=seen
             )
             self.service.training.apply_label(row["ts"], label, available)
             consumed.add(key)
