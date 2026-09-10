@@ -373,7 +373,7 @@ class StartupBridge:
     def _decide(self, row: dict) -> dict[str, Any]:
         state, heads = self.service.state, self.service.heads
         target = pd.Timestamp(row["ts"]).to_pydatetime()
-        observed = target + timedelta(seconds=5)
+        observed = self._observed(target + timedelta(seconds=5))
 
         # An official settlement that became available BEFORE this target is
         # applied first, so the daily floor sees the exposure in real order.
@@ -457,6 +457,23 @@ class StartupBridge:
             },
         }
 
+    def _observed(self, at: datetime) -> datetime:
+        """When THIS process observes a recovered event.
+
+        `available_at` stays the venue's true availability instant, but the
+        engine's observed-time clock is monotonic: a container that starts
+        after an outcome has already been applied cannot honestly claim to have
+        seen an older interval earlier. Recovered events are therefore observed
+        in chronological order at or after the current clock, and the row keeps
+        its RESEARCH/recovered marking so it is never mistaken for a decision
+        taken at its own boundary.
+        """
+        clock = self.service.state.engine.clock
+        if not clock:
+            return at
+        current = pd.Timestamp(clock).to_pydatetime()
+        return max(at, current)
+
     # -- settlement interleaving ----------------------------------------------
     def _remember_settlement(self, row: dict) -> None:
         if pd.notna(row.get("label")) and pd.notna(row.get("settlement_ts")):
@@ -475,11 +492,12 @@ class StartupBridge:
             if key in consumed:
                 continue
             label = int(row["label"])
+            seen = self._observed(available)
             state.engine.settle(
-                row["ticker"], label, available_at=available, observed_at=available
+                row["ticker"], label, available_at=available, observed_at=seen
             )
             state.guard.settle(
-                row["ticker"], label, available_at=available, observed_at=available
+                row["ticker"], label, available_at=available, observed_at=seen
             )
             self.service.training.apply_label(row["ts"], label, available)
             consumed.add(key)
