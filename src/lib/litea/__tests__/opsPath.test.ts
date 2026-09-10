@@ -132,10 +132,11 @@ describe("decision.commit for Version 1", () => {
   it("never dispatches an old shadow row even with the control on", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
     const db = fakeDb();
+    const stale = { ...admittedTarget, target_open_utc: new Date(Date.now() - 86_400_000).toISOString() };
     const out = await runC85Op(
       db.client,
       "c85-worker-amsterdam-1",
-      { op: "decision.commit", target: admittedTarget, checkpoint: null, outbox: outboxRequest } as any,
+      { op: "decision.commit", target: stale, checkpoint: null, outbox: outboxRequest } as any,
       LITE_A_MODEL_VERSION,
     );
     expect(out.result.dispatch).toBe("EXPIRED");
