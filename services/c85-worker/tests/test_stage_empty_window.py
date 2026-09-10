@@ -63,9 +63,15 @@ def test_empty_first_second_is_nan_not_absent():
     assert np.isnan(row["binance_spot_t5_w001_return_bps"])
     assert not np.isnan(row["binance_spot_t5_w005_return_bps"])
     # The derived anchor block no longer raises on the missing column.
-    frame = base_anchor_fields(pd.DataFrame([{**row, "spot_t0_price": 100_000.0,
-                                              "floor_strike": 99_500.0}]))
+    frame = base_anchor_fields(
+        pd.DataFrame([{**row, "spot_t0_price": 100_000.0,
+                       "floor_strike": 99_500.0, "anchor_valid": True}])
+    )
     assert len(frame) == 1
+    # The empty first second is honestly reported as incomplete acquisition,
+    # never as a complete window.
+    assert not bool(frame["binance_complete"].iloc[0])
+
 
 
 def test_fully_populated_packet_is_untouched_by_the_template():
