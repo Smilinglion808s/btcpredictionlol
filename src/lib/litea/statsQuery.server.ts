@@ -101,6 +101,7 @@ export interface LiteAStats {
 
 const SELECT_COLUMNS = [
   "target_open_utc",
+  "ticker",
   "run_mode",
   "status",
   "gate_reasons",
