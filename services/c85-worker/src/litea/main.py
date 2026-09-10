@@ -55,10 +55,20 @@ class LiteAService:
         )
 
         root = Path(os.environ.get("LITEA_STATE_DIR", "/var/lib/litea"))
+        self.root = root
         self.heads = DailyHeadStore(root / "heads")
         self.state_path = root / "state.json"
         self.training_path = root / "training.parquet"
+        # The container has no persistent volume: the private bucket is the
+        # durability. Restore BEFORE reading any local file.
+        self.remote = RemoteArtifacts(self.backend, root)
+        self.restore_report = self._restore_artifacts()
         self.state = self._restore_state()
+        self.training = (
+            TrainingFrame.load(self.training_path)
+            if self.training_path.exists()
+            else TrainingFrame.empty()
+        )
 
         self.worker = LiteAWorker(
             packet_source=self.packets,
@@ -68,6 +78,8 @@ class LiteAService:
             state_path=self.state_path,
             ticker_resolver=self.ticker_resolver,
             feeds=self.feeds,
+            training=self.training,
+            training_path=self.training_path,
             lease_ttl_seconds=self.settings.lease_ttl_seconds,
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
