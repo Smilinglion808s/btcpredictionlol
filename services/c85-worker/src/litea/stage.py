@@ -110,15 +110,53 @@ class V1DirectionStage:
                 stale.append(name)
         return stale
 
+    def missing_context_minutes(self, at_ns: int) -> dict[str, list[str]]:
+        """Which of the 16 required completed minutes are absent, by feed.
+
+        "The context is incomplete" is a symptom. The boundary needs BTCUSD_PERP,
+        the COIN-M index and spot for all 16 completed minutes ending at T-1, so
+        readiness has to be judged on held HISTORY, not on how fresh the latest
+        packet happens to look.
+        """
+        import datetime as _dt
+
+        now_ms = at_ns // 1_000_000
+        prior_open = (now_ms // MINUTE_MS) * MINUTE_MS - MINUTE_MS
+        first_open = prior_open - 15 * MINUTE_MS
+        gaps: dict[str, list[str]] = {}
+        for name in ("binance_cm_1m", "binance_index", "binance_1m"):
+            buffer = self._buffer(name)
+            if buffer is None or not hasattr(buffer, "missing_minutes"):
+                gaps[name] = ["unavailable"]
+                continue
+            absent = buffer.missing_minutes(first_open, prior_open, at_ns)
+            if absent:
+                gaps[name] = [
+                    _dt.datetime.fromtimestamp(ms / 1000, _dt.timezone.utc).strftime("%H:%M")
+                    for ms in absent
+                ]
+        return gaps
+
     def blocking_reasons(self, at_ns: int) -> list[str]:
+        reasons: list[str] = []
         stale = self.stale_feeds(at_ns)
-        if not stale:
-            return []
-        return [
-            "LITEA_FEEDS_STALE_AT_CUTOFF: no fresh received data for "
-            + ", ".join(stale)
-            + " — the packet is not built from a partial feed set"
-        ]
+        if stale:
+            reasons.append(
+                "LITEA_FEEDS_STALE_AT_CUTOFF: no fresh received data for "
+                + ", ".join(stale)
+                + " — the packet is not built from a partial feed set"
+            )
+        gaps = self.missing_context_minutes(at_ns)
+        if gaps:
+            detail = "; ".join(
+                f"{name} missing {', '.join(minutes)} UTC" for name, minutes in sorted(gaps.items())
+            )
+            reasons.append(
+                "LITEA_CONTEXT_HISTORY_INCOMPLETE: the 16 completed minutes ending at "
+                f"T-1 are not all held — {detail}"
+            )
+        return reasons
+
 
     def watermarks(self, freeze_ns: int) -> dict[str, Any]:
         out: dict[str, Any] = {}
