@@ -428,8 +428,9 @@ export function supabaseLiteaDispatchDeps(
       return Number.isFinite(until) && until > Date.now();
     },
     async settle(entry) {
-      // Only the owner may write the terminal state.
-      await supabase
+      // Conditional on BOTH this owner and a still-PENDING row, and the
+      // affected rows are inspected: a lost claim writes nothing anywhere.
+      const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
         .update({
           state: entry.status,
@@ -438,8 +439,13 @@ export function supabaseLiteaDispatchDeps(
           claim_owner: null,
         })
         .eq("dedupe_key", entry.dedupeKey)
-        .eq("claim_owner", entry.owner);
-      if (entry.targetId) {
+        .eq("claim_owner", entry.owner)
+        .eq("state", "PENDING")
+        .select("dedupe_key");
+      const applied = !error && Array.isArray(data) && data.length > 0;
+      // Only the owner of the terminal write may amend the version-scoped
+      // target row, so a failed/zero-row update can never mark it sent.
+      if (applied && entry.targetId) {
         await supabase
           .from(C85_TARGETS_TABLE)
           .update({
@@ -448,8 +454,10 @@ export function supabaseLiteaDispatchDeps(
             dispatch_ns:
               entry.status === "SENT" ? String(BigInt(Date.now()) * 1_000_000n) : null,
           })
-          .eq("id", entry.targetId);
+          .eq("id", entry.targetId)
+          .eq("model_version", LITE_A_MODEL_VERSION);
       }
+      return { applied };
     },
 
   };
