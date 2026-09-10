@@ -147,6 +147,22 @@ describe("decision.commit for Version 1", () => {
     expect(out.result.dispatch).toBe("FAILED");
   });
 
+  it("does not amend the target when the owner-conditional settle matches nothing", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const fresh = { ...admittedTarget, target_open_utc: new Date(Date.now() - 6_000).toISOString() };
+    const db = fakeDb(fresh, { ownerUpdateMatches: false });
+    const out = await runC85Op(
+      db.client,
+      "c85-worker-amsterdam-1",
+      { op: "decision.commit", target: fresh, checkpoint: null, outbox: outboxRequest } as any,
+      LITE_A_MODEL_VERSION,
+    );
+    // The claim was lost: nothing is recorded as ours and the version-scoped
+    // target row is never marked sent on our behalf.
+    expect(out.result.dispatch).toBe("OWNER_LOST");
+    expect(db.writes["c85_targets"] ?? []).toHaveLength(0);
+  });
+
   it("delivers from the committed record, never from an altered replay body", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
     const committed = {
