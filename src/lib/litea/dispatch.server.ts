@@ -220,11 +220,18 @@ export interface LiteADispatchDeps {
 
 
 export interface LiteADispatchResult {
-  verdict: LiteADispatchVerdict | "SENT" | "FAILED" | "NOT_CLAIM_OWNER";
+  verdict:
+    | LiteADispatchVerdict
+    | "SENT"
+    | "FAILED"
+    | "NOT_CLAIM_OWNER"
+    | "OWNER_LOST";
   dedupeKey: string | null;
   claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
+  /** False when the owner-and-PENDING conditional terminal write matched nothing. */
+  settled?: boolean;
 }
 
 /** A per-request owner id; never reused across attempts. */
@@ -233,15 +240,18 @@ export function newDispatchOwner(): string {
 }
 
 /**
- * Exclusive durable claim first, then send, then record the outcome — in that
- * order, so a crash leaves a replayable entry rather than an untracked signal.
- * A retry reuses the same event identity and takes NO new claim, and both the
- * ceiling and claim ownership are re-checked immediately before every attempt.
+ * Exclusive durable claim first, then ONE attempt per configured endpoint,
+ * then the conditional terminal write — in that order, so a crash leaves an
+ * inspectable entry rather than an untracked signal.
  *
- * Dedupe here cannot promise exactly-once broker fills. It guarantees at most
- * one outbound signal per interval from this system; the external bot must
- * honour `dedupe_key` for the end-to-end property.
+ * What this actually gives: one exclusive dispatch operation per event
+ * identity, and at most one automatic attempt per configured endpoint. It is
+ * NOT a claim of a single global signal (several endpoints may be configured)
+ * and NOT exactly-once broker execution — the external bot must honour
+ * `dedupe_key` for anything end-to-end. An unresolved or ambiguous response is
+ * recorded conservatively and never replayed or re-claimed.
  */
+
 export async function dispatchLiteaDecision(
   deps: LiteADispatchDeps,
   row: LiteADecisionRecord,
