@@ -149,6 +149,32 @@ async function loadSettlements(): Promise<Map<string, number>> {
   return map;
 }
 
+/**
+ * Grade forward LIVE calls against official labels.
+ *
+ * A call is a row with final_side ±1 (abstains, side 0, are excluded). It is
+ * graded only by the settlement carrying the SAME ticker and target — a
+ * same-time row from another market or model cannot grade it. Equal side and
+ * label is a win, opposite a loss; a missing or invalid label stays pending.
+ */
+export function gradeLiveCalls(
+  liveRows: Row[],
+  settlements: Map<string, number>,
+): { calls: number; wins: number; losses: number; pending: number } {
+  const out = { calls: 0, wins: 0, losses: 0, pending: 0 };
+  for (const r of liveRows) {
+    const side = Number(r.final_side ?? 0);
+    if (side !== 1 && side !== -1) continue; // abstains are never graded
+    out.calls += 1;
+    const key = `${String(r.ticker ?? "")}@${new Date(String(r.target_open_utc)).toISOString()}`;
+    const label = settlements.get(key) ?? null;
+    if (label == null) out.pending += 1;
+    else if (side === label) out.wins += 1;
+    else out.losses += 1;
+  }
+  return out;
+}
+
 function ageSeconds(iso: unknown): number | null {
   if (!iso) return null;
   const t = new Date(String(iso)).getTime();
