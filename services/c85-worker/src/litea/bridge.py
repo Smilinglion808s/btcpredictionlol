@@ -43,6 +43,7 @@ from ..features import DIRECTION_ORDER
 from .fit_service import run_due_fits
 from .heads import HeadUnavailable
 from .identity import MODEL_ID
+from .strike_policy import INPUT_POLICY_VERSION
 from .reconstruct import RecoveryUnavailable, recover_targets
 from .store import checkpoint_payload, target_row
 
@@ -406,7 +407,18 @@ class StartupBridge:
             features={"anchor_valid": bool(row["input_valid"])},
             direction60=features,
             blockers=row.get("blockers"),
-            source={"feed_watermarks": {}, "recovery": "PUBLIC_VENUE_REST"},
+            source={
+                "feed_watermarks": {},
+                "recovery": "PUBLIC_VENUE_REST",
+                # A reconstructed row uses the venue's OWN recorded strike; no
+                # estimate is ever back-filled into history.
+                "strike_policy": {
+                    "input_policy_version": INPUT_POLICY_VERSION,
+                    "strike_source": "official",
+                    "estimated": False,
+                    "method": "venue_floor_strike",
+                },
+            },
         )
         payload = target_row(
             target_open=target,

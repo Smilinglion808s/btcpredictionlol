@@ -54,7 +54,7 @@ from ..features import (
 )
 from ..packets import _events, _kline_row
 from .reconstruct import empty_window_template
-from .strike_policy import INPUT_POLICY_VERSION, choose_strike
+from .strike_policy import choose_strike
 
 
 NS = 1_000_000_000
