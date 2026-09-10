@@ -265,9 +265,9 @@ export function LiteACard({
 
       {Number(stats?.research_rows ?? 0) > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          {stats.research_rows} earlier{" "}
-          {Number(stats.research_rows) === 1 ? "close was" : "closes were"} rebuilt after the fact
-          during testing and are kept out of the results above.
+          {Number(stats.research_rows) === 1
+            ? "1 earlier close was rebuilt after the fact during testing and is kept out of the results above."
+            : `${stats.research_rows} earlier closes were rebuilt after the fact during testing and are kept out of the results above.`}
         </p>
       ) : null}
     </Card>
