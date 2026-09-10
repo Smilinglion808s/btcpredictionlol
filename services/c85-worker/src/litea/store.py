@@ -149,7 +149,13 @@ class LiteAStore:
 
 
 def checkpoint_payload(state: Any, *, next_target: datetime | None) -> dict[str, Any]:
-    """The paired Version 1 state, in the backend checkpoint shape."""
+    """The paired Version 1 state, in the backend checkpoint shape.
+
+    `expert_state` carries the ORIGINAL paired envelope verbatim — both member
+    snapshots, every cursor and the pair digest that sealed them. Restoring from
+    a checkpoint therefore re-verifies the digest that was actually written
+    instead of manufacturing a fresh one over reassembled parts.
+    """
     envelope = state.snapshot()
     cursors = state.cursors.as_dict()
     return {
