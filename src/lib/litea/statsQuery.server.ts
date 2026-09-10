@@ -101,6 +101,7 @@ export interface LiteAStats {
 
 const SELECT_COLUMNS = [
   "target_open_utc",
+  "ticker",
   "run_mode",
   "status",
   "gate_reasons",
@@ -125,19 +126,53 @@ async function loadRows(): Promise<Row[]> {
   return (data ?? []) as unknown as Row[];
 }
 
-async function loadSettlements(): Promise<Map<string, string>> {
+/**
+ * Official labels are keyed by ticker + target: a same-time row from another
+ * market or another model can never grade this model's call. The worker
+ * writes the venue's official `label` (±1); rows without a valid label are
+ * not evidence and leave the call pending.
+ */
+async function loadSettlements(): Promise<Map<string, number>> {
   const { data } = await sb()
     .from("c85_settlements")
-    .select("target_open_utc, outcome")
+    .select("target_open_utc, ticker, label")
     .eq("model_version", LITE_A_MODEL_VERSION)
     .order("target_open_utc", { ascending: false })
     .limit(2000);
-  const map = new Map<string, string>();
+  const map = new Map<string, number>();
   for (const r of (data ?? []) as Row[]) {
-    const key = new Date(String(r.target_open_utc)).toISOString();
-    if (!map.has(key)) map.set(key, String(r.outcome ?? ""));
+    const label = Number(r.label);
+    if (label !== 1 && label !== -1) continue; // absent/invalid — stays pending
+    const key = `${String(r.ticker ?? "")}@${new Date(String(r.target_open_utc)).toISOString()}`;
+    if (!map.has(key)) map.set(key, label);
   }
   return map;
+}
+
+/**
+ * Grade forward LIVE calls against official labels.
+ *
+ * A call is a row with final_side ±1 (abstains, side 0, are excluded). It is
+ * graded only by the settlement carrying the SAME ticker and target — a
+ * same-time row from another market or model cannot grade it. Equal side and
+ * label is a win, opposite a loss; a missing or invalid label stays pending.
+ */
+export function gradeLiveCalls(
+  liveRows: Row[],
+  settlements: Map<string, number>,
+): { calls: number; wins: number; losses: number; pending: number } {
+  const out = { calls: 0, wins: 0, losses: 0, pending: 0 };
+  for (const r of liveRows) {
+    const side = Number(r.final_side ?? 0);
+    if (side !== 1 && side !== -1) continue; // abstains are never graded
+    out.calls += 1;
+    const key = `${String(r.ticker ?? "")}@${new Date(String(r.target_open_utc)).toISOString()}`;
+    const label = settlements.get(key) ?? null;
+    if (label == null) out.pending += 1;
+    else if (side === label) out.wins += 1;
+    else out.losses += 1;
+  }
+  return out;
 }
 
 function ageSeconds(iso: unknown): number | null {
@@ -274,14 +309,13 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
     )
       live.unavailable += 1;
     else live.confidence_abstains += 1;
-
-    if (Number(r.final_side ?? 0) === 0) continue;
-    live.calls += 1;
-    const outcome = settlements.get(new Date(String(r.target_open_utc)).toISOString()) ?? null;
-    if (outcome === "WIN") live.wins += 1;
-    else if (outcome === "LOSS") live.losses += 1;
-    else if (outcome !== "PUSH") live.pending += 1;
   }
+
+  const grading = gradeLiveCalls(liveRows, settlements);
+  live.calls = grading.calls;
+  live.wins = grading.wins;
+  live.losses = grading.losses;
+  live.pending = grading.pending;
   const graded = live.wins + live.losses;
   live.win_rate = graded > 0 ? live.wins / graded : null;
 
