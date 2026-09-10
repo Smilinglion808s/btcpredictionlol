@@ -144,7 +144,7 @@ export function LiteACard({
 }) {
   if (error) {
     return (
-      <Card className="v1-shell rounded-2xl p-6">
+      <Card className="v1-shell self-start rounded-2xl p-6">
         <span className="v1-orbit-ring" aria-hidden />
         <h3 className="v1-title relative text-4xl font-heading font-bold tracking-tight">Version 1</h3>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -156,7 +156,7 @@ export function LiteACard({
 
   if (loading && !stats?.phase) {
     return (
-      <Card className="v1-shell rounded-2xl p-6 space-y-4">
+      <Card className="v1-shell self-start rounded-2xl p-6 space-y-4">
         <span className="v1-orbit-ring" aria-hidden />
         <div className="h-7 w-40 rounded bg-muted/50 animate-pulse" />
         <div className="h-4 w-56 rounded bg-muted/40 animate-pulse" />
@@ -178,7 +178,7 @@ export function LiteACard({
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
 
   return (
-    <Card className="v1-shell rounded-2xl p-5 sm:p-6 space-y-5">
+    <Card className="v1-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
       <span className="v1-orbit-ring" aria-hidden />
 
       <header className="relative flex items-start justify-between gap-3">
