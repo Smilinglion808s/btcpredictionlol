@@ -110,7 +110,10 @@ class StartupBridge:
     def plan(self, now: datetime | None = None) -> dict[str, Any]:
         training_at, decided_at = self._resume_from()
         end = last_available_target(now)
-        start = max([t for t in (training_at, decided_at) if t is not None], default=None)
+        # The EARLIER of the two: a training frame behind a newer checkpoint is
+        # rebuilt for the frame only, so a new rank state is never paired with a
+        # stale history. Targets at or before the decided position are not re-decided.
+        start = min([t for t in (training_at, decided_at) if t is not None], default=None)
         if start is None:
             return {
                 "status": "NO_POSITION",

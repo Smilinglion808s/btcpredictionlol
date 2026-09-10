@@ -102,7 +102,7 @@ def test_bridges_and_is_idempotent(tmp_path, stub_recovery):
     assert service.state.engine.last_target == end.isoformat()
     assert all(c["run_mode"] == "RESEARCH" for c in service.store.commits)
     # execution is structurally absent: a recovered row can never dispatch
-    assert all(c["decision"]["execution_enabled"] is False for c in service.store.commits)
+    assert all(c["features"]["execution_enabled"] is False for c in service.store.commits)
 
     again = StartupBridge(service).run(NOW)
     assert again["status"] == "CURRENT" and again["targets"] == 0
