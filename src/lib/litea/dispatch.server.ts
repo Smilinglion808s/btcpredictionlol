@@ -338,7 +338,7 @@ export async function dispatchLiteaDecision(
 
 type MinimalClient = {
   from: (table: string) => any;
-  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: any; error: any }>;
+  rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: any; error: any }>;
 };
 
 /** The claim RPC prepared in supabase/prepared/. NOT applied in production yet. */
