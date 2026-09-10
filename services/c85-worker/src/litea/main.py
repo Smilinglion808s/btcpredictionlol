@@ -91,6 +91,8 @@ class LiteAService:
         )
         self.scheduler = BoundaryScheduler(self.worker.on_boundary)
         self.bridge = StartupBridge(self)
+        #: earliest wall-clock second at which a blocked bridge may retry
+        self._bridge_retry_after = 0.0
         # The only thing in this process that writes an official outcome.
         self.outcomes = OfficialOutcomes(self)
 
