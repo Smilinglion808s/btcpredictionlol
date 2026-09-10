@@ -104,15 +104,18 @@ class LiteAService:
         whose committed position is later is adopted. Neither is ever repaired
         by starting fresh.
         """
-        local: LiteAState | None = None
+        candidates: list[tuple[str, LiteAState]] = []
         if self.state_path.exists():
-            local = LiteAState.load(self.state_path)
+            candidates.append(("LOCAL_SNAPSHOT", LiteAState.load(self.state_path)))
 
-        remote: LiteAState | None = None
+        bucket = self.state_path.with_name("state.remote.json")
+        if bucket.exists():
+            candidates.append(("BUCKET_SNAPSHOT", LiteAState.load(bucket)))
+
         checkpoint = self.store.latest_checkpoint() or {}
         envelope = (checkpoint.get("expert_state") or {}).get("litea_paired_envelope")
         if envelope:
-            remote = LiteAState.restore(envelope)
+            candidates.append(("BACKEND_CHECKPOINT", LiteAState.restore(envelope)))
         elif checkpoint.get("admission_rank_state"):
             raise RuntimeError(
                 "LITEA_CHECKPOINT_UNRESTORABLE: the latest durable checkpoint predates "
@@ -120,18 +123,15 @@ class LiteAService:
                 "reassembled parts"
             )
 
-        def position(state: LiteAState | None) -> str:
-            if state is None:
-                return ""
-            return str(
-                state.cursors.last_committed_target or state.engine.last_target or ""
-            )
+        def position(state: LiteAState) -> str:
+            return str(state.cursors.last_committed_target or state.engine.last_target or "")
 
-        chosen = local
-        self.state_origin = "LOCAL_SNAPSHOT"
-        if remote is not None and position(remote) > position(local):
-            chosen = remote
-            self.state_origin = "BACKEND_CHECKPOINT"
+        chosen: LiteAState | None = None
+        self.state_origin = "COLD_START"
+        for origin, state in candidates:
+            if chosen is None or position(state) > position(chosen):
+                chosen, self.state_origin = state, origin
+
         if chosen is None:
             self.state_origin = "COLD_START"
             return LiteAState()
