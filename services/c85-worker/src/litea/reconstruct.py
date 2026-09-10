@@ -121,7 +121,26 @@ def _ban_deadline_ms(body: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+#: Minimum spacing between recovery reads, per host. Gap recovery pages an
+#: aggregate-trade window and the venue's weight limit is per address, so an
+#: unpaced burst earns an IP ban that makes the gap UNRECOVERABLE for minutes.
+#: Pacing keeps recovery slow rather than self-defeating; it never changes what
+#: is fetched. `LITEA_REST_MIN_INTERVAL_S` tunes it for a deployment whose own
+#: address has a different budget.
+REST_MIN_INTERVAL_S = float(os.environ.get("LITEA_REST_MIN_INTERVAL_S", "0.35"))
+_LAST_REST_AT: dict[str, float] = {}
+
+
+def _pace(url: str) -> None:
+    host = urllib.parse.urlsplit(url).netloc
+    wait = REST_MIN_INTERVAL_S - (time.monotonic() - _LAST_REST_AT.get(host, 0.0))
+    if wait > 0:
+        time.sleep(wait)
+    _LAST_REST_AT[host] = time.monotonic()
+
+
 def _rest(url: str, params: dict) -> list:
+    _pace(url)
     query = urllib.parse.urlencode(params)
     for attempt in range(6):
         try:
