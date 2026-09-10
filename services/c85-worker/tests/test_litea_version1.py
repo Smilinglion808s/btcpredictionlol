@@ -341,7 +341,7 @@ def _worker(tmp_path: Path, store, head_cutoff: datetime | None = None):
 
     heads = DailyHeadStore(tmp_path / "heads")
     if head_cutoff is not None:
-        heads.install(make_head(head_cutoff))
+        heads.save(make_head(head_cutoff))
     return LiteAWorker(
         packet_source=FakePackets({}, ()),
         store=store,
