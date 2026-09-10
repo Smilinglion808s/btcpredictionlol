@@ -181,7 +181,18 @@ class V1DirectionStage:
         freeze_ns = max(int(freeze_ns), int(cutoff_ns))
 
         reasons: list[str] = self.blocking_reasons(cutoff_ns)
-        row: dict[str, Any] = {"ts": target_open, "target_ms": target_ms}
+        # The canonical row starts from the reference EMPTY-WINDOW template:
+        # an unobserved sub-window is NaN in every aggregate, exactly as the
+        # archive builder leaves it. Starting from a bare row instead made a
+        # genuinely empty first second (no trade in [T, T+1s)) delete the
+        # column entirely, and the derived blocks then raised KeyError. NaN is
+        # the model-allowed per-feature missingness handled by the fitted
+        # median imputation; it is NOT zero-fill and does not fabricate events.
+        row: dict[str, Any] = {
+            "ts": target_open,
+            "target_ms": target_ms,
+            **empty_window_template(),
+        }
 
         # 1. Binance direction windows from received aggregate trades.
         for feed_name in ("binance_spot", "binance_um"):
@@ -189,11 +200,14 @@ class V1DirectionStage:
             if buffer is None:
                 reasons.append(f"LITEA_FEED_NOT_CONFIGURED: {feed_name}")
                 continue
-            row.update(
-                binance_window_features(
-                    _events(buffer, target_ns, cutoff_ns, freeze_ns), target_ms, feed_name
-                )
-            )
+            events = _events(buffer, target_ns, cutoff_ns, freeze_ns)
+            if events.empty:
+                # Acquisition genuinely produced nothing for this venue over
+                # [T-15m, T+5s) — a source failure, not per-feature missingness.
+                reasons.append(f"LITEA_NO_EVENTS_RECEIVED: {feed_name}")
+                continue
+            row.update(binance_window_features(events, target_ms, feed_name))
+
         if "binance_spot_t5_w005_return_bps" in row:
             row.update(binance_cross_fields(row))
 
