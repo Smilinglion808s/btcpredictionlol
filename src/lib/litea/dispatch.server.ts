@@ -286,8 +286,8 @@ export async function dispatchLiteaDecision(
   const guard = async (): Promise<boolean> => {
     const verdict = evaluateLiteaDispatch(row, {
       nowMs: deps.now(),
-      executionEnabled: liteaServerExecutionEnabled(),
-      allowedModels: liteaEffectiveAllowlist(),
+      executionEnabled: (deps.isEnabledNow ?? liteaServerExecutionEnabled)(),
+      allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
       alreadySent: false,
       transportDeadlineMs: args.transportDeadlineMs,
     });
