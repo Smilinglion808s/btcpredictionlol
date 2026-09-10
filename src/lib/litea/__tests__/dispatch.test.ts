@@ -77,8 +77,11 @@ function harness(opts: {
       return { delivered: opts.accept === false ? 0 : 1 };
     },
     async settle(entry) {
+      const row = table.get(entry.dedupeKey);
+      const applied = !!row && row.state === "PENDING" && row.owner === entry.owner;
       settled.push(entry);
-      table.set(entry.dedupeKey, { state: entry.status, owner: null });
+      if (applied) table.set(entry.dedupeKey, { state: entry.status, owner: null });
+      return { applied };
     },
   };
   return { deps, reserved, settled, received, table };

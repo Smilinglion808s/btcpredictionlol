@@ -71,10 +71,15 @@ function harness(opts: { failFirst?: boolean; ambiguous?: boolean } = {}) {
       return { delivered: 1 };
     },
     async settle(entry) {
+      // Conditional on owner AND still-PENDING, and the caller is told
+      // whether anything was actually amended.
       const row = rows.get(entry.dedupeKey);
-      if (!row || row.owner !== entry.owner) return; // only the owner settles
+      if (!row || row.owner !== entry.owner || row.state !== "PENDING") {
+        return { applied: false };
+      }
       row.state = entry.status;
       row.owner = null;
+      return { applied: true };
     },
   };
 
