@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -45,8 +46,14 @@ def main() -> None:
     verified: dict[str, str] = {}
     for relative, expected in sorted(manifest.items()):
         key = f"datasets/lite-a-floor4-top10-r1/{relative}"
-        body = remote._get(key, required=True)  # noqa: SLF001 - verification path
-        actual = hashlib.sha256(body or b"").hexdigest()
+        actual = ""
+        for attempt in range(6):
+            body = remote._get(key, required=True)  # noqa: SLF001 - verification path
+            actual = hashlib.sha256(body or b"").hexdigest()
+            if actual == expected:
+                break
+            # A stale CDN copy is retried, never accepted.
+            time.sleep(5 * (attempt + 1))
         if actual != expected:
             raise SystemExit(f"READBACK_MISMATCH: {relative} {expected} != {actual}")
         verified[relative] = actual
