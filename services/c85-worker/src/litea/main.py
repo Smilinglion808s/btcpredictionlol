@@ -270,12 +270,20 @@ class LiteAService:
             # unscored until they are genuinely recovered, and nothing about
             # the gap is assumed away in the meantime.
             block = str(self.worker.external_scoring_block or "")
-            if "LITEA_SOURCE_GAP" in block or "LITEA_STARTUP_BRIDGE_FAILED" in block:
+            retryable = "LITEA_SOURCE_GAP" in block or "LITEA_STARTUP_BRIDGE_FAILED" in block
+            if retryable and time.time() >= self._bridge_retry_after:
                 try:
                     report = await asyncio.to_thread(self.bridge.run_until_current)
                     print(f"[{MODEL_ID}] bridge retry: {report}", flush=True)
                 except Exception as exc:  # noqa: BLE001
+                    report = {"gap": f"{type(exc).__name__}: {exc}"}
                     print(f"[{MODEL_ID}] bridge retry failed: {exc}", flush=True)
+                # A rate-limit ban is only made longer by retrying inside it,
+                # so back off for minutes rather than seconds.
+                gap = str((report or {}).get("gap") or "")
+                self._bridge_retry_after = time.time() + (
+                    300.0 if "RATE_LIMITED" in gap else 60.0
+                )
 
     def drain_settlements(self) -> int:
         """Produce official outcomes, then apply every unconsumed one.
