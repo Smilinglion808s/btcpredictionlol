@@ -1014,8 +1014,22 @@ class FeedRegistry:
     # dead even though its handshake succeeded, and REST takes over.
     WS_GRACE_NS = 20 * NS
 
-    def __init__(self, env: dict[str, str]) -> None:
+    #: Version 1 needs exactly these. Passing them keeps the process from
+    #: spending its shared request budget — and its ban risk — on trade streams
+    #: no selected model reads. `None` preserves the legacy full set.
+    V1_FEEDS = (
+        "binance_spot",
+        "binance_um",
+        "binance_1m",
+        "binance_usdcusdt_1m",
+        "binance_index",
+        "binance_cm_1m",
+        "kalshi_markets",
+    )
+
+    def __init__(self, env: dict[str, str], only: Iterable[str] | None = None) -> None:
         self.env = env
+        self.only = None if only is None else set(only)
         spot_ws = env.get("BINANCE_SPOT_WS", "wss://stream.binance.com:9443/stream")
         um_ws = env.get("BINANCE_UM_WS", "wss://fstream.binance.com/stream")
         cm_ws = env.get("BINANCE_CM_WS", "wss://dstream.binance.com/stream")
@@ -1191,7 +1205,8 @@ class FeedRegistry:
 
     def missing(self, at_ns: int | None = None) -> list[str]:
         at_ns = at_ns or now_ns()
-        return [name for name in self.REQUIRED if not self.buffers[name].is_fresh(at_ns)]
+        required = self.REQUIRED if self.only is None else tuple(sorted(self.only))
+        return [name for name in required if not self.buffers[name].is_fresh(at_ns)]
 
     def ready(self, at_ns: int | None = None) -> bool:
         return not self.missing(at_ns)
