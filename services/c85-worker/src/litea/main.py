@@ -214,11 +214,14 @@ class LiteAService:
     def snapshot(self) -> dict:
         report = self.worker.snapshot()
         report["stage"] = "SHADOW_LOGGING"
-        report["training"] = {
-            "rows": self.state.cursors.training_rows,
-            "last_target": self.state.cursors.training_last_target,
-            "sha256": self.state.cursors.training_sha256,
-        }
+        # Read under the same lock as every cursor mutation, so a heartbeat can
+        # never report a row count from one fit and a hash from another.
+        with self.worker.state_lock:
+            report["training"] = {
+                "rows": self.state.cursors.training_rows,
+                "last_target": self.state.cursors.training_last_target,
+                "sha256": self.state.cursors.training_sha256,
+            }
         report["feeds"] = self.feeds.watermarks()
         report["artifact_restore"] = self.restore_report
         report["startup_bridge"] = self.bridge.report
