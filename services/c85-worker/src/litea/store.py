@@ -91,9 +91,9 @@ def target_row(
 
         "feature_order_sha256": FEATURE_ORDER_SHA256,
         "features": {
-            "direction60": packet.as_engine_features(),
-            "lite_a": engine_output,
-            "daily_floor": guard_output,
+            "direction60": _jsonable(packet.as_engine_features()),
+            "lite_a": _jsonable(engine_output),
+            "daily_floor": _jsonable(guard_output),
             "input_valid": bool(packet.input_valid),
             "blockers": packet.blockers or None,
             "model_id": MODEL_ID,
