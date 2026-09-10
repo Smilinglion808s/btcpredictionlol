@@ -197,9 +197,11 @@ def build(start: str, end: str) -> pd.DataFrame:
 
 def _minute(frame: pd.DataFrame, open_ms: int) -> pd.Series | None:
     try:
-        return frame.loc[open_ms]
+        row = frame.loc[open_ms].copy()
     except KeyError:
         return None
+    row["open_ms"] = open_ms
+    return row
 
 
 def _target_row(
