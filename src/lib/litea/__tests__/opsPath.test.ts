@@ -36,12 +36,16 @@ const outboxRequest = {
  * Minimal in-memory stand-in for the service client. Records every write and
  * serves the COMMITTED row back — that is what the dispatch path must use.
  */
-function fakeDb(persisted?: Record<string, unknown> | null) {
+function fakeDb(
+  persisted?: Record<string, unknown> | null,
+  opts: { ownerUpdateMatches?: boolean } = {},
+) {
   const rpcCalls: any[] = [];
   const writes: Record<string, any[]> = {};
   const record = (table: string, op: string, value: unknown) => {
     (writes[table] ??= []).push({ op, value });
   };
+  const matched = opts.ownerUpdateMatches !== false;
   const client: any = {
     rpc: async (name: string, args: any) => {
       rpcCalls.push({ name, args });
@@ -61,6 +65,11 @@ function fakeDb(persisted?: Record<string, unknown> | null) {
           record(table, "update", value);
           const eq: any = () => eq;
           eq.eq = eq;
+          // The owner-and-PENDING conditional write reports affected rows.
+          eq.select = async () => ({
+            data: matched ? [{ dedupe_key: "fake-key" }] : [],
+            error: null,
+          });
           // Awaitable at any depth of `.eq()` chaining.
           eq.then = (resolve: any) => resolve({ error: null });
           return eq;
@@ -78,6 +87,7 @@ function fakeDb(persisted?: Record<string, unknown> | null) {
   };
   return { client, rpcCalls, writes };
 }
+
 
 afterEach(() => {
   delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
