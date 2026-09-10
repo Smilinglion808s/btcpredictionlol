@@ -117,6 +117,13 @@ class ReferenceBuffer(_BaseBuffer):
     retain_ms: int = 10 * MINUTE_MS
     credentials_missing: bool = False
     freshness_budget_ns: int = 10 * NS
+    #: How an approximation built from these ticks is described. Irregular
+    #: TRADE prints are not the index's evenly spaced per-second readings, and
+    #: the difference is disclosed on every decision rather than smoothed over.
+    approx_method: str = "causal_approx_60s_mean"
+    #: Venue event ids already stored, so a repeated print is never counted
+    #: twice and a replayed frame cannot change a second's chosen value.
+    seen_events: set = field(default_factory=set)
 
     def append(
         self,
@@ -124,6 +131,7 @@ class ReferenceBuffer(_BaseBuffer):
         value: Any,
         receipt_ns: int,
         expires_at_ms: int | None = None,
+        event_id: Any = None,
     ) -> bool:
         price = _finite_price(value)
         stamp = _int(source_ts_ms)
@@ -131,7 +139,14 @@ class ReferenceBuffer(_BaseBuffer):
             return False
         if expires_at_ms is not None and expires_at_ms <= stamp:
             return False  # already expired when it was observed
-        self.ticks.append((stamp, price, int(receipt_ns), expires_at_ms))
+        if event_id is not None:
+            key = (self.source, str(event_id))
+            if key in self.seen_events:
+                return False
+            self.seen_events.add(key)
+            if len(self.seen_events) > 20_000:
+                self.seen_events.clear()
+        self.ticks.append((stamp, price, int(receipt_ns), expires_at_ms, event_id))
         self.last_event_ns = max(self.last_event_ns, stamp * 1_000_000)
         self.last_receipt_ns = max(self.last_receipt_ns, int(receipt_ns))
         self.connected_since_ns = self.connected_since_ns or int(receipt_ns)
@@ -209,17 +224,20 @@ class ReferenceBuffer(_BaseBuffer):
             }
 
         usable = [
-            (ts, value, receipt, expires)
-            for ts, value, receipt, expires in self.ticks
-            if window_start < ts <= target_ms
-            and receipt <= freeze_ns
-            and (expires is None or expires > target_ms)
+            row
+            for row in self.ticks
+            if window_start < row[0] <= target_ms
+            and row[2] <= freeze_ns
+            and (row[3] is None or row[3] > target_ms)
         ]
         if not usable:
             return {**base, "usable": False, "reason": "no_ticks_in_window"}
-        # De-duplicate on source second; the last received wins.
-        by_second: dict[int, tuple[int, float, int, int | None]] = {}
-        for row in sorted(usable, key=lambda item: (item[0], item[2])):
+        # One value per SOURCE second, chosen deterministically by source time
+        # then venue event id. Receipt order is deliberately not the tiebreak:
+        # a frame that arrives late must not rewrite a second that was already
+        # settled by a later-stamped print.
+        by_second: dict[int, tuple] = {}
+        for row in sorted(usable, key=lambda item: (item[0], str(item[4]))):
             by_second[row[0] // 1000] = row
         rows = sorted(by_second.values(), key=lambda item: item[0])
         count = len(rows)
@@ -246,7 +264,7 @@ class ReferenceBuffer(_BaseBuffer):
             **detail,
             "usable": True,
             "value": round(mean, 2),
-            "method": "causal_approx_60s_mean",
+            "method": self.approx_method,
         }
 
 
@@ -524,3 +542,170 @@ class ChainlinkStreamsCollector:
                 except Exception as exc:  # noqa: BLE001
                     self.buffer.error = f"{type(exc).__name__}: {exc}"
                 await asyncio.sleep(self.poll_s)
+
+
+# --------------------------------------------------------------------------- #
+# FREE public spot references: Coinbase Exchange and Kraken
+# --------------------------------------------------------------------------- #
+# Neither is the venue's own index. Both are ordinary public BTC/USD TRADE
+# streams, reachable with no account, no key and no purchase, and both are used
+# ONLY as a disclosed ESTIMATE of the opening boundary when the official
+# same-contract strike is absent. Trade prints arrive irregularly, so the value
+# they produce is a causal mean of the received prints in (T-60s, T] and is
+# labelled `causal_approx_60s_trade_mean` — never presented as the exact
+# 60-reading index average the contract settles against.
+def _rfc3339_ms(text: Any) -> int | None:
+    """Milliseconds for an RFC3339 stamp, as both venues publish them."""
+    if not isinstance(text, str) or not text:
+        return None
+    value = text.strip()
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    from datetime import datetime
+
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        from datetime import timezone as _tz
+
+        moment = moment.replace(tzinfo=_tz.utc)
+    return int(moment.timestamp() * 1000)
+
+
+class CoinbaseMatchesCollector:
+    """BTC-USD trades from Coinbase Exchange's PUBLIC market-data websocket.
+
+    `wss://ws-feed.exchange.coinbase.com` is documented as publicly available
+    without authentication (the `ws-direct` host is the one that is not), and
+    the `matches` channel carries each trade's own source `time`. `heartbeat`
+    is subscribed alongside it so a silent market is distinguishable from a
+    dead socket.
+
+    The first frame after subscribing is a `last_match`: a HISTORICAL print,
+    stored with its real source time and its real receipt instant. It is one
+    tick, and the window's gap checks refuse to treat it as sixty seconds of
+    live coverage.
+    """
+
+    SOURCE = "coinbase_btcusd"
+    PRODUCT = "BTC-USD"
+
+    def __init__(
+        self, buffer: ReferenceBuffer, ws_url: str = "wss://ws-feed.exchange.coinbase.com"
+    ) -> None:
+        self.buffer = buffer
+        self.ws_url = ws_url
+        self.buffer.approx_method = "causal_approx_60s_trade_mean"
+        self.buffer.credentials_missing = False
+        self.heartbeats = 0
+
+    def ingest(self, frame: dict[str, Any], receipt_ns: int) -> bool:
+        if not isinstance(frame, dict):
+            return False
+        kind = frame.get("type")
+        if kind == "heartbeat":
+            self.heartbeats += 1
+            self.buffer.last_receipt_ns = max(self.buffer.last_receipt_ns, int(receipt_ns))
+            return False
+        if kind not in ("match", "last_match"):
+            return False
+        if frame.get("product_id") != self.PRODUCT:
+            return False
+        return self.buffer.append(
+            _rfc3339_ms(frame.get("time")),
+            frame.get("price"),
+            receipt_ns,
+            event_id=frame.get("trade_id"),
+        )
+
+    async def run(self) -> None:
+        subscribe = json.dumps(
+            {
+                "type": "subscribe",
+                "product_ids": [self.PRODUCT],
+                "channels": ["matches", "heartbeat"],
+            }
+        )
+        while True:
+            try:
+                async with websockets.connect(self.ws_url, ping_interval=10) as socket:
+                    self.buffer.transport = "websocket"
+                    self.buffer.error = None
+                    await socket.send(subscribe)
+                    async for raw in socket:
+                        with contextlib.suppress(Exception):
+                            self.ingest(json.loads(raw), now_ns())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                self.buffer.disconnects += 1
+                self.buffer.error = f"{type(exc).__name__}: {exc}"
+                await asyncio.sleep(2.0)
+
+
+class KrakenTradeCollector:
+    """BTC/USD trades from Kraken's PUBLIC spot websocket v2 `trade` channel.
+
+    `wss://ws.kraken.com/v2` needs no token for public channels. Each update
+    carries a `data` BATCH; every element has its own RFC3339 `timestamp`,
+    `price` and `trade_id`, and each is stored individually.
+    """
+
+    SOURCE = "kraken_btcusd"
+    SYMBOL = "BTC/USD"
+
+    def __init__(
+        self, buffer: ReferenceBuffer, ws_url: str = "wss://ws.kraken.com/v2"
+    ) -> None:
+        self.buffer = buffer
+        self.ws_url = ws_url
+        self.buffer.approx_method = "causal_approx_60s_trade_mean"
+        self.buffer.credentials_missing = False
+
+    def ingest(self, frame: dict[str, Any], receipt_ns: int) -> bool:
+        if not isinstance(frame, dict) or frame.get("channel") != "trade":
+            return False
+        if frame.get("type") not in ("update", "snapshot"):
+            return False
+        rows = frame.get("data")
+        if not isinstance(rows, list):
+            return False
+        stored = False
+        for row in rows:
+            if not isinstance(row, dict) or row.get("symbol") != self.SYMBOL:
+                continue
+            stored = (
+                self.buffer.append(
+                    _rfc3339_ms(row.get("timestamp")),
+                    row.get("price"),
+                    receipt_ns,
+                    event_id=row.get("trade_id"),
+                )
+                or stored
+            )
+        return stored
+
+    async def run(self) -> None:
+        subscribe = json.dumps(
+            {
+                "method": "subscribe",
+                "params": {"channel": "trade", "symbol": [self.SYMBOL]},
+            }
+        )
+        while True:
+            try:
+                async with websockets.connect(self.ws_url, ping_interval=10) as socket:
+                    self.buffer.transport = "websocket"
+                    self.buffer.error = None
+                    await socket.send(subscribe)
+                    async for raw in socket:
+                        with contextlib.suppress(Exception):
+                            self.ingest(json.loads(raw), now_ns())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                self.buffer.disconnects += 1
+                self.buffer.error = f"{type(exc).__name__}: {exc}"
+                await asyncio.sleep(2.0)

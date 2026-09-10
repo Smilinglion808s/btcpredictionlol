@@ -23,8 +23,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
-INPUT_POLICY_VERSION = "strike-fallbacks-r1"
-PRIORITY = ("official", "cf_brti", "chainlink_streams")
+#: Free public spot backups. Decisions made under this policy are versioned
+#: separately from the earlier paid-reference policy (`strike-fallbacks-r1`),
+#: so an audit can always tell which sources a frozen row could have used.
+INPUT_POLICY_VERSION = "strike-fallbacks-free-r1"
+PRIORITY = ("official", "coinbase_btcusd", "kraken_btcusd")
 
 
 def _official(market: dict[str, Any] | None) -> float | None:
@@ -68,7 +71,7 @@ def choose_strike(
             else ("market_not_received" if not market else "no_floor_strike")
         )
 
-    for name in ("cf_brti", "chainlink_streams"):
+    for name in PRIORITY[1:]:
         buffer = references.get(name)
         if buffer is None:
             failures[name] = "not_configured"

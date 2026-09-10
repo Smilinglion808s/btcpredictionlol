@@ -54,7 +54,7 @@ from ..features import (
 )
 from ..packets import _events, _kline_row
 from .reconstruct import empty_window_template
-from .strike_policy import choose_strike
+from .strike_policy import PRIORITY, choose_strike
 
 
 NS = 1_000_000_000
@@ -263,7 +263,7 @@ class V1DirectionStage:
         )
         strike_policy = choose_strike(
             market,
-            {name: self._buffer(name) for name in ("cf_brti", "chainlink_streams")},
+            {name: self._buffer(name) for name in PRIORITY[1:]},
             target_ms,
             freeze_ns,
             official_conflict=bool(conflict),

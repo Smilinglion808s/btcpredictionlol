@@ -317,62 +317,19 @@ def test_a_report_that_expires_before_the_boundary_is_not_used():
 # --------------------------------------------------------------------------- #
 # priority and provenance
 # --------------------------------------------------------------------------- #
-def references(cf_ok: bool = True, link_ok: bool = True) -> dict:
-    cf, _ = cf_buffer(ticks=60 if cf_ok else 0, price=68_000.0)
-    link = ReferenceBuffer("chainlink_streams", source="chainlink_streams")
-    collector = ChainlinkStreamsCollector(link, "https://x", FEED_ID, "u", "s")
-    if link_ok:
-        for index in range(60):
-            second = TARGET_MS // 1000 - (59 - index)
-            collector.ingest(chainlink_body(second, second + 60, 68_500.0), second * NS)
-    return {"cf_brti": cf, "chainlink_streams": link}
-
-
-def test_official_strike_wins_over_both_references():
-    record = choose_strike(market(77_313.34), references(), TARGET_MS, FREEZE_NS)
-    assert record["strike"] == 77_313.34
-    assert record["strike_source"] == "official" and record["estimated"] is False
-    assert record["input_policy_version"] == INPUT_POLICY_VERSION
-
-
-def test_cf_is_preferred_over_chainlink_when_the_strike_is_missing():
-    record = choose_strike(market(None), references(), TARGET_MS, FREEZE_NS)
-    assert record["strike_source"] == "cf_brti" and record["estimated"] is True
-    assert record["strike"] == 68_000.0
-    assert record["source_failures"]["official"] == "no_floor_strike"
-    assert record["value_receipt_ns"] and record["event_window"]
-
-
-def test_chainlink_rescues_the_boundary_when_cf_is_unusable():
+# Selection is no longer made from these paid references: the shipped policy is
+# `strike-fallbacks-free-r1` (official > Coinbase > Kraken), covered in
+# tests/test_litea_strike_free_fallbacks.py. The decoding and window rules above
+# stay under test because the code remains in the tree for provenance.
+def test_the_paid_references_are_not_in_the_shipped_priority():
+    assert INPUT_POLICY_VERSION == "strike-fallbacks-free-r1"
     record = choose_strike(
-        market(None), references(cf_ok=False), TARGET_MS, FREEZE_NS
-    )
-    assert record["strike_source"] == "chainlink_streams"
-    assert record["strike"] == 68_500.0
-    assert record["source_failures"]["cf_brti"] == "no_ticks_in_window"
-
-
-def test_all_sources_unusable_is_an_honest_refusal():
-    record = choose_strike(
-        market(None), references(cf_ok=False, link_ok=False), TARGET_MS, FREEZE_NS
+        market(None),
+        {"cf_brti": cf_buffer()[0]},
+        TARGET_MS,
+        FREEZE_NS,
     )
     assert record["strike"] is None and record["strike_source"] is None
-    assert set(record["source_failures"]) == {"official", "cf_brti", "chainlink_streams"}
-
-
-def test_official_conflict_refuses_rather_than_falling_back():
-    record = choose_strike(
-        market(None), references(), TARGET_MS, FREEZE_NS, official_conflict=True
-    )
-    assert record["strike"] is None and record["refused"] == "official_paths_disagree"
-
-
-def test_a_late_official_strike_is_audit_only():
-    record = choose_strike(market(None), references(), TARGET_MS, FREEZE_NS)
-    audit = official_difference(record, 68_010.0)
-    assert audit["audit_only"] is True and audit["difference"] == -10.0
-    # The frozen record is untouched by the audit.
-    assert record["strike"] == 68_000.0 and record["strike_source"] == "cf_brti"
 
 
 # --------------------------------------------------------------------------- #
