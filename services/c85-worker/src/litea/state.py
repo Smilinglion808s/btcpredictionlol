@@ -43,10 +43,18 @@ class Cursors:
     consumed_settlements: list[str] = field(default_factory=list)
     #: last observed feed receipt watermarks, for honest restart reporting
     source_watermarks: dict[str, Any] = field(default_factory=dict)
-    #: rolling training frame identity the last fit consumed
+    #: identity of the LIVE rolling training frame on disk. This is what a
+    #: restart verifies its restored frame against, so it must always describe
+    #: the current file — never a copy that a fit happened to consume.
     training_sha256: str | None = None
     training_rows: int = 0
     training_last_target: str | None = None
+    #: identity of the frame the last fit actually consumed. Kept separately
+    #: from the live cursors above, because a fit runs on an immutable copy and
+    #: the live frame legitimately moves on while it runs.
+    fit_input_sha256: str | None = None
+    fit_input_rows: int = 0
+    fit_input_last_target: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +66,9 @@ class Cursors:
             "training_sha256": self.training_sha256,
             "training_rows": self.training_rows,
             "training_last_target": self.training_last_target,
+            "fit_input_sha256": self.fit_input_sha256,
+            "fit_input_rows": self.fit_input_rows,
+            "fit_input_last_target": self.fit_input_last_target,
         }
 
     @classmethod
@@ -71,6 +82,9 @@ class Cursors:
             training_sha256=payload.get("training_sha256"),
             training_rows=int(payload.get("training_rows") or 0),
             training_last_target=payload.get("training_last_target"),
+            fit_input_sha256=payload.get("fit_input_sha256"),
+            fit_input_rows=int(payload.get("fit_input_rows") or 0),
+            fit_input_last_target=payload.get("fit_input_last_target"),
         )
 
 

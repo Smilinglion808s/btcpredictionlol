@@ -398,11 +398,14 @@ class LiteAWorker:
             return TrainingFrame(self.training.frame.copy(deep=True))
 
     def install_fit_cursors(self, training: TrainingFrame, last: Any = None) -> None:
-        """Record what the fit actually consumed, coherently.
+        """Record what the fit actually consumed — without rewriting the live cursors.
 
-        The FITTED FRAME's identity is installed — not the live frame's, which
-        may already have moved on. The cursors then describe a frame that
-        genuinely produced these heads.
+        The fit ran on an immutable copy, and the live frame will normally have
+        grown while it ran. The FIT-INPUT identity therefore goes in its own
+        cursors, and the live `training_*` cursors keep describing the frame
+        that is actually on disk: a restart verifies its restored frame against
+        those, so a stale copy's hash there would fail the restore check for no
+        reason.
         """
         with self.state_lock:
             if last is not None:
@@ -410,9 +413,13 @@ class LiteAWorker:
                 self.state.cursors.last_fit_result = (
                     "FITTED" if last.fitted else (last.reason or "")
                 )
-            self.state.cursors.training_sha256 = training.sha256
-            self.state.cursors.training_rows = training.rows
-            self.state.cursors.training_last_target = training.last_target
+            self.state.cursors.fit_input_sha256 = training.sha256
+            self.state.cursors.fit_input_rows = training.rows
+            self.state.cursors.fit_input_last_target = training.last_target
+            # Live identity is re-read from the live frame, never regressed to
+            # the snapshot's.
+            self.state.cursors.training_rows = self.training.rows
+            self.state.cursors.training_last_target = self.training.last_target
             self.state.save(self.state_path)
 
     # -- pre-boundary ----------------------------------------------------------
@@ -545,10 +552,6 @@ class LiteAWorker:
         except HeadUnavailable:
             head = None
 
-        observed = datetime.now(timezone.utc)
-        if observed < target + timedelta(seconds=5):
-            observed = target + timedelta(seconds=5)
-
         # Sole-writer validity is settled BEFORE the pair is touched, never
         # after. Scoring mutates shared state: the engine's rank queue advances
         # and the guard reserves the day's exposure. If the lease were only
@@ -569,6 +572,16 @@ class LiteAWorker:
             lease = renewed
             lease_status = self.lease_state(lease, time.time_ns())
 
+        # A GRANT IS NOT ENOUGH. A renewal can come back granted but already
+        # expired, or with no parsable expiry at all. Either way this process
+        # cannot show it owns the boundary for the duration of the decision, so
+        # the pair is left exactly as it was and no row is written over the
+        # owner's interval.
+        if lease_status != "USABLE":
+            return BoundaryOutcome(
+                target, "MISSED", f"lease not evidenced ({lease_status.lower()})"
+            )
+
         # ONE critical section for the whole decision: the engine's rank
         # advance, the guard's reservation, the watermark cursor, the local
         # paired save and the checkpoint payload. A settlement thread cannot
@@ -576,6 +589,14 @@ class LiteAWorker:
         # a digest of a half-advanced pair. No network call is made while the
         # lock is held.
         with self.state_lock:
+            # Observed INSIDE the section, after any settlement that got in
+            # first. Taken before the renewal or the lock wait, it could name
+            # an instant earlier than a settlement that has since advanced the
+            # pair's clock, and the decision would be refused as out of order
+            # for no real reason.
+            observed = datetime.now(timezone.utc)
+            if observed < target + timedelta(seconds=5):
+                observed = target + timedelta(seconds=5)
             engine_output = self.state.engine.decide(
                 target=target,
                 ticker=ticker or label,
