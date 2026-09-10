@@ -7,8 +7,9 @@ type Stats = Record<string, any>;
  *
  * Deliberate omissions: no bankroll, no stake, no execution toggle, no
  * artifact paths, no feature internals. The status badge is driven by the
- * server’s phase, which needs a live heartbeat, current daily model and a
- * a fresh daily head or a saved research row never reads as live.
+ * server's phase, which needs a live heartbeat, a scoring-ready worker, a
+ * daily model valid right now, and a fresh genuinely scored record. A fresh
+ * daily model alone, or a saved research row, never reads as live.
  */
 
 const PHASES = {

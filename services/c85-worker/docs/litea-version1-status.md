@@ -108,9 +108,17 @@ Environment it needs:
 
 | Key | Purpose |
 | --- | --- |
-| `LITEA_OPS_URL` | signed ops endpoint, `https://<host>/api/public/hooks/c85-ops` |
-| `C85_GATEWAY_SECRET` | HMAC key for that endpoint (already stored, never in an image) |
-| `WORKER_ID` | heartbeat identity for this instance |
+| `C85_GATEWAY_URL` | signed gateway endpoint, `https://<host>/api/public/hooks/c85` |
+| `C85_OPS_URL` | signed ops endpoint, `https://<host>/api/public/hooks/c85-ops`; derived from `C85_GATEWAY_URL` when unset |
+| `C85_GATEWAY_SECRET` | HMAC key for those endpoints (already stored, never in an image) |
+| `C85_WORKER_ID` | heartbeat identity for this instance (default `c85-worker-1`) |
+| `C85_MODEL_VERSION` | `lite-a-floor4-top10-r1` |
+| `C85_BUILD_SHA` | optional; reported in the heartbeat and matched against `LITEA_REQUIRED_BUILD_SHA` on the site when that is set |
+
+Verified against `src/config.py::load_settings` at this commit: the worker reads
+`C85_OPS_URL` / `C85_WORKER_ID`. There is no `LITEA_OPS_URL` or `WORKER_ID` in
+the code; the earlier table was wrong. `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` must NOT be set — startup fails closed if they are.
 
 No Supabase URL, anon key or service-role key is given to the worker: every
 read and write goes through the signed endpoint, and every artifact goes
