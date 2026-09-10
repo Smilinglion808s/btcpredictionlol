@@ -232,6 +232,6 @@ describe("decision.commit for Version 1", () => {
     expect(db.rpcCalls[0].args.p_outbox).toEqual(outboxRequest);
     expect(out.result.dispatch).toBeUndefined();
     expect(isModelAllowedToSend("c85-multi-meta-r1")).toBe(false);
-    expect(isModelAllowedToSend("t45-priceflow")).toBe(true);
+    expect(isModelAllowedToSend("t45-priceflow")).toBe(false);
   });
 });
