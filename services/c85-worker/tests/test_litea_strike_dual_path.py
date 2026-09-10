@@ -279,3 +279,36 @@ def test_backup_shares_the_venue_backoff_and_cannot_out_run_it():
     finally:
         LIMITER._banned_until.clear()
         LIMITER._next_at.clear()
+
+
+def test_no_usable_strike_from_either_path_is_reported_as_no_source():
+    """Both paths answered, neither carried a strike: honest, not 'chosen'."""
+    buffer = MarketBuffer("kalshi_markets")
+    ticker = "KXBTC15M-T"
+    for source in ("primary", "backup"):
+        buffer.record(TARGET_MS, {**_market(ticker, None), "receipt_ns": 10}, source=source)
+    diag = buffer.diagnostics(TARGET_MS, 100)
+    assert diag["source_chosen"] is None
+    assert diag["no_source_reason"] == "no_strike_by_freeze"
+    assert diag["same_contract_verified"] is None
+
+
+def test_stage_refuses_a_conflicted_boundary_with_its_own_reason():
+    import datetime as dt
+
+    from src.litea.stage import V1DirectionStage
+
+    buffer = MarketBuffer("kalshi_markets")
+    ticker = "KXBTC15M-T"
+    buffer.record(TARGET_MS, {**_market(ticker, 77_000.0), "receipt_ns": 10}, source="primary")
+    buffer.record(TARGET_MS, {**_market(ticker, 79_000.0), "receipt_ns": 20}, source="backup")
+
+    class Feeds:
+        markets = buffer
+
+    stage = V1DirectionStage(Feeds())
+    target = dt.datetime.fromtimestamp(TARGET_MS / 1000, dt.timezone.utc)
+    built = stage.build(target, (TARGET_MS + 5_000) * 1_000_000)
+    conflict = [r for r in built.reasons if r.startswith("LITEA_FLOOR_STRIKE_CONFLICT")]
+    assert conflict, built.reasons
+    assert not any(r.startswith("LITEA_MARKET_NOT_LISTED_BY_FREEZE") for r in built.reasons)
