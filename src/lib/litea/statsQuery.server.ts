@@ -284,12 +284,14 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
       live.unavailable += 1;
     else live.confidence_abstains += 1;
 
-    if (Number(r.final_side ?? 0) === 0) continue;
+    const side = Number(r.final_side ?? 0);
+    if (side !== 1 && side !== -1) continue; // abstains are never graded
     live.calls += 1;
-    const outcome = settlements.get(new Date(String(r.target_open_utc)).toISOString()) ?? null;
-    if (outcome === "WIN") live.wins += 1;
-    else if (outcome === "LOSS") live.losses += 1;
-    else if (outcome !== "PUSH") live.pending += 1;
+    const key = `${String(r.ticker ?? "")}@${new Date(String(r.target_open_utc)).toISOString()}`;
+    const label = settlements.get(key) ?? null;
+    if (label == null) live.pending += 1;
+    else if (side === label) live.wins += 1;
+    else live.losses += 1;
   }
   const graded = live.wins + live.losses;
   live.win_rate = graded > 0 ? live.wins / graded : null;
