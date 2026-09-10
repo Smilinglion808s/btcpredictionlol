@@ -273,6 +273,16 @@ class MarketBuffer(_BaseBuffer):
     retain: int = 192
 
     def record(self, target_ms: int, market: dict[str, Any]) -> None:
+        # A contract is LISTED before it opens but its floor_strike is only
+        # published AT the open, so an early strike-less listing must never
+        # overwrite the record that actually carries the strike.
+        existing = self.markets.get(target_ms)
+        if (
+            existing is not None
+            and existing.get("floor_strike") is not None
+            and market.get("floor_strike") is None
+        ):
+            return
         self.markets[target_ms] = market
         self.last_event_ns = max(self.last_event_ns, target_ms * 1_000_000)
         self.last_receipt_ns = max(self.last_receipt_ns, int(market["receipt_ns"]))
@@ -880,6 +890,7 @@ class FeedRegistry:
             self._tasks.append(asyncio.create_task(collector.run_ws()))
             self._tasks.append(asyncio.create_task(collector.run_rest()))
         self._tasks.append(asyncio.create_task(self._kalshi.run()))
+        self._tasks.append(asyncio.create_task(self._strikes.run()))
 
     async def stop(self) -> None:
         for task in self._tasks:
