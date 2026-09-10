@@ -35,12 +35,12 @@ from src.litea.state import Cursors, LiteAState  # noqa: E402
 from src.litea.training import COLUMNS, TrainingFrame  # noqa: E402
 
 
-def historical_frame(audit: Path) -> pd.DataFrame:
+def historical_frame(audit: Path, guard_audit: Path) -> pd.DataFrame:
     features = pd.read_csv(
         audit / "c85_research_inputs/c71/research_c71/full/DIRECTION_FEATURES_CM_BOTH.csv.gz"
     )
     features["ts"] = pd.to_datetime(features["ts"], utc=True)
-    ledger = pd.read_csv(audit / "lite_a_confidence_exception/output/decision_ledger.csv.gz")
+    ledger = pd.read_csv(guard_audit / "decision_ledger.csv.gz")
     ledger["ts"] = pd.to_datetime(ledger["ts"], utc=True)
     ledger["settlement_ts"] = pd.to_datetime(ledger["settlement_ts"], utc=True)
     ledger["input_valid"] = ledger["base_reason"].ne("INPUT_UNAVAILABLE")
@@ -127,7 +127,7 @@ def main() -> None:
     root = Path(sys.argv[4])           # artifact root, e.g. /var/lib/litea
 
     frame = pd.concat(
-        [historical_frame(audit), september_frame(september)], ignore_index=True
+        [historical_frame(audit, guard_audit), september_frame(september)], ignore_index=True
     )
     training = TrainingFrame(frame)
     training_path = root / "training.parquet"
