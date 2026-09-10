@@ -268,7 +268,7 @@ class StartupBridge:
             except Exception as exc:  # noqa: BLE001
                 gap = (
                     f"LITEA_SOURCE_GAP: {chunk[0].isoformat()}..{chunk[-1].isoformat()} "
-                    f"could not be recovered ({type(exc).__name__})"
+                    f"could not be recovered ({type(exc).__name__}: {str(exc)[:160]})"
                 )
                 break
 
