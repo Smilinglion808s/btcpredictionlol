@@ -43,10 +43,34 @@ def _row(target: datetime, *, valid: bool = True) -> dict:
 class _Store:
     def __init__(self) -> None:
         self.commits: list[dict] = []
+        self.recorded: list[dict] = []
 
     def commit(self, row, checkpoint):  # noqa: ANN001
         self.commits.append(row)
         return {"ok": True}
+
+    def recorded_targets(self, from_utc, to_utc, limit=700):  # noqa: ANN001
+        return list(self.recorded)
+
+
+class _Worker:
+    """The durable-commit surface the bridge actually uses."""
+
+    def __init__(self, store: "_Store") -> None:
+        self.store = store
+        self.external_scoring_block = None
+        self.queued: list[dict] = []
+
+    def _commit(self, row, checkpoint):  # noqa: ANN001
+        try:
+            result = self.store.commit(row, checkpoint)
+        except Exception as exc:  # noqa: BLE001
+            self.queued.append(row)
+            return {"ok": False, "error": str(exc)}
+        if result.get("ok") is not True:
+            self.queued.append(row)
+            return {"ok": False, "error": "refused"}
+        return {"ok": True, "ack_ns": 1, "ack_latency_ms": 0.0}
 
 
 class _Service:
@@ -61,7 +85,7 @@ class _Service:
         self.heads = DailyHeadStore(root / "heads")
         self.store = _Store()
         self.remote = type("R", (), {"publish": lambda *a, **k: {}})()
-        self.worker = type("W", (), {"external_scoring_block": None})()
+        self.worker = _Worker(self.store)
 
     def _catch_up_fits(self):
         return []
