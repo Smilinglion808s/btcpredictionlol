@@ -57,6 +57,28 @@ def _lease_expiry_ns(lease: dict[str, Any]) -> int | None:
         moment = moment.replace(tzinfo=timezone.utc)
     return int(moment.timestamp() * NS)
 
+
+#: The concise private breakdown kept with every durable decision, so a
+#: rollout can be compared against the pre-change baseline from the record
+#: itself rather than from a log. Deliberately small, and deliberately inside
+#: the existing private `features` payload: no new public column, nothing
+#: user-visible, no raw feed contents.
+_DIAGNOSTIC_FIELDS = (
+    "freeze_offset_ms",
+    "prepare_ms",
+    "lease_reused",
+    "lease_wait_ms",
+    "lease_renewal_ms",
+    "lease_status",
+    "publication_offset_ms",
+    "commit_latency_ms",
+    "durable_ack_offset_ms",
+)
+
+
+def _timing_diagnostics(measured: dict[str, Any]) -> dict[str, Any]:
+    return {k: measured[k] for k in _DIAGNOSTIC_FIELDS if measured.get(k) is not None}
+
 #: `REQUIRED_FEEDS` is imported from the Version 1 stage so there is one
 #: definition of what this model actually consumes. The C85 aggregate readiness
 #: (market Q1, auxiliary bundles, ancestor experts) is NOT consulted, and
