@@ -89,7 +89,12 @@ class LiteAService:
             training_path=self.training_path,
             lease_ttl_seconds=self.settings.lease_ttl_seconds,
         )
-        self.scheduler = BoundaryScheduler(self.worker.on_boundary)
+        # The pre-boundary hook drains the pending queue and takes the
+        # sole-writer lease BEFORE the target opens, so the only thing left
+        # between the T+5s wake and the freeze is the freeze itself.
+        self.scheduler = BoundaryScheduler(
+            self.worker.on_boundary, prepare=self.worker.prepare_boundary
+        )
         self.bridge = StartupBridge(self)
         #: earliest wall-clock second at which a blocked bridge may retry
         self._bridge_retry_after = 0.0
@@ -184,7 +189,7 @@ class LiteAService:
         self.state.cursors.training_sha256 = training.sha256
         self.state.cursors.training_rows = training.rows
         self.state.cursors.training_last_target = training.last_target
-        self.state.save(self.state_path)
+        self._save_state()
         if results:
             try:
                 self.remote.publish(
@@ -226,7 +231,10 @@ class LiteAService:
         while True:
             report = {}
             try:
-                report = self.snapshot()
+                # The snapshot itself reads the paired state under the worker's
+                # lock; taking it in a thread keeps that read off the collector
+                # event loop too.
+                report = await asyncio.to_thread(self.snapshot)
                 # RECORDING_ONLY still arms the scheduler. Only a genuine
                 # recording blocker disarms it.
                 armed = report["readiness"] in ("LOGGING_READY", "RECORDING_ONLY")
@@ -237,14 +245,19 @@ class LiteAService:
             except Exception:  # noqa: BLE001
                 pass
             try:
-                self.store.heartbeat(
-                    readiness=report.get("readiness", "UNKNOWN"),
-                    stage="SHADOW_LOGGING",
-                    blocking_reason=report.get("blocking_reason"),
-                    progress=report,
-                    feed_freshness=self.feeds.watermarks(),
-                    next_target_utc=next_boundary().isoformat(),
-                    build_sha=self.settings.build_sha,
+                # `store.heartbeat` is a blocking HTTP round trip. Run on the
+                # event loop it stalled every websocket collector for the whole
+                # request; in a thread it cannot delay a feed receipt.
+                await asyncio.to_thread(
+                    lambda: self.store.heartbeat(
+                        readiness=report.get("readiness", "UNKNOWN"),
+                        stage="SHADOW_LOGGING",
+                        blocking_reason=report.get("blocking_reason"),
+                        progress=report,
+                        feed_freshness=self.feeds.watermarks(),
+                        next_target_utc=next_boundary().isoformat(),
+                        build_sha=self.settings.build_sha,
+                    )
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -262,7 +275,7 @@ class LiteAService:
             try:
                 outcome = await asyncio.to_thread(self.worker.reconcile_pending)
                 if outcome and outcome.get("delivered"):
-                    self.state.save(self.state_path)
+                    await asyncio.to_thread(self._save_state)
             except Exception as exc:  # noqa: BLE001
                 print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
 
@@ -288,6 +301,22 @@ class LiteAService:
                     300.0 if "RATE_LIMITED" in gap else 60.0
                 )
 
+    def _save_state(self) -> None:
+        """Serialised local persistence. Always the paired file, never a part."""
+        with self.worker.state_lock:
+            self.state.save(self.state_path)
+
+    def _settlement_checkpoint(self) -> dict:
+        """Save locally and take the checkpoint under ONE lock hold.
+
+        The payload must describe the same pair that was just written to disk;
+        building it outside the lock would let a boundary commit land in between
+        and publish a checkpoint that matches neither position.
+        """
+        with self.worker.state_lock:
+            self.state.save(self.state_path)
+            return checkpoint_payload(self.state, next_target=next_boundary())
+
     def drain_settlements(self) -> int:
         """Produce official outcomes, then apply every unconsumed one.
 
@@ -301,7 +330,7 @@ class LiteAService:
             print(f"[{MODEL_ID}] outcome poll failed: {exc}", flush=True)
         applied = self.worker.apply_settlements(self.store.pending_settlements())
         if applied:
-            self.state.save(self.state_path)
+            self._save_state()
         return applied
 
     async def settlement_loop(self) -> None:
@@ -312,10 +341,11 @@ class LiteAService:
                     # Local paired state first, then the durable checkpoint, so
                     # a crash in between replays settlements that the consumed
                     # cursor has already recorded — never double-counts them.
-                    self.state.save(self.state_path)
-                    self.backend.call(
-                        "checkpoint.append",
-                        checkpoint=checkpoint_payload(self.state, next_target=next_boundary()),
+                    # Both the snapshot and the blocking append run off the
+                    # collector event loop.
+                    checkpoint = await asyncio.to_thread(self._settlement_checkpoint)
+                    await asyncio.to_thread(
+                        lambda: self.backend.call("checkpoint.append", checkpoint=checkpoint)
                     )
                     # Newly known labels can make a due daily fit eligible.
                     await asyncio.to_thread(self._catch_up_fits)

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -35,6 +36,26 @@ from .training import TrainingFrame
 
 NS = 1_000_000_000
 CUTOFF_MS = 5_000
+
+#: A prepared lease is only reused while it still covers the whole decision,
+#: with this much slack left. Anything tighter is treated as expired and
+#: re-acquired, so sole-writer validity is never assumed.
+LEASE_SAFETY_MS = 5_000
+
+
+def _lease_expiry_ns(lease: dict[str, Any]) -> int | None:
+    """Wall-clock expiry of a granted lease, in local ns, or None if unknown."""
+    raw = lease.get("expires_at")
+    if not raw:
+        return None
+    text = str(raw).replace("Z", "+00:00")
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return int(moment.timestamp() * NS)
 
 #: `REQUIRED_FEEDS` is imported from the Version 1 stage so there is one
 #: definition of what this model actually consumes. The C85 aggregate readiness
@@ -74,6 +95,7 @@ class LiteAWorker:
         training: TrainingFrame | None = None,
         training_path: Path | None = None,
         lease_ttl_seconds: int = 60,
+        state_lock: Any = None,
     ) -> None:
         self.direction = Direction60Source(feeds)
         self.store = store
@@ -87,10 +109,20 @@ class LiteAWorker:
         self.pending_dir = self.state_path.with_name("pending")
         self.lease_ttl_seconds = lease_ttl_seconds
         self.readiness = "WARMING"
+        # Background loops now do their network I/O off the collector event
+        # loop, in worker threads. Every mutation of the paired state and every
+        # snapshot taken of it is serialised through this reentrant lock, so a
+        # heartbeat or settlement thread can never read a half-written pair or
+        # interleave with a boundary commit.
+        self.state_lock = state_lock or threading.RLock()
         # Why the last commit did or did not carry a dispatch request. Default
         # OFF: with no execution control set this stays EXECUTION_DISABLED.
         self.last_dispatch_reason = "EXECUTION_DISABLED"
         self.blocking_reason: str | None = None
+        #: Result of the pre-boundary preparation for ONE target: the granted
+        #: lease and the pending-drain outcome, both obtained before T so the
+        #: cutoff path has no avoidable remote wait left.
+        self.prepared: dict[str, Any] | None = None
         # Set by the startup bridge when a gap between the restored checkpoint
         # and launch could NOT be recovered. Recording continues; scoring does
         # not, because the rank window would contain a hole.
@@ -159,9 +191,20 @@ class LiteAWorker:
         return "NONE"
 
     def snapshot(self) -> dict[str, Any]:
+        """A COHERENT view of the paired state, never a half-written one.
+
+        Read under the same lock that serialises mutations, so a heartbeat
+        thread reporting the digest cannot observe an engine that has advanced
+        past its guard.
+        """
         status, reason = self.evaluate_readiness()
         scoring, scoring_reason = self.scoring_readiness()
         pending = self.pending_targets()
+        with self.state_lock:
+            state_sha = self.state.snapshot()["sha256"]
+            cursors = self.state.cursors.as_dict()
+            training_rows = self.training.rows
+            training_last = self.training.last_target
         return {
             "model_version": MODEL_ID,
             "readiness": status,
@@ -171,11 +214,11 @@ class LiteAWorker:
             "dispatch": self.dispatch_status(),
             "execution_enabled": False,
             "heads": self.heads.inventory(),
-            "state_sha256": self.state.snapshot()["sha256"],
-            "cursors": self.state.cursors.as_dict(),
+            "state_sha256": state_sha,
+            "cursors": cursors,
             "pending_commits": [p.name for p in pending],
-            "training_rows": self.training.rows,
-            "training_last_target": self.training.last_target,
+            "training_rows": training_rows,
+            "training_last_target": training_last,
             "next_target_utc": next_boundary().isoformat(),
             "at": datetime.now(timezone.utc).isoformat(),
         }
@@ -191,35 +234,36 @@ class LiteAWorker:
         that target, with the settlement's own observed availability.
         """
         applied = 0
-        consumed = set(self.state.cursors.consumed_settlements)
-        rows = sorted(
-            (s for s in settlements if s.get("settlement_ts")),
-            key=lambda s: str(s["settlement_ts"]),
-        )
-        now = datetime.now(timezone.utc)
-        for row in rows:
-            key = f"{row.get('ticker')}@{row.get('target_open_utc')}"
-            if key in consumed:
-                continue
-            label = row.get("label")
-            if label not in (-1, 1):
-                continue
-            available = row["settlement_ts"]
-            self.state.engine.settle(
-                row["ticker"], int(label), available_at=available, observed_at=now
+        with self.state_lock:
+            consumed = set(self.state.cursors.consumed_settlements)
+            rows = sorted(
+                (s for s in settlements if s.get("settlement_ts")),
+                key=lambda s: str(s["settlement_ts"]),
             )
-            self.state.guard.settle(
-                row["ticker"], int(label), available_at=available, observed_at=now
-            )
-            if row.get("target_open_utc"):
-                self.training.apply_label(row["target_open_utc"], int(label), available)
-            consumed.add(key)
-            applied += 1
-        self.state.cursors.consumed_settlements = sorted(consumed)
-        if applied and self.training_path:
-            self.state.cursors.training_sha256 = self.training.save(self.training_path)
-            self.state.cursors.training_rows = self.training.rows
-            self.state.cursors.training_last_target = self.training.last_target
+            now = datetime.now(timezone.utc)
+            for row in rows:
+                key = f"{row.get('ticker')}@{row.get('target_open_utc')}"
+                if key in consumed:
+                    continue
+                label = row.get("label")
+                if label not in (-1, 1):
+                    continue
+                available = row["settlement_ts"]
+                self.state.engine.settle(
+                    row["ticker"], int(label), available_at=available, observed_at=now
+                )
+                self.state.guard.settle(
+                    row["ticker"], int(label), available_at=available, observed_at=now
+                )
+                if row.get("target_open_utc"):
+                    self.training.apply_label(row["target_open_utc"], int(label), available)
+                consumed.add(key)
+                applied += 1
+            self.state.cursors.consumed_settlements = sorted(consumed)
+            if applied and self.training_path:
+                self.state.cursors.training_sha256 = self.training.save(self.training_path)
+                self.state.cursors.training_rows = self.training.rows
+                self.state.cursors.training_last_target = self.training.last_target
         return applied
 
     # -- durable commit --------------------------------------------------------
@@ -285,23 +329,25 @@ class LiteAWorker:
     def reconcile_pending(self) -> dict[str, Any] | None:
         """Re-submit undelivered decisions in target order.
 
-        Called off the boundary path by the recovery loop as well as at the
-        start of a boundary, so a transport outage drains by itself. Delivery
-        stops at the first still-failing target: the ledger stays in order.
+        Called off the boundary path by the recovery loop and by the
+        pre-boundary preparation, so a transport outage drains by itself.
+        Delivery stops at the first still-failing target: the ledger stays in
+        order.
         """
         outcomes: list[dict[str, Any]] = []
-        for path in self.pending_targets():
-            saved = json.loads(path.read_text())
-            outcome = self._commit(saved["target"], saved["checkpoint"] or None)
-            outcomes.append({"target": saved["target"]["target_open_utc"], **outcome})
-            if not outcome["ok"]:
-                break
-            committed = str(saved["target"]["target_open_utc"])
-            # The cursor only ever moves forward: a late delivery of an older
-            # target must not rewind the committed position.
-            if (self.state.cursors.last_committed_target or "") < committed:
-                self.state.cursors.last_committed_target = committed
-                self.state.save(self.state_path)
+        with self.state_lock:
+            for path in self.pending_targets():
+                saved = json.loads(path.read_text())
+                outcome = self._commit(saved["target"], saved["checkpoint"] or None)
+                outcomes.append({"target": saved["target"]["target_open_utc"], **outcome})
+                if not outcome["ok"]:
+                    break
+                committed = str(saved["target"]["target_open_utc"])
+                # The cursor only ever moves forward: a late delivery of an older
+                # target must not rewind the committed position.
+                if (self.state.cursors.last_committed_target or "") < committed:
+                    self.state.cursors.last_committed_target = committed
+                    self.state.save(self.state_path)
         if not outcomes:
             return None
         failed = [o for o in outcomes if not o["ok"]]
@@ -311,6 +357,55 @@ class LiteAWorker:
             "error": failed[0]["error"] if failed else None,
         }
 
+    # -- pre-boundary ----------------------------------------------------------
+    def _lease_usable(self, prepared: dict[str, Any] | None, at_ns: int) -> bool:
+        """A prepared lease is only reused while it still covers the decision."""
+        if not prepared:
+            return False
+        lease = prepared.get("lease") or {}
+        if not lease.get("granted"):
+            return False
+        expiry = _lease_expiry_ns(lease)
+        if expiry is None:
+            # No expiry reported: treat it as unusable rather than assume
+            # ownership we cannot evidence.
+            return False
+        return expiry > at_ns + LEASE_SAFETY_MS * 1_000_000
+
+    async def prepare_boundary(self, target: datetime) -> dict[str, Any]:
+        """Do the remote work BEFORE T, never between the wake and the freeze.
+
+        Two things used to sit on the critical path between the scheduler's
+        T+5s wake and the actual packet freeze: draining the undelivered queue
+        and acquiring the sole-writer lease. Both are network round trips, and
+        both are now done at the prepare lead, in a worker thread, before the
+        target even opens.
+
+        Nothing about the model moves earlier. No feed is read, no packet is
+        frozen and no decision is taken here: the input window is still exactly
+        [T, T+5s).
+        """
+        target = target.astimezone(timezone.utc)
+        started = time.time_ns()
+        reconciled = None
+        try:
+            reconciled = await asyncio.to_thread(self.reconcile_pending)
+        except Exception as exc:  # noqa: BLE001 — retried by the recovery loop
+            reconciled = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        try:
+            lease = await asyncio.to_thread(self.store.acquire_lease, self.lease_ttl_seconds)
+        except Exception as exc:  # noqa: BLE001 — re-acquired on the boundary path
+            lease = {"granted": False, "error": f"{type(exc).__name__}: {exc}"}
+        prepared = {
+            "target": target.isoformat(),
+            "lease": lease or {},
+            "reconciled": reconciled,
+            "prepared_ns": started,
+            "prepare_ms": (time.time_ns() - started) / 1_000_000,
+        }
+        self.prepared = prepared
+        return prepared
+
     # -- boundary --------------------------------------------------------------
     async def on_boundary(self, target: datetime, timing: RunTiming) -> BoundaryOutcome:
         target = target.astimezone(timezone.utc)
@@ -318,17 +413,36 @@ class LiteAWorker:
         cutoff_ns = target_ns + CUTOFF_MS * 1_000_000
         label = self.ticker_resolver.unverified_label(target)
 
-        # An undelivered earlier decision is retried, but it never suppresses
-        # this target: the opportunity is recorded either way, and the queue
-        # preserves ordering for delivery.
-        self.reconcile_pending()
+        prepared = self.prepared
+        if prepared is not None and prepared.get("target") != target.isoformat():
+            prepared = None
+        self.prepared = None
 
-
-        lease = self.store.acquire_lease(self.lease_ttl_seconds)
-        if not lease.get("granted"):
-            owner = lease.get("owner_id", "other")
+        # A lease that was prepared for THIS target and still covers the whole
+        # decision is reused; anything else is re-acquired. Either way the
+        # decision only proceeds while this process demonstrably owns the
+        # boundary — the wait is what moved, not the guarantee.
+        lease_wait_ns = 0
+        if prepared is not None and prepared["lease"].get("granted") is False and prepared[
+            "lease"
+        ].get("owner_id"):
+            owner = prepared["lease"].get("owner_id", "other")
             self.store.mark_missed(label, target, f"LITEA_LEASE_HELD_BY:{owner}")
             return BoundaryOutcome(target, "MISSED", f"lease held by {owner}")
+
+        # Judged against the LATER of the cutoff and now: a boundary that is
+        # already running late needs a lease valid for the real decision time,
+        # not for a cutoff that has passed.
+        reused = self._lease_usable(prepared, max(cutoff_ns, time.time_ns()))
+        lease = (prepared or {}).get("lease") or {}
+        if not reused:
+            lease_started = time.time_ns()
+            lease = self.store.acquire_lease(self.lease_ttl_seconds)
+            lease_wait_ns = time.time_ns() - lease_started
+            if not lease.get("granted"):
+                owner = lease.get("owner_id", "other")
+                self.store.mark_missed(label, target, f"LITEA_LEASE_HELD_BY:{owner}")
+                return BoundaryOutcome(target, "MISSED", f"lease held by {owner}")
 
         # The full [T, T+5s) window is used. The packet freezes at the model's
         # own cutoff; if the scheduler is late, the measured lateness is
@@ -388,6 +502,12 @@ class LiteAWorker:
             "publication_offset_ms": (timing.compute_complete_ns - target_ns) / 1_000_000,
             # Measured against the configured T+5 ceiling. Never extended.
             "deadline_met": timing.compute_complete_ns < target_ns + CUTOFF_MS * 1_000_000,
+            # Where the boundary's remote waits actually went. `lease_reused`
+            # means the round trip happened before T instead of after the wake.
+            "lease_reused": bool(reused),
+            "lease_wait_ms": lease_wait_ns / 1_000_000,
+            "prepare_ms": (prepared or {}).get("prepare_ms"),
+            "freeze_offset_ms": (freeze_ns - target_ns) / 1_000_000,
         }
 
         row = target_row(
@@ -399,14 +519,27 @@ class LiteAWorker:
             timing=measured,
         )
 
+        # Sole-writer validity must hold at the COMMIT, not merely at the wake.
+        # A lease that has aged out since it was prepared is renewed here, and a
+        # refusal fails closed: the row is not written by a process that no
+        # longer owns the boundary.
+        if not self._lease_usable({"lease": lease}, time.time_ns()):
+            renewed = self.store.acquire_lease(self.lease_ttl_seconds)
+            if not renewed.get("granted"):
+                owner = renewed.get("owner_id", "other")
+                self.store.mark_missed(label, target, f"LITEA_LEASE_LOST_TO:{owner}")
+                return BoundaryOutcome(target, "MISSED", f"lease lost to {owner}")
+            lease = renewed
+
         # Local paired state first, then the durable transaction. A retry after
         # a transport failure replays the SAME decision: the engine and guard
         # both return their recorded output for an already decided target, so
         # neither the rank queue nor the floor exposure can advance twice.
-        self.state.cursors.source_watermarks = packet.source.get("feed_watermarks") or {}
-        self.state.save(self.state_path)
-        checkpoint = checkpoint_payload(self.state, next_target=next_boundary(target))
-        outcome = self._commit(row, checkpoint)
+        with self.state_lock:
+            self.state.cursors.source_watermarks = packet.source.get("feed_watermarks") or {}
+            self.state.save(self.state_path)
+            checkpoint = checkpoint_payload(self.state, next_target=next_boundary(target))
+            outcome = self._commit(row, checkpoint)
         if outcome["ok"]:
             # Durable acknowledgement is its own measurement; compute completion
             # is not a publication guarantee. The committed row is amended with
@@ -415,8 +548,9 @@ class LiteAWorker:
             measured["durable_ack_ns"] = outcome["ack_ns"]
             measured["durable_ack_offset_ms"] = (outcome["ack_ns"] - target_ns) / 1_000_000
             measured["commit_latency_ms"] = outcome["ack_latency_ms"]
-            self.state.cursors.last_committed_target = target.isoformat()
-            self.state.save(self.state_path)
+            with self.state_lock:
+                self.state.cursors.last_committed_target = target.isoformat()
+                self.state.save(self.state_path)
             try:
                 self.store.commit({**row, "decision_durable_ns": str(outcome["ack_ns"])}, None)
             except Exception:  # noqa: BLE001 - the decision itself is already durable
@@ -427,7 +561,8 @@ class LiteAWorker:
         # features that were ACTUALLY frozen at this target's own cutoff, valid
         # or not, unlabelled until its settlement arrives. Kept off the timed
         # path: it runs after the durable commit.
-        self._record_training_row(target, ticker or label, packet)
+        with self.state_lock:
+            self._record_training_row(target, ticker or label, packet)
 
         return BoundaryOutcome(
             target=target,

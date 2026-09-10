@@ -124,9 +124,16 @@ class BoundaryScheduler:
         handler: Callable[[datetime, RunTiming], Awaitable[None]],
         *,
         prepare_lead_s: float = 20.0,
+        prepare: Callable[[datetime], Awaitable[Any]] | None = None,
     ) -> None:
         self.handler = handler
         self.prepare_lead_s = prepare_lead_s
+        # Optional pre-boundary hook. It runs at the prepare lead, BEFORE the
+        # target opens, so remote work a handler would otherwise do on the
+        # critical path (lease acquisition, draining an undelivered queue) is
+        # already finished when the cutoff arrives. It never touches the input
+        # window: nothing is frozen or read here.
+        self.prepare = prepare
         self._task: asyncio.Task | None = None
         self.current_target: datetime | None = None
 
@@ -136,6 +143,14 @@ class BoundaryScheduler:
             self.current_target = target
             target_ns = int(target.timestamp() * NS)
             await sleep_until_ns(target_ns - int(self.prepare_lead_s * NS))
+
+            if self.prepare is not None:
+                try:
+                    await self.prepare(target)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — the handler re-checks anyway
+                    pass
 
             timing = RunTiming(target_open_ns=target_ns)
             # The model's own input window is [T, T+5s) (FEATURE_INPUT_CUTOFF_MS,
