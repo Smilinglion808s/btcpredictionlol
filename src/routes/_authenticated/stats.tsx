@@ -13,7 +13,7 @@ import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
 import { T30Card } from "@/components/t30-card";
 import { T10Card } from "@/components/t10-card";
-import { C85Card } from "@/components/c85-card";
+
 import { LiteACard } from "@/components/litea-card";
 
 
@@ -24,7 +24,7 @@ import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "
 import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
-import { getC85Stats, getC85Pending } from "@/lib/c85.functions";
+
 import { getLiteAStats } from "@/lib/litea.functions";
 
 import { BinanceObCard } from "@/components/binance-ob-card";
@@ -92,11 +92,6 @@ function StatsPage() {
   const t10Q = useQuery({ queryKey: ["t10-stats"], queryFn: () => t10Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
   const t10PendingFn = useServerFn(getT10Pending);
   const t10PendingQ = useQuery({ queryKey: ["t10-pending"], queryFn: () => t10PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-  // C85 MULTI_META — Python worker publishes by T+5s; app only reads its rows.
-  const c85Fn = useServerFn(getC85Stats);
-  const c85Q = useQuery({ queryKey: ["c85-stats"], queryFn: () => c85Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const c85PendingFn = useServerFn(getC85Pending);
-  const c85PendingQ = useQuery({ queryKey: ["c85-pending"], queryFn: () => c85PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
 
   // Version 1 (lite-a-floor4-top10-r1) — shadow only, never dispatches.
   const liteAFn = useServerFn(getLiteAStats);
@@ -141,9 +136,6 @@ function StatsPage() {
     window.location.href = "/api/export/t10-csv";
   }
 
-  function downloadC85Csv() {
-    window.location.href = "/api/export/c85-csv";
-  }
 
 
 
@@ -287,11 +279,6 @@ function StatsPage() {
           error={liteAQ.isError}
         />
 
-        <C85Card
-          stats={(c85Q.data as any) ?? {}}
-          pending={(c85PendingQ.data as any) ?? null}
-          onExport={downloadC85Csv}
-        />
 
 
 
