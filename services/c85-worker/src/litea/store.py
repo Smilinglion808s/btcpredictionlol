@@ -169,13 +169,24 @@ class LiteAStore:
 
     # -- writes ----------------------------------------------------------------
     def commit(
-        self, row: dict[str, Any], checkpoint: dict[str, Any] | None
+        self,
+        row: dict[str, Any],
+        checkpoint: dict[str, Any] | None,
+        outbox: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """One transaction: the decision row and the paired checkpoint.
 
-        `outbox` is omitted, permanently. Version 1 never dispatches.
+        `outbox` is omitted unless the worker's own human-enabled execution
+        control is on AND the decision passed every admission/timing check in
+        `litea/dispatch.py`. It is off by default, and the backend enforces its
+        own separate control on top of this one.
         """
-        return self.backend.call("decision.commit", target=row, checkpoint=checkpoint)
+        if outbox is None:
+            return self.backend.call("decision.commit", target=row, checkpoint=checkpoint)
+        return self.backend.call(
+            "decision.commit", target=row, checkpoint=checkpoint, outbox=outbox
+        )
+
 
     def mark_missed(self, ticker: str, target: datetime, reason: str) -> None:
         self.backend.call(
