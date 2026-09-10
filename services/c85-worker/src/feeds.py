@@ -731,6 +731,92 @@ class KalshiWindowCollector:
                 await asyncio.sleep(self.poll_s)
 
 
+class KalshiStrikeCollector:
+    """The target's own STRIKE, fetched the moment the contract opens.
+
+    KXBTC15M contracts are listed ahead of time but their `floor_strike` is
+    only published when the market OPENS, which is the target instant T itself
+    (verified against the venue: an `initialized` future market returns a null
+    strike, the `active` current market returns a number). A 60-second market
+    refresh would therefore miss the strike for most targets, and the packet
+    that needs it freezes at T+5s.
+
+    So this collector polls the open-markets listing rapidly across `[T, T+4s)`
+    until the target's own strike appears, and records it with the measured
+    receipt instant. It stops as soon as the strike is held: no polling loop
+    runs while nothing is expected, and no value is ever guessed or carried
+    over from the neighbouring interval.
+    """
+
+    INTERVAL_MS = 15 * 60_000
+    #: Stop trying inside the packet's own deadline; a later arrival is a
+    #: genuinely missing input, not something to backdate.
+    WINDOW_MS = 4_000
+
+    def __init__(self, buffer: MarketBuffer, api_base: str, series: str,
+                 poll_s: float = 0.25) -> None:
+        self.buffer = buffer
+        self.base = api_base.rstrip("/")
+        self.series = series
+        self.poll_s = poll_s
+
+    def _has_strike(self, target_ms: int) -> bool:
+        record = self.buffer.markets.get(target_ms)
+        return bool(record and record.get("floor_strike") is not None)
+
+    async def _poll_once(self, client: httpx.AsyncClient) -> None:
+        response = await client.get(
+            f"{self.base}/markets",
+            params={"series_ticker": self.series, "status": "open", "limit": 20},
+        )
+        response.raise_for_status()
+        receipt = now_ns()
+        self.buffer.note_poll(receipt)
+        import datetime as _dt
+
+        for market in response.json().get("markets", []):
+            open_time = market.get("open_time")
+            strike = market.get("floor_strike")
+            if not open_time or strike is None:
+                continue
+            stamp = _dt.datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+            self.buffer.record(
+                int(stamp.timestamp() * 1000),
+                {
+                    "ticker": market["ticker"],
+                    "floor_strike": float(strike),
+                    "open_time": open_time,
+                    "close_time": market.get("close_time"),
+                    "status": market.get("status"),
+                    "receipt_ns": receipt,
+                },
+            )
+
+    async def run(self) -> None:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            while True:
+                now_ms = now_ns() // 1_000_000
+                target_ms = (now_ms // self.INTERVAL_MS) * self.INTERVAL_MS
+                offset = now_ms - target_ms
+                if offset < self.WINDOW_MS and not self._has_strike(target_ms):
+                    try:
+                        await self._poll_once(client)
+                        self.buffer.connected_since_ns = (
+                            self.buffer.connected_since_ns or now_ns()
+                        )
+                        self.buffer.transport = "rest"
+                        self.buffer.error = None
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
+                        self.buffer.error = f"{type(exc).__name__}: {exc}"
+                    await asyncio.sleep(self.poll_s)
+                    continue
+                # Nothing expected until the next boundary; wake just before it.
+                wait_ms = self.INTERVAL_MS - offset - 200
+                await asyncio.sleep(max(0.2, wait_ms / 1000))
+
+
 # --------------------------------------------------------------------------- #
 # registry
 # --------------------------------------------------------------------------- #
@@ -850,6 +936,11 @@ class FeedRegistry:
             env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
             env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
             markets=self.markets,
+        )
+        self._strikes = KalshiStrikeCollector(
+            self.markets,
+            env.get("KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"),
+            env.get("KALSHI_SERIES_TICKER", "KXBTC15M"),
         )
         self._tasks: list[asyncio.Task] = []
 
