@@ -84,6 +84,10 @@ class V1Stage:
     direction_features: dict[str, float] | None
     market: dict[str, Any] | None = None
     watermarks: dict[str, Any] = field(default_factory=dict)
+    #: Small, secret-free record of what the venue actually served for this
+    #: target's contract, so a late publication can be told from a defect.
+    market_diagnostics: dict[str, Any] | None = None
+
 
 
 class V1DirectionStage:
