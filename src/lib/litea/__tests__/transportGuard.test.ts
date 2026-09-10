@@ -148,7 +148,11 @@ describe("legacy unguarded callers", () => {
       prediction: "YES",
     });
     expect(posts).toHaveLength(1);
-    await out.settle;
-    expect(posts.length).toBeGreaterThan(1); // retries still happen
-  });
+    void out.settle;
+    // The first backoff is 2s; a legacy caller still retries on its own.
+    for (let i = 0; i < 60 && posts.length < 2; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(posts.length).toBeGreaterThan(1);
+  }, 15_000);
 });
