@@ -17,6 +17,7 @@ import {
   C85_RECONSTRUCTION_VERSION,
   C85_WRITABLE_MODEL_VERSIONS,
   LITE_A_MODEL_VERSION,
+  C85_TARGETS_TABLE,
 } from "./config";
 import {
   dispatchLiteaDecision,
