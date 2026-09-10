@@ -177,10 +177,10 @@ export function LiteACard({
   const liveOpportunities = Number(live.opportunities ?? 0);
   const graded = Number(live.wins ?? 0) + Number(live.losses ?? 0);
   const winRate = live.win_rate == null ? null : Number(live.win_rate);
-  const netUnits = Number(live.net_units ?? 0);
-  const todayNet = Number(today.net_units ?? 0);
-  // +0.87 per win, −1 per loss → break-even at ~53.5%.
-  const BREAK_EVEN = 1 / 1.87;
+  const netWins = Number(live.wins ?? 0) - Number(live.losses ?? 0);
+  const todayNet = Number(today.wins ?? 0) - Number(today.losses ?? 0);
+  // Raw net wins: wins minus losses → break-even at 50%.
+  const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
@@ -252,18 +252,18 @@ export function LiteACard({
 
         <div className="min-w-0 flex-1">
           <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
-            Net units · shadow
+            Net wins · shadow
           </div>
           <div
             className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${
-              netUnits > 0 ? "text-bull" : netUnits < 0 ? "text-bear" : "text-foreground"
+              netWins > 0 ? "text-bull" : netWins < 0 ? "text-bear" : "text-foreground"
             }`}
           >
-            {netUnits > 0 ? "+" : ""}
-            {netUnits.toFixed(2)}
+            {netWins > 0 ? "+" : ""}
+            {netWins}
           </div>
           <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
-            +0.87 per win · −1 per loss · break-even {(BREAK_EVEN * 100).toFixed(2)}%
+            wins minus losses · break-even {(BREAK_EVEN * 100).toFixed(0)}%
             {winRate != null ? (
               <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
                 {aboveBreakeven ? "▲ above" : "▼ below"}
@@ -284,7 +284,7 @@ export function LiteACard({
         />
         <Field
           label="Today net"
-          value={`${todayNet > 0 ? "+" : ""}${todayNet.toFixed(2)}`}
+          value={`${todayNet > 0 ? "+" : ""}${todayNet}`}
         />
       </div>
 
@@ -400,20 +400,21 @@ export function LiteACard({
             <span className="h-px flex-1 bg-gradient-to-r from-signal-orange/40 via-steel/20 to-transparent" />
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
-            {daily.map((d) => (
-              <span
-                key={String(d.date)}
-                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
-                  Number(d.net_units) >= 0
-                    ? "border-bull/30 text-bull"
-                    : "border-bear/30 text-bear"
-                }`}
-              >
-                {String(d.date).slice(5)} {Number(d.net_units) > 0 ? "+" : ""}
-                {Number(d.net_units).toFixed(2)}
-                {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
-              </span>
-            ))}
+            {daily.map((d) => {
+              const dNet = Number(d.wins ?? 0) - Number(d.losses ?? 0);
+              return (
+                <span
+                  key={String(d.date)}
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums ${
+                    dNet >= 0 ? "border-bull/30 text-bull" : "border-bear/30 text-bear"
+                  }`}
+                >
+                  {String(d.date).slice(5)} {dNet > 0 ? "+" : ""}
+                  {dNet}
+                  {d.win_rate == null ? "" : ` · ${(Number(d.win_rate) * 100).toFixed(0)}%`}
+                </span>
+              );
+            })}
           </div>
         </section>
       ) : null}
