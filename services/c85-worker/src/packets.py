@@ -369,6 +369,44 @@ class LivePacketSource:
             except Exception as exc:  # noqa: BLE001
                 reasons.append(f"C85_DIRECTION_MATRIX_UNAVAILABLE: {type(exc).__name__}: {exc}")
 
+        return DirectionStage(
+            target_open=target_open,
+            target_ns=target_ns,
+            target_ms=target_ms,
+            cutoff_ns=cutoff_ns,
+            freeze_ns=freeze_ns,
+            reasons=reasons,
+            row=row,
+            frame=frame,
+            direction_features=direction_features,
+            market_q1=market_q1,
+            last_yes_price=last_yes_price,
+        )
+
+    def build(
+        self,
+        target_open: datetime,
+        cutoff_ns: int,
+        freeze_ns: int | None = None,
+    ) -> TargetInputs:
+        """Assemble one full C85 target: the direction stage plus the ancestor,
+        meta and auxiliary blocks. Behaviour is unchanged; stages 1-6 now live in
+        `direction_stage` so a direction-only consumer can reuse exactly the same
+        sourced calculations without pulling in the ancestor chain.
+        """
+        stage = self.direction_stage(target_open, cutoff_ns, freeze_ns)
+        target_open = stage.target_open
+        target_ns = stage.target_ns
+        cutoff_ns = stage.cutoff_ns
+        freeze_ns = stage.freeze_ns
+        reasons = stage.reasons
+        row = stage.row
+        frame = stage.frame
+        direction_features = stage.direction_features
+        market_q1 = stage.market_q1
+        last_yes_price = stage.last_yes_price
+
+
         # 7. The transcribed ancestor chain. It emits LEAF COLUMNS
         #    (c30/c36/c37/r4/external/c42/c51/c54 predictions and ranks); it does
         #    not, and never did, return nested `meta_features_without_aux` or
