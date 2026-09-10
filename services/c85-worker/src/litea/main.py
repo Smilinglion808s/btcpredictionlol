@@ -175,21 +175,21 @@ class LiteAService:
         cursor: a head that was fitted and then lost would otherwise never be
         refitted. A day with no available midnight opportunity simply has no
         head, and the previous head still expires.
+
+        The frame is snapshotted coherently and then fitted OUTSIDE the state
+        lock. A daily fit takes seconds; holding the lock for it would stall
+        the next boundary's decision and every settlement in the meantime.
+        Because the fit consumed a copy, the cursors installed afterwards
+        describe the frame that actually produced these heads, not whatever the
+        live frame has since become.
         """
-        training = self.worker.training
+        training = self.worker.training_snapshot()
         if training.rows == 0:
             return []
         latest = self.heads.latest_cutoff()
         after = f"{latest}T00:00:00+00:00" if latest else self.state.cursors.last_fit_cutoff
         results = run_due_fits(training, self.heads, after=after)
-        if results:
-            last = results[-1]
-            self.state.cursors.last_fit_cutoff = last.cutoff
-            self.state.cursors.last_fit_result = "FITTED" if last.fitted else (last.reason or "")
-        self.state.cursors.training_sha256 = training.sha256
-        self.state.cursors.training_rows = training.rows
-        self.state.cursors.training_last_target = training.last_target
-        self._save_state()
+        self.worker.install_fit_cursors(training, results[-1] if results else None)
         if results:
             try:
                 self.remote.publish(
@@ -214,11 +214,14 @@ class LiteAService:
     def snapshot(self) -> dict:
         report = self.worker.snapshot()
         report["stage"] = "SHADOW_LOGGING"
-        report["training"] = {
-            "rows": self.state.cursors.training_rows,
-            "last_target": self.state.cursors.training_last_target,
-            "sha256": self.state.cursors.training_sha256,
-        }
+        # Read under the same lock as every cursor mutation, so a heartbeat can
+        # never report a row count from one fit and a hash from another.
+        with self.worker.state_lock:
+            report["training"] = {
+                "rows": self.state.cursors.training_rows,
+                "last_target": self.state.cursors.training_last_target,
+                "sha256": self.state.cursors.training_sha256,
+            }
         report["feeds"] = self.feeds.watermarks()
         report["artifact_restore"] = self.restore_report
         report["startup_bridge"] = self.bridge.report
