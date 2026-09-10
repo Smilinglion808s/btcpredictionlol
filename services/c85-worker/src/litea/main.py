@@ -263,6 +263,20 @@ class LiteAService:
             except Exception as exc:  # noqa: BLE001
                 print(f"[{MODEL_ID}] pending retry failed: {exc}", flush=True)
 
+            # A source gap blocks scoring, and a public venue can refuse reads
+            # for a few minutes (an IP rate-limit ban is the observed case).
+            # Retrying the bridge here is what turns a transient refusal into a
+            # delay instead of a dead process: the intervals stay missing and
+            # unscored until they are genuinely recovered, and nothing about
+            # the gap is assumed away in the meantime.
+            block = str(self.worker.external_scoring_block or "")
+            if "LITEA_SOURCE_GAP" in block or "LITEA_STARTUP_BRIDGE_FAILED" in block:
+                try:
+                    report = await asyncio.to_thread(self.bridge.run_until_current)
+                    print(f"[{MODEL_ID}] bridge retry: {report}", flush=True)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[{MODEL_ID}] bridge retry failed: {exc}", flush=True)
+
     def drain_settlements(self) -> int:
         """Produce official outcomes, then apply every unconsumed one.
 
