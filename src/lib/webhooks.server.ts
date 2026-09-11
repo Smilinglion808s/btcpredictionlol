@@ -394,6 +394,12 @@ export function buildResolvedWebhookPayload(
   };
 }
 
+/** The instant this process handed a request to the HTTP client. */
+export interface AttemptStart {
+  startedAtMs: number;
+  startedAtNs: bigint;
+}
+
 /**
  * One HTTP attempt.
  *
@@ -401,8 +407,13 @@ export function buildResolvedWebhookPayload(
  * is invoked, after every awaited gate has already resolved. They mean exactly
  * "the moment this process handed the request to the HTTP client" — NOT the
  * kernel wire time, NOT TLS/connect completion, and NOT the bot's receipt or
- * acknowledgement time. Nothing later (an ACK, a status code, a settle write)
- * ever amends them.
+ * acknowledgement time.
+ *
+ * `onStart` is called SYNCHRONOUSLY immediately after the fetch promise has
+ * been initiated, so the start instant exists independently of the response.
+ * It survives a rejection, an abort/timeout and a never-resolving request. It
+ * cannot survive a process crash before the durable write — that is a real
+ * limit, not a guarantee.
  */
 async function postOnce(
   url: string,
@@ -410,6 +421,7 @@ async function postOnce(
   signature: string,
   event: WebhookEvent,
   timeoutMs = 5_000,
+  onStart?: (start: AttemptStart) => void,
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -429,7 +441,11 @@ async function postOnce(
     // --- nothing awaited, allocated or logged between here and fetch() ---
     const startedAtNs = process.hrtime.bigint();
     const startedAtMs = Date.now();
-    const res = await fetch(url, init);
+    const pending = fetch(url, init);
+    // Initiated. Publishing the start now costs the attempt nothing and does
+    // not depend on the response ever arriving.
+    onStart?.({ startedAtMs, startedAtNs });
+    const res = await pending;
     let text = "";
     try {
       text = (await res.text()).slice(0, 1000);
@@ -441,6 +457,29 @@ async function postOnce(
     clearTimeout(timer);
   }
 }
+
+/** Secret-free structured start evidence. Emitted at invocation, never amended. */
+function logAttemptStart(
+  model: string,
+  event: WebhookEvent,
+  endpointId: string,
+  attempt: number,
+  startedAtMs: number,
+  targetOpenMs: number | null,
+) {
+  console.info(
+    JSON.stringify({
+      evt: "webhook_attempt_start",
+      model,
+      event,
+      endpoint_id: endpointId,
+      attempt,
+      attempt_started_at: new Date(startedAtMs).toISOString(),
+      attempt_start_offset_ms: targetOpenMs != null ? startedAtMs - targetOpenMs : null,
+    }),
+  );
+}
+
 
 
 /**
@@ -589,6 +628,9 @@ export async function deliverWebhookNow(
   const t0 = Date.now();
   const first = await Promise.all(
     endpoints.map(async (ep, i) => {
+      // Per-attempt state, mutated at invocation, readable even if the fetch
+      // promise rejects, aborts or never settles.
+      const attemptStart: { startedAtMs: number | null } = { startedAtMs: null };
       const blank = {
         ep,
         i,
@@ -602,7 +644,10 @@ export async function deliverWebhookNow(
       // Immediately before the transport, not merely at intake.
       if (!(await allowed())) return { ...blank, cancelled: true, error: "cancelled_before_send" };
       try {
-        const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
+        const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS, (s) => {
+          attemptStart.startedAtMs = s.startedAtMs;
+          logAttemptStart(source, event, ep.id, 1, s.startedAtMs, targetOpenMs);
+        });
         return {
           ...blank,
           status: r.status,
@@ -611,7 +656,12 @@ export async function deliverWebhookNow(
           startedAtMs: r.startedAtMs,
         };
       } catch (e) {
-        return { ...blank, error: e instanceof Error ? e.message : String(e) };
+        // A thrown/aborted attempt DID start; keep its true invocation instant.
+        return {
+          ...blank,
+          startedAtMs: attemptStart.startedAtMs,
+          error: e instanceof Error ? e.message : String(e),
+        };
       }
     }),
   );
@@ -630,23 +680,12 @@ export async function deliverWebhookNow(
     await Promise.all(
       first.map(async (r) => {
         let lastStatus = r.status;
+        // Start evidence was already emitted at invocation; this is the durable
+        // copy of that same instant, on success AND on rejection/timeout. A
+        // cancelled attempt never posted, so it stays null — never back-filled
+        // with a response or settlement clock.
         const attemptOffsetMs =
           r.startedAtMs != null && targetOpenMs != null ? r.startedAtMs - targetOpenMs : null;
-        // Structured, secret-free attempt-start record. Written off the
-        // pre-send path; never amended by the acknowledgement that follows.
-        if (r.startedAtMs != null) {
-          console.info(
-            JSON.stringify({
-              evt: "webhook_attempt_start",
-              model: source,
-              event,
-              endpoint_id: r.ep.id,
-              attempt: 1,
-              attempt_started_at: new Date(r.startedAtMs).toISOString(),
-              attempt_start_offset_ms: attemptOffsetMs,
-            }),
-          );
-        }
         await supabase.from("webhook_deliveries").insert({
           endpoint_id: r.ep.id,
           event,
@@ -660,6 +699,8 @@ export async function deliverWebhookNow(
         });
 
 
+
+
         // A cancelled attempt never posted and is terminal: it must not be
         // revived here. An attempt that produced no HTTP status may still have
         // reached the bot, so it is left unresolved rather than repeated.
@@ -670,8 +711,19 @@ export async function deliverWebhookNow(
             // The kill switch, allow-list, original deadline and claim
             // ownership are re-checked before this retry actually posts.
             if (!(await allowed())) break;
+            const retryStart: { startedAtMs: number | null } = { startedAtMs: null };
             try {
-              const retry = await postOnce(r.ep.url, body, signatures[r.i], event);
+              const retry = await postOnce(
+                r.ep.url,
+                body,
+                signatures[r.i],
+                event,
+                undefined,
+                (s) => {
+                  retryStart.startedAtMs = s.startedAtMs;
+                  logAttemptStart(source, event, r.ep.id, attempt, s.startedAtMs, targetOpenMs);
+                },
+              );
               lastStatus = retry.status;
               await supabase.from("webhook_deliveries").insert({
                 endpoint_id: r.ep.id,
@@ -693,9 +745,18 @@ export async function deliverWebhookNow(
                 payload: payloadJson,
                 error: e instanceof Error ? e.message : String(e),
                 attempt,
+                attempt_started_at:
+                  retryStart.startedAtMs != null
+                    ? new Date(retryStart.startedAtMs).toISOString()
+                    : null,
+                attempt_start_offset_ms:
+                  retryStart.startedAtMs != null && targetOpenMs != null
+                    ? retryStart.startedAtMs - targetOpenMs
+                    : null,
               });
               if (guard != null) break;
             }
+
           }
         }
 
