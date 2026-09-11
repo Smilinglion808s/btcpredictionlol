@@ -322,3 +322,125 @@ describe("Version 1 pre-send path", () => {
     expect(trace.ownsCalls).toBe(1);
   });
 });
+
+// --- Start evidence must not depend on the response ---------------------
+describe("Version 1 attempt-start evidence is response-independent", () => {
+  it("(a) a held, unresolved fetch already has start evidence before any response", async () => {
+    const mod = await loadFresh();
+    const supabase = fakeSupabase(trace);
+    await mod.wh.primeWebhookEndpoints(supabase, true);
+
+    let release: (r: Response) => void = () => {};
+    const logs: any[] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((line: any) => {
+      try {
+        logs.push(JSON.parse(String(line)));
+      } catch {
+        /* ignore */
+      }
+    });
+    vi.stubGlobal("fetch", (_u: string, init: any) => {
+      trace.posts.push({ body: String(init?.body ?? ""), atMs: Date.now() });
+      return new Promise<Response>((r) => {
+        release = r;
+      });
+    });
+
+    const pending = run(mod, makeDeps(mod, supabase, trace));
+    // Give the invocation a tick; the response has NOT been produced yet.
+    await sleep(2 * LAT_MS + 30);
+    const start = logs.find((l) => l.evt === "webhook_attempt_start");
+    expect(start).toBeTruthy();
+    expect(start.attempt).toBe(1);
+    expect(Math.abs(Date.parse(start.attempt_started_at) - trace.posts[0].atMs)).toBeLessThanOrEqual(5);
+    expect(JSON.stringify(start)).not.toContain("test-secret");
+    expect(trace.deliveryInserts).toHaveLength(0); // nothing durable yet
+
+    release(new Response("ok", { status: 200 }));
+    await pending;
+    info.mockRestore();
+  });
+
+  it("(b) a thrown/timed-out fetch keeps its true invocation instant, one attempt only", async () => {
+    const mod = await loadFresh();
+    const supabase = fakeSupabase(trace);
+    await mod.wh.primeWebhookEndpoints(supabase, true);
+    let invokedAt = 0;
+    vi.stubGlobal("fetch", async (_u: string, init: any) => {
+      invokedAt = Date.now();
+      trace.posts.push({ body: String(init?.body ?? ""), atMs: invokedAt });
+      await sleep(15);
+      throw new Error("socket hang up");
+    });
+
+    const out = await run(mod, makeDeps(mod, supabase, trace));
+    expect(out.delivered).toBe(0);
+    expect(trace.posts).toHaveLength(1); // no extra attempt, no retry
+
+    const insert = trace.deliveryInserts[0];
+    expect(insert.error).toContain("socket hang up");
+    expect(insert.status_code).toBeNull();
+    const started = Date.parse(insert.attempt_started_at);
+    expect(Math.abs(started - invokedAt)).toBeLessThanOrEqual(5);
+    expect(started).toBeLessThan(Date.now()); // the invocation, not the failure time
+    expect(insert.attempt_start_offset_ms).toBe(started - OPEN_MS);
+    expect(out.sendStartedAtMs).toBe(started);
+  });
+
+  it("(c) an attempt cancelled at the final gate has no start at all", async () => {
+    const mod = await loadFresh();
+    const supabase = fakeSupabase(trace);
+    await mod.wh.primeWebhookEndpoints(supabase, true);
+    const deps = makeDeps(mod, supabase, trace, {
+      async ownsClaim() {
+        trace.ownsCalls += 1;
+        return false;
+      },
+    });
+    const out = await run(mod, deps);
+    expect(trace.posts).toHaveLength(0);
+    expect(out.sendStartedAtMs ?? null).toBeNull();
+    const insert = trace.deliveryInserts[0];
+    expect(insert.attempt_started_at).toBeNull();
+    expect(insert.attempt_start_offset_ms).toBeNull();
+    expect(insert.error).toBe("cancelled_before_send");
+  });
+
+  it("(d) no response-time fallback is ever written as a send-start", async () => {
+    const mod = await loadFresh();
+    const supabase = fakeSupabase(trace);
+    await mod.wh.primeWebhookEndpoints(supabase, true);
+
+    const updates: any[] = [];
+    const targetsClient = {
+      from(table: string) {
+        if (table === "webhook_endpoints" || table === "webhook_deliveries") {
+          return supabase.from(table);
+        }
+        const chain: any = {
+          update: (v: any) => {
+            updates.push(v);
+            return chain;
+          },
+          eq: () => chain,
+          then: (r: any) => r({ data: null, error: null }),
+        };
+        return chain;
+      },
+    } as any;
+    const real = mod.dispatch.supabaseLiteaDispatchDeps(targetsClient, async () => ({
+      delivered: 1,
+      sendStartedAtMs: null, // delivered, but the instant is genuinely unknown
+    }));
+    await real.settle({
+      dedupeKey: "k",
+      owner: "o",
+      targetId: "11111111-1111-1111-1111-111111111111",
+      status: "SENT",
+      error: null,
+      publicationOffsetMs: 5200,
+      sendStartedAtMs: null,
+    });
+    expect(updates.at(-1).dispatch_ns).toBeNull(); // never Date.now()
+  });
+});
