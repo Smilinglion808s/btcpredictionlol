@@ -417,12 +417,15 @@ describe("Version 1 attempt-start evidence is response-independent", () => {
         if (table === "webhook_endpoints" || table === "webhook_deliveries") {
           return supabase.from(table);
         }
+        const isOutbox = table.includes("outbox");
         const chain: any = {
           update: (v: any) => {
-            updates.push(v);
+            if (!isOutbox) updates.push(v);
             return chain;
           },
           eq: () => chain,
+          // The owner-and-PENDING conditional write reports one matched row.
+          select: async () => ({ data: [{ dedupe_key: "k" }], error: null }),
           then: (r: any) => r({ data: null, error: null }),
         };
         return chain;
