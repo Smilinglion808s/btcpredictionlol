@@ -108,6 +108,8 @@ export interface LiteAStats {
     win_rate: number | null;
     /** Unit P/L at the model's settled payoff: +0.87 per win, −1 per loss. */
     net_units: number;
+    /** Share of live intervals that received a directional call. */
+    coverage: number | null;
   };
   /** Today's (UTC) graded LIVE calls only. */
   today: {
@@ -327,6 +329,7 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
     pending: 0,
     win_rate: null as number | null,
     net_units: 0,
+    coverage: null as number | null,
   };
 
   for (const r of liveRows) {
@@ -352,6 +355,7 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
   const graded = live.wins + live.losses;
   live.win_rate = graded > 0 ? live.wins / graded : null;
   live.net_units = netUnits(live.wins, live.losses);
+  live.coverage = live.opportunities > 0 ? live.calls / live.opportunities : null;
 
   // Same grading, split by UTC day: "today" plus a short recent history.
   const byDay = new Map<string, Row[]>();

@@ -133,6 +133,53 @@ function Field({ label, value, hint }: { label: string; value: string; hint?: st
   );
 }
 
+function Gauge({
+  value,
+  label,
+  sublabel,
+}: {
+  value: number | null;
+  label: string;
+  sublabel?: string;
+}) {
+  const r = 34;
+  const circumference = 2 * Math.PI * r;
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, value * 100));
+  const above = value != null && value >= 0.5;
+  return (
+    <div className="relative size-[72px] shrink-0">
+      <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--border)" strokeWidth="7" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          stroke={above ? "var(--bull)" : "var(--signal-orange)"}
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - pct / 100)}
+          className="transition-all duration-700"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-base font-bold tabular-nums leading-none">
+          {value == null ? "—" : `${(value * 100).toFixed(1)}%`}
+        </span>
+        <span className="mt-0.5 text-[7px] uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
+        {sublabel ? (
+          <span className="text-[6px] uppercase tracking-[0.1em] text-muted-foreground/70">
+            {sublabel}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function LiteACard({
   stats,
   loading,
@@ -177,17 +224,15 @@ export function LiteACard({
   const liveOpportunities = Number(live.opportunities ?? 0);
   const graded = Number(live.wins ?? 0) + Number(live.losses ?? 0);
   const winRate = live.win_rate == null ? null : Number(live.win_rate);
+  const dailyWinRate = today.win_rate == null ? null : Number(today.win_rate);
   const netWins = Number(live.wins ?? 0) - Number(live.losses ?? 0);
   const todayNet = Number(today.wins ?? 0) - Number(today.losses ?? 0);
+  const coverage = live.coverage == null ? null : Number(live.coverage);
   // Raw net wins: wins minus losses → break-even at 50%.
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
-
-  const gaugeR = 34;
-  const circumference = 2 * Math.PI * gaugeR;
-  const wrPct = winRate == null ? 0 : Math.max(0, Math.min(100, winRate * 100));
 
   return (
     <Card className="v1-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -218,36 +263,24 @@ export function LiteACard({
           <span className="rounded-full border border-steel/25 bg-steel/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-steel/80">
             Betting off
           </span>
+          <span
+            className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+              coverage != null && coverage > 0
+                ? "border-signal-orange/30 bg-signal-orange/10 text-signal-orange/90"
+                : "border-steel/25 bg-steel/5 text-steel/80"
+            }`}
+          >
+            Coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
+          </span>
         </div>
       </header>
 
       <p className="text-[13px] leading-relaxed text-muted-foreground">{stats?.phase_detail}</p>
 
-      <section className="relative flex items-center gap-5">
-        <div className="relative size-[86px] shrink-0">
-          <svg viewBox="0 0 80 80" className="size-full -rotate-90">
-            <circle cx="40" cy="40" r={gaugeR} fill="none" stroke="var(--border)" strokeWidth="7" />
-            <circle
-              cx="40"
-              cy="40"
-              r={gaugeR}
-              fill="none"
-              stroke={aboveBreakeven ? "var(--bull)" : "var(--signal-orange)"}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - wrPct / 100)}
-              className="transition-all duration-700"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-mono text-lg font-bold tabular-nums leading-none">
-              {winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`}
-            </span>
-            <span className="mt-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
-              win rate
-            </span>
-          </div>
+      <section className="relative flex flex-wrap items-center gap-4 sm:gap-5">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Gauge value={winRate} label="win rate" sublabel="total" />
+          <Gauge value={dailyWinRate} label="win rate" sublabel="today" />
         </div>
 
         <div className="min-w-0 flex-1">
