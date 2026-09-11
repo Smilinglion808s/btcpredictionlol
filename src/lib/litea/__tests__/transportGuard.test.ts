@@ -113,20 +113,21 @@ describe("Version 1 guarded transport", () => {
   it("never revives a cancelled attempt in the background", async () => {
     const db = fakeSupabase();
     let live = true;
-    // Guard passes at intake, then the switch flips before the transport check.
-    let calls = 0;
+    // The switch flips while the transport check itself is awaiting.
     const out = await deliverWebhookNow(db.client, "prediction.created", payload, {
       ...V1,
-      guard: () => {
-        calls += 1;
-        if (calls > 1) live = false;
-        return live;
+      guard: async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        const now = live;
+        live = false;
+        return now && false;
       },
     });
     await out.settle;
     expect(posts).toHaveLength(0); // cancelled before transport
     expect(out.delivered).toBe(0);
   });
+
 
   it("delivers once and does not repeat on success", async () => {
     vi.stubGlobal("fetch", async (url: string) => {
