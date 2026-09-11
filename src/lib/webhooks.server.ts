@@ -711,8 +711,19 @@ export async function deliverWebhookNow(
             // The kill switch, allow-list, original deadline and claim
             // ownership are re-checked before this retry actually posts.
             if (!(await allowed())) break;
+            const retryStart: { startedAtMs: number | null } = { startedAtMs: null };
             try {
-              const retry = await postOnce(r.ep.url, body, signatures[r.i], event);
+              const retry = await postOnce(
+                r.ep.url,
+                body,
+                signatures[r.i],
+                event,
+                undefined,
+                (s) => {
+                  retryStart.startedAtMs = s.startedAtMs;
+                  logAttemptStart(source, event, r.ep.id, attempt, s.startedAtMs, targetOpenMs);
+                },
+              );
               lastStatus = retry.status;
               await supabase.from("webhook_deliveries").insert({
                 endpoint_id: r.ep.id,
@@ -734,9 +745,18 @@ export async function deliverWebhookNow(
                 payload: payloadJson,
                 error: e instanceof Error ? e.message : String(e),
                 attempt,
+                attempt_started_at:
+                  retryStart.startedAtMs != null
+                    ? new Date(retryStart.startedAtMs).toISOString()
+                    : null,
+                attempt_start_offset_ms:
+                  retryStart.startedAtMs != null && targetOpenMs != null
+                    ? retryStart.startedAtMs - targetOpenMs
+                    : null,
               });
               if (guard != null) break;
             }
+
           }
         }
 
