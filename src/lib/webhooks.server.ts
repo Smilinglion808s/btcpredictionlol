@@ -680,6 +680,9 @@ export async function deliverWebhookNow(
                 status_code: retry.status,
                 response_body: retry.body,
                 attempt,
+                attempt_started_at: new Date(retry.startedAtMs).toISOString(),
+                attempt_start_offset_ms:
+                  targetOpenMs != null ? retry.startedAtMs - targetOpenMs : null,
               });
               if (retry.ok) break;
               if (guard != null && retry.status === null) break;
@@ -710,6 +713,8 @@ export async function deliverWebhookNow(
     attempted: endpoints.length,
     latencyMs,
     sentAt: new Date(t0).toISOString(),
+    sendStartedAtMs,
+    sendStartOffsetMs,
     settle,
   };
 }
