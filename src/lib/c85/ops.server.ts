@@ -289,6 +289,14 @@ export async function runC85Op(
       });
       if (error) throw new Error(error.message);
       const lease = (data ?? {}) as Record<string, unknown>;
+      // The Version 1 worker takes this lease BEFORE the boundary, so it is the
+      // natural place to warm the endpoint list on whichever instance handles
+      // the commit. Fire-and-forget: it never delays the lease response, and a
+      // commit landing on a different instance still falls back to the normal
+      // (unchanged, 120 s TTL, revocation-respecting) read at send time.
+      if (lease.granted && mv === LITE_A_MODEL_VERSION) {
+        void primeWebhookEndpoints(supabase, true).catch(() => {});
+      }
       return { status: lease.granted ? 200 : 409, result: { ok: Boolean(lease.granted), lease } };
     }
 
