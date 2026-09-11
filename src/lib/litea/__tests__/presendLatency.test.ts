@@ -136,6 +136,10 @@ let trace: Trace;
 beforeEach(() => {
   trace = { posts: [], endpointReads: 0, ownsCalls: 0, claims: 0, deliveryInserts: [] };
   process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+  // The fixture target is a fixed instant; run the clock just after its open so
+  // the ORIGINAL 8 s ceiling is live rather than long past.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(OPEN_MS + 5_200));
   vi.stubGlobal("fetch", async (_url: string, init: any) => {
     trace.posts.push({ body: String(init?.body ?? ""), atMs: Date.now() });
     return new Response("ok", { status: 200 });
@@ -143,6 +147,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
 });
@@ -231,10 +236,8 @@ describe("Version 1 pre-send path", () => {
         return true;
       },
     });
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(OPEN_MS + 5_500));
     const out = await run(mod, deps);
-    vi.useRealTimers();
 
     expect(trace.posts).toHaveLength(0);
     expect(out.delivered).toBe(0);
