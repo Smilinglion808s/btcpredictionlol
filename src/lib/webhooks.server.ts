@@ -394,6 +394,12 @@ export function buildResolvedWebhookPayload(
   };
 }
 
+/** The instant this process handed a request to the HTTP client. */
+export interface AttemptStart {
+  startedAtMs: number;
+  startedAtNs: bigint;
+}
+
 /**
  * One HTTP attempt.
  *
@@ -401,8 +407,13 @@ export function buildResolvedWebhookPayload(
  * is invoked, after every awaited gate has already resolved. They mean exactly
  * "the moment this process handed the request to the HTTP client" — NOT the
  * kernel wire time, NOT TLS/connect completion, and NOT the bot's receipt or
- * acknowledgement time. Nothing later (an ACK, a status code, a settle write)
- * ever amends them.
+ * acknowledgement time.
+ *
+ * `onStart` is called SYNCHRONOUSLY immediately after the fetch promise has
+ * been initiated, so the start instant exists independently of the response.
+ * It survives a rejection, an abort/timeout and a never-resolving request. It
+ * cannot survive a process crash before the durable write — that is a real
+ * limit, not a guarantee.
  */
 async function postOnce(
   url: string,
@@ -410,6 +421,7 @@ async function postOnce(
   signature: string,
   event: WebhookEvent,
   timeoutMs = 5_000,
+  onStart?: (start: AttemptStart) => void,
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -429,7 +441,11 @@ async function postOnce(
     // --- nothing awaited, allocated or logged between here and fetch() ---
     const startedAtNs = process.hrtime.bigint();
     const startedAtMs = Date.now();
-    const res = await fetch(url, init);
+    const pending = fetch(url, init);
+    // Initiated. Publishing the start now costs the attempt nothing and does
+    // not depend on the response ever arriving.
+    onStart?.({ startedAtMs, startedAtNs });
+    const res = await pending;
     let text = "";
     try {
       text = (await res.text()).slice(0, 1000);
@@ -441,6 +457,29 @@ async function postOnce(
     clearTimeout(timer);
   }
 }
+
+/** Secret-free structured start evidence. Emitted at invocation, never amended. */
+function logAttemptStart(
+  model: string,
+  event: WebhookEvent,
+  endpointId: string,
+  attempt: number,
+  startedAtMs: number,
+  targetOpenMs: number | null,
+) {
+  console.info(
+    JSON.stringify({
+      evt: "webhook_attempt_start",
+      model,
+      event,
+      endpoint_id: endpointId,
+      attempt,
+      attempt_started_at: new Date(startedAtMs).toISOString(),
+      attempt_start_offset_ms: targetOpenMs != null ? startedAtMs - targetOpenMs : null,
+    }),
+  );
+}
+
 
 
 /**
