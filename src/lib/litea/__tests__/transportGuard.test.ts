@@ -58,16 +58,20 @@ afterEach(() => {
 });
 
 describe("Version 1 guarded transport", () => {
-  it("posts nothing when the guard is false before the first attempt", async () => {
+  it("posts nothing when the guard is false at the transport check", async () => {
+    // Since the pre-send latency patch the awaited guard runs ONCE, immediately
+    // before the transport (the authoritative check). A false guard therefore
+    // cancels the attempt there rather than at intake: nothing is posted.
     const db = fakeSupabase();
     const out = await deliverWebhookNow(db.client, "prediction.created", payload, {
       ...V1,
       guard: () => false,
     });
+    await out.settle;
     expect(out.delivered).toBe(0);
-    expect(out.attempted).toBe(0);
     expect(posts).toHaveLength(0);
   });
+
 
   it("posts nothing for Version 1 when the server control is absent", async () => {
     delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
