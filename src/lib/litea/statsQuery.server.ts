@@ -108,6 +108,8 @@ export interface LiteAStats {
     win_rate: number | null;
     /** Unit P/L at the model's settled payoff: +0.87 per win, −1 per loss. */
     net_units: number;
+    /** Share of live intervals that received a directional call. */
+    coverage: number | null;
   };
   /** Today's (UTC) graded LIVE calls only. */
   today: {
