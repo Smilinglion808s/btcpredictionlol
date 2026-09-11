@@ -133,6 +133,53 @@ function Field({ label, value, hint }: { label: string; value: string; hint?: st
   );
 }
 
+function Gauge({
+  value,
+  label,
+  sublabel,
+}: {
+  value: number | null;
+  label: string;
+  sublabel?: string;
+}) {
+  const r = 34;
+  const circumference = 2 * Math.PI * r;
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, value * 100));
+  const above = value != null && value >= 0.5;
+  return (
+    <div className="relative size-[72px] shrink-0">
+      <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--border)" strokeWidth="7" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          stroke={above ? "var(--bull)" : "var(--signal-orange)"}
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - pct / 100)}
+          className="transition-all duration-700"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-base font-bold tabular-nums leading-none">
+          {value == null ? "—" : `${(value * 100).toFixed(1)}%`}
+        </span>
+        <span className="mt-0.5 text-[7px] uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
+        {sublabel ? (
+          <span className="text-[6px] uppercase tracking-[0.1em] text-muted-foreground/70">
+            {sublabel}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function LiteACard({
   stats,
   loading,
