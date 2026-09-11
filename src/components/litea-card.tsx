@@ -231,7 +231,6 @@ export function LiteACard({
   // Raw net wins: wins minus losses → break-even at 50%.
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
-  const dailyAboveBreakeven = dailyWinRate != null && dailyWinRate >= BREAK_EVEN;
   const decision = latest ? describe(latest) : null;
   const sideLabel = latest?.final_side === 1 ? "UP" : latest?.final_side === -1 ? "DOWN" : null;
 
