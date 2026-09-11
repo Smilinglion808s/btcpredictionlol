@@ -197,11 +197,14 @@ export interface LiteADispatchDeps {
    * Existing transport. `guard` is re-evaluated immediately before the single
    * attempt this path allows per configured endpoint; false cancels it. No
    * Version 1 response, timeout, exception or cancellation is ever resent.
+   *
+   * `sendStartedAtMs` is the instant `fetch()` was actually invoked (after all
+   * gates), never the acknowledgement time.
    */
   deliver(
     payload: Record<string, unknown>,
     guard: () => Promise<boolean>,
-  ): Promise<{ delivered: number }>;
+  ): Promise<{ delivered: number; sendStartedAtMs?: number | null }>;
   /**
    * Terminal write, conditional on this owner AND a still-PENDING row.
    * `applied` is false when the condition matched nothing or the write errored;
@@ -214,9 +217,12 @@ export interface LiteADispatchDeps {
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
     publicationOffsetMs: number | null;
+    /** HTTP invocation instant of the attempt, when one was actually made. */
+    sendStartedAtMs?: number | null;
   }): Promise<{ applied: boolean }>;
   now(): number;
 }
+
 
 
 export interface LiteADispatchResult {
