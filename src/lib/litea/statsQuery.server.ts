@@ -355,6 +355,7 @@ export async function buildLiteAStats(): Promise<LiteAStats> {
   const graded = live.wins + live.losses;
   live.win_rate = graded > 0 ? live.wins / graded : null;
   live.net_units = netUnits(live.wins, live.losses);
+  live.coverage = live.opportunities > 0 ? live.calls / live.opportunities : null;
 
   // Same grading, split by UTC day: "today" plus a short recent history.
   const byDay = new Map<string, Row[]>();
