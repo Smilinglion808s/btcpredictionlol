@@ -354,6 +354,10 @@ export async function dispatchLiteaDecision(
 
   const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
+  const sendStartedAtMs =
+    typeof delivery.sendStartedAtMs === "number" && Number.isFinite(delivery.sendStartedAtMs)
+      ? delivery.sendStartedAtMs
+      : null;
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
   const settled = await deps.settle({
     dedupeKey,
@@ -361,7 +365,10 @@ export async function dispatchLiteaDecision(
     targetId: args.targetId,
     status,
     error: status === "SENT" ? null : "no_endpoint_accepted",
-    publicationOffsetMs: sentMs - openMs,
+    // Offset of the actual HTTP invocation when we have one; otherwise the
+    // post-attempt clock. Never presented as the bot's receipt time.
+    publicationOffsetMs: (sendStartedAtMs ?? sentMs) - openMs,
+    sendStartedAtMs,
   });
   return {
     // The claim was lost or already terminal: the outcome is NOT recorded as
@@ -370,7 +377,9 @@ export async function dispatchLiteaDecision(
     dedupeKey,
     claim: claimed.outcome,
     delivered: delivery.delivered,
-    publicationOffsetMs: sentMs - openMs,
+    publicationOffsetMs: (sendStartedAtMs ?? sentMs) - openMs,
+    sendStartedAtMs,
+    sendStartOffsetMs: sendStartedAtMs == null ? null : sendStartedAtMs - openMs,
     settled: settled.applied,
   };
 }
