@@ -11992,6 +11992,8 @@ export type Database = {
       webhook_deliveries: {
         Row: {
           attempt: number
+          attempt_start_offset_ms: number | null
+          attempt_started_at: string | null
           delivered_at: string
           endpoint_id: string | null
           error: string | null
@@ -12003,6 +12005,8 @@ export type Database = {
         }
         Insert: {
           attempt?: number
+          attempt_start_offset_ms?: number | null
+          attempt_started_at?: string | null
           delivered_at?: string
           endpoint_id?: string | null
           error?: string | null
@@ -12014,6 +12018,8 @@ export type Database = {
         }
         Update: {
           attempt?: number
+          attempt_start_offset_ms?: number | null
+          attempt_started_at?: string | null
           delivered_at?: string
           endpoint_id?: string | null
           error?: string | null
