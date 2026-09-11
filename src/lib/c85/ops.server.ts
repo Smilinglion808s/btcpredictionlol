@@ -27,7 +27,7 @@ import {
   supabaseLiteaDispatchDeps,
   type LiteADecisionRecord,
 } from "@/lib/litea/dispatch.server";
-import { deliverWebhookNow } from "@/lib/webhooks.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 
 // The identity a signed worker request writes under. Restricted to a closed
 // allow-list so a reconstruction worker can never overwrite archived rows and
