@@ -236,6 +236,10 @@ export interface LiteADispatchResult {
   claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
+  /** HTTP invocation instant (ms) of the single attempt, if one was made. */
+  sendStartedAtMs?: number | null;
+  /** `sendStartedAtMs` measured from the target interval open. */
+  sendStartOffsetMs?: number | null;
   /** False when the owner-and-PENDING conditional terminal write matched nothing. */
   settled?: boolean;
 }
