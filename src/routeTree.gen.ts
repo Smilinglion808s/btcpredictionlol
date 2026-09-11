@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as LiteaPreviewRouteImport } from './routes/litea-preview'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
@@ -46,11 +45,6 @@ import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/t
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LiteaPreviewRoute = LiteaPreviewRouteImport.update({
-  id: '/litea-preview',
-  path: '/litea-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -233,7 +227,6 @@ const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/litea-preview': typeof LiteaPreviewRoute
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
@@ -267,7 +260,6 @@ export interface FileRoutesByFullPath {
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesByTo {
-  '/litea-preview': typeof LiteaPreviewRoute
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
@@ -304,7 +296,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/litea-preview': typeof LiteaPreviewRoute
   '/_authenticated/daily': typeof AuthenticatedDailyRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
@@ -342,7 +333,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/litea-preview'
     | '/daily'
     | '/history'
     | '/models'
@@ -376,7 +366,6 @@ export interface FileRouteTypes {
     | '/api/public/timing/btc-15m'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/litea-preview'
     | '/daily'
     | '/history'
     | '/models'
@@ -412,7 +401,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
-    | '/litea-preview'
     | '/_authenticated/daily'
     | '/_authenticated/history'
     | '/_authenticated/models'
@@ -449,7 +437,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  LiteaPreviewRoute: typeof LiteaPreviewRoute
   ApiC85SelfcheckRoute: typeof ApiC85SelfcheckRoute
   ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
   ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
@@ -486,13 +473,6 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/litea-preview': {
-      id: '/litea-preview'
-      path: '/litea-preview'
-      fullPath: '/litea-preview'
-      preLoaderRoute: typeof LiteaPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -743,7 +723,6 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  LiteaPreviewRoute: LiteaPreviewRoute,
   ApiC85SelfcheckRoute: ApiC85SelfcheckRoute,
   ApiExportC85CsvRoute: ApiExportC85CsvRoute,
   ApiExportT10CsvRoute: ApiExportT10CsvRoute,
