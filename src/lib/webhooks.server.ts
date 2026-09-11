@@ -628,6 +628,9 @@ export async function deliverWebhookNow(
   const t0 = Date.now();
   const first = await Promise.all(
     endpoints.map(async (ep, i) => {
+      // Per-attempt state, mutated at invocation, readable even if the fetch
+      // promise rejects, aborts or never settles.
+      const attemptStart: { startedAtMs: number | null } = { startedAtMs: null };
       const blank = {
         ep,
         i,
@@ -641,7 +644,10 @@ export async function deliverWebhookNow(
       // Immediately before the transport, not merely at intake.
       if (!(await allowed())) return { ...blank, cancelled: true, error: "cancelled_before_send" };
       try {
-        const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
+        const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS, (s) => {
+          attemptStart.startedAtMs = s.startedAtMs;
+          logAttemptStart(source, event, ep.id, 1, s.startedAtMs, targetOpenMs);
+        });
         return {
           ...blank,
           status: r.status,
@@ -650,7 +656,12 @@ export async function deliverWebhookNow(
           startedAtMs: r.startedAtMs,
         };
       } catch (e) {
-        return { ...blank, error: e instanceof Error ? e.message : String(e) };
+        // A thrown/aborted attempt DID start; keep its true invocation instant.
+        return {
+          ...blank,
+          startedAtMs: attemptStart.startedAtMs,
+          error: e instanceof Error ? e.message : String(e),
+        };
       }
     }),
   );
@@ -669,23 +680,12 @@ export async function deliverWebhookNow(
     await Promise.all(
       first.map(async (r) => {
         let lastStatus = r.status;
+        // Start evidence was already emitted at invocation; this is the durable
+        // copy of that same instant, on success AND on rejection/timeout. A
+        // cancelled attempt never posted, so it stays null — never back-filled
+        // with a response or settlement clock.
         const attemptOffsetMs =
           r.startedAtMs != null && targetOpenMs != null ? r.startedAtMs - targetOpenMs : null;
-        // Structured, secret-free attempt-start record. Written off the
-        // pre-send path; never amended by the acknowledgement that follows.
-        if (r.startedAtMs != null) {
-          console.info(
-            JSON.stringify({
-              evt: "webhook_attempt_start",
-              model: source,
-              event,
-              endpoint_id: r.ep.id,
-              attempt: 1,
-              attempt_started_at: new Date(r.startedAtMs).toISOString(),
-              attempt_start_offset_ms: attemptOffsetMs,
-            }),
-          );
-        }
         await supabase.from("webhook_deliveries").insert({
           endpoint_id: r.ep.id,
           event,
@@ -697,6 +697,8 @@ export async function deliverWebhookNow(
           attempt_started_at: r.startedAtMs != null ? new Date(r.startedAtMs).toISOString() : null,
           attempt_start_offset_ms: attemptOffsetMs,
         });
+
+
 
 
         // A cancelled attempt never posted and is terminal: it must not be
