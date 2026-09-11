@@ -465,13 +465,20 @@ export function supabaseLiteaDispatchDeps(
       // Only the owner of the terminal write may amend the version-scoped
       // target row, so a failed/zero-row update can never mark it sent.
       if (applied && entry.targetId) {
+        // dispatch_ns now means the instant `fetch()` was invoked, not the
+        // instant the acknowledgement came back. It falls back to the write
+        // clock only when no attempt was made.
+        const startMs =
+          typeof entry.sendStartedAtMs === "number" && Number.isFinite(entry.sendStartedAtMs)
+            ? entry.sendStartedAtMs
+            : Date.now();
         await supabase
           .from(C85_TARGETS_TABLE)
           .update({
             webhook_status: entry.status,
             webhook_last_error: entry.error,
             dispatch_ns:
-              entry.status === "SENT" ? String(BigInt(Date.now()) * 1_000_000n) : null,
+              entry.status === "SENT" ? String(BigInt(Math.round(startMs)) * 1_000_000n) : null,
           })
           .eq("id", entry.targetId)
           .eq("model_version", LITE_A_MODEL_VERSION);
