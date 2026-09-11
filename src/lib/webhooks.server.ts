@@ -394,6 +394,16 @@ export function buildResolvedWebhookPayload(
   };
 }
 
+/**
+ * One HTTP attempt.
+ *
+ * `startedAtMs` / `startedAtNs` are captured on the LAST line before `fetch()`
+ * is invoked, after every awaited gate has already resolved. They mean exactly
+ * "the moment this process handed the request to the HTTP client" — NOT the
+ * kernel wire time, NOT TLS/connect completion, and NOT the bot's receipt or
+ * acknowledgement time. Nothing later (an ACK, a status code, a settle write)
+ * ever amends them.
+ */
 async function postOnce(
   url: string,
   body: string,
@@ -403,30 +413,35 @@ async function postOnce(
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const init = {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-btc15m-event": event,
+      "x-btc15m-signature": `sha256=${signature}`,
+      "user-agent": "BTC15mBot-Webhook/1.0",
+    },
+    body,
+    signal: controller.signal,
+  } as const;
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-btc15m-event": event,
-        "x-btc15m-signature": `sha256=${signature}`,
-        "user-agent": "BTC15mBot-Webhook/1.0",
-      },
-      body,
-      signal: controller.signal,
-    });
+    // --- nothing awaited, allocated or logged between here and fetch() ---
+    const startedAtNs = process.hrtime.bigint();
+    const startedAtMs = Date.now();
+    const res = await fetch(url, init);
     let text = "";
     try {
       text = (await res.text()).slice(0, 1000);
     } catch {
       /* ignore */
     }
-    return { status: res.status, ok: res.ok, body: text };
+    return { status: res.status, ok: res.ok, body: text, startedAtMs, startedAtNs };
   } finally {
     clearTimeout(timer);
   }
 }
+
 
 /**
  * Master kill switch for ALL outbound webhooks (every model, every event).
