@@ -197,11 +197,14 @@ export interface LiteADispatchDeps {
    * Existing transport. `guard` is re-evaluated immediately before the single
    * attempt this path allows per configured endpoint; false cancels it. No
    * Version 1 response, timeout, exception or cancellation is ever resent.
+   *
+   * `sendStartedAtMs` is the instant `fetch()` was actually invoked (after all
+   * gates), never the acknowledgement time.
    */
   deliver(
     payload: Record<string, unknown>,
     guard: () => Promise<boolean>,
-  ): Promise<{ delivered: number }>;
+  ): Promise<{ delivered: number; sendStartedAtMs?: number | null }>;
   /**
    * Terminal write, conditional on this owner AND a still-PENDING row.
    * `applied` is false when the condition matched nothing or the write errored;
@@ -214,9 +217,12 @@ export interface LiteADispatchDeps {
     status: "SENT" | "FAILED" | "EXPIRED";
     error: string | null;
     publicationOffsetMs: number | null;
+    /** HTTP invocation instant of the attempt, when one was actually made. */
+    sendStartedAtMs?: number | null;
   }): Promise<{ applied: boolean }>;
   now(): number;
 }
+
 
 
 export interface LiteADispatchResult {
@@ -230,6 +236,10 @@ export interface LiteADispatchResult {
   claim?: LiteAClaimOutcome;
   delivered?: number;
   publicationOffsetMs?: number;
+  /** HTTP invocation instant (ms) of the single attempt, if one was made. */
+  sendStartedAtMs?: number | null;
+  /** `sendStartedAtMs` measured from the target interval open. */
+  sendStartOffsetMs?: number | null;
   /** False when the owner-and-PENDING conditional terminal write matched nothing. */
   settled?: boolean;
 }
@@ -344,6 +354,10 @@ export async function dispatchLiteaDecision(
 
   const delivery = await deps.deliver(payload, guard);
   const sentMs = deps.now();
+  const sendStartedAtMs =
+    typeof delivery.sendStartedAtMs === "number" && Number.isFinite(delivery.sendStartedAtMs)
+      ? delivery.sendStartedAtMs
+      : null;
   const status = delivery.delivered > 0 ? "SENT" : "FAILED";
   const settled = await deps.settle({
     dedupeKey,
@@ -351,7 +365,10 @@ export async function dispatchLiteaDecision(
     targetId: args.targetId,
     status,
     error: status === "SENT" ? null : "no_endpoint_accepted",
-    publicationOffsetMs: sentMs - openMs,
+    // Offset of the actual HTTP invocation when we have one; otherwise the
+    // post-attempt clock. Never presented as the bot's receipt time.
+    publicationOffsetMs: (sendStartedAtMs ?? sentMs) - openMs,
+    sendStartedAtMs,
   });
   return {
     // The claim was lost or already terminal: the outcome is NOT recorded as
@@ -360,7 +377,9 @@ export async function dispatchLiteaDecision(
     dedupeKey,
     claim: claimed.outcome,
     delivered: delivery.delivered,
-    publicationOffsetMs: sentMs - openMs,
+    publicationOffsetMs: (sendStartedAtMs ?? sentMs) - openMs,
+    sendStartedAtMs,
+    sendStartOffsetMs: sendStartedAtMs == null ? null : sendStartedAtMs - openMs,
     settled: settled.applied,
   };
 }
@@ -446,13 +465,20 @@ export function supabaseLiteaDispatchDeps(
       // Only the owner of the terminal write may amend the version-scoped
       // target row, so a failed/zero-row update can never mark it sent.
       if (applied && entry.targetId) {
+        // dispatch_ns now means the instant `fetch()` was invoked, not the
+        // instant the acknowledgement came back. It falls back to the write
+        // clock only when no attempt was made.
+        const startMs =
+          typeof entry.sendStartedAtMs === "number" && Number.isFinite(entry.sendStartedAtMs)
+            ? entry.sendStartedAtMs
+            : Date.now();
         await supabase
           .from(C85_TARGETS_TABLE)
           .update({
             webhook_status: entry.status,
             webhook_last_error: entry.error,
             dispatch_ns:
-              entry.status === "SENT" ? String(BigInt(Date.now()) * 1_000_000n) : null,
+              entry.status === "SENT" ? String(BigInt(Math.round(startMs)) * 1_000_000n) : null,
           })
           .eq("id", entry.targetId)
           .eq("model_version", LITE_A_MODEL_VERSION);

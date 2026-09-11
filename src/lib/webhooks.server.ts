@@ -394,6 +394,16 @@ export function buildResolvedWebhookPayload(
   };
 }
 
+/**
+ * One HTTP attempt.
+ *
+ * `startedAtMs` / `startedAtNs` are captured on the LAST line before `fetch()`
+ * is invoked, after every awaited gate has already resolved. They mean exactly
+ * "the moment this process handed the request to the HTTP client" — NOT the
+ * kernel wire time, NOT TLS/connect completion, and NOT the bot's receipt or
+ * acknowledgement time. Nothing later (an ACK, a status code, a settle write)
+ * ever amends them.
+ */
 async function postOnce(
   url: string,
   body: string,
@@ -403,30 +413,35 @@ async function postOnce(
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const init = {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-btc15m-event": event,
+      "x-btc15m-signature": `sha256=${signature}`,
+      "user-agent": "BTC15mBot-Webhook/1.0",
+    },
+    body,
+    signal: controller.signal,
+  } as const;
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-btc15m-event": event,
-        "x-btc15m-signature": `sha256=${signature}`,
-        "user-agent": "BTC15mBot-Webhook/1.0",
-      },
-      body,
-      signal: controller.signal,
-    });
+    // --- nothing awaited, allocated or logged between here and fetch() ---
+    const startedAtNs = process.hrtime.bigint();
+    const startedAtMs = Date.now();
+    const res = await fetch(url, init);
     let text = "";
     try {
       text = (await res.text()).slice(0, 1000);
     } catch {
       /* ignore */
     }
-    return { status: res.status, ok: res.ok, body: text };
+    return { status: res.status, ok: res.ok, body: text, startedAtMs, startedAtNs };
   } finally {
     clearTimeout(timer);
   }
 }
+
 
 /**
  * Master kill switch for ALL outbound webhooks (every model, every event).
@@ -488,6 +503,14 @@ export interface FastDeliveryResult {
   attempted: number;
   latencyMs: number;
   sentAt: string | null;
+  /**
+   * Wall-clock ms of the EARLIEST actual `fetch()` invocation in this call,
+   * captured after every awaited gate. Null when nothing was posted. This is
+   * the HTTP invocation instant, not the bot's receipt or acknowledgement.
+   */
+  sendStartedAtMs: number | null;
+  /** `sendStartedAtMs` minus the target open, when the caller supplies one. */
+  sendStartOffsetMs: number | null;
   /** Logging + retries for failed endpoints; await it after the hot path. */
   settle: Promise<void>;
 }
@@ -505,6 +528,8 @@ export interface FastDeliveryOptions {
    * exception or cancellation. Default keeps the legacy backoff behaviour.
    */
   maxAttempts?: number;
+  /** Target interval open (ms). Used only to record the send-start offset. */
+  targetOpenMs?: number;
 }
 
 /**
@@ -524,11 +549,14 @@ export async function deliverWebhookNow(
 ): Promise<FastDeliveryResult> {
   const guard = options?.guard;
   const maxAttempts = Math.max(1, options?.maxAttempts ?? BACKOFFS_MS.length);
+  const targetOpenMs = options?.targetOpenMs ?? null;
   const noop: FastDeliveryResult = {
     delivered: 0,
     attempted: 0,
     latencyMs: 0,
     sentAt: null,
+    sendStartedAtMs: null,
+    sendStartOffsetMs: null,
     settle: Promise.resolve(),
   };
   if (!OUTBOUND_WEBHOOKS_ENABLED) return noop;
@@ -539,9 +567,14 @@ export async function deliverWebhookNow(
     if (!isModelAllowedToSend(source)) return false;
     return guard ? (await guard()) === true : true;
   };
-  if (!(await allowed())) return noop;
-
-
+  // The awaited guard (for Version 1: the durable claim-ownership read) is a
+  // network round trip. It is checked per endpoint immediately before the
+  // transport, which is the authoritative check; running it here as well only
+  // adds latency and can go stale. Single-attempt callers therefore rely on
+  // that final check alone. Legacy multi-attempt callers keep the early gate.
+  if (maxAttempts > 1 && !(await allowed())) return noop;
+  // Kill switch and allow-list are process-local and free, so they are still
+  // evaluated up front (above) for every caller.
 
   const endpoints = (await primeWebhookEndpoints(supabase)).filter((e) =>
     e.events?.includes(event),
@@ -564,12 +597,19 @@ export async function deliverWebhookNow(
         resBody: null as string | null,
         error: null as string | null,
         cancelled: false,
+        startedAtMs: null as number | null,
       };
       // Immediately before the transport, not merely at intake.
       if (!(await allowed())) return { ...blank, cancelled: true, error: "cancelled_before_send" };
       try {
         const r = await postOnce(ep.url, body, signatures[i], event, FAST_POST_TIMEOUT_MS);
-        return { ...blank, status: r.status, ok: r.ok, resBody: r.body };
+        return {
+          ...blank,
+          status: r.status,
+          ok: r.ok,
+          resBody: r.body,
+          startedAtMs: r.startedAtMs,
+        };
       } catch (e) {
         return { ...blank, error: e instanceof Error ? e.message : String(e) };
       }
@@ -578,12 +618,35 @@ export async function deliverWebhookNow(
 
   const latencyMs = Date.now() - t0;
   const delivered = first.filter((r) => r.ok).length;
+  const starts = first
+    .map((r) => r.startedAtMs)
+    .filter((v): v is number => typeof v === "number");
+  const sendStartedAtMs = starts.length ? Math.min(...starts) : null;
+  const sendStartOffsetMs =
+    sendStartedAtMs != null && targetOpenMs != null ? sendStartedAtMs - targetOpenMs : null;
 
   const payloadJson = JSON.parse(body);
   const settle = (async () => {
     await Promise.all(
       first.map(async (r) => {
         let lastStatus = r.status;
+        const attemptOffsetMs =
+          r.startedAtMs != null && targetOpenMs != null ? r.startedAtMs - targetOpenMs : null;
+        // Structured, secret-free attempt-start record. Written off the
+        // pre-send path; never amended by the acknowledgement that follows.
+        if (r.startedAtMs != null) {
+          console.info(
+            JSON.stringify({
+              evt: "webhook_attempt_start",
+              model: source,
+              event,
+              endpoint_id: r.ep.id,
+              attempt: 1,
+              attempt_started_at: new Date(r.startedAtMs).toISOString(),
+              attempt_start_offset_ms: attemptOffsetMs,
+            }),
+          );
+        }
         await supabase.from("webhook_deliveries").insert({
           endpoint_id: r.ep.id,
           event,
@@ -592,7 +655,10 @@ export async function deliverWebhookNow(
           response_body: r.resBody,
           error: r.error,
           attempt: 1,
+          attempt_started_at: r.startedAtMs != null ? new Date(r.startedAtMs).toISOString() : null,
+          attempt_start_offset_ms: attemptOffsetMs,
         });
+
 
         // A cancelled attempt never posted and is terminal: it must not be
         // revived here. An attempt that produced no HTTP status may still have
@@ -614,6 +680,9 @@ export async function deliverWebhookNow(
                 status_code: retry.status,
                 response_body: retry.body,
                 attempt,
+                attempt_started_at: new Date(retry.startedAtMs).toISOString(),
+                attempt_start_offset_ms:
+                  targetOpenMs != null ? retry.startedAtMs - targetOpenMs : null,
               });
               if (retry.ok) break;
               if (guard != null && retry.status === null) break;
@@ -644,6 +713,8 @@ export async function deliverWebhookNow(
     attempted: endpoints.length,
     latencyMs,
     sentAt: new Date(t0).toISOString(),
+    sendStartedAtMs,
+    sendStartOffsetMs,
     settle,
   };
 }

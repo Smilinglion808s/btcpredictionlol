@@ -27,7 +27,7 @@ import {
   supabaseLiteaDispatchDeps,
   type LiteADecisionRecord,
 } from "@/lib/litea/dispatch.server";
-import { deliverWebhookNow } from "@/lib/webhooks.server";
+import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 
 // The identity a signed worker request writes under. Restricted to a closed
 // allow-list so a reconstruction worker can never overwrite archived rows and
@@ -289,6 +289,14 @@ export async function runC85Op(
       });
       if (error) throw new Error(error.message);
       const lease = (data ?? {}) as Record<string, unknown>;
+      // The Version 1 worker takes this lease BEFORE the boundary, so it is the
+      // natural place to warm the endpoint list on whichever instance handles
+      // the commit. Fire-and-forget: it never delays the lease response, and a
+      // commit landing on a different instance still falls back to the normal
+      // (unchanged, 120 s TTL, revocation-respecting) read at send time.
+      if (lease.granted && mv === LITE_A_MODEL_VERSION) {
+        void primeWebhookEndpoints(supabase, true).catch(() => {});
+      }
       return { status: lease.granted ? 200 : 409, result: { ok: Boolean(lease.granted), lease } };
     }
 
@@ -337,22 +345,31 @@ export async function runC85Op(
         const targetId =
           (res.target_id as string | undefined) ?? (res.id as string | undefined) ?? null;
         // The delivered signal is built ONLY from the committed immutable
-        // record identified by the returned id under this exact model
-        // identity. A replayed request whose body was altered after the
-        // original commit cannot change what would be sent.
-        const persisted = targetId
-          ? (
-              await supabase
-                .from(C85_TARGETS_TABLE)
-                .select("*")
-                .eq("id", targetId)
-                .eq("model_version", LITE_A_MODEL_VERSION)
-                .maybeSingle()
-            ).data
-          : null;
+        // record under this exact model identity. The commit transaction now
+        // returns those minimal persisted fields itself (read back from the
+        // table inside the same transaction), so the hot path no longer pays
+        // for a second round trip. A replayed request whose body was altered
+        // after the original commit still cannot change what would be sent.
+        // Older deployments of the RPC omit `decision`; that path falls back
+        // to the explicit scoped read.
+        const returned = (res.decision ?? null) as Record<string, unknown> | null;
+        const persisted =
+          returned && String(returned.model_version) === LITE_A_MODEL_VERSION
+            ? returned
+            : targetId
+              ? (
+                  await supabase
+                    .from(C85_TARGETS_TABLE)
+                    .select("*")
+                    .eq("id", targetId)
+                    .eq("model_version", LITE_A_MODEL_VERSION)
+                    .maybeSingle()
+                ).data
+              : null;
         if (!persisted) {
           return { status: 200, result: { ...res, dispatch: "NO_PERSISTED_RECORD" } };
         }
+        const targetOpenMs = new Date(String((persisted as any).target_open_utc)).getTime();
         const dispatch = await dispatchLiteaDecision(
           supabaseLiteaDispatchDeps(supabase, async (payload, guard) => {
             // Exactly ONE automatic attempt per configured endpoint. `settle`
@@ -361,9 +378,13 @@ export async function runC85Op(
             const delivery = await deliverWebhookNow(supabase, "prediction.created", payload, {
               guard,
               maxAttempts: 1,
+              targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
             });
             void delivery.settle;
-            return { delivered: delivery.delivered };
+            return {
+              delivered: delivery.delivered,
+              sendStartedAtMs: delivery.sendStartedAtMs,
+            };
           }),
 
           persisted as LiteADecisionRecord,
@@ -374,7 +395,14 @@ export async function runC85Op(
             transportDeadlineMs: liteaTransportDeadlineMs(),
           },
         );
-        return { status: 200, result: { ...res, dispatch: dispatch.verdict } };
+        return {
+          status: 200,
+          result: {
+            ...res,
+            dispatch: dispatch.verdict,
+            dispatch_send_start_offset_ms: dispatch.sendStartOffsetMs ?? null,
+          },
+        };
       }
 
       return { status: 200, result: res };
