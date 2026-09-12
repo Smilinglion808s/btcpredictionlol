@@ -14,6 +14,7 @@ import { T30Card } from "@/components/t30-card";
 import { T10Card } from "@/components/t10-card";
 
 import { LiteACard } from "@/components/litea-card";
+import { V11Card } from "@/components/v11-card";
 
 
 /** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
@@ -25,6 +26,7 @@ import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
 
 import { getLiteAStats } from "@/lib/litea.functions";
+import { getV11Stats } from "@/lib/v11.functions";
 
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
@@ -262,6 +264,12 @@ function StatsPage() {
           stats={(liteAQ.data as any) ?? {}}
           loading={liteAQ.isLoading}
           error={liteAQ.isError}
+        />
+
+        <V11Card
+          stats={(v11Q.data as any) ?? {}}
+          loading={v11Q.isLoading}
+          error={v11Q.isError}
         />
 
 
