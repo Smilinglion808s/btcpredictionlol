@@ -155,7 +155,9 @@ export function evaluateLiteaDispatch(
 
   const age = o.nowMs - openMs;
   if (!Number.isFinite(age) || age < 0) return "TIMING_UNAVAILABLE";
-  if (age >= o.transportDeadlineMs) return "EXPIRED";
+  // Past the 8s goal the signal is late, not dead: it still sends. Only a
+  // closed target candle expires it.
+  if (age >= o.hardCapMs) return "EXPIRED";
 
   if (o.alreadySent) return "ALREADY_SENT";
   return "WOULD_SEND";
