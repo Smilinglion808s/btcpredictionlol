@@ -112,21 +112,29 @@ export async function buildV11Stats(): Promise<V11Stats> {
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
-  const { data: decisionRows, error } = await sb
-    .from("v11_decisions")
-    .select("target_ts, run_mode, leg, side, reason, rank, probability")
-    .order("target_ts", { ascending: false })
-    .limit(2000);
-  if (error) throw error;
-  const decisions = (decisionRows ?? []) as Record<string, unknown>[];
+  // Aggregation window, paged. Every decision counted here is also LABELLED
+  // here: a row whose label was never fetched must not be reported as pending.
+  const decisions: Record<string, unknown>[] = [];
+  for (let page = 0; page < V11_STATS_MAX_PAGES; page++) {
+    const from = page * V11_STATS_PAGE;
+    const { data: rows, error } = await sb
+      .from("v11_decisions")
+      .select("target_ts, run_mode, leg, side, reason, rank, probability")
+      .order("target_ts", { ascending: false })
+      .range(from, from + V11_STATS_PAGE - 1);
+    if (error) throw error;
+    const batch = (rows ?? []) as Record<string, unknown>[];
+    decisions.push(...batch);
+    if (batch.length < V11_STATS_PAGE) break;
+  }
 
   const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
   const labels = new Map<string, number | null>();
-  if (tsList.length > 0) {
+  for (let i = 0; i < tsList.length; i += 500) {
     const { data: ctx, error: cErr } = await sb
       .from("v11_context_rows")
       .select("target_ts, label")
-      .in("target_ts", tsList.slice(0, 1000));
+      .in("target_ts", tsList.slice(i, i + 500));
     if (cErr) throw cErr;
     for (const row of (ctx ?? []) as Record<string, unknown>[]) {
       labels.set(
