@@ -1,11 +1,7 @@
 // Version 1.1 tile — combined V1 + improved T45 R2 fallback.
 //
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
-// (orange body, steel accent) and more vibrant. Live and research evidence
-// are shown in separate blocks and never summed. A ✓ in the history is shown
-// only for an interval whose delivery ledger holds a real HTTP 2xx response.
-
-import { Check } from "lucide-react";
+// (orange body, steel accent) and more vibrant.
 
 type Stats = Record<string, any>;
 
@@ -145,7 +141,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
 
   const phase = PHASES[stats?.phase as string] ?? PHASES.PREPARING;
   const live = stats?.live ?? {};
-  const research = stats?.research;
   const combined = live?.combined ?? {};
   const today = live?.today ?? {};
   const latest = stats?.latest ?? null;
@@ -158,7 +153,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const sideLabel = latest?.side === 1 ? "UP" : latest?.side === -1 ? "DOWN" : null;
-  const history: any[] = Array.isArray(stats?.history) ? stats.history : [];
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -302,74 +296,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
         </div>
       </section>
 
-      {history.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              Recent intervals
-            </span>
-            <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
-          </div>
-          <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-signal-orange-vivid/20">
-            <table className="w-full text-[11px] tabular-nums">
-              <tbody>
-                {history.map((h: any) => (
-                  <tr key={h.targetTs} className="border-b border-border/40 last:border-0">
-                    <td className="px-2 py-1 text-muted-foreground">
-                      {new Date(h.targetTs).toISOString().slice(5, 16).replace("T", " ")}
-                    </td>
-                    <td className="px-2 py-1">
-                      <span className="inline-flex items-center gap-1">
-                        {h.leg ?? "—"}
-                        {h.sent ? (
-                          <span
-                            className="inline-flex items-center gap-0.5 rounded border border-bull/40 bg-bull/10 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-bull"
-                            title="A webhook for this interval was sent and answered with HTTP 2xx"
-                          >
-                            <Check className="size-2.5" strokeWidth={3} />
-                            sent
-                          </span>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1">
-                      {h.side === 1 ? "UP" : h.side === -1 ? "DOWN" : "—"}
-                    </td>
-                    <td className="px-2 py-1 text-right font-semibold">
-                      {h.outcome === "WIN"
-                        ? "Win"
-                        : h.outcome === "LOSS"
-                          ? "Loss"
-                          : h.outcome === "PENDING"
-                            ? "Pending"
-                            : "No call"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
-            ✓ sent appears only when the destination answered the webhook with a success code.
-          </p>
-        </section>
-      )}
-
-      {research && Number(research.opportunities ?? 0) > 0 ? (
-        <section>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              Research / recovery — not live evidence
-            </span>
-            <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
-          </div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <LegRecord title="Combined" r={research?.combined} />
-            <LegRecord title="V1 leg" r={research?.v1Leg} />
-            <LegRecord title="T45 R2 fallback" r={research?.fallbackLeg} />
-          </div>
-        </section>
-      ) : null}
     </section>
   );
 }
