@@ -115,8 +115,6 @@ export interface V11Stats {
 /** Rows per page, and the honest ceiling of the aggregation window. */
 const V11_STATS_PAGE = 1000;
 const V11_STATS_MAX_PAGES = 12;
-/** Keep timestamp filters below the runtime's HTTP header ceiling. */
-const V11_LABEL_BATCH_SIZE = 100;
 
 /** Trading day is Boise, matching the daily floor the strategy is defined on. */
 const boiseFmt = new Intl.DateTimeFormat("en-CA", {
