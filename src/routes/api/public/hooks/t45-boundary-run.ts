@@ -20,6 +20,7 @@ import { observeV11Target } from "@/lib/v11/observer.server";
 import { runV11Maintenance } from "@/lib/v11/maintenance.server";
 import { V11_RUN_MODES } from "@/lib/v11/config";
 import { v11ObservationGate } from "@/lib/v11/hookGate";
+import { dispatchV11FallbackForObservation } from "@/lib/v11/dispatch.server";
 import { T45_CUTOFF_OFFSET_MS, T45_PUBLISH_DEADLINE_MS, TF_MS } from "@/lib/t45/config";
 
 /** Never sit longer than this waiting for the T+45s cutoff. */
@@ -183,12 +184,29 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
 
         const v11: unknown = await v11Promise;
 
+        // Version 1.1 fallback leg. Only a signed collector trigger whose
+        // observation just committed as an on-time LIVE_SHADOW directional
+        // fallback can reach delivery, and only while BOTH human controls are
+        // set. With them absent this refuses before any claim or read.
+        let v11Dispatch: unknown = null;
+        try {
+          v11Dispatch = await dispatchV11FallbackForObservation(
+            supabase,
+            target,
+            v11 as never,
+            { signed },
+          );
+        } catch (e) {
+          v11Dispatch = { verdict: "ERROR", error: e instanceof Error ? e.message : String(e) };
+        }
+
         const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
         const pfResolved = await resolvePriceFlowBacklog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
+
 
 
         return Response.json({
@@ -198,6 +216,7 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
           t45_balanced: result,
           price_flow: priceFlow,
           v11_shadow: v11,
+          v11_dispatch: v11Dispatch,
           price_flow_resolved: pfResolved.resolved,
           resolved: resolved.resolved,
           elapsed_ms: Date.now() - started,
