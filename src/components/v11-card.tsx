@@ -156,7 +156,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const sideLabel = latest?.side === 1 ? "UP" : latest?.side === -1 ? "DOWN" : null;
-  const history: any[] = Array.isArray(stats?.history) ? stats.history : [];
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
