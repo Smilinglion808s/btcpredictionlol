@@ -347,14 +347,47 @@ const ENDPOINT = {
   is_active: true,
 };
 
+/** The eligible same-interval ORIGINAL V1 row this fallback attaches to. */
+const V1_SOURCE_TARGET = {
+  id: "11111111-2222-3333-4444-555555555555",
+  model_version: "lite-a-floor4-top10-r1",
+  ticker: TICKER,
+  target_open_utc: new Date(OPEN_MS).toISOString(),
+  run_mode: "LIVE",
+  final_side: 0,
+  features: {
+    input_valid: true,
+    lite_a: { reason: "CONFIDENCE_ABSTAIN" },
+    daily_floor: { ordinary_floor_allows: true },
+  },
+};
+
 /** In-memory Supabase stand-in that records every statement it is given. */
-function fakeDb(opts: { decision?: V11DecisionRecord | null; endpoints?: unknown[] } = {}) {
+function fakeDb(
+  opts: {
+    decision?: V11DecisionRecord | null;
+    endpoints?: unknown[];
+    v1Target?: Record<string, unknown> | null;
+  } = {},
+) {
   const log: { table: string; op: string; args: unknown }[] = [];
   const rpc: { name: string; args: Record<string, unknown> }[] = [];
   const outbox = new Map<string, { state: string; claim_owner: string | null; claim_expires_at: string }>();
   const client: any = {
     rpc: async (name: string, args: Record<string, unknown>) => {
       rpc.push({ name, args });
+      // Production contract: c85_outbox.target_id is NOT NULL with an FK to
+      // c85_targets(id). A null id is a hard database error, not a soft miss.
+      if (args.p_target_id === null || args.p_target_id === undefined) {
+        throw new Error(
+          'null value in column "target_id" of relation "c85_outbox" violates not-null constraint',
+        );
+      }
+      if (args.p_target_id !== V1_SOURCE_TARGET.id) {
+        throw new Error(
+          'insert or update on table "c85_outbox" violates foreign key constraint "c85_outbox_target_id_fkey"',
+        );
+      }
       const key = String(args.p_dedupe_key);
       if (outbox.has(key)) return { data: { outcome: "HELD_BY_OTHER" }, error: null };
       outbox.set(key, {
