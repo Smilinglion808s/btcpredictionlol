@@ -102,16 +102,30 @@ export async function readT45Inputs(
   sb: SupabaseClient,
   targetTs: string,
 ): Promise<Record<string, number> | null> {
+  return (await readT45InputsTimed(sb, targetTs))?.feats ?? null;
+}
+
+/**
+ * T45 inputs plus their ACTUAL persistence instant. `feature_cutoff_ts` is an
+ * event-time boundary (exactly T+45s) and must never be read as "available at
+ * 45000ms": `created_at` is the real receipt/persist time and is typically a
+ * few hundred milliseconds later.
+ */
+export async function readT45InputsTimed(
+  sb: SupabaseClient,
+  targetTs: string,
+): Promise<{ feats: Record<string, number>; persistedAt: string | null } | null> {
   const { data } = await sb
     .from("t45_features")
-    .select(["target_ts", ...V11_T45_BASE_ORDER].join(", "))
+    .select(["target_ts", "created_at", ...V11_T45_BASE_ORDER].join(", "))
     .eq("feature_version", T45_FEATURE_VERSION)
     .eq("target_ts", targetTs)
     .maybeSingle();
   if (!data) return null;
-  const out: Record<string, number> = {};
-  for (const n of V11_T45_BASE_ORDER) out[n] = Number((data as unknown as Record<string, unknown>)[n]);
-  return out;
+  const rec = data as unknown as Record<string, unknown>;
+  const feats: Record<string, number> = {};
+  for (const n of V11_T45_BASE_ORDER) feats[n] = Number(rec[n]);
+  return { feats, persistedAt: (rec.created_at as string | null) ?? null };
 }
 
 /**
@@ -324,6 +338,14 @@ export interface V11DecisionRecord {
   v1FloorOpen: boolean | null;
   v1SendClaim: string;
   strategy: Record<string, unknown>;
+  /** Event-time feature cutoff (always 45000ms) — NOT an availability claim. */
+  eventCutoffOffsetMs: number;
+  /** Measured offset at which the T45 inputs were actually persisted. */
+  inputsPersistedOffsetMs: number | null;
+  /** Measured offset at which this decision was produced. */
+  decisionOffsetMs: number | null;
+  publicationCeilingMs: number;
+  withinPublicationCeiling: boolean | null;
 }
 
 /** Append-only, one row per interval; duplicates are refused by the PK. */
@@ -349,6 +371,11 @@ export async function insertDecision(
     v1_send_claim: rec.v1SendClaim,
     strategy: rec.strategy,
     dispatch_enabled: false,
+    event_cutoff_offset_ms: rec.eventCutoffOffsetMs,
+    inputs_persisted_offset_ms: rec.inputsPersistedOffsetMs,
+    decision_offset_ms: rec.decisionOffsetMs,
+    publication_ceiling_ms: rec.publicationCeilingMs,
+    within_publication_ceiling: rec.withinPublicationCeiling,
   });
   if (error) {
     if (error.code === "23505") return "exists";
