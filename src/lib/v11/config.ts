@@ -217,6 +217,13 @@ export const V11_EVENT_CUTOFF_OFFSET_MS = 45_000;
 export const V11_PUBLICATION_CEILING_MS = 60_000;
 
 export const TF_MS = 15 * 60 * 1000;
+
+/**
+ * The publication ceiling is the decision GOAL, not a send drop: a committed,
+ * admitted fallback whose transport is slow still goes out, late, while its
+ * target candle is open. The hard cap is the candle close.
+ */
+export const V11_SEND_HARD_CAP_MS = TF_MS;
 export const V11_T5_OFFSET_MS = 5_000;
 export const V11_T45_OFFSET_MS = 45_000;
 
