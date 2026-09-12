@@ -6,12 +6,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  V11_CONFIG_FINGERPRINT,
   V11_CONTEXT_TABLE,
   V11_DECISIONS_TABLE,
   V11_HEADS_TABLE,
   V11_SCORES_TABLE,
   V11_STATE_KEY,
   V11_STATE_TABLE,
+  V11_FEATURE_ORDER_HASH,
   V11_T45_BASE_ORDER,
   V11_VOL_SOURCE,
   V1_MODEL_VERSION,
@@ -21,6 +23,16 @@ import type { V11Head, V11Scaler, V11TrainingRow } from "./head";
 import type { V1LegSnapshot } from "./decision";
 
 const V11_VECTORS_TABLE = "v11_vectors";
+
+/**
+ * SQL NULL is MISSING, never zero. `Number(null)` is 0 and `Number("")` is 0,
+ * both of which would silently impute a value the model never observed.
+ */
+export function numOrNaN(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "") return Number(v);
+  return NaN;
+}
 const T45_FEATURE_VERSION = "t45-features-r1";
 
 export interface V11ContextRow {
@@ -36,11 +48,12 @@ export async function readContextRow(
   sb: SupabaseClient,
   targetTs: string,
 ): Promise<V11ContextRow | null> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
     .select("target_ts, ticker, input_valid, label, settlement_ts, feats")
     .eq("target_ts", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   return {
     targetTs: new Date(data.target_ts as string).toISOString(),
@@ -52,28 +65,45 @@ export async function readContextRow(
   };
 }
 
-/** Live context for a target straight from the committed V1 row (read-only). */
+/**
+ * Live context for a target from the committed V1 row (read-only).
+ *
+ * A DB failure is NOT "no model row": it is raised so the caller records a read
+ * failure instead of silently scoring the interval as missing.
+ */
 export async function readLiveContext(
   sb: SupabaseClient,
   targetTs: string,
-): Promise<V11ContextRow | null> {
-  const { data } = await sb
+): Promise<(V11ContextRow & { runMode: string | null; lastReceiptNs: string | null; publicationOffsetMs: number | null }) | null> {
+  const { data, error } = await sb
     .from("c85_targets")
-    .select("target_open_utc, ticker, features")
+    .select(
+      "target_open_utc, ticker, features, run_mode, last_receipt_ns, publication_offset_ms",
+    )
     .eq("model_version", V1_MODEL_VERSION)
     .eq("target_open_utc", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   const features = (data.features ?? {}) as Record<string, unknown>;
   const d60 = (features["direction60"] ?? null) as Record<string, number> | null;
   if (!d60) return null;
+  const pubOff = data.publication_offset_ms;
   return {
     targetTs: new Date(data.target_open_utc as string).toISOString(),
     ticker: (data.ticker as string) ?? "",
+    // Strictly `=== true`: the string "false" must never be coerced to true.
     inputValid: features["input_valid"] === true,
     label: null,
     settlementTs: null,
     feats: d60,
+    runMode: (data.run_mode as string | null) ?? null,
+    lastReceiptNs:
+      data.last_receipt_ns === null || data.last_receipt_ns === undefined
+        ? null
+        : String(data.last_receipt_ns),
+    publicationOffsetMs:
+      pubOff === null || pubOff === undefined ? null : Number(pubOff),
   };
 }
 
@@ -115,16 +145,18 @@ export async function readT45InputsTimed(
   sb: SupabaseClient,
   targetTs: string,
 ): Promise<{ feats: Record<string, number>; persistedAt: string | null } | null> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from("t45_features")
     .select(["target_ts", "created_at", ...V11_T45_BASE_ORDER].join(", "))
     .eq("feature_version", T45_FEATURE_VERSION)
     .eq("target_ts", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   const rec = data as unknown as Record<string, unknown>;
   const feats: Record<string, number> = {};
-  for (const n of V11_T45_BASE_ORDER) feats[n] = Number(rec[n]);
+  // NULL stays NaN: a missing input must invalidate the row, not become 0.
+  for (const n of V11_T45_BASE_ORDER) feats[n] = numOrNaN(rec[n]);
   return { feats, persistedAt: (rec.created_at as string | null) ?? null };
 }
 
@@ -137,43 +169,69 @@ export async function readVolHistory(
   targetTs: string,
   limit = 95,
 ): Promise<number[]> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
     .select("target_ts, feats")
     .lt("target_ts", targetTs)
     .order("target_ts", { ascending: false })
     .limit(limit);
+  if (error) throw error;
   const rows = (data ?? []) as { feats: Record<string, number> }[];
-  return rows
-    .reverse()
-    .map((r) => Number(r.feats?.[V11_VOL_SOURCE]))
-    .map((v) => (Number.isFinite(v) ? v : NaN));
+  return rows.reverse().map((r) => numOrNaN(r.feats?.[V11_VOL_SOURCE]));
 }
 
 /**
- * Prior scores over the previous official opportunities, chronological.
- * `null` marks an observed-but-invalid opportunity (needed for availability).
+ * The last 768 FINITE historical confidences, chronological.
+ *
+ * The rank clock counts FINITE confidences, not calendar opportunities: filter
+ * out invalid/NULL scores FIRST, then take the newest 768. Truncating to 768
+ * opportunities before filtering silently shortens the window whenever the
+ * feed had gaps.
  */
-export async function readPriorScores(
+export async function readPriorConfidences(
   sb: SupabaseClient,
   targetTs: string,
   limit = 768,
-): Promise<{ confidence: number | null }[]> {
-  const { data } = await sb
+): Promise<number[]> {
+  const { data, error } = await sb
     .from(V11_SCORES_TABLE)
     .select("target_ts, confidence")
     .lt("target_ts", targetTs)
+    .eq("valid", true)
+    .not("confidence", "is", null)
     .order("target_ts", { ascending: false })
     .limit(limit);
+  if (error) throw error;
   const rows = (data ?? []) as { confidence: number | null }[];
   return rows
     .reverse()
-    .map((r) => ({
-      confidence:
-        r.confidence === null || !Number.isFinite(Number(r.confidence))
-          ? null
-          : Number(r.confidence),
-    }));
+    .map((r) => numOrNaN(r.confidence))
+    .filter((v) => Number.isFinite(v));
+}
+
+/**
+ * The last 768 OFFICIAL OPPORTUNITIES, chronological, invalid ones included.
+ * `null` marks an observed-but-unscored opportunity. This is the availability
+ * clock and is deliberately different from the rank clock above.
+ */
+export async function readPriorOpportunities(
+  sb: SupabaseClient,
+  targetTs: string,
+  limit = 768,
+): Promise<(number | null)[]> {
+  const { data, error } = await sb
+    .from(V11_SCORES_TABLE)
+    .select("target_ts, confidence, valid")
+    .lt("target_ts", targetTs)
+    .order("target_ts", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  const rows = (data ?? []) as { confidence: number | null; valid: boolean }[];
+  return rows.reverse().map((r) => {
+    if (!r.valid) return null;
+    const c = numOrNaN(r.confidence);
+    return Number.isFinite(c) ? c : null;
+  });
 }
 
 export interface V11ScoreRecord {
