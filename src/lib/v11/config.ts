@@ -170,8 +170,13 @@ export const V11_FEATURE_ORDER: readonly string[] = [
   V11_NORM_DISPLACEMENT,
 ];
 
-/** Volatility scaler for the normalized block. */
-export const V11_VOL_SOURCE = "ctx_binance_spot_t0_w900_return_bps" as const;
+/**
+ * Volatility scaler for the normalized block. The field is read from the RAW
+ * un-prefixed direction60 map; its prefixed model name is
+ * `ctx_binance_spot_t0_w900_return_bps`.
+ */
+export const V11_VOL_SOURCE = "binance_spot_t0_w900_return_bps" as const;
+export const V11_VOL_SOURCE_MODEL_NAME = `ctx_${V11_VOL_SOURCE}` as const;
 export const V11_VOL_WINDOW = 96;
 export const V11_VOL_MIN_FINITE = 24;
 export const V11_VOL_CLIP = 200;
