@@ -277,7 +277,24 @@ export async function buildV11Stats(): Promise<V11Stats> {
     publicationMode: V11_PUBLICATION_MODE,
     stakeFractionOfBoiseOpen: V11_STAKE_FRACTION_OF_BOISE_OPEN,
     sizingOwner: "external-betting-bot",
-    dispatchEnabled: v11DeliveryArmed(),
+    dispatchEnabled: armed,
+    control: {
+      v11FlagSet,
+      v1DeliveryOff,
+      armed,
+      activeEndpoints,
+      wouldSend: armed && activeEndpoints === 1,
+      status: !v11FlagSet
+        ? "PAUSED_NO_FLAG"
+        : !v1DeliveryOff
+          ? "BLOCKED_V1_SENDER_ON"
+          : activeEndpoints === 0
+            ? "ARMED_NO_DESTINATION"
+            : activeEndpoints > 1
+              ? "ARMED_MULTIPLE_DESTINATIONS"
+              : "ARMED_DELIVERY_CONFIGURED",
+    },
+
     phase,
     headDate: (head?.fit_date as string | null) ?? null,
     headQuarantined: head?.quarantined === true,
