@@ -2,11 +2,8 @@
 //
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
 // (orange body, steel accent) and more vibrant. Live and research evidence
-// are shown in separate blocks and never summed. The delivery status shown
-// here is read from the real server controls and the real destination count;
-// it describes this project's CONFIGURATION only, not whether the external
-// betting bot acted on anything. A ✓ in the history is shown only for an
-// interval whose delivery ledger holds a real HTTP 2xx response.
+// are shown in separate blocks and never summed. A ✓ in the history is shown
+// only for an interval whose delivery ledger holds a real HTTP 2xx response.
 
 import { Check } from "lucide-react";
 
@@ -36,39 +33,6 @@ const PHASES: Record<string, { label: string; dot: string; chip: string }> = {
     label: "Preparing",
     dot: "bg-muted-foreground",
     chip: "border-border text-muted-foreground bg-muted/30",
-  },
-};
-
-/**
- * Honest delivery wording. "Sending" here means this project would transmit a
- * message; placing and sizing an order remains entirely the external betting
- * bot's decision, which this dashboard cannot observe.
- */
-const DELIVERY_STATUS: Record<string, { badge: string; detail: string }> = {
-  PAUSED_NO_FLAG: {
-    badge: "Sending paused",
-    detail:
-      "Sending is switched off on the server, so no message leaves this project for any interval.",
-  },
-  BLOCKED_V1_SENDER_ON: {
-    badge: "Sending blocked",
-    detail:
-      "The original Version 1 sender is still switched on, so Version 1.1 refuses to send — the two share one interval.",
-  },
-  ARMED_NO_DESTINATION: {
-    badge: "Switched on · no destination",
-    detail:
-      "Sending is switched on, but no active destination is configured, so nothing can actually be transmitted.",
-  },
-  ARMED_MULTIPLE_DESTINATIONS: {
-    badge: "Switched on · too many destinations",
-    detail:
-      "Sending is switched on but more than one active destination is configured. Version 1.1 refuses to transmit, because one interval must reach exactly one destination.",
-  },
-  ARMED_DELIVERY_CONFIGURED: {
-    badge: "Sending on",
-    detail:
-      "Sending is switched on with one active destination, so an admitted call would be transmitted. Whether an order is then placed is decided by the external betting bot.",
   },
 };
 
@@ -180,11 +144,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
   }
 
   const phase = PHASES[stats?.phase as string] ?? PHASES.PREPARING;
-  const control = stats?.control;
-  const delivery = DELIVERY_STATUS[control?.status as string] ?? {
-    badge: "Delivery: unknown",
-    detail: "Delivery configuration could not be read.",
-  };
   const live = stats?.live ?? {};
   const research = stats?.research;
   const combined = live?.combined ?? {};
@@ -226,9 +185,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
           >
             <span className={`size-1.5 shrink-0 rounded-full ${phase.dot}`} />
             {phase.label}
-          </span>
-          <span className="rounded-full border border-signal-orange-vivid/30 bg-signal-orange-vivid/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-signal-orange-vivid/90">
-            {delivery.badge}
           </span>
           <span
             className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
@@ -414,22 +370,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
           </div>
         </section>
       ) : null}
-
-      <div className="v11-chip p-3">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Delivery
-        </div>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-          {delivery.detail}
-          {control ? <> Active destinations for new calls: {control.activeEndpoints}.</> : null}
-        </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-          Strategy metadata records a stake of{" "}
-          {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the Boise-day opening
-          principal per leg. Sizing and order placement stay with the external betting bot; this
-          dashboard shows what was sent, never what was traded.
-        </p>
-      </div>
     </section>
   );
 }
