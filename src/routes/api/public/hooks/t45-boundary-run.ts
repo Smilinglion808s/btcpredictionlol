@@ -16,6 +16,9 @@ import {
   runPriceFlowBoundary,
   resolvePriceFlowBacklog,
 } from "@/lib/t45pf/orchestrator.server";
+import { observeV11Target } from "@/lib/v11/observer.server";
+import { runV11Maintenance } from "@/lib/v11/maintenance.server";
+import { V11_RUN_MODES } from "@/lib/v11/config";
 import { T45_CUTOFF_OFFSET_MS, T45_PUBLISH_DEADLINE_MS, TF_MS } from "@/lib/t45/config";
 
 /** Never sit longer than this waiting for the T+45s cutoff. */
@@ -83,9 +86,18 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         if (mode === "resolve") {
           const res = await resolveT45Backlog(supabase, { limit: 500 });
           const pf = await resolvePriceFlowBacklog(supabase, { limit: 500 });
+          // Labels, vectors, daily head and gap recovery — never on the
+          // boundary path, so a refit can never delay a T+45 decision.
+          let v11Maintenance: unknown = null;
+          try {
+            v11Maintenance = await runV11Maintenance(supabase);
+          } catch (e) {
+            v11Maintenance = { error: e instanceof Error ? e.message : String(e) };
+          }
           return Response.json({
             ok: true,
             mode,
+            v11_maintenance: v11Maintenance,
             ...res,
             price_flow_resolved: pf.resolved,
             elapsed_ms: Date.now() - started,
@@ -144,6 +156,23 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         } catch (e) {
           result = { error: e instanceof Error ? e.message : String(e) };
         }
+        // Version 1.1 shadow observer. It runs AFTER both legacy legs, is fully
+        // isolated (a throw here cannot affect them), and has no send path of
+        // any kind. Only a genuinely signed collector trigger may ask for
+        // LIVE_SHADOW; the observer still downgrades it unless the receipt,
+        // the V1 run mode and the 60s ceiling all check out.
+        let v11: unknown = null;
+        try {
+          v11 = await observeV11Target(supabase, target, {
+            requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
+            live: signed
+              ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
+              : undefined,
+          });
+        } catch (e) {
+          v11 = { error: e instanceof Error ? e.message : String(e) };
+        }
+
         const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
@@ -158,6 +187,7 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
           execution_path: executionPath,
           t45_balanced: result,
           price_flow: priceFlow,
+          v11_shadow: v11,
           price_flow_resolved: pfResolved.resolved,
           resolved: resolved.resolved,
           elapsed_ms: Date.now() - started,

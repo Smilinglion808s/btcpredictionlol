@@ -6,12 +6,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  V11_CONFIG_FINGERPRINT,
   V11_CONTEXT_TABLE,
   V11_DECISIONS_TABLE,
   V11_HEADS_TABLE,
   V11_SCORES_TABLE,
   V11_STATE_KEY,
   V11_STATE_TABLE,
+  V11_FEATURE_ORDER_HASH,
   V11_T45_BASE_ORDER,
   V11_VOL_SOURCE,
   V1_MODEL_VERSION,
@@ -21,6 +23,16 @@ import type { V11Head, V11Scaler, V11TrainingRow } from "./head";
 import type { V1LegSnapshot } from "./decision";
 
 const V11_VECTORS_TABLE = "v11_vectors";
+
+/**
+ * SQL NULL is MISSING, never zero. `Number(null)` is 0 and `Number("")` is 0,
+ * both of which would silently impute a value the model never observed.
+ */
+export function numOrNaN(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "") return Number(v);
+  return NaN;
+}
 const T45_FEATURE_VERSION = "t45-features-r1";
 
 export interface V11ContextRow {
@@ -36,11 +48,12 @@ export async function readContextRow(
   sb: SupabaseClient,
   targetTs: string,
 ): Promise<V11ContextRow | null> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
     .select("target_ts, ticker, input_valid, label, settlement_ts, feats")
     .eq("target_ts", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   return {
     targetTs: new Date(data.target_ts as string).toISOString(),
@@ -52,28 +65,45 @@ export async function readContextRow(
   };
 }
 
-/** Live context for a target straight from the committed V1 row (read-only). */
+/**
+ * Live context for a target from the committed V1 row (read-only).
+ *
+ * A DB failure is NOT "no model row": it is raised so the caller records a read
+ * failure instead of silently scoring the interval as missing.
+ */
 export async function readLiveContext(
   sb: SupabaseClient,
   targetTs: string,
-): Promise<V11ContextRow | null> {
-  const { data } = await sb
+): Promise<(V11ContextRow & { runMode: string | null; lastReceiptNs: string | null; publicationOffsetMs: number | null }) | null> {
+  const { data, error } = await sb
     .from("c85_targets")
-    .select("target_open_utc, ticker, features")
+    .select(
+      "target_open_utc, ticker, features, run_mode, last_receipt_ns, publication_offset_ms",
+    )
     .eq("model_version", V1_MODEL_VERSION)
     .eq("target_open_utc", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   const features = (data.features ?? {}) as Record<string, unknown>;
   const d60 = (features["direction60"] ?? null) as Record<string, number> | null;
   if (!d60) return null;
+  const pubOff = data.publication_offset_ms;
   return {
     targetTs: new Date(data.target_open_utc as string).toISOString(),
     ticker: (data.ticker as string) ?? "",
+    // Strictly `=== true`: the string "false" must never be coerced to true.
     inputValid: features["input_valid"] === true,
     label: null,
     settlementTs: null,
     feats: d60,
+    runMode: (data.run_mode as string | null) ?? null,
+    lastReceiptNs:
+      data.last_receipt_ns === null || data.last_receipt_ns === undefined
+        ? null
+        : String(data.last_receipt_ns),
+    publicationOffsetMs:
+      pubOff === null || pubOff === undefined ? null : Number(pubOff),
   };
 }
 
@@ -115,16 +145,18 @@ export async function readT45InputsTimed(
   sb: SupabaseClient,
   targetTs: string,
 ): Promise<{ feats: Record<string, number>; persistedAt: string | null } | null> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from("t45_features")
     .select(["target_ts", "created_at", ...V11_T45_BASE_ORDER].join(", "))
     .eq("feature_version", T45_FEATURE_VERSION)
     .eq("target_ts", targetTs)
     .maybeSingle();
+  if (error) throw error;
   if (!data) return null;
   const rec = data as unknown as Record<string, unknown>;
   const feats: Record<string, number> = {};
-  for (const n of V11_T45_BASE_ORDER) feats[n] = Number(rec[n]);
+  // NULL stays NaN: a missing input must invalidate the row, not become 0.
+  for (const n of V11_T45_BASE_ORDER) feats[n] = numOrNaN(rec[n]);
   return { feats, persistedAt: (rec.created_at as string | null) ?? null };
 }
 
@@ -137,43 +169,69 @@ export async function readVolHistory(
   targetTs: string,
   limit = 95,
 ): Promise<number[]> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
     .select("target_ts, feats")
     .lt("target_ts", targetTs)
     .order("target_ts", { ascending: false })
     .limit(limit);
+  if (error) throw error;
   const rows = (data ?? []) as { feats: Record<string, number> }[];
-  return rows
-    .reverse()
-    .map((r) => Number(r.feats?.[V11_VOL_SOURCE]))
-    .map((v) => (Number.isFinite(v) ? v : NaN));
+  return rows.reverse().map((r) => numOrNaN(r.feats?.[V11_VOL_SOURCE]));
 }
 
 /**
- * Prior scores over the previous official opportunities, chronological.
- * `null` marks an observed-but-invalid opportunity (needed for availability).
+ * The last 768 FINITE historical confidences, chronological.
+ *
+ * The rank clock counts FINITE confidences, not calendar opportunities: filter
+ * out invalid/NULL scores FIRST, then take the newest 768. Truncating to 768
+ * opportunities before filtering silently shortens the window whenever the
+ * feed had gaps.
  */
-export async function readPriorScores(
+export async function readPriorConfidences(
   sb: SupabaseClient,
   targetTs: string,
   limit = 768,
-): Promise<{ confidence: number | null }[]> {
-  const { data } = await sb
+): Promise<number[]> {
+  const { data, error } = await sb
     .from(V11_SCORES_TABLE)
     .select("target_ts, confidence")
     .lt("target_ts", targetTs)
+    .eq("valid", true)
+    .not("confidence", "is", null)
     .order("target_ts", { ascending: false })
     .limit(limit);
+  if (error) throw error;
   const rows = (data ?? []) as { confidence: number | null }[];
   return rows
     .reverse()
-    .map((r) => ({
-      confidence:
-        r.confidence === null || !Number.isFinite(Number(r.confidence))
-          ? null
-          : Number(r.confidence),
-    }));
+    .map((r) => numOrNaN(r.confidence))
+    .filter((v) => Number.isFinite(v));
+}
+
+/**
+ * The last 768 OFFICIAL OPPORTUNITIES, chronological, invalid ones included.
+ * `null` marks an observed-but-unscored opportunity. This is the availability
+ * clock and is deliberately different from the rank clock above.
+ */
+export async function readPriorOpportunities(
+  sb: SupabaseClient,
+  targetTs: string,
+  limit = 768,
+): Promise<(number | null)[]> {
+  const { data, error } = await sb
+    .from(V11_SCORES_TABLE)
+    .select("target_ts, confidence, valid")
+    .lt("target_ts", targetTs)
+    .order("target_ts", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  const rows = (data ?? []) as { confidence: number | null; valid: boolean }[];
+  return rows.reverse().map((r) => {
+    if (!r.valid) return null;
+    const c = numOrNaN(r.confidence);
+    return Number.isFinite(c) ? c : null;
+  });
 }
 
 export interface V11ScoreRecord {
@@ -227,7 +285,10 @@ export async function scoreExists(
   return Boolean(data);
 }
 
-/** Immutable read of the ORIGINAL V1 leg, including its send-claim state. */
+/**
+ * Immutable read of the ORIGINAL V1 leg, including its send-claim state.
+ * Throws on a DB failure — a failed read is never reported as "no V1 row".
+ */
 export async function readV1Snapshot(
   sb: SupabaseClient,
   targetTs: string,
@@ -235,31 +296,24 @@ export async function readV1Snapshot(
   const { data, error } = await sb
     .from("c85_targets")
     .select(
-      "ticker, status, final_side, features, gate_reasons, webhook_status, webhook_dedupe_key",
+      "ticker, status, run_mode, final_side, features, gate_reasons, webhook_status, webhook_dedupe_key, publication_offset_ms, last_receipt_ns",
     )
     .eq("model_version", V1_MODEL_VERSION)
     .eq("target_open_utc", targetTs)
     .maybeSingle();
-  if (error) {
-    return {
-      committed: false,
-      status: null,
-      inputValid: false,
-      finalSide: null,
-      reason: null,
-      ordinaryFloorOpen: null,
-      sendClaim: "unknown",
-    };
-  }
+  if (error) throw error;
   if (!data) {
     return {
       committed: false,
       status: null,
+      runMode: null,
       inputValid: false,
       finalSide: null,
       reason: null,
       ordinaryFloorOpen: null,
       sendClaim: "none",
+      publicationOffsetMs: null,
+      lastReceiptNs: null,
     };
   }
   const features = (data.features ?? {}) as Record<string, unknown>;
@@ -272,9 +326,12 @@ export async function readV1Snapshot(
     (data.webhook_status as string | null) ?? null,
     (data.webhook_dedupe_key as string | null) ?? null,
   );
+  // `=== true` on both flags: JSON "false"/"0"/"" must not become true.
+  const floorRaw = floor["ordinary_floor_allows"];
   return {
     committed: true,
     status: (data.status as string | null) ?? null,
+    runMode: (data.run_mode as string | null) ?? null,
     inputValid: features["input_valid"] === true,
     finalSide:
       data.final_side === null || data.final_side === undefined
@@ -282,10 +339,16 @@ export async function readV1Snapshot(
         : Number(data.final_side),
     reason: (liteA["reason"] as string | null) ?? null,
     ordinaryFloorOpen:
-      floor["ordinary_floor_allows"] === undefined
-        ? null
-        : Boolean(floor["ordinary_floor_allows"]),
+      floorRaw === undefined || floorRaw === null ? null : floorRaw === true,
     sendClaim: claim,
+    publicationOffsetMs:
+      data.publication_offset_ms === null || data.publication_offset_ms === undefined
+        ? null
+        : Number(data.publication_offset_ms),
+    lastReceiptNs:
+      data.last_receipt_ns === null || data.last_receipt_ns === undefined
+        ? null
+        : String(data.last_receipt_ns),
   };
 }
 
@@ -312,6 +375,7 @@ export async function readV1SendClaim(
     .from("c85_outbox")
     .select("dedupe_key, status")
     .eq("dedupe_key", key)
+    // A claim read failure is "unknown", which is never fallback-eligible.
     .limit(1);
   if (error) return "unknown";
   const rows = (data ?? []) as { status: string | null }[];
@@ -397,6 +461,14 @@ export async function readHeadForDate(
   return {
     fitDate: data.fit_date as string,
     expiresAt: new Date(data.expires_at as string).toISOString(),
+    cutoffTs: data.cutoff_ts ? new Date(data.cutoff_ts as string).toISOString() : null,
+    featureOrderHash: (data.feature_order_hash as string | null) ?? null,
+    configFingerprint: (data.config_fingerprint as string | null) ?? null,
+    maxTrainingSettlementTs: data.max_training_settlement_ts
+      ? new Date(data.max_training_settlement_ts as string).toISOString()
+      : null,
+    quarantined: data.quarantined === true,
+    quarantineReason: (data.quarantine_reason as string | null) ?? null,
     scaler: data.scaler as V11Scaler,
     coefficients: data.coefficients as number[],
     intercept: Number(data.intercept),
@@ -410,9 +482,20 @@ export async function readHeadForDate(
   };
 }
 
+/**
+ * Upsert, not insert-and-ignore: a refit for an existing fit_date REPLACES the
+ * head. Ignoring the duplicate silently kept stale heads alive after a data
+ * correction.
+ */
 export async function writeHead(sb: SupabaseClient, head: V11Head): Promise<void> {
-  const { error } = await sb.from(V11_HEADS_TABLE).insert({
+  const { error } = await sb.from(V11_HEADS_TABLE).upsert({
     fit_date: head.fitDate,
+    cutoff_ts: head.cutoffTs,
+    feature_order_hash: head.featureOrderHash ?? V11_FEATURE_ORDER_HASH,
+    config_fingerprint: head.configFingerprint ?? V11_CONFIG_FINGERPRINT,
+    max_training_settlement_ts: head.maxTrainingSettlementTs,
+    quarantined: head.quarantined === true,
+    quarantine_reason: head.quarantineReason ?? null,
     expires_at: head.expiresAt,
     scaler: head.scaler,
     coefficients: head.coefficients,
@@ -424,8 +507,8 @@ export async function writeHead(sb: SupabaseClient, head: V11Head): Promise<void
     converged: head.converged,
     iterations: head.iterations,
     gradient_norm: head.gradientNorm,
-  });
-  if (error && error.code !== "23505") throw error;
+  }, { onConflict: "fit_date" });
+  if (error) throw error;
 }
 
 /** Training rows for a fit: materialised 80-input vectors with Kalshi labels. */
@@ -532,4 +615,84 @@ export async function advanceState(
     .from(V11_STATE_TABLE)
     .upsert(next, { onConflict: "state_key" });
   if (error) throw error;
+}
+
+/**
+ * ATOMIC ORDERED COMMIT.
+ *
+ * Score, decision and checkpoint are written by ONE database transaction that
+ * takes a per-interval advisory lock. Consequences that the previous
+ * append-then-append-then-checkpoint sequence could not provide:
+ *  - a crash after the score can never leave a permanently missing decision;
+ *  - two concurrent invocations cannot interleave two different snapshots;
+ *  - the checkpoint uses GREATEST(), so it can never regress.
+ */
+export async function commitObservation(
+  sb: SupabaseClient,
+  targetTs: string,
+  score: Record<string, unknown>,
+  decision: Record<string, unknown>,
+): Promise<{ scoreWritten: boolean; decisionWritten: boolean; lastProcessedTs: string | null }> {
+  const { data, error } = await sb.rpc("v11_commit_observation", {
+    p_target_ts: targetTs,
+    p_score: score,
+    p_decision: decision,
+  });
+  if (error) throw error;
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    scoreWritten: r.score_written === true,
+    decisionWritten: r.decision_written === true,
+    lastProcessedTs: (r.last_processed_ts as string | null) ?? null,
+  };
+}
+
+/** Is a committed decision already present for this interval? */
+export async function decisionExists(
+  sb: SupabaseClient,
+  targetTs: string,
+): Promise<boolean> {
+  const { data, error } = await sb
+    .from(V11_DECISIONS_TABLE)
+    .select("target_ts")
+    .eq("target_ts", targetTs)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
+ * Official opportunities between the checkpoint and `targetTs` that have no
+ * committed decision. A non-empty list means the chronological chain has holes
+ * and must be recovered in order before this interval is treated as continuous.
+ */
+export async function readMissingPredecessors(
+  sb: SupabaseClient,
+  targetTs: string,
+  limit = 96,
+): Promise<string[]> {
+  const state = await readState(sb);
+  if (!state.lastProcessedTs) return [];
+  const { data: ctx, error: ctxErr } = await sb
+    .from(V11_CONTEXT_TABLE)
+    .select("target_ts")
+    .gt("target_ts", state.lastProcessedTs)
+    .lt("target_ts", targetTs)
+    .order("target_ts", { ascending: true })
+    .limit(limit);
+  if (ctxErr) throw ctxErr;
+  const wanted = ((ctx ?? []) as { target_ts: string }[]).map((r) =>
+    new Date(r.target_ts).toISOString(),
+  );
+  if (wanted.length === 0) return [];
+  const { data: done, error: doneErr } = await sb
+    .from(V11_DECISIONS_TABLE)
+    .select("target_ts")
+    .gt("target_ts", state.lastProcessedTs)
+    .lt("target_ts", targetTs);
+  if (doneErr) throw doneErr;
+  const have = new Set(
+    ((done ?? []) as { target_ts: string }[]).map((r) => new Date(r.target_ts).toISOString()),
+  );
+  return wanted.filter((ts) => !have.has(ts));
 }

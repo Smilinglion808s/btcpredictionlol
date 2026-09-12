@@ -10206,6 +10206,7 @@ export type Database = {
           dispatch_enabled: boolean
           event_cutoff_offset_ms: number | null
           event_key: string
+          evidence: Json
           head_date: string | null
           inputs_persisted_offset_ms: number | null
           leg: string | null
@@ -10213,6 +10214,7 @@ export type Database = {
           publication_ceiling_ms: number | null
           rank: number | null
           reason: string
+          run_mode: string
           side: number
           strategy: Json
           target_ts: string
@@ -10231,6 +10233,7 @@ export type Database = {
           dispatch_enabled?: boolean
           event_cutoff_offset_ms?: number | null
           event_key: string
+          evidence?: Json
           head_date?: string | null
           inputs_persisted_offset_ms?: number | null
           leg?: string | null
@@ -10238,6 +10241,7 @@ export type Database = {
           publication_ceiling_ms?: number | null
           rank?: number | null
           reason: string
+          run_mode?: string
           side?: number
           strategy?: Json
           target_ts: string
@@ -10256,6 +10260,7 @@ export type Database = {
           dispatch_enabled?: boolean
           event_cutoff_offset_ms?: number | null
           event_key?: string
+          evidence?: Json
           head_date?: string | null
           inputs_persisted_offset_ms?: number | null
           leg?: string | null
@@ -10263,6 +10268,7 @@ export type Database = {
           publication_ceiling_ms?: number | null
           rank?: number | null
           reason?: string
+          run_mode?: string
           side?: number
           strategy?: Json
           target_ts?: string
@@ -10279,48 +10285,69 @@ export type Database = {
       v11_heads: {
         Row: {
           coefficients: Json
+          config_fingerprint: string | null
           converged: boolean
           created_at: string
+          cutoff_ts: string | null
           expires_at: string
+          feature_order_hash: string | null
           fit_date: string
           gradient_norm: number
           intercept: number
           iterations: number
+          max_training_settlement_ts: string | null
+          quarantine_reason: string | null
+          quarantined: boolean
           scaler: Json
           training_end_ts: string
           training_fingerprint: string
           training_rows: number
           training_start_ts: string
+          vector_fingerprint: string | null
         }
         Insert: {
           coefficients: Json
+          config_fingerprint?: string | null
           converged: boolean
           created_at?: string
+          cutoff_ts?: string | null
           expires_at: string
+          feature_order_hash?: string | null
           fit_date: string
           gradient_norm: number
           intercept: number
           iterations: number
+          max_training_settlement_ts?: string | null
+          quarantine_reason?: string | null
+          quarantined?: boolean
           scaler: Json
           training_end_ts: string
           training_fingerprint: string
           training_rows: number
           training_start_ts: string
+          vector_fingerprint?: string | null
         }
         Update: {
           coefficients?: Json
+          config_fingerprint?: string | null
           converged?: boolean
           created_at?: string
+          cutoff_ts?: string | null
           expires_at?: string
+          feature_order_hash?: string | null
           fit_date?: string
           gradient_norm?: number
           intercept?: number
           iterations?: number
+          max_training_settlement_ts?: string | null
+          quarantine_reason?: string | null
+          quarantined?: boolean
           scaler?: Json
           training_end_ts?: string
           training_fingerprint?: string
           training_rows?: number
           training_start_ts?: string
+          vector_fingerprint?: string | null
         }
         Relationships: []
       }
@@ -10330,11 +10357,15 @@ export type Database = {
           availability: number | null
           confidence: number | null
           created_at: string
+          decision_offset_ms: number | null
+          event_cutoff_offset_ms: number | null
           head_date: string | null
+          inputs_persisted_offset_ms: number | null
           probability: number | null
           rank: number | null
           rank_history: number
           reason: string
+          run_mode: string
           target_ts: string
           ticker: string
           valid: boolean
@@ -10344,11 +10375,15 @@ export type Database = {
           availability?: number | null
           confidence?: number | null
           created_at?: string
+          decision_offset_ms?: number | null
+          event_cutoff_offset_ms?: number | null
           head_date?: string | null
+          inputs_persisted_offset_ms?: number | null
           probability?: number | null
           rank?: number | null
           rank_history?: number
           reason: string
+          run_mode?: string
           target_ts: string
           ticker?: string
           valid?: boolean
@@ -10358,11 +10393,15 @@ export type Database = {
           availability?: number | null
           confidence?: number | null
           created_at?: string
+          decision_offset_ms?: number | null
+          event_cutoff_offset_ms?: number | null
           head_date?: string | null
+          inputs_persisted_offset_ms?: number | null
           probability?: number | null
           rank?: number | null
           rank_history?: number
           reason?: string
+          run_mode?: string
           target_ts?: string
           ticker?: string
           valid?: boolean
@@ -12574,6 +12613,10 @@ export type Database = {
         Returns: Json
       }
       t45pf_mint_lock: { Args: { p_block_start: number }; Returns: boolean }
+      v11_commit_observation: {
+        Args: { p_decision: Json; p_score: Json; p_target_ts: string }
+        Returns: Json
+      }
     }
     Enums: {
       binance_ob_capture_status:

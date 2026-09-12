@@ -20,6 +20,10 @@ export interface V1LegSnapshot {
   committed: boolean;
   /** V1 status, e.g. "DECIDED" / "INPUT_UNAVAILABLE". */
   status: string | null;
+  /** V1 run mode: only a genuine LIVE V1 row can admit a live fallback. */
+  runMode?: string | null;
+  publicationOffsetMs?: number | null;
+  lastReceiptNs?: string | null;
   inputValid: boolean;
   /** Original recorded side: +1 / -1 / 0. */
   finalSide: number | null;
@@ -57,11 +61,14 @@ export interface V11Decision {
   probability: number | null;
 }
 
+/**
+ * The selected strategy is pure direction: p >= .5 is UP, anything else DOWN.
+ * There is no neutral band. A non-finite probability is not a direction at all
+ * and is refused upstream.
+ */
 export function v11SideFromProbability(p: number): V11Direction {
   if (!Number.isFinite(p)) return 0;
-  if (p > 0.5) return 1;
-  if (p < 0.5) return -1;
-  return 0;
+  return p >= 0.5 ? 1 : -1;
 }
 
 /**
@@ -126,22 +133,53 @@ export function decideV11(
     };
   }
 
-  if (!candidate.valid || candidate.probability === null || candidate.rank === null) {
+  const pOk =
+    candidate.probability !== null &&
+    Number.isFinite(candidate.probability) &&
+    candidate.probability >= 0 &&
+    candidate.probability <= 1;
+  const headOk = candidate.headReady && candidate.headFresh && candidate.headCertified;
+  if (!headOk) {
+    return {
+      leg: null,
+      side: 0,
+      reason: candidate.invalidReason ?? V11_REASONS.HEAD_NOT_READY,
+      rank: candidate.rank,
+      gate:
+        candidate.availability !== null && candidate.availability > 0
+          ? v11AdmissionGate(candidate.availability)
+          : null,
+      probability: candidate.probability,
+    };
+  }
+  if (
+    !candidate.valid ||
+    !pOk ||
+    candidate.rank === null ||
+    !Number.isFinite(candidate.rank)
+  ) {
     return {
       leg: null,
       side: 0,
       reason: candidate.invalidReason ?? V11_REASONS.RANK_NOT_READY,
       rank: candidate.rank,
       gate:
-        candidate.availability !== null ? v11AdmissionGate(candidate.availability) : null,
+        candidate.availability !== null && candidate.availability > 0
+          ? v11AdmissionGate(candidate.availability)
+          : null,
       probability: candidate.probability,
     };
   }
-  if (candidate.availability === null) {
+  // Availability 0 means nothing was scored in the window: there is no gate and
+  // therefore no admission, rather than a gate of 1 that merely never passes.
+  if (candidate.availability === null || !(candidate.availability > 0)) {
     return {
       leg: null,
       side: 0,
-      reason: V11_REASONS.AVAILABILITY_NOT_READY,
+      reason:
+        candidate.availability === null
+          ? V11_REASONS.AVAILABILITY_NOT_READY
+          : V11_REASONS.AVAILABILITY_ZERO,
       rank: candidate.rank,
       gate: null,
       probability: candidate.probability,
@@ -170,12 +208,12 @@ export function decideV11(
     };
   }
 
-  const side = v11SideFromProbability(candidate.probability);
+  const side = v11SideFromProbability(candidate.probability as number);
   if (side === 0) {
     return {
       leg: null,
       side: 0,
-      reason: V11_REASONS.BELOW_FALLBACK_RANK,
+      reason: V11_REASONS.NON_FINITE_INPUT,
       rank: candidate.rank,
       gate,
       probability: candidate.probability,

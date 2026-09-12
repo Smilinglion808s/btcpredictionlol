@@ -14,6 +14,7 @@ import { T30Card } from "@/components/t30-card";
 import { T10Card } from "@/components/t10-card";
 
 import { LiteACard } from "@/components/litea-card";
+import { V11Card } from "@/components/v11-card";
 
 
 /** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
@@ -25,6 +26,7 @@ import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
 import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
 
 import { getLiteAStats } from "@/lib/litea.functions";
+import { getV11Stats } from "@/lib/v11.functions";
 
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
@@ -94,6 +96,10 @@ function StatsPage() {
   // Version 1 (lite-a-floor4-top10-r1) — shadow only, never dispatches.
   const liteAFn = useServerFn(getLiteAStats);
   const liteAQ = useQuery({ queryKey: ["litea-stats"], queryFn: () => liteAFn(), refetchInterval: 15_000, staleTime: 5_000 });
+
+  // Version 1.1 — combined shadow candidate. Read-only, no dispatch path.
+  const v11Fn = useServerFn(getV11Stats);
+  const v11Q = useQuery({ queryKey: ["v11-stats"], queryFn: () => v11Fn(), refetchInterval: 30_000, staleTime: 10_000 });
 
   const [exportingPf, setExportingPf] = useState(false);
   const [exportingT30, setExportingT30] = useState(false);
@@ -262,6 +268,12 @@ function StatsPage() {
           stats={(liteAQ.data as any) ?? {}}
           loading={liteAQ.isLoading}
           error={liteAQ.isError}
+        />
+
+        <V11Card
+          stats={(v11Q.data as any) ?? {}}
+          loading={v11Q.isLoading}
+          error={v11Q.isError}
         />
 
 
