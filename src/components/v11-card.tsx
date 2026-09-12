@@ -129,6 +129,40 @@ export function V11Card({ stats, loading, error }: V11Props) {
               </div>
             </div>
 
+            {Array.isArray(stats?.history) && stats.history.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Recent intervals
+                </h3>
+                <div className="max-h-56 overflow-y-auto rounded-md border border-border/60">
+                  <table className="w-full text-[11px] tabular-nums">
+                    <tbody>
+                      {stats.history.map((h: any) => (
+                        <tr key={h.targetTs} className="border-b border-border/40 last:border-0">
+                          <td className="px-2 py-1 text-muted-foreground">
+                            {new Date(h.targetTs).toISOString().slice(5, 16).replace("T", " ")}
+                          </td>
+                          <td className="px-2 py-1">{h.leg ?? "—"}</td>
+                          <td className="px-2 py-1">
+                            {h.side === 1 ? "UP" : h.side === -1 ? "DOWN" : "—"}
+                          </td>
+                          <td className="px-2 py-1 text-right font-semibold">
+                            {h.outcome === "WIN"
+                              ? "Win"
+                              : h.outcome === "LOSS"
+                                ? "Loss"
+                                : h.outcome === "PENDING"
+                                  ? "Pending"
+                                  : "No call"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Strategy metadata records a stake of{" "}
               {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the
