@@ -421,7 +421,7 @@ async function observeV11TargetOnce(
       processed: true,
       duplicate: false,
       scoreValid: false,
-      runMode,
+      runMode: effectiveRunMode,
       decisionLeg: decision.leg,
       side: decision.side,
       // The blocking cause is reported as itself: a failed V1 read must not be
@@ -517,7 +517,7 @@ async function observeV11TargetOnce(
     processed: true,
     duplicate: false,
     scoreValid: true,
-    runMode,
+    runMode: effectiveRunMode,
     decisionLeg: decision.leg,
     side: decision.side,
     reason: decision.reason,
