@@ -36,6 +36,7 @@ import {
   TF_MS,
   V11_CANDIDATE_VERSION,
   V11_CONFIG_FINGERPRINT,
+  V11_DECISIONS_TABLE,
   V11_FALLBACK_MIN_RANK,
   V11_FEATURE_ORDER_HASH,
   V11_MODEL_NAME,
@@ -611,5 +612,61 @@ export async function dispatchV11FallbackFromCommit(
   return dispatchV11Fallback(deps, row, {
     commitOffsetMs: commit.commitOffsetMs,
     effectiveRunMode: commit.effectiveRunMode,
+  });
+}
+
+/**
+ * The ONE production seam for the fallback leg.
+ *
+ * Called by the signed T+45 collector hook immediately after the atomic
+ * observation commit. It refuses anything that is not a freshly committed,
+ * signed, on-time LIVE_SHADOW directional fallback, and it re-reads the row
+ * the transaction actually persisted rather than trusting in-memory state.
+ * Maintenance, watchdog recovery, replay and research can never reach it.
+ */
+export async function dispatchV11FallbackForObservation(
+  supabase: MinimalClient,
+  targetTs: string,
+  observation: {
+    commit?: {
+      committed?: boolean;
+      decisionWritten?: boolean;
+      effectiveRunMode?: string | null;
+      commitOffsetMs?: number | null;
+    } | null;
+    decisionLeg?: string | null;
+    side?: number | null;
+  } | null,
+  opts: { signed: boolean },
+): Promise<V11DispatchResult & { verdict: string }> {
+  if (!opts.signed) return { verdict: "SKIPPED_UNSIGNED", dedupeKey: null };
+  if (!v11DeliveryArmed()) {
+    return {
+      verdict: v11ServerExecutionEnabled() ? "V1_DELIVERY_STILL_ENABLED" : "EXECUTION_DISABLED",
+      dedupeKey: null,
+    };
+  }
+  const commit = observation?.commit ?? null;
+  if (!commit?.committed || commit.decisionWritten !== true) {
+    return { verdict: "NO_FRESH_COMMIT", dedupeKey: null };
+  }
+  if (commit.effectiveRunMode !== V11_RUN_MODES.LIVE) {
+    return { verdict: "NOT_LIVE_SHADOW", dedupeKey: null };
+  }
+  if (observation?.decisionLeg !== "T45R2") return { verdict: "NOT_FALLBACK_LEG", dedupeKey: null };
+  if (observation?.side !== 1 && observation?.side !== -1) {
+    return { verdict: "ABSTAIN", dedupeKey: null };
+  }
+
+  const { data, error } = await supabase
+    .from(V11_DECISIONS_TABLE)
+    .select("*")
+    .eq("target_ts", new Date(targetTs).toISOString())
+    .maybeSingle();
+  if (error || !data) return { verdict: "NO_PERSISTED_RECORD", dedupeKey: null };
+
+  return dispatchV11FallbackFromCommit(supabase, data as V11DecisionRecord, {
+    commitOffsetMs: commit.commitOffsetMs ?? null,
+    effectiveRunMode: commit.effectiveRunMode ?? null,
   });
 }
