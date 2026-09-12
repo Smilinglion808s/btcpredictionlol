@@ -1,6 +1,7 @@
 // Version 1.1 (combined) outbound delivery. DEFAULT OFF.
 //
-// Version 1.1 is ONE stream with two legs and at most one bet per interval:
+// Version 1.1 is ONE stream with two legs and at most one automatic outbound
+// attempt per interval:
 //
 //   leg "V1"    — the ORIGINAL lite-a-floor4-top10-r1 admitted call, delivered
 //                 on its OWN existing early (T+5) commit path, with its exact
@@ -14,7 +15,10 @@
 //
 // Both legs claim the SAME canonical per-interval key (the original V1 event
 // key) in the SAME durable table, so the two legs are mutually exclusive by
-// construction and no interval can produce two bets.
+// construction: this project makes at most one automatic outbound attempt per
+// interval. What the external bot does with that signal — including whether it
+// places zero, one or more orders — is its own behaviour and is not
+// guaranteed here.
 //
 // Controls (all absent today; both must hold):
 //   1. V11_SERVER_EXECUTION_ENABLED=true
@@ -61,7 +65,8 @@ export function v11ServerExecutionEnabled(): boolean {
 
 /**
  * Version 1.1 may only deliver while the ORIGINAL Version 1 sender is off.
- * Both legs own the same interval; two enabled senders could produce two bets.
+ * Both legs own the same interval; two enabled senders could produce two
+ * outbound attempts for one interval.
  */
 export function v1DeliveryDisabled(): boolean {
   return (
@@ -133,7 +138,7 @@ export function v11V1LegDeliver(
         maxAttempts: 1,
         targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
         // Combined stream: both legs must resolve to ONE destination, or the
-        // at-most-one-bet property cannot be honoured. Fails closed.
+        // one-attempt-per-interval property cannot be honoured. Fails closed.
         requireSingleEndpoint: true,
       },
     );
@@ -615,7 +620,7 @@ export async function resolveV1SourceTargetId(
   const openMs = new Date(String(row['target_open_utc'])).getTime();
   if (openMs !== new Date(source.targetOpenIso).getTime()) return null;
   if (String(row['run_mode']) !== "LIVE") return null;
-  if (Number(row['final_side']) !== 0) return null;
+  if (row['final_side'] !== 0) return null;
   // The original V1 leg must not have touched this interval at all.
   if (row['webhook_status'] != null) return null;
   const features = (row['features'] ?? {}) as Record<string, any>;
