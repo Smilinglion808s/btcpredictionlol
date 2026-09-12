@@ -583,14 +583,20 @@ export interface V11State {
 }
 
 export async function readState(sb: SupabaseClient): Promise<V11State> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from(V11_STATE_TABLE)
-    .select("last_processed_ts, last_fit_date")
+    .select("last_processed_ts, last_fit_date, state_version")
     .eq("state_key", V11_STATE_KEY)
     .maybeSingle();
+  if (error) throw error;
+  const raw = (data?.last_processed_ts as string | null) ?? null;
   return {
-    lastProcessedTs: (data?.last_processed_ts as string | null) ?? null,
+    lastProcessedTs: raw ? new Date(raw).toISOString() : null,
     lastFitDate: (data?.last_fit_date as string | null) ?? null,
+    stateVersion:
+      data?.state_version === null || data?.state_version === undefined
+        ? null
+        : Number(data.state_version),
   };
 }
 
@@ -620,30 +626,78 @@ export async function advanceState(
 /**
  * ATOMIC ORDERED COMMIT.
  *
- * Score, decision and checkpoint are written by ONE database transaction that
- * takes a per-interval advisory lock. Consequences that the previous
- * append-then-append-then-checkpoint sequence could not provide:
- *  - a crash after the score can never leave a permanently missing decision;
- *  - two concurrent invocations cannot interleave two different snapshots;
- *  - the checkpoint uses GREATEST(), so it can never regress.
+ * One database transaction under a single global Version 1.1 lock writes the
+ * score, the decision and the checkpoint. Beyond atomicity it enforces the
+ * ORDER requirements, which the caller cannot enforce from outside:
+ *  - `expectedPrevTs` / `expectedStateVersion`: if the checkpoint moved while
+ *    this observation was being computed, its rank/availability were derived
+ *    from a state that no longer exists, so the commit is REJECTED as stale
+ *    and the caller recomputes.
+ *  - a later target can never skip an official opportunity that still has no
+ *    decision (`PREDECESSOR_MISSING`).
+ *  - a half-written pair from a crash is repaired into ONE canonical pair; the
+ *    already-stored row always wins.
+ *  - a fallback call is re-checked against the frozen V1 leg and its outbox
+ *    INSIDE the transaction, so a V1 send that lands concurrently excludes it.
  */
+export interface V11CommitOutcome {
+  committed: boolean;
+  duplicate: boolean;
+  stale: boolean;
+  gap: boolean;
+  excluded: boolean;
+  outOfOrder: boolean;
+  repaired: boolean;
+  reason: string | null;
+  scoreWritten: boolean;
+  decisionWritten: boolean;
+  lastProcessedTs: string | null;
+  stateVersion: number | null;
+  firstMissingTs: string | null;
+}
+
 export async function commitObservation(
   sb: SupabaseClient,
   targetTs: string,
   score: Record<string, unknown>,
   decision: Record<string, unknown>,
-): Promise<{ scoreWritten: boolean; decisionWritten: boolean; lastProcessedTs: string | null }> {
+  expected: {
+    prevTs?: string | null;
+    stateVersion?: number | null;
+    allowBackfill?: boolean;
+  } = {},
+): Promise<V11CommitOutcome> {
   const { data, error } = await sb.rpc("v11_commit_observation", {
     p_target_ts: targetTs,
     p_score: score,
     p_decision: decision,
+    p_expected_prev_ts: expected.prevTs ?? null,
+    p_expected_state_version:
+      expected.stateVersion === undefined ? null : expected.stateVersion,
+    p_allow_backfill: expected.allowBackfill === true,
   });
   if (error) throw error;
   const r = (data ?? {}) as Record<string, unknown>;
+  const lp = (r.last_processed_ts as string | null) ?? null;
   return {
+    committed: r.committed === true,
+    duplicate: r.duplicate === true,
+    stale: r.stale === true,
+    gap: r.gap === true,
+    excluded: r.excluded === true,
+    outOfOrder: r.out_of_order === true,
+    repaired: r.repaired === true,
+    reason: (r.reason as string | null) ?? null,
     scoreWritten: r.score_written === true,
     decisionWritten: r.decision_written === true,
-    lastProcessedTs: (r.last_processed_ts as string | null) ?? null,
+    lastProcessedTs: lp ? new Date(lp).toISOString() : null,
+    stateVersion:
+      r.state_version === null || r.state_version === undefined
+        ? null
+        : Number(r.state_version),
+    firstMissingTs: r.first_missing_ts
+      ? new Date(r.first_missing_ts as string).toISOString()
+      : null,
   };
 }
 
