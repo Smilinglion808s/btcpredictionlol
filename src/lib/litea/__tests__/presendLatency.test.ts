@@ -223,16 +223,17 @@ describe("Version 1 pre-send path", () => {
     expect(body.strike).toBe(77250);
   });
 
-  it("the ORIGINAL expiry is still enforced after the last awaited lookup", async () => {
+  it("expiry is still enforced after the last awaited lookup", async () => {
     const mod = await loadFresh();
     const supabase = fakeSupabase(trace);
     await mod.wh.primeWebhookEndpoints(supabase, true);
-    // Ownership resolves only after the original 8 s ceiling has passed.
+    // Ownership resolves only after the target candle has CLOSED: that close,
+    // not the 8 s goal, is the hard stop.
     const deps = makeDeps(mod, supabase, trace, {
       async ownsClaim() {
         trace.ownsCalls += 1;
         await sleep(LAT_MS);
-        vi.setSystemTime(new Date(OPEN_MS + 9_000));
+        vi.setSystemTime(new Date(OPEN_MS + 901_000));
         return true;
       },
     });

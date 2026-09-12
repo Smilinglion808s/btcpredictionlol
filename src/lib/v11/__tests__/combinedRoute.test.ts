@@ -257,7 +257,7 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
     expect(posts).toHaveLength(0);
   });
 
-  it("never transmits past the original Version 1 transport ceiling", async () => {
+  it("still transmits past the 8s goal while the candle is open", async () => {
     process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
     const { runC85Op } = await load();
     const posts: unknown[] = [];
@@ -265,8 +265,26 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
       posts.push(a);
       return new Response("{}", { status: 200 });
     });
-    // Well past the 8s ceiling measured from the target open.
+    // Well past the 8s goal measured from the target open, but the candle is
+    // open: late sends go out.
     const openUtc = new Date(Date.now() - 30_000).toISOString();
+    const db = fakeDb(admittedTarget(openUtc));
+
+    const out = await runC85Op(db.client, "c85-worker-1", commit(openUtc), LITE_A_MODEL_VERSION);
+
+    expect(out.result.dispatch).toBe("SENT");
+    expect(posts).toHaveLength(1);
+  });
+
+  it("never transmits once the target candle has closed", async () => {
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    const { runC85Op } = await load();
+    const posts: unknown[] = [];
+    vi.stubGlobal("fetch", async (...a: unknown[]) => {
+      posts.push(a);
+      return new Response("{}", { status: 200 });
+    });
+    const openUtc = new Date(Date.now() - 901_000).toISOString();
     const db = fakeDb(admittedTarget(openUtc));
 
     const out = await runC85Op(db.client, "c85-worker-1", commit(openUtc), LITE_A_MODEL_VERSION);
