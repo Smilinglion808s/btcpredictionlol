@@ -183,12 +183,29 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
 
         const v11: unknown = await v11Promise;
 
+        // Version 1.1 fallback leg. Only a signed collector trigger whose
+        // observation just committed as an on-time LIVE_SHADOW directional
+        // fallback can reach delivery, and only while BOTH human controls are
+        // set. With them absent this refuses before any claim or read.
+        let v11Dispatch: unknown = null;
+        try {
+          v11Dispatch = await dispatchV11FallbackForObservation(
+            supabase,
+            target,
+            v11 as never,
+            { signed },
+          );
+        } catch (e) {
+          v11Dispatch = { verdict: "ERROR", error: e instanceof Error ? e.message : String(e) };
+        }
+
         const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
         const pfResolved = await resolvePriceFlowBacklog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,
         }));
+
 
 
         return Response.json({
