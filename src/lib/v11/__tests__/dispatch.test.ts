@@ -356,6 +356,8 @@ const V1_SOURCE_TARGET = {
   target_open_utc: new Date(OPEN_MS).toISOString(),
   run_mode: "LIVE",
   final_side: 0,
+  // The original V1 leg never touched this interval.
+  webhook_status: null,
   features: {
     input_valid: true,
     lite_a: { reason: "CONFIDENCE_ABSTAIN" },
