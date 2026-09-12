@@ -87,7 +87,16 @@ function StatsPage() {
 
   // Version 1.1 — combined shadow candidate. Read-only, no dispatch path.
   const v11Fn = useServerFn(getV11Stats);
-  const v11Q = useQuery({ queryKey: ["v11-stats"], queryFn: () => v11Fn(), refetchInterval: 30_000, staleTime: 10_000 });
+  const v11Q = useQuery({
+    queryKey: ["v11-stats"],
+    queryFn: () => v11Fn(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 5_000,
+  });
 
   const [exportingPf, setExportingPf] = useState(false);
 
@@ -167,6 +176,18 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
         qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
         qc.invalidateQueries({ queryKey: ["b2-recent"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "v11_decisions" }, () => {
+        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "v11_context_rows" }, () => {
+        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "v11_heads" }, () => {
+        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "webhook_deliveries" }, () => {
+        qc.invalidateQueries({ queryKey: ["v11-stats"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
