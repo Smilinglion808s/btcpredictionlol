@@ -601,7 +601,9 @@ export async function resolveV1SourceTargetId(
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from(C85_TARGETS_TABLE)
-    .select("id,model_version,ticker,target_open_utc,run_mode,final_side,features")
+    .select(
+      "id,model_version,ticker,target_open_utc,run_mode,final_side,features,webhook_status",
+    )
     .eq("model_version", LITE_A_MODEL_VERSION)
     .eq("ticker", source.ticker)
     .eq("target_open_utc", source.targetOpenIso)
