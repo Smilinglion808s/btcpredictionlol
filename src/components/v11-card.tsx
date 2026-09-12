@@ -1,7 +1,10 @@
-// Version 1.1 tile — combined V1 + improved T45 R2 fallback, SHADOW ONLY.
+// Version 1.1 tile — combined V1 + improved T45 R2 fallback.
 //
 // Live and research evidence are shown in separate blocks and never summed.
-// Nothing here can place a bet: the model has no dispatch path.
+// The delivery status shown here is read from the real server controls and the
+// real destination count; it describes this project's CONFIGURATION only, not
+// whether the external betting bot acted on anything.
+
 
 interface LegRecord {
   calls: number;
@@ -47,11 +50,50 @@ function Record({ title, r }: { title: string; r: LegRecord | undefined }) {
   );
 }
 
+/**
+ * Honest delivery wording. "Sending" here means this project would transmit a
+ * message; placing and sizing an order remains entirely the external betting
+ * bot's decision, which this dashboard cannot observe.
+ */
+const DELIVERY_STATUS: Record<string, { badge: string; detail: string }> = {
+  PAUSED_NO_FLAG: {
+    badge: "Sending paused",
+    detail:
+      "Sending is switched off on the server, so no message leaves this project for any interval.",
+  },
+  BLOCKED_V1_SENDER_ON: {
+    badge: "Sending blocked",
+    detail:
+      "The original Version 1 sender is still switched on, so Version 1.1 refuses to send — the two share one interval.",
+  },
+  ARMED_NO_DESTINATION: {
+    badge: "Switched on · no destination",
+    detail:
+      "Sending is switched on, but no active destination is configured, so nothing can actually be transmitted.",
+  },
+  ARMED_MULTIPLE_DESTINATIONS: {
+    badge: "Switched on · too many destinations",
+    detail:
+      "Sending is switched on but more than one active destination is configured. Version 1.1 refuses to transmit, because one interval must reach exactly one destination.",
+  },
+  ARMED_DELIVERY_CONFIGURED: {
+    badge: "Sending on",
+    detail:
+      "Sending is switched on with one active destination, so an admitted call would be transmitted. Whether an order is then placed is decided by the external betting bot.",
+  },
+};
+
+
 export function V11Card({ stats, loading, error }: V11Props) {
   const live = stats?.live;
   const research = stats?.research;
   const latest = stats?.latest;
   const phase: string = stats?.phase ?? "PREPARING";
+  const control = stats?.control;
+  const delivery = DELIVERY_STATUS[control?.status as string] ?? {
+    badge: "Delivery: unknown",
+    detail: "Delivery configuration could not be read.",
+  };
 
   return (
     <section className="litea-tile rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -62,9 +104,10 @@ export function V11Card({ stats, loading, error }: V11Props) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="litea-badge">{phase.replace(/_/g, " ")}</span>
-          <span className="litea-badge">Betting off</span>
+          <span className="litea-badge">{delivery.badge}</span>
         </div>
       </header>
+
 
       <div className="p-4 space-y-4">
         {error ? (
@@ -163,12 +206,28 @@ export function V11Card({ stats, loading, error }: V11Props) {
               </div>
             )}
 
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Strategy metadata records a stake of{" "}
-              {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the
-              Boise-day opening principal per leg. Sizing and order placement stay with
-              the external betting bot; this model sends nothing.
-            </p>
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Delivery
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {delivery.detail}
+                {control ? (
+                  <>
+                    {" "}
+                    Active destinations for new calls: {control.activeEndpoints}.
+                  </>
+                ) : null}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Strategy metadata records a stake of{" "}
+                {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the
+                Boise-day opening principal per leg. Sizing and order placement stay
+                with the external betting bot; this dashboard shows what was sent, never
+                what was traded.
+              </p>
+            </div>
+
           </>
         )}
       </div>

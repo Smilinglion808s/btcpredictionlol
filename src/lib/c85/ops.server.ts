@@ -30,8 +30,10 @@ import {
 import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 import {
   v11DeliveryArmed,
+  v11V1LegClaimRelabel,
   v11V1LegDeliver,
   v11V1LegGateReaders,
+
 } from "@/lib/v11/dispatch.server";
 
 // The identity a signed worker request writes under. Restricted to a closed
@@ -409,8 +411,15 @@ export async function runC85Op(
               };
             };
         const liveReaders = v11Combined ? v11V1LegGateReaders() : {};
+        const baseDeps = supabaseLiteaDispatchDeps(supabase, deliver);
+        // On the combined route the DURABLE outbox payload must match the wire:
+        // same combined identity, leg and stake metadata. Key, target id,
+        // expiry, ownership and V1 guard accounting are unchanged, and the
+        // original dispatcher itself is untouched.
+        const claimDeps = v11Combined ? v11V1LegClaimRelabel(baseDeps) : {};
         const dispatch = await dispatchLiteaDecision(
-          { ...supabaseLiteaDispatchDeps(supabase, deliver), ...liveReaders },
+          { ...baseDeps, ...claimDeps, ...liveReaders },
+
           persisted as LiteADecisionRecord,
           {
             targetId,

@@ -21,6 +21,8 @@ import { runV11Maintenance } from "@/lib/v11/maintenance.server";
 import { V11_RUN_MODES } from "@/lib/v11/config";
 import { v11ObservationGate } from "@/lib/v11/hookGate";
 import { dispatchV11FallbackForObservation } from "@/lib/v11/dispatch.server";
+import { v11ObserveAndDispatch } from "@/lib/v11/hookPipeline";
+
 import { T45_CUTOFF_OFFSET_MS, T45_PUBLISH_DEADLINE_MS, TF_MS } from "@/lib/t45/config";
 
 /** Never sit longer than this waiting for the T+45s cutoff. */
@@ -157,16 +159,35 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         // watchdog/manual invocations skip the observer entirely so their
         // immutable RECOVERY row cannot pre-empt the on-time signed trigger.
         const v11Gate = v11ObservationGate({ signed, targetMs, nowMs: Date.now() });
-        const v11Promise = v11Gate.run
-          ? observeV11Target(supabase, target, {
-              requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
-              live: signed
-                ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
-                : undefined,
-            }).catch((e: unknown) => ({
-              error: e instanceof Error ? e.message : String(e),
-            }))
-          : Promise.resolve({ skipped: v11Gate.reason });
+        // Version 1.1 fallback delivery is attached to the observer's OWN
+        // continuation, not to the end of the handler: the dispatch decision
+        // runs the instant the atomic commit resolves, so legacy T45 work can
+        // never push an eligible send past the 60s ceiling. Only a signed
+        // collector trigger whose observation just committed as an on-time
+        // LIVE_SHADOW directional fallback can reach delivery, and only while
+        // BOTH human controls are set. With them absent this refuses before
+        // any claim, read or byte on the wire.
+        const v11Promise: Promise<{ observation: unknown; dispatch: unknown }> = v11Gate.run
+          ? v11ObserveAndDispatch(
+              () =>
+                observeV11Target(supabase, target, {
+                  requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
+                  live: signed
+                    ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
+                    : undefined,
+                }),
+              (observation) =>
+                dispatchV11FallbackForObservation(
+                  supabase,
+                  target,
+                  observation as never,
+                  { signed },
+                ),
+            )
+          : Promise.resolve({
+              observation: { skipped: v11Gate.reason },
+              dispatch: { verdict: "SKIPPED_UNSIGNED", reason: v11Gate.reason },
+            });
 
         let priceFlow: unknown = null;
         try {
@@ -182,23 +203,8 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
           result = { error: e instanceof Error ? e.message : String(e) };
         }
 
-        const v11: unknown = await v11Promise;
+        const { observation: v11, dispatch: v11Dispatch } = await v11Promise;
 
-        // Version 1.1 fallback leg. Only a signed collector trigger whose
-        // observation just committed as an on-time LIVE_SHADOW directional
-        // fallback can reach delivery, and only while BOTH human controls are
-        // set. With them absent this refuses before any claim or read.
-        let v11Dispatch: unknown = null;
-        try {
-          v11Dispatch = await dispatchV11FallbackForObservation(
-            supabase,
-            target,
-            v11 as never,
-            { signed },
-          );
-        } catch (e) {
-          v11Dispatch = { verdict: "ERROR", error: e instanceof Error ? e.message : String(e) };
-        }
 
         const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,

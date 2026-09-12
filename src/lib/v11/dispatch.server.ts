@@ -34,18 +34,22 @@ import { liteaDedupeKey } from "@/lib/litea/webhook.server";
 import { LITEA_CLAIM_RPC } from "@/lib/litea/dispatch.server";
 import {
   TF_MS,
+  V1_LOW_CONFIDENCE_REASON,
   V11_CANDIDATE_VERSION,
   V11_CONFIG_FINGERPRINT,
   V11_DECISIONS_TABLE,
+  V11_EVENT_CUTOFF_OFFSET_MS,
   V11_FALLBACK_MIN_RANK,
   V11_FEATURE_ORDER_HASH,
   V11_MODEL_NAME,
   V11_MODEL_VERSION,
   V11_POLICY_VERSION,
   V11_PUBLICATION_CEILING_MS,
+  V11_REASONS,
   V11_RUN_MODES,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
+
 
 export const V11_EXECUTION_ENV = "V11_SERVER_EXECUTION_ENABLED";
 
@@ -127,12 +131,35 @@ export function v11V1LegDeliver(
         guard,
         maxAttempts: 1,
         targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
+        // Combined stream: both legs must resolve to ONE destination, or the
+        // at-most-one-bet property cannot be honoured. Fails closed.
+        requireSingleEndpoint: true,
       },
     );
     void delivery.settle;
     return { delivered: delivery.delivered, sendStartedAtMs: delivery.sendStartedAtMs };
   };
 }
+
+/**
+ * Claim wrapper for the combined route.
+ *
+ * The ORIGINAL dispatcher builds the durable outbox payload from the V1 record
+ * and is NOT modified. When the interval is routed through Version 1.1 the
+ * durable row must describe what actually goes on the wire, so the claim
+ * payload is re-labelled with the same combined identity, leg and stake
+ * metadata the transport sends. Key, target id, expiry, ownership and the V1
+ * guard accounting are untouched.
+ */
+export function v11V1LegClaimRelabel<
+  D extends { claim: (e: { payload: Record<string, unknown> } & Record<string, any>) => any },
+>(deps: D): Pick<D, "claim"> {
+  return {
+    claim: ((entry: any) =>
+      deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) })) as D["claim"],
+  };
+}
+
 
 /** Live readers the V1-leg guard must use while routed through Version 1.1. */
 export function v11V1LegGateReaders() {
@@ -153,6 +180,7 @@ export type V11DispatchVerdict =
   | "V1_DELIVERY_STILL_ENABLED"
   | "NOT_LIVE_SHADOW"
   | "NOT_FALLBACK_LEG"
+  | "REASON_MISMATCH"
   | "ABSTAIN"
   | "IDENTITY_MISMATCH"
   | "EVIDENCE_UNSIGNED"
@@ -162,10 +190,12 @@ export type V11DispatchVerdict =
   | "V1_LEG_NOT_EXCLUSIVE"
   | "BAD_TARGET_IDENTITY"
   | "TIMING_UNAVAILABLE"
+  | "TIMING_INCOHERENT"
   | "LATE_COMMIT"
   | "EXPIRED"
   | "ALREADY_CLAIMED"
   | "WOULD_SEND";
+
 
 /** The persisted `v11_decisions` row, exactly as the transaction stored it. */
 export interface V11DecisionRecord {
@@ -218,6 +248,9 @@ export function evaluateV11Dispatch(
   if (o.effectiveRunMode !== V11_RUN_MODES.LIVE) return "NOT_LIVE_SHADOW";
 
   if (String(row.leg) !== "T45R2") return "NOT_FALLBACK_LEG";
+  // Exactly the fallback-call reason. No other admitted or abstained reason,
+  // however directional the row looks, may be delivered.
+  if (String(row.reason) !== V11_REASONS.FALLBACK_CALL) return "REASON_MISMATCH";
   const side = finite(row.side);
   if (side !== 1 && side !== -1) return "ABSTAIN";
 
@@ -243,12 +276,17 @@ export function evaluateV11Dispatch(
   if (evidence.trigger_signed !== true) return "EVIDENCE_UNSIGNED";
   if (String(evidence.run_mode) !== V11_RUN_MODES.LIVE) return "EVIDENCE_UNSIGNED";
   if (evidence.downgraded_by != null) return "EVIDENCE_UNSIGNED";
-  if (finite(evidence.trigger_received_at_ms) === null) return "EVIDENCE_UNSIGNED";
+  const receivedAtMs = finite(evidence.trigger_received_at_ms);
+  if (receivedAtMs === null) return "EVIDENCE_UNSIGNED";
 
+  // Probabilities, ranks and gates are all unit-interval quantities. Anything
+  // outside [0,1] is a corrupt row, not a confident call.
   const probability = finite(row.probability);
   const rank = finite(row.rank);
   const gate = finite(row.admission_gate);
   if (probability === null || rank === null || gate === null) return "SCORE_INVALID";
+  const unit = (v: number) => v >= 0 && v <= 1;
+  if (!unit(probability) || !unit(rank) || !unit(gate)) return "SCORE_INVALID";
   if (rank < gate) return "BELOW_ADMISSION_GATE";
   if (rank < V11_FALLBACK_MIN_RANK) return "BELOW_FALLBACK_RANK";
 
@@ -257,7 +295,7 @@ export function evaluateV11Dispatch(
   if (String(row.v1_status ?? "") === "") return "V1_LEG_NOT_EXCLUSIVE";
   if (row.v1_final_side !== 0) return "V1_LEG_NOT_EXCLUSIVE";
   if (row.v1_floor_open !== true) return "V1_LEG_NOT_EXCLUSIVE";
-  if (String(row.v1_reason) !== "CONFIDENCE_ABSTAIN") return "V1_LEG_NOT_EXCLUSIVE";
+  if (String(row.v1_reason) !== V1_LOW_CONFIDENCE_REASON) return "V1_LEG_NOT_EXCLUSIVE";
   if (String(row.v1_send_claim) !== "none") return "V1_LEG_NOT_EXCLUSIVE";
   if (String(evidence.v1_run_mode) !== "LIVE") return "V1_LEG_NOT_EXCLUSIVE";
   if (evidence.v1_read_failed === true) return "V1_LEG_NOT_EXCLUSIVE";
@@ -266,21 +304,47 @@ export function evaluateV11Dispatch(
   const openMs = new Date(String(row.target_ts)).getTime();
   if (!ticker || !Number.isFinite(openMs)) return "BAD_TARGET_IDENTITY";
 
+  // ── Timing coherence ───────────────────────────────────────────────────────
+  // The fallback exists only in the window [T+45s, T+60s). Every instant the
+  // row reports must sit inside it and be ordered receipt <= decision <=
+  // commit <= now, with no negative, future or contradictory value. A row that
+  // cannot prove when it happened is not delivered.
   const ceiling = o.ceilingMs ?? V11_PUBLICATION_CEILING_MS;
   const decisionOffset = finite(row.decision_offset_ms);
-  if (decisionOffset === null || decisionOffset < 0) return "TIMING_UNAVAILABLE";
+  if (decisionOffset === null) return "TIMING_UNAVAILABLE";
   if (o.commitOffsetMs === null || !Number.isFinite(o.commitOffsetMs)) {
     return "TIMING_UNAVAILABLE";
   }
-  if (row.within_publication_ceiling !== true) return "LATE_COMMIT";
-  if (o.commitOffsetMs >= ceiling) return "LATE_COMMIT";
+  const commitOffset = o.commitOffsetMs;
+  if (commitOffset < 0 || decisionOffset < 0) return "TIMING_INCOHERENT";
 
+  // The RPC's report and the stored evidence must describe the same commit.
+  const storedCommitOffset = finite(evidence.commit_offset_ms);
+  if (storedCommitOffset !== null && Math.abs(storedCommitOffset - commitOffset) > 250) {
+    return "TIMING_INCOHERENT";
+  }
+
+  const receiptOffset = receivedAtMs - openMs;
   const age = o.nowMs - openMs;
   if (!Number.isFinite(age) || age < 0) return "BAD_TARGET_IDENTITY";
+
+  const inWindow = (v: number) => v >= V11_EVENT_CUTOFF_OFFSET_MS && v < ceiling;
+  if (!inWindow(receiptOffset) || !inWindow(decisionOffset) || !inWindow(commitOffset)) {
+    // A commit past the ceiling is the ordinary "too late" case; anything
+    // earlier than the T+45 cutoff is an impossible fallback.
+    if (commitOffset >= ceiling || decisionOffset >= ceiling) return "LATE_COMMIT";
+    return "TIMING_INCOHERENT";
+  }
+  if (receiptOffset > decisionOffset || decisionOffset > commitOffset) {
+    return "TIMING_INCOHERENT";
+  }
+  if (age < commitOffset) return "TIMING_INCOHERENT"; // commit in the future
+  if (row.within_publication_ceiling !== true) return "LATE_COMMIT";
   if (age >= ceiling) return "EXPIRED";
 
   return "WOULD_SEND";
 }
+
 
 /**
  * Fallback payload. Same field names the existing bot endpoint already accepts,
@@ -603,6 +667,9 @@ export async function dispatchV11FallbackFromCommit(
           guard,
           maxAttempts: 1,
           targetOpenMs: Number.isFinite(openMs) ? openMs : undefined,
+          // One destination for the combined stream, or nothing at all.
+          requireSingleEndpoint: true,
+
         },
       );
       void delivery.settle;

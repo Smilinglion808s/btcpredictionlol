@@ -14,7 +14,9 @@ import {
   V11_RUN_MODES,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
-import { v11DeliveryArmed } from "./dispatch.server";
+import { v1DeliveryDisabled, v11ServerExecutionEnabled } from "./dispatch.server";
+import { countActiveEndpointsForEvent } from "@/lib/webhooks.server";
+
 
 
 export interface V11LegRecord {
@@ -35,6 +37,30 @@ export interface V11Stats {
   sizingOwner: string;
   /** True only when V11_SERVER_EXECUTION_ENABLED=true AND V1 delivery is off. */
   dispatchEnabled: boolean;
+  /**
+   * Truthful, read-only operator view of the delivery configuration. This
+   * describes what THIS project would do, never what the external betting bot
+   * does with a message it receives.
+   */
+  control: {
+    /** V11_SERVER_EXECUTION_ENABLED=true */
+    v11FlagSet: boolean;
+    /** The original Version 1 sender is off (required for the combined route). */
+    v1DeliveryOff: boolean;
+    /** Both server conditions hold. */
+    armed: boolean;
+    /** Active destinations subscribed to prediction.created. Never any URL. */
+    activeEndpoints: number;
+    /** Armed AND exactly one destination: a message would actually be sent. */
+    wouldSend: boolean;
+    status:
+      | "PAUSED_NO_FLAG"
+      | "BLOCKED_V1_SENDER_ON"
+      | "ARMED_NO_DESTINATION"
+      | "ARMED_MULTIPLE_DESTINATIONS"
+      | "ARMED_DELIVERY_CONFIGURED";
+  };
+
 
   phase: "PREPARING" | "RECORDING_ONLY" | "LIVE_SHADOW";
   headDate: string | null;
@@ -246,6 +272,17 @@ export async function buildV11Stats(): Promise<V11Stats> {
         ? "RECORDING_ONLY"
         : "PREPARING";
 
+  // Delivery configuration, read only. Counting destinations never exposes a
+  // URL, a secret or an endpoint id, and nothing here activates anything.
+  const v11FlagSet = v11ServerExecutionEnabled();
+  const v1DeliveryOff = v1DeliveryDisabled();
+  const armed = v11FlagSet && v1DeliveryOff;
+  const activeEndpoints = await countActiveEndpointsForEvent(
+    sb as never,
+    "prediction.created",
+  ).catch(() => 0);
+
+
   return {
     modelVersion: V11_MODEL_VERSION,
     candidateVersion: V11_CANDIDATE_VERSION,
@@ -253,7 +290,24 @@ export async function buildV11Stats(): Promise<V11Stats> {
     publicationMode: V11_PUBLICATION_MODE,
     stakeFractionOfBoiseOpen: V11_STAKE_FRACTION_OF_BOISE_OPEN,
     sizingOwner: "external-betting-bot",
-    dispatchEnabled: v11DeliveryArmed(),
+    dispatchEnabled: armed,
+    control: {
+      v11FlagSet,
+      v1DeliveryOff,
+      armed,
+      activeEndpoints,
+      wouldSend: armed && activeEndpoints === 1,
+      status: !v11FlagSet
+        ? "PAUSED_NO_FLAG"
+        : !v1DeliveryOff
+          ? "BLOCKED_V1_SENDER_ON"
+          : activeEndpoints === 0
+            ? "ARMED_NO_DESTINATION"
+            : activeEndpoints > 1
+              ? "ARMED_MULTIPLE_DESTINATIONS"
+              : "ARMED_DELIVERY_CONFIGURED",
+    },
+
     phase,
     headDate: (head?.fit_date as string | null) ?? null,
     headQuarantined: head?.quarantined === true,

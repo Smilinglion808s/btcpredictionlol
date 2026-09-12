@@ -582,7 +582,31 @@ export interface FastDeliveryOptions {
   maxAttempts?: number;
   /** Target interval open (ms). Used only to record the send-start offset. */
   targetOpenMs?: number;
+  /**
+   * Deliver ONLY when exactly one active endpoint is subscribed to the event.
+   * The Version 1.1 combined stream sets this: its two legs share one interval
+   * and can guarantee at most one bet only against a single destination. Zero
+   * or several configured destinations cancel the send. Legacy callers omit it
+   * and keep fan-out to every configured endpoint.
+   */
+  requireSingleEndpoint?: boolean;
 }
+
+/**
+ * Read-only operator view of the destination list: how many ACTIVE endpoints
+ * are subscribed to an event. No URL, secret or id ever leaves this function.
+ */
+export async function countActiveEndpointsForEvent(
+  supabase: SupabaseClient,
+  event: WebhookEvent,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("webhook_endpoints")
+    .select("events,is_active")
+    .eq("is_active", true);
+  if (error || !Array.isArray(data)) return 0;
+  return (data as { events?: string[] }[]).filter((e) => e.events?.includes(event)).length;
+
 
 /**
  * Send now, log later. The first attempt fires immediately with a short
@@ -632,6 +656,10 @@ export async function deliverWebhookNow(
     e.events?.includes(event),
   );
   if (!endpoints.length) return noop;
+  // Scoped, opt-in: several destinations would mean several bets for one
+  // interval, so the combined stream refuses rather than fanning out.
+  if (options?.requireSingleEndpoint && endpoints.length !== 1) return noop;
+
 
   const body = JSON.stringify({ event, ...payloadObj });
   const signatures = endpoints.map((ep) =>
