@@ -305,12 +305,20 @@ export async function runC85Op(
       // worker sends. Enforced here, at the trust boundary, instead of relying
       // on the worker to omit the field.
       //
-      // Version 1 is on that forbidden list and STAYS on it unless the server's
-      // own human control (LITEA_SERVER_EXECUTION_ENABLED=true) is set. It is
-      // absent today, so a worker outbox request is refused exactly as before.
+      // Version 1 delivery now has TWO mutually exclusive routes, both of which
+      // are absent by default:
+      //   * its own control  LITEA_SERVER_EXECUTION_ENABLED=true  → sends as V1
+      //   * Version 1.1      V11_SERVER_EXECUTION_ENABLED=true    → the SAME
+      //     admitted call, same gates/guard/deadline/claim/accounting, sent as
+      //     the combined stream's "V1" leg.
+      // With both absent nothing is sent — but the decision MUST still be
+      // committed. A worker outbox request for Version 1 therefore never fails
+      // the commit: the transactional outbox field is simply dropped, because
+      // Version 1 dispatch happens after durability on its own path.
       const liteaExecution = mv === LITE_A_MODEL_VERSION && liteaServerExecutionEnabled();
+      const v11Combined = mv === LITE_A_MODEL_VERSION && v11DeliveryArmed();
       const forbidden = (C85_DISPATCH_FORBIDDEN_MODEL_VERSIONS as readonly string[]).filter(
-        (v) => !(v === LITE_A_MODEL_VERSION && liteaExecution),
+        (v) => !(v === LITE_A_MODEL_VERSION),
       );
       if (body.outbox && forbidden.includes(mv)) {
         return {
@@ -328,7 +336,7 @@ export async function runC85Op(
       const { data, error } = await supabase.rpc("c85_commit_decision", {
         p_target: target,
         p_checkpoint: body.checkpoint ? { ...body.checkpoint, model_version: mv } : null,
-        p_outbox: liteaExecution ? null : (body.outbox ?? null),
+        p_outbox: mv === LITE_A_MODEL_VERSION ? null : (body.outbox ?? null),
       });
       if (error) {
         // 409 only for genuine conflicts (stale parent, serialization, unique);
@@ -340,8 +348,9 @@ export async function runC85Op(
       if (res.ok === false) return { status: 409, result: res };
 
       // Durable first, then — and only then — the prepared Version 1 dispatch.
-      // With the control off this returns EXECUTION_DISABLED and sends nothing.
+      // With both controls off this returns EXECUTION_DISABLED and sends nothing.
       if (mv === LITE_A_MODEL_VERSION && body.outbox) {
+
         const targetId =
           (res.target_id as string | undefined) ?? (res.id as string | undefined) ?? null;
         // The delivered signal is built ONLY from the committed immutable
