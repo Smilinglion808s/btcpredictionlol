@@ -31,7 +31,9 @@ export interface V11Stats {
   publicationMode: string;
   stakeFractionOfBoiseOpen: number;
   sizingOwner: string;
-  dispatchEnabled: false;
+  /** True only when V11_SERVER_EXECUTION_ENABLED=true AND V1 delivery is off. */
+  dispatchEnabled: boolean;
+
   phase: "PREPARING" | "RECORDING_ONLY" | "LIVE_SHADOW";
   headDate: string | null;
   headQuarantined: boolean;
