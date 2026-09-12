@@ -10162,6 +10162,255 @@ export type Database = {
         }
         Relationships: []
       }
+      v11_context_rows: {
+        Row: {
+          created_at: string
+          feats: Json
+          input_valid: boolean
+          label: number | null
+          settlement_ts: string | null
+          source: string
+          target_ts: string
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feats: Json
+          input_valid?: boolean
+          label?: number | null
+          settlement_ts?: string | null
+          source?: string
+          target_ts: string
+          ticker?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feats?: Json
+          input_valid?: boolean
+          label?: number | null
+          settlement_ts?: string | null
+          source?: string
+          target_ts?: string
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v11_decisions: {
+        Row: {
+          admission_gate: number | null
+          created_at: string
+          dispatch_enabled: boolean
+          event_key: string
+          head_date: string | null
+          leg: string | null
+          probability: number | null
+          rank: number | null
+          reason: string
+          side: number
+          strategy: Json
+          target_ts: string
+          ticker: string
+          v1_final_side: number | null
+          v1_floor_open: boolean | null
+          v1_reason: string | null
+          v1_send_claim: string
+          v1_status: string | null
+        }
+        Insert: {
+          admission_gate?: number | null
+          created_at?: string
+          dispatch_enabled?: boolean
+          event_key: string
+          head_date?: string | null
+          leg?: string | null
+          probability?: number | null
+          rank?: number | null
+          reason: string
+          side?: number
+          strategy?: Json
+          target_ts: string
+          ticker?: string
+          v1_final_side?: number | null
+          v1_floor_open?: boolean | null
+          v1_reason?: string | null
+          v1_send_claim?: string
+          v1_status?: string | null
+        }
+        Update: {
+          admission_gate?: number | null
+          created_at?: string
+          dispatch_enabled?: boolean
+          event_key?: string
+          head_date?: string | null
+          leg?: string | null
+          probability?: number | null
+          rank?: number | null
+          reason?: string
+          side?: number
+          strategy?: Json
+          target_ts?: string
+          ticker?: string
+          v1_final_side?: number | null
+          v1_floor_open?: boolean | null
+          v1_reason?: string | null
+          v1_send_claim?: string
+          v1_status?: string | null
+        }
+        Relationships: []
+      }
+      v11_heads: {
+        Row: {
+          coefficients: Json
+          converged: boolean
+          created_at: string
+          expires_at: string
+          fit_date: string
+          gradient_norm: number
+          intercept: number
+          iterations: number
+          scaler: Json
+          training_end_ts: string
+          training_fingerprint: string
+          training_rows: number
+          training_start_ts: string
+        }
+        Insert: {
+          coefficients: Json
+          converged: boolean
+          created_at?: string
+          expires_at: string
+          fit_date: string
+          gradient_norm: number
+          intercept: number
+          iterations: number
+          scaler: Json
+          training_end_ts: string
+          training_fingerprint: string
+          training_rows: number
+          training_start_ts: string
+        }
+        Update: {
+          coefficients?: Json
+          converged?: boolean
+          created_at?: string
+          expires_at?: string
+          fit_date?: string
+          gradient_norm?: number
+          intercept?: number
+          iterations?: number
+          scaler?: Json
+          training_end_ts?: string
+          training_fingerprint?: string
+          training_rows?: number
+          training_start_ts?: string
+        }
+        Relationships: []
+      }
+      v11_scores: {
+        Row: {
+          admission_gate: number | null
+          availability: number | null
+          confidence: number | null
+          created_at: string
+          head_date: string | null
+          probability: number | null
+          rank: number | null
+          rank_history: number
+          reason: string
+          target_ts: string
+          ticker: string
+          valid: boolean
+        }
+        Insert: {
+          admission_gate?: number | null
+          availability?: number | null
+          confidence?: number | null
+          created_at?: string
+          head_date?: string | null
+          probability?: number | null
+          rank?: number | null
+          rank_history?: number
+          reason: string
+          target_ts: string
+          ticker?: string
+          valid?: boolean
+        }
+        Update: {
+          admission_gate?: number | null
+          availability?: number | null
+          confidence?: number | null
+          created_at?: string
+          head_date?: string | null
+          probability?: number | null
+          rank?: number | null
+          rank_history?: number
+          reason?: string
+          target_ts?: string
+          ticker?: string
+          valid?: boolean
+        }
+        Relationships: []
+      }
+      v11_state: {
+        Row: {
+          last_fit_date: string | null
+          last_processed_ts: string | null
+          state_key: string
+          updated_at: string
+        }
+        Insert: {
+          last_fit_date?: string | null
+          last_processed_ts?: string | null
+          state_key: string
+          updated_at?: string
+        }
+        Update: {
+          last_fit_date?: string | null
+          last_processed_ts?: string | null
+          state_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v11_vectors: {
+        Row: {
+          created_at: string
+          label: number | null
+          missing: Json
+          settlement_ts: string | null
+          target_ts: string
+          updated_at: string
+          valid: boolean
+          vector: Json | null
+          vol: number | null
+        }
+        Insert: {
+          created_at?: string
+          label?: number | null
+          missing?: Json
+          settlement_ts?: string | null
+          target_ts: string
+          updated_at?: string
+          valid?: boolean
+          vector?: Json | null
+          vol?: number | null
+        }
+        Update: {
+          created_at?: string
+          label?: number | null
+          missing?: Json
+          settlement_ts?: string | null
+          target_ts?: string
+          updated_at?: string
+          valid?: boolean
+          vector?: Json | null
+          vol?: number | null
+        }
+        Relationships: []
+      }
       v6_broad_red_state: {
         Row: {
           broad_red_history_count: number
