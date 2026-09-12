@@ -97,6 +97,23 @@ export async function observeV11Target(
   targetTsInput: string,
   opts: V11ObserveOptions = {},
 ): Promise<V11ObservationResult> {
+  // A commit is rejected as STALE when the checkpoint moved underneath this
+  // computation: the rank/availability windows it used no longer describe the
+  // committed history. The only correct response is to recompute against the
+  // new state, so the whole observation is retried, bounded.
+  let last: V11ObservationResult | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    last = await observeV11TargetOnce(sb, targetTsInput, opts);
+    if (last.commit?.stale !== true) return last;
+  }
+  return last as V11ObservationResult;
+}
+
+async function observeV11TargetOnce(
+  sb: SupabaseClient,
+  targetTsInput: string,
+  opts: V11ObserveOptions = {},
+): Promise<V11ObservationResult> {
   const targetTs = new Date(targetTsInput).toISOString();
   const now = opts.now ?? new Date();
   const openMs = Date.parse(targetTs);
@@ -121,6 +138,9 @@ export async function observeV11Target(
     };
   }
 
+  // The exact prior state this observation is computed against. The commit
+  // refuses to apply if it changed in the meantime.
+  const expectedState = await readState(sb);
   const missingPredecessors = await readMissingPredecessors(sb, targetTs);
 
   // Context: the live committed V1 row is preferred; a DB failure raises rather
@@ -213,12 +233,14 @@ export async function observeV11Target(
     dispatch_enabled: false,
   };
 
+  let commitOutcome: V11CommitOutcome | null = null;
+
   const commit = async (
     score: Record<string, unknown>,
     decision: ReturnType<typeof decideV11>,
     headDate: string | null,
   ): Promise<void> => {
-    await commitObservation(
+    commitOutcome = await commitObservation(
       sb,
       targetTs,
       { ticker, head_date: headDate, run_mode: runMode, ...timing, ...score },
