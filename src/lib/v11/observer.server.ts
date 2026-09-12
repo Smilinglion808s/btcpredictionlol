@@ -403,6 +403,10 @@ async function observeV11TargetOnce(
       headCertified: false,
       invalidReason: reason,
     });
+    // Name the real blocker on the persisted row too.
+    if (v1ReadFailed && decision.leg === null) {
+      decision.reason = V11_REASONS.V1_READ_FAILED;
+    }
     await commit(
       {
         probability: null,
