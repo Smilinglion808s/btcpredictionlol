@@ -615,6 +615,14 @@ export async function dispatchV11FallbackFromCommit(
   });
 }
 
+export type V11ObservationDispatchResult = Omit<V11DispatchResult, "verdict"> & {
+  verdict:
+    | V11DispatchResult["verdict"]
+    | "SKIPPED_UNSIGNED"
+    | "NO_FRESH_COMMIT"
+    | "NO_PERSISTED_RECORD";
+};
+
 /**
  * The ONE production seam for the fallback leg.
  *
@@ -638,7 +646,7 @@ export async function dispatchV11FallbackForObservation(
     side?: number | null;
   } | null,
   opts: { signed: boolean },
-): Promise<V11DispatchResult & { verdict: string }> {
+): Promise<V11ObservationDispatchResult> {
   if (!opts.signed) return { verdict: "SKIPPED_UNSIGNED", dedupeKey: null };
   if (!v11DeliveryArmed()) {
     return {
