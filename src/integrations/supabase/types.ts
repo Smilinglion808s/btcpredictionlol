@@ -10413,18 +10413,21 @@ export type Database = {
           last_fit_date: string | null
           last_processed_ts: string | null
           state_key: string
+          state_version: number
           updated_at: string
         }
         Insert: {
           last_fit_date?: string | null
           last_processed_ts?: string | null
           state_key: string
+          state_version?: number
           updated_at?: string
         }
         Update: {
           last_fit_date?: string | null
           last_processed_ts?: string | null
           state_key?: string
+          state_version?: number
           updated_at?: string
         }
         Relationships: []
@@ -12614,7 +12617,14 @@ export type Database = {
       }
       t45pf_mint_lock: { Args: { p_block_start: number }; Returns: boolean }
       v11_commit_observation: {
-        Args: { p_decision: Json; p_score: Json; p_target_ts: string }
+        Args: {
+          p_allow_backfill?: boolean
+          p_decision: Json
+          p_expected_prev_ts?: string
+          p_expected_state_version?: number
+          p_score: Json
+          p_target_ts: string
+        }
         Returns: Json
       }
     }

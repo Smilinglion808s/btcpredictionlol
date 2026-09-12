@@ -64,7 +64,7 @@ export function computeV11Vol(
     -V11_VOL_WINDOW,
   );
   const finite = window
-    .map((v) => (v === null || v === undefined ? NaN : Number(v)))
+    .map((v) => (v === null || v === undefined ? NaN : num(v)))
     .filter((v) => Number.isFinite(v))
     .map((v) => clip(v, -V11_VOL_CLIP, V11_VOL_CLIP));
   if (finite.length < V11_VOL_MIN_FINITE) {

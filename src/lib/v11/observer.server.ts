@@ -38,6 +38,7 @@ import {
 import { decideV11, type V11CandidateScore, type V1LegSnapshot } from "./decision";
 import {
   commitObservation,
+  readState,
   decisionExists,
   readContextRow,
   readHeadForDate,
@@ -50,6 +51,7 @@ import {
   readVolHistory,
   upsertContextRow,
   upsertVector,
+  type V11CommitOutcome,
 } from "./store.server";
 
 /**
@@ -70,6 +72,11 @@ export interface V11ObserveOptions {
   requestedRunMode?: V11RunMode;
   live?: V11LiveEvidence;
   now?: Date;
+  /**
+   * Historical bootstrap only: allows a commit at or before the checkpoint.
+   * Live and recovery paths leave this off so the chain stays forward-only.
+   */
+  allowBackfill?: boolean;
 }
 
 export interface V11ObservationResult {
@@ -85,6 +92,8 @@ export interface V11ObservationResult {
   gate: number | null;
   probability: number | null;
   missingPredecessors: string[];
+  /** Raw outcome of the ordered transaction; null when nothing was attempted. */
+  commit?: V11CommitOutcome | null;
 }
 
 /**
@@ -93,6 +102,40 @@ export interface V11ObservationResult {
  * and a partially finished call has written nothing at all.
  */
 export async function observeV11Target(
+  sb: SupabaseClient,
+  targetTsInput: string,
+  opts: V11ObserveOptions = {},
+): Promise<V11ObservationResult> {
+  // A commit is rejected as STALE when the checkpoint moved underneath this
+  // computation: the rank/availability windows it used no longer describe the
+  // committed history. The only correct response is to recompute against the
+  // new state, so the whole observation is retried, bounded.
+  let last: V11ObservationResult | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    last = await observeV11TargetOnce(sb, targetTsInput, opts);
+    if (last.commit?.stale !== true) return withCommitTruth(last);
+  }
+  return withCommitTruth(last as V11ObservationResult);
+}
+
+/**
+ * A rejected commit (stale, predecessor gap, out of order) wrote NOTHING. The
+ * result must say so: reporting `processed` for a transaction that refused to
+ * apply is exactly the lie that lets a hole go unnoticed.
+ */
+function withCommitTruth(result: V11ObservationResult): V11ObservationResult {
+  const c = result.commit;
+  if (!c || c.committed || c.duplicate) return result;
+  return {
+    ...result,
+    processed: false,
+    reason: c.reason ?? V11_REASONS.COMMIT_REJECTED,
+  };
+}
+
+
+
+async function observeV11TargetOnce(
   sb: SupabaseClient,
   targetTsInput: string,
   opts: V11ObserveOptions = {},
@@ -118,9 +161,13 @@ export async function observeV11Target(
       gate: null,
       probability: null,
       missingPredecessors: [],
+      commit: null,
     };
   }
 
+  // The exact prior state this observation is computed against. The commit
+  // refuses to apply if it changed in the meantime.
+  const expectedState = await readState(sb);
   const missingPredecessors = await readMissingPredecessors(sb, targetTs);
 
   // Context: the live committed V1 row is preferred; a DB failure raises rather
@@ -213,12 +260,14 @@ export async function observeV11Target(
     dispatch_enabled: false,
   };
 
+  let commitOutcome: V11CommitOutcome | null = null;
+
   const commit = async (
     score: Record<string, unknown>,
     decision: ReturnType<typeof decideV11>,
     headDate: string | null,
   ): Promise<void> => {
-    await commitObservation(
+    commitOutcome = await commitObservation(
       sb,
       targetTs,
       { ticker, head_date: headDate, run_mode: runMode, ...timing, ...score },
@@ -250,7 +299,60 @@ export async function observeV11Target(
           sizing_owner: "external-betting-bot",
         },
       },
+      {
+        prevTs: expectedState.lastProcessedTs,
+        stateVersion: expectedState.stateVersion ?? null,
+        allowBackfill: opts.allowBackfill === true,
+      },
     );
+
+    // The transaction re-checked the frozen V1 leg and found it NOT exclusive
+    // (a V1 send landed, or the abstention is no longer the recorded one).
+    // The score is still history, so the pair is re-committed as a no-call
+    // instead of being dropped: the chain must not develop a hole.
+    if (commitOutcome.excluded) {
+      commitOutcome = await commitObservation(
+        sb,
+        targetTs,
+        { ticker, head_date: headDate, run_mode: runMode, ...timing, ...score },
+        {
+          ticker,
+          event_key: v11EventKey(ticker, targetTs),
+          leg: null,
+          side: 0,
+          reason: V11_REASONS.V1_LEG_NOT_EXCLUSIVE,
+          probability: decision.probability,
+          rank: decision.rank,
+          admission_gate: decision.gate,
+          head_date: headDate,
+          v1_status: v1.status,
+          v1_reason: v1.reason,
+          v1_final_side: v1.finalSide,
+          v1_floor_open: v1.ordinaryFloorOpen,
+          v1_send_claim: v1.sendClaim,
+          run_mode: runMode,
+          evidence: { ...evidence, downgraded_by: "V1_LEG_NOT_EXCLUSIVE" },
+          ...timing,
+          strategy: {
+            model_version: V11_MODEL_VERSION,
+            candidate_version: V11_CANDIDATE_VERSION,
+            policy_version: V11_POLICY_VERSION,
+            publication_mode: V11_PUBLICATION_MODE,
+            stake_fraction_of_boise_day_opening_principal:
+              V11_STAKE_FRACTION_OF_BOISE_OPEN,
+            sizing_owner: "external-betting-bot",
+          },
+        },
+        {
+          prevTs: expectedState.lastProcessedTs,
+          stateVersion: expectedState.stateVersion ?? null,
+          allowBackfill: opts.allowBackfill === true,
+        },
+      );
+      decision.side = 0;
+      decision.leg = null;
+      decision.reason = V11_REASONS.V1_LEG_NOT_EXCLUSIVE;
+    }
   };
 
   const fail = async (reason: string): Promise<V11ObservationResult> => {
@@ -294,7 +396,8 @@ export async function observeV11Target(
       gate: decision.gate,
       probability: null,
       missingPredecessors,
-    };
+      commit: commitOutcome,
+    } as V11ObservationResult;
   };
 
   if (v1ReadFailed) return fail(V11_REASONS.V1_READ_FAILED);
@@ -387,6 +490,7 @@ export async function observeV11Target(
     gate: decision.gate,
     probability,
     missingPredecessors,
+    commit: commitOutcome,
   };
 }
 

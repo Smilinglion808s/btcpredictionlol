@@ -8,6 +8,7 @@ vi.mock("../store.server", () => ({
   decisionExists: vi.fn(),
   readMissingPredecessors: vi.fn(),
   commitObservation: vi.fn(),
+  readState: vi.fn(),
   readLiveContext: vi.fn(),
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("../store.server", () => ({
   readPriorOpportunities: vi.fn(),
   readV1Snapshot: vi.fn(),
 }));
+
 
 import * as store from "../store.server";
 import { observeV11Target } from "../observer.server";
@@ -53,11 +55,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.decisionExists.mockResolvedValue(false);
   m.readMissingPredecessors.mockResolvedValue([]);
+  m.readState.mockResolvedValue({ lastProcessedTs: null, stateVersion: 1 });
   m.commitObservation.mockResolvedValue({
+    committed: true,
+    duplicate: false,
+    stale: false,
+    gap: false,
+    excluded: false,
+    outOfOrder: false,
+    repaired: false,
+    reason: null,
     scoreWritten: true,
     decisionWritten: true,
     lastProcessedTs: TARGET,
+    stateVersion: 2,
+    firstMissingTs: null,
   });
+
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45InputsTimed.mockResolvedValue(null);
@@ -279,5 +293,51 @@ describe("timing is recorded truthfully", () => {
     m.readT45InputsTimed.mockResolvedValue({ feats: {}, persistedAt: null });
     await observeV11Target(sb, TARGET);
     expect(lastDecision().inputs_persisted_offset_ms).toBeNull();
+  });
+});
+
+describe("a rejected commit is never reported as processed", () => {
+  const rejected = (over: Record<string, unknown>) => ({
+    committed: false,
+    duplicate: false,
+    stale: false,
+    gap: false,
+    excluded: false,
+    outOfOrder: false,
+    repaired: false,
+    reason: null,
+    scoreWritten: false,
+    decisionWritten: false,
+    lastProcessedTs: null,
+    stateVersion: null,
+    firstMissingTs: null,
+    ...over,
+  });
+
+  it("retries a stale commit against the new state, bounded", async () => {
+    m.commitObservation.mockResolvedValue(rejected({ stale: true, reason: "PRIOR_STATE_CHANGED" }));
+    const res = await observeV11Target(sb, TARGET);
+    expect(m.commitObservation).toHaveBeenCalledTimes(3);
+    expect(m.readState).toHaveBeenCalledTimes(3);
+    expect(res.processed).toBe(false);
+    expect(res.reason).toBe("PRIOR_STATE_CHANGED");
+  });
+
+  it("reports a predecessor gap as unprocessed instead of success", async () => {
+    m.commitObservation.mockResolvedValue(
+      rejected({ gap: true, reason: "MISSING_PREDECESSOR", firstMissingTs: "2026-09-11T18:00:00.000Z" }),
+    );
+    const res = await observeV11Target(sb, TARGET);
+    expect(m.commitObservation).toHaveBeenCalledTimes(1);
+    expect(res.processed).toBe(false);
+    expect(res.reason).toBe("MISSING_PREDECESSOR");
+  });
+
+  it("passes the exact prior state it computed against to the commit", async () => {
+    m.readState.mockResolvedValue({ lastProcessedTs: "2026-09-11T18:00:00.000Z", stateVersion: 41 });
+    await observeV11Target(sb, TARGET);
+    const expected = m.commitObservation.mock.calls.at(-1)?.[4];
+    expect(expected.prevTs).toBe("2026-09-11T18:00:00.000Z");
+    expect(expected.stateVersion).toBe(41);
   });
 });
