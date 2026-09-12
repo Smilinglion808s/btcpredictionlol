@@ -23,6 +23,7 @@ import {
   dispatchLiteaDecision,
   liteaEffectiveAllowlist,
   liteaServerExecutionEnabled,
+  liteaSendHardCapMs,
   liteaTransportDeadlineMs,
   supabaseLiteaDispatchDeps,
   type LiteADecisionRecord,
