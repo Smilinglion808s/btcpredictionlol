@@ -152,12 +152,11 @@ export function v11V1LegDeliver(
  * metadata the transport sends. Key, target id, expiry, ownership and the V1
  * guard accounting are untouched.
  */
-export function v11V1LegClaimRelabel<
-  D extends { claim: (e: { payload: Record<string, unknown> } & Record<string, any>) => any },
->(deps: D): Pick<D, "claim"> {
+export function v11V1LegClaimRelabel<E extends { payload: Record<string, unknown> }, R>(deps: {
+  claim: (e: E) => R;
+}): { claim: (e: E) => R } {
   return {
-    claim: ((entry: any) =>
-      deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) })) as D["claim"],
+    claim: (entry: E) => deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) }),
   };
 }
 
