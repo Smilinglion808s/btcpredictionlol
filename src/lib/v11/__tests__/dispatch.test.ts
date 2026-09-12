@@ -409,6 +409,10 @@ function fakeDb(
         maybeSingle: async () => {
           log.push({ table, op: "select", args: { ...filters } });
           if (table === "v11_decisions") return { data: opts.decision ?? null, error: null };
+          if (table === "c85_targets") {
+            const row = opts.v1Target === undefined ? V1_SOURCE_TARGET : opts.v1Target;
+            return { data: row ?? null, error: null };
+          }
           if (table === "c85_outbox") {
             const row = outbox.get(String(filters['dedupe_key']));
             return { data: row ? { dedupe_key: filters['dedupe_key'], ...row } : null, error: null };
