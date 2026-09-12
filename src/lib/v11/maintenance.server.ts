@@ -285,6 +285,7 @@ export async function runV11Maintenance(
     opts.labelLimit ?? 400,
     opts.kalshiLimit ?? 12,
     before,
+    now.getTime(),
   );
   report.labelsRefreshed = labels.total;
   report.labelsFromSettlements = labels.fromSettlements;
