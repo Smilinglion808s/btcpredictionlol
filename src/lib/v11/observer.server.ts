@@ -294,6 +294,23 @@ async function observeV11TargetOnce(
   };
 
   let commitOutcome: V11CommitOutcome | null = null;
+  let persistedCommitOffsetMs: number | null = null;
+
+  /**
+   * The database, not this process, is the authority on what was persisted.
+   * The pre-commit stamp is only a request: if the transaction landed past the
+   * ceiling it stores RECOVERY, and that is the mode reported back to callers.
+   */
+  const adoptOutcome = (o: V11CommitOutcome): void => {
+    if (o.commitOffsetMs !== null && o.commitOffsetMs !== undefined) {
+      persistedCommitOffsetMs = o.commitOffsetMs;
+    }
+    if (o.withinPublicationCeiling === false) withinCeiling = false;
+    const m = o.effectiveRunMode;
+    if (m === V11_RUN_MODES.LIVE || m === V11_RUN_MODES.RECOVERY || m === V11_RUN_MODES.RESEARCH) {
+      effectiveRunMode = m as V11RunMode;
+    }
+  };
 
   const commit = async (
     score: Record<string, unknown>,
@@ -341,6 +358,7 @@ async function observeV11TargetOnce(
         allowBackfill: opts.allowBackfill === true,
       },
     );
+    adoptOutcome(commitOutcome);
 
     // The transaction re-checked the frozen V1 leg and found it NOT exclusive
     // (a V1 send landed, or the abstention is no longer the recorded one).
@@ -385,6 +403,7 @@ async function observeV11TargetOnce(
           allowBackfill: opts.allowBackfill === true,
         },
       );
+      adoptOutcome(commitOutcome);
       decision.side = 0;
       decision.leg = null;
       decision.reason = V11_REASONS.V1_LEG_NOT_EXCLUSIVE;
