@@ -93,6 +93,8 @@ export interface V11ObservationResult {
   gate: number | null;
   probability: number | null;
   missingPredecessors: string[];
+  /** Elapsed ms from target open to the DB transaction boundary, if committed. */
+  commitOffsetMs?: number | null;
   /** Raw outcome of the ordered transaction; null when nothing was attempted. */
   commit?: V11CommitOutcome | null;
 }
@@ -446,6 +448,7 @@ async function observeV11TargetOnce(
       duplicate: false,
       scoreValid: false,
       runMode: effectiveRunMode,
+    commitOffsetMs: persistedCommitOffsetMs,
       decisionLeg: decision.leg,
       side: decision.side,
       // The blocking cause is reported as itself: a failed V1 read must not be
@@ -552,6 +555,7 @@ async function observeV11TargetOnce(
     duplicate: false,
     scoreValid: true,
     runMode: effectiveRunMode,
+    commitOffsetMs: persistedCommitOffsetMs,
     decisionLeg: decision.leg,
     side: decision.side,
     reason: decision.reason,
