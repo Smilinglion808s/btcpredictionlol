@@ -110,7 +110,7 @@ export async function readT45Inputs(
     .maybeSingle();
   if (!data) return null;
   const out: Record<string, number> = {};
-  for (const n of V11_T45_BASE_ORDER) out[n] = Number((data as Record<string, unknown>)[n]);
+  for (const n of V11_T45_BASE_ORDER) out[n] = Number((data as unknown as Record<string, unknown>)[n]);
   return out;
 }
 

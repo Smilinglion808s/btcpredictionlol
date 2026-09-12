@@ -177,7 +177,7 @@ async function readT45Range(
       .order("target_ts", { ascending: true })
       .range(offset, offset + page - 1);
     if (error) throw error;
-    const rows = (data ?? []) as Record<string, unknown>[];
+    const rows = (data ?? []) as unknown as Record<string, unknown>[];
     for (const r of rows) {
       const ts = new Date(r.target_ts as string).toISOString();
       const rec: Record<string, number> = {};
