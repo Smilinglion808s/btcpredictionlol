@@ -144,14 +144,17 @@ def prepare_outbox(
         return None, "TIMING_UNAVAILABLE"
 
     deadline_ms = transport_deadline_ms(env)
+    hard_cap_ms = send_hard_cap_ms(env)
     target_ms = target_open.timestamp() * 1000.0
     age_ms = _finite(now_ms - target_ms)
     if age_ms is None or age_ms < 0:
         return None, "CLOCK_UNUSABLE"
-    if age_ms >= deadline_ms:
+    # Past the 8000 ms goal the signal is late, not dead: still requested.
+    # Only a closed target candle expires it.
+    if age_ms >= hard_cap_ms:
         return None, "EXPIRED"
 
-    expires_at = (target_open + timedelta(milliseconds=deadline_ms)).isoformat()
+    expires_at = (target_open + timedelta(milliseconds=hard_cap_ms)).isoformat()
     return (
         {
             "dedupe_key": dedupe_key(ticker, row["target_open_utc"]),
