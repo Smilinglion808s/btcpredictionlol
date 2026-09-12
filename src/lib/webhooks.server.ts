@@ -606,7 +606,7 @@ export async function countActiveEndpointsForEvent(
     .eq("is_active", true);
   if (error || !Array.isArray(data)) return 0;
   return (data as { events?: string[] }[]).filter((e) => e.events?.includes(event)).length;
-
+}
 
 /**
  * Send now, log later. The first attempt fires immediately with a short
