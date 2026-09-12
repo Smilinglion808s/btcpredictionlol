@@ -224,58 +224,72 @@ async function observeV11TargetOnce(
     };
   }
 
-  const decisionOffsetMs = Math.round(now.getTime() - openMs);
-  const withinCeiling = decisionOffsetMs <= V11_PUBLICATION_CEILING_MS;
-
   /**
-   * LIVE_SHADOW is earned, not requested. It needs a signed live trigger, a
-   * receipt that actually arrived, a genuine LIVE V1 row for the same interval,
-   * and a decision produced before the 60s publication ceiling. Anything else
-   * is RESEARCH or RECOVERY and is scored separately.
+   * LIVE_SHADOW is earned, not requested, and it is decided at the COMMIT
+   * boundary, not at entry. Everything except the clock is known here; the
+   * elapsed time is measured when the decision is actually finished, because a
+   * slow read must downgrade the row rather than be back-dated out of sight.
    */
-  const liveEligible =
+  const liveEvidenceOk =
     opts.requestedRunMode === V11_RUN_MODES.LIVE &&
     opts.live?.signed === true &&
     Number.isFinite(opts.live?.receivedAtMs) &&
-    inputsPersistedOffsetMs !== null &&
+    inputSource === "t45_second_samples" &&
+    inputsReceivedOffsetMs !== null &&
     v1.runMode === "LIVE" &&
     !v1ReadFailed &&
-    withinCeiling &&
     missingPredecessors.length === 0;
-  const runMode: V11RunMode = liveEligible
-    ? V11_RUN_MODES.LIVE
-    : opts.requestedRunMode === V11_RUN_MODES.RECOVERY
-      ? V11_RUN_MODES.RECOVERY
-      : opts.requestedRunMode === V11_RUN_MODES.LIVE
-        ? V11_RUN_MODES.RECOVERY
-        : V11_RUN_MODES.RESEARCH;
 
-  const timing = {
-    // Event-time cutoff. NOT a claim that inputs were in hand at 45000ms.
-    event_cutoff_offset_ms: V11_EVENT_CUTOFF_OFFSET_MS,
-    inputs_persisted_offset_ms: inputsPersistedOffsetMs,
-    decision_offset_ms: decisionOffsetMs,
-    publication_ceiling_ms: V11_PUBLICATION_CEILING_MS,
-    within_publication_ceiling: withinCeiling,
-  };
+  const triggerOffsetMs = Number.isFinite(opts.live?.receivedAtMs)
+    ? Math.round((opts.live as V11LiveEvidence).receivedAtMs - openMs)
+    : null;
 
-  const evidence = {
-    run_mode: runMode,
-    requested_run_mode: opts.requestedRunMode ?? V11_RUN_MODES.RESEARCH,
-    trigger: opts.live?.source ?? "maintenance",
-    trigger_signed: opts.live?.signed === true,
-    trigger_received_at_ms: opts.live?.receivedAtMs ?? null,
-    v1_run_mode: v1.runMode ?? null,
-    v1_read_failed: v1ReadFailed,
-    v1_publication_offset_ms: v1.publicationOffsetMs ?? null,
-    t45_persisted_offset_ms: inputsPersistedOffsetMs,
-    event_cutoff_offset_ms: V11_EVENT_CUTOFF_OFFSET_MS,
-    decision_offset_ms: decisionOffsetMs,
-    within_publication_ceiling: withinCeiling,
-    missing_predecessors: missingPredecessors.length,
-    feature_order_hash: V11_FEATURE_ORDER_HASH,
-    config_fingerprint: V11_CONFIG_FINGERPRINT,
-    dispatch_enabled: false,
+  /** Clock captured when the decision is complete, immediately before commit. */
+  let effectiveRunMode: V11RunMode = V11_RUN_MODES.RESEARCH;
+  let decisionOffsetMs = Math.round(now.getTime() - openMs);
+  let withinCeiling = decisionOffsetMs <= V11_PUBLICATION_CEILING_MS;
+
+  const finalize = () => {
+    const completedAt = opts.now ? opts.now.getTime() : Date.now();
+    decisionOffsetMs = Math.round(completedAt - openMs);
+    withinCeiling = decisionOffsetMs <= V11_PUBLICATION_CEILING_MS;
+    effectiveRunMode =
+      liveEvidenceOk && withinCeiling
+        ? V11_RUN_MODES.LIVE
+        : opts.requestedRunMode === V11_RUN_MODES.RESEARCH
+          ? V11_RUN_MODES.RESEARCH
+          : V11_RUN_MODES.RECOVERY;
+    const timing = {
+      // Event-time cutoff. NOT a claim that inputs were in hand at 45000ms.
+      event_cutoff_offset_ms: V11_EVENT_CUTOFF_OFFSET_MS,
+      trigger_received_offset_ms: triggerOffsetMs,
+      inputs_received_offset_ms: inputsReceivedOffsetMs,
+      inputs_persisted_offset_ms: inputsPersistedOffsetMs,
+      decision_offset_ms: decisionOffsetMs,
+      publication_ceiling_ms: V11_PUBLICATION_CEILING_MS,
+      within_publication_ceiling: withinCeiling,
+    };
+    const evidence = {
+      run_mode: effectiveRunMode,
+      requested_run_mode: opts.requestedRunMode ?? V11_RUN_MODES.RESEARCH,
+      trigger: opts.live?.source ?? "maintenance",
+      trigger_signed: opts.live?.signed === true,
+      trigger_received_at_ms: opts.live?.receivedAtMs ?? null,
+      input_source: inputSource,
+      last_input_received_at: lastInputReceivedAt,
+      last_input_persisted_at: lastInputPersistedAt,
+      v1_run_mode: v1.runMode ?? null,
+      v1_read_failed: v1ReadFailed,
+      v1_publication_offset_ms: v1.publicationOffsetMs ?? null,
+      downgraded_by:
+        liveEvidenceOk && !withinCeiling ? V11_REASONS.LATE_PUBLICATION : null,
+      ...timing,
+      missing_predecessors: missingPredecessors.length,
+      feature_order_hash: V11_FEATURE_ORDER_HASH,
+      config_fingerprint: V11_CONFIG_FINGERPRINT,
+      dispatch_enabled: false,
+    };
+    return { timing, evidence, runMode: effectiveRunMode };
   };
 
   let commitOutcome: V11CommitOutcome | null = null;
