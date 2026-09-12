@@ -14,6 +14,8 @@ import {
   V11_RUN_MODES,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
+import { v11DeliveryArmed } from "./dispatch.server";
+
 
 export interface V11LegRecord {
   calls: number;
@@ -31,7 +33,9 @@ export interface V11Stats {
   publicationMode: string;
   stakeFractionOfBoiseOpen: number;
   sizingOwner: string;
-  dispatchEnabled: false;
+  /** True only when V11_SERVER_EXECUTION_ENABLED=true AND V1 delivery is off. */
+  dispatchEnabled: boolean;
+
   phase: "PREPARING" | "RECORDING_ONLY" | "LIVE_SHADOW";
   headDate: string | null;
   headQuarantined: boolean;
@@ -249,7 +253,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
     publicationMode: V11_PUBLICATION_MODE,
     stakeFractionOfBoiseOpen: V11_STAKE_FRACTION_OF_BOISE_OPEN,
     sizingOwner: "external-betting-bot",
-    dispatchEnabled: false,
+    dispatchEnabled: v11DeliveryArmed(),
     phase,
     headDate: (head?.fit_date as string | null) ?? null,
     headQuarantined: head?.quarantined === true,
