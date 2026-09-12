@@ -113,10 +113,27 @@ export async function observeV11Target(
   let last: V11ObservationResult | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     last = await observeV11TargetOnce(sb, targetTsInput, opts);
-    if (last.commit?.stale !== true) return last;
+    if (last.commit?.stale !== true) return withCommitTruth(last);
   }
-  return last as V11ObservationResult;
+  return withCommitTruth(last as V11ObservationResult);
 }
+
+/**
+ * A rejected commit (stale, predecessor gap, out of order) wrote NOTHING. The
+ * result must say so: reporting `processed` for a transaction that refused to
+ * apply is exactly the lie that lets a hole go unnoticed.
+ */
+function withCommitTruth(result: V11ObservationResult): V11ObservationResult {
+  const c = result.commit;
+  if (!c || c.committed || c.duplicate) return result;
+  return {
+    ...result,
+    processed: false,
+    reason: c.reason ?? V11_REASONS.COMMIT_REJECTED,
+  };
+}
+
+
 
 async function observeV11TargetOnce(
   sb: SupabaseClient,
