@@ -6,7 +6,7 @@
 - [x] v11 config + CONTEXT69_NORM_38 feature builder (28 feature_ + 41 ctx_ + 11 norm_ = 80)
 - [x] Daily UTC fit (trailing 90d, RobustScaler(10,90), LogisticRegression C=.003 lbfgs, certified ts-lbfgs port)
 - [x] Rank / availability / admission gate + append-all-valid-scores observer
-- [x] V1 eligibility read (CONFIDENCE_ABSTAIN + ordinary_floor_allows + final_side 0) with cross-leg claim exclusion
+- [x] V1 eligibility read (nested features.lite_a.reason=CONFIDENCE_ABSTAIN + ordinary_floor_allows + final_side 0) with cross-leg claim exclusion
 - [x] Immutable append-only v11 decisions + durable checkpoint state
 - [x] Schema migration applied (v11_context_rows, v11_vectors, v11_heads, v11_scores, v11_decisions, v11_state)
 - [x] Historical seed (20,544 context rows) + 18,607 valid 80-input vectors + daily heads 2026-08-01..2026-09-14
