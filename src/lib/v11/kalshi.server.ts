@@ -9,6 +9,8 @@
 
 import { buildKalshiEventTicker } from "@/lib/kalshi.server";
 
+export type { KalshiMarket };
+
 export interface V11NativeResolution {
   result: "YES" | "NO";
   ticker: string;
@@ -23,9 +25,13 @@ interface KalshiMarket {
   result?: string;
   market_type?: string;
   title?: string;
+  /** Official finalized settlement instant (Kalshi market lifecycle). */
+  settlement_ts?: string;
   settled_time?: string;
   settlement_timestamp?: string;
+  /** Determination PRECEDES settlement — never used as a settlement time. */
   determination_time?: string;
+  close_time?: string;
   settlement_value_dollars?: string;
 }
 
@@ -34,19 +40,42 @@ const HEADERS = {
   "user-agent": "Mozilla/5.0 (compatible; BTC15mDashboard/1.0)",
 };
 
-/** Only a real, sane instant counts; sentinel epochs are not settlement times. */
-function nativeTs(m: KalshiMarket): string | null {
-  for (const raw of [m.settled_time, m.settlement_timestamp, m.determination_time]) {
+/**
+ * The venue's own settlement instant.
+ *
+ * `settlement_ts` is the field the official market/lifecycle documentation
+ * publishes once a market is finalized, so it is read FIRST; the older
+ * `settled_time` / `settlement_timestamp` spellings stay as compatibility
+ * aliases. `determination_time` is deliberately NOT accepted: determination
+ * precedes settlement in the official lifecycle, so using it would stamp an
+ * outcome as official before it was.
+ *
+ * Every candidate is validated: it must be a real instant, not before the
+ * market's close time, and not in the future relative to this observation.
+ * Anything failing that is discarded, and the caller falls back to the
+ * conservative observed time tagged as such. Nothing is backdated.
+ */
+export function nativeSettlementTsOf(
+  m: KalshiMarket,
+  observedAtMs: number = Date.now(),
+): string | null {
+  const closeMs = m.close_time ? Date.parse(m.close_time) : NaN;
+  for (const raw of [m.settlement_ts, m.settled_time, m.settlement_timestamp]) {
     if (!raw) continue;
     const ms = Date.parse(raw);
     if (!Number.isFinite(ms) || ms <= 0) continue;
-    if (ms < Date.UTC(2015, 0, 1)) continue;
+    if (ms < Date.UTC(2015, 0, 1)) continue; // sentinel epoch
+    if (Number.isFinite(closeMs) && ms < closeMs - 60_000) continue; // before close
+    if (ms > observedAtMs + 60_000) continue; // future relative to observation
     return new Date(ms).toISOString();
   }
   return null;
 }
 
-function pick(markets: KalshiMarket[] | undefined): V11NativeResolution | null {
+export function pick(
+  markets: KalshiMarket[] | undefined,
+  observedAtMs: number = Date.now(),
+): V11NativeResolution | null {
   const list = markets ?? [];
   const m =
     list.find((x) => x.market_type === "binary" && /up in next 15/i.test(x.title ?? "")) ??
@@ -58,7 +87,7 @@ function pick(markets: KalshiMarket[] | undefined): V11NativeResolution | null {
   return {
     result: raw === "yes" ? "YES" : "NO",
     ticker: m.ticker ?? "",
-    nativeSettlementTs: nativeTs(m),
+    nativeSettlementTs: nativeSettlementTsOf(m, observedAtMs),
     settlementValue: m.settlement_value_dollars
       ? Number(m.settlement_value_dollars)
       : null,
