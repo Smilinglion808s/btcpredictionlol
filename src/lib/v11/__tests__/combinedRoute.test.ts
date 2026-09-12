@@ -65,11 +65,19 @@ function fakeDb(
     events: ["prediction.created"],
     is_active: true,
   }));
+  // The durable outbox row the claim RPC creates, served back to the real
+  // ownership guard exactly as the production table would.
+  let claimed: { state: string; claim_owner: string; claim_expires_at: string } | null = null;
   const client: any = {
     rpc: async (name: string, args: any) => {
       rpcCalls.push({ name, args });
       if (name === "c85_litea_claim_outbox") {
         record("c85_outbox", "claim", args);
+        claimed = {
+          state: "PENDING",
+          claim_owner: String(args.p_owner),
+          claim_expires_at: new Date(Date.now() + 30_000).toISOString(),
+        };
         // The real RPC returns an outcome, never a `claimed` boolean.
         return { data: { outcome: "CLAIMED" }, error: null };
       }
@@ -92,7 +100,8 @@ function fakeDb(
         select: () => chain,
         eq: () => chain,
         maybeSingle: async () => ({
-          data: table === "c85_targets" ? persisted : null,
+          data:
+            table === "c85_targets" ? persisted : table === "c85_outbox" ? claimed : null,
           error: null,
         }),
         then: (resolve: any) =>
