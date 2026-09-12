@@ -88,6 +88,7 @@ async function refreshLabels(
   limit: number,
   kalshiLimit: number,
   before: string,
+  nowMs: number = Date.now(),
 ): Promise<{ total: number; fromSettlements: number; fromKalshi: number }> {
   const { data, error } = await sb
     .from("v11_context_rows")
