@@ -645,9 +645,30 @@ export function supabaseV11DispatchDeps(
     isEnabledNow: () => v11ServerExecutionEnabled(),
     v1OffNow: () => v1DeliveryDisabled(),
     async claim(entry) {
+      claimedSourceId = null;
+      // The payload actually being made durable must describe this exact
+      // combined leg and this exact interval, under the canonical shared key.
+      const payload = entry.payload as Record<string, unknown>;
+      const openMs = Date.parse(String(payload['candle_starts_at']));
+      if (
+        payload['model'] !== V11_MODEL_VERSION ||
+        payload['leg'] !== "T45R2" ||
+        String(payload['market_ticker'] ?? "") !== source.ticker ||
+        !Number.isFinite(openMs) ||
+        openMs !== Date.parse(source.targetOpenIso) ||
+        entry.dedupeKey !== v11EventDedupeKey(source.ticker, source.targetOpenIso)
+      ) {
+        return { outcome: "UNAVAILABLE" };
+      }
       // NOT NULL + FK: no target id, no claim. Never send p_target_id null.
-      const targetId = await resolveV1SourceTargetId(supabase, source);
+      let targetId: string | null = null;
+      try {
+        targetId = await resolveV1SourceTargetId(supabase, source);
+      } catch {
+        return { outcome: "UNAVAILABLE" };
+      }
       if (!targetId) return { outcome: "UNAVAILABLE" };
+      claimedSourceId = targetId;
       const { data, error } = await supabase.rpc(LITEA_CLAIM_RPC, {
         p_dedupe_key: entry.dedupeKey,
         p_owner: entry.owner,
