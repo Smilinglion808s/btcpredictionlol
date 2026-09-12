@@ -195,6 +195,7 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
     expect(posts).toHaveLength(1);
 
     const durable = claims[0].value.p_payload;
+    console.log("DBGKEYS", JSON.stringify(posts[0].body));
     const wire = posts[0].body;
     for (const payload of [durable, wire]) {
       // Combined identity — the durable row says exactly what went on the wire.
