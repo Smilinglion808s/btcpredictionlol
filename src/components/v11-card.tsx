@@ -176,7 +176,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
             V1 + improved T45 R2 fallback · daily fit
           </div>
           <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-mono text-muted-foreground/80 sm:max-w-none">
-            v11-original-confidence-rank80-4
+            {stats?.modelVersion ?? "v11-original-confidence-rank80-4"}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">

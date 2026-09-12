@@ -42,7 +42,7 @@ export const getV11Stats = createServerFn({ method: "GET" }).handler(
     if (!(await isSignedIn())) {
       return { phase: "PREPARING", unauthorized: true };
     }
-    return (await cachedStats("v11-stats", buildV11Stats, 15_000)) as Record<
+    return (await cachedStats("v11-stats", buildV11Stats, 5_000)) as Record<
       string,
       any
     >;
