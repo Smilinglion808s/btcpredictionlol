@@ -76,9 +76,8 @@ async function vectors(fromIso: string, toIso: string) {
     volClock.push(current);
     if (volClock.length > 200) volClock.splice(0, volClock.length - 200);
 
-    const built = row.input_valid
-      ? buildV11Vector({ direction60: feats, t45: t45.get(ts) ?? null }, vol.vol)
-      : { vector: null, valid: false, missing: ["v1_input_invalid"], vol: vol.vol };
+    // finite-80 only; original V1 input_valid is not an R2 scoring gate
+    const built = buildV11Vector({ direction60: feats, t45: t45.get(ts) ?? null }, vol.vol);
     if (built.valid) valid++;
     batch.push({
       target_ts: ts,

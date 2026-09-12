@@ -140,9 +140,10 @@ export async function backfillV11Vectors(
     if (volClock.length > 200) volClock.splice(0, volClock.length - 200);
 
     const t45 = t45Map.get(ts) ?? null;
-    const built = row.input_valid
-      ? buildV11Vector({ direction60: row.feats, t45 }, vol.vol)
-      : { vector: null, valid: false, missing: ["v1_input_invalid"], vol: vol.vol };
+    // R2 validity is finite-80 ONLY. Original V1 input_valid is deliberately
+    // NOT consulted here: V1 can be invalid for 1/2/3-second inputs that R2
+    // does not use. V1 input_valid gates final fallback eligibility only.
+    const built = buildV11Vector({ direction60: row.feats, t45 }, vol.vol);
     await upsertVector(sb, {
       targetTs: ts,
       vector: built.vector,

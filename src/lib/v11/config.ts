@@ -205,6 +205,17 @@ export const V11_FALLBACK_MIN_RANK = 0.8;
 /** Strategy metadata only — the external betting bot sizes and executes. */
 export const V11_STAKE_FRACTION_OF_BOISE_OPEN = 0.04;
 
+/**
+ * Event-time feature cutoff for the T45 leg: exactly T+45s. This is a clock
+ * boundary in the feature definition, NOT a claim that inputs are in hand at
+ * 45000ms. Real last-bar receipts land at ~45134-45224ms and are persisted at
+ * ~45262-45378ms; those measured instants are recorded separately.
+ */
+export const V11_EVENT_CUTOFF_OFFSET_MS = 45_000;
+
+/** A decision produced later than this after the open is not publishable. */
+export const V11_PUBLICATION_CEILING_MS = 60_000;
+
 export const TF_MS = 15 * 60 * 1000;
 export const V11_T5_OFFSET_MS = 5_000;
 export const V11_T45_OFFSET_MS = 45_000;

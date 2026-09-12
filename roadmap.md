@@ -16,3 +16,11 @@
 - [ ] Shadow replay over the seeded window + Version 1.1 stats surface
 
 Constraints: no V1 math/identity/state changes; no real sends; dispatch_enabled always false; mock transport only.
+
+## 2026-09-12 correction pass
+- [x] Removed v1_input_invalid gate from R2 vectors/training (finite-80 only); V1 input_valid now gates final fallback eligibility only
+- [x] Recomputed all 20,544 vectors: valid 18,607 -> 20,022
+- [x] Deleted 45 provisional heads, refit Aug 1 - Sep 12 from corrected vectors
+- [x] Fit parity vs Python sklearn 1.9.1 on identical rows: coef 1.1e-14, intercept 6.7e-16, prob 3.5e-14, 0 side disagreements
+- [ ] Residual: Aug 31 window yields 8,222 rows vs reference 8,217 (5-row gap, cause unidentified)
+- [x] Timing: 45s event cutoff recorded separately from measured receipt/decision; 60s publication ceiling enforced

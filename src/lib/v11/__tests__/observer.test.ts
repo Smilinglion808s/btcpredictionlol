@@ -9,6 +9,7 @@ vi.mock("../store.server", () => ({
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
   readT45Inputs: vi.fn(),
+  readT45InputsTimed: vi.fn(),
   readVolHistory: vi.fn(),
   upsertVector: vi.fn(),
   readHeadForDate: vi.fn(),
@@ -46,6 +47,7 @@ beforeEach(() => {
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45Inputs.mockResolvedValue(null);
+  m.readT45InputsTimed.mockResolvedValue(null);
   m.readVolHistory.mockResolvedValue([]);
   m.readHeadForDate.mockResolvedValue(null);
   m.readPriorScores.mockResolvedValue([]);
@@ -104,7 +106,7 @@ describe("observeV11Target", () => {
         [...new Array(60).keys()].map((i) => [`f${i}`, 1]),
       ),
     });
-    m.readT45Inputs.mockResolvedValue({});
+    m.readT45InputsTimed.mockResolvedValue({ feats: {}, persistedAt: null });
     m.readVolHistory.mockResolvedValue(new Array(96).fill(10));
     const res = await observeV11Target(sb, TARGET);
     expect(res.scoreValid).toBe(false);
@@ -140,5 +142,27 @@ describe("observeV11Target", () => {
     expect(row.leg).toBeNull();
     expect(row.strategy.publication_mode).toBeDefined();
     expect(row.strategy.sizing_owner).toBe("external-betting-bot");
+  });
+});
+
+describe("timing is recorded truthfully", () => {
+  it("keeps the 45s event cutoff separate from actual receipt and enforces the 60s ceiling", async () => {
+    m.readT45InputsTimed.mockResolvedValue({
+      feats: {},
+      persistedAt: new Date(Date.parse(TARGET) + 45_312).toISOString(),
+    });
+    await observeV11Target(sb, TARGET);
+    const row = m.insertDecision.mock.calls[0][1];
+    expect(row.eventCutoffOffsetMs).toBe(45_000);
+    expect(row.inputsPersistedOffsetMs).toBe(45_312);
+    expect(row.inputsPersistedOffsetMs).toBeGreaterThan(row.eventCutoffOffsetMs);
+    expect(row.publicationCeilingMs).toBe(60_000);
+    expect(typeof row.withinPublicationCeiling).toBe("boolean");
+  });
+
+  it("leaves receipt timing null instead of assuming 45000ms", async () => {
+    m.readT45InputsTimed.mockResolvedValue({ feats: {}, persistedAt: null });
+    await observeV11Target(sb, TARGET);
+    expect(m.insertDecision.mock.calls[0][1].inputsPersistedOffsetMs).toBeNull();
   });
 });
