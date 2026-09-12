@@ -500,16 +500,27 @@ export const WEBHOOK_ALLOWED_MODELS = new Set<string>([]);
 /**
  * The effective sender allow-list.
  *
- * Version 1 is the only model that can send, and only while its server-side
- * human control (`LITEA_SERVER_EXECUTION_ENABLED=true`) is on.
+ * Version 1 sends only while `LITEA_SERVER_EXECUTION_ENABLED=true` (the secret
+ * is deleted today, so V1 delivery is PAUSED).
+ *
+ * Version 1.1 sends only while `V11_SERVER_EXECUTION_ENABLED=true` AND the
+ * original Version 1 sender is off. The two legs share one interval, so they
+ * are mutually exclusive by construction; both are absent by default.
  */
 export function isModelAllowedToSend(model: string): boolean {
   if (WEBHOOK_ALLOWED_MODELS.has(model)) return true;
-  return (
-    model === LITE_A_MODEL_VERSION &&
-    process.env['LITEA_SERVER_EXECUTION_ENABLED'] === "true"
-  );
+  const v1On = process.env['LITEA_SERVER_EXECUTION_ENABLED'] === "true";
+  if (model === LITE_A_MODEL_VERSION) return v1On;
+  if (model === V11_MODEL_VERSION) {
+    return (
+      process.env['V11_SERVER_EXECUTION_ENABLED'] === "true" &&
+      !v1On &&
+      !WEBHOOK_ALLOWED_MODELS.has(LITE_A_MODEL_VERSION)
+    );
+  }
+  return false;
 }
+
 
 // ── Latency-critical delivery path ───────────────────────────────────────────
 // The active model must reach the bot the instant the decision exists, so the
