@@ -891,9 +891,31 @@ export async function readMissingPredecessors(
     .order("target_ts", { ascending: true })
     .limit(limit);
   if (ctxErr) throw ctxErr;
-  const wanted = ((ctx ?? []) as { target_ts: string }[]).map((r) =>
-    new Date(r.target_ts).toISOString(),
-  );
+  // The authoritative list of official opportunities is the original V1 target
+  // ledger, NOT what V11 happens to have imported. A live observation inserts
+  // its own context row, so an interval V11 never imported would otherwise be
+  // invisible here and skipped forever.
+  const { data: official, error: offErr } = await sb
+    .from("c85_targets")
+    .select("target_open_utc")
+    .eq("model_version", V1_MODEL_VERSION)
+    .gt("target_open_utc", state.lastProcessedTs)
+    .lt("target_open_utc", targetTs)
+    .order("target_open_utc", { ascending: true })
+    .limit(limit);
+  if (offErr) throw offErr;
+  const wanted = Array.from(
+    new Set([
+      ...((ctx ?? []) as { target_ts: string }[]).map((r) =>
+        new Date(r.target_ts).toISOString(),
+      ),
+      ...((official ?? []) as { target_open_utc: string }[]).map((r) =>
+        new Date(r.target_open_utc).toISOString(),
+      ),
+    ]),
+  )
+    .sort()
+    .slice(0, limit);
   if (wanted.length === 0) return [];
   const { data: done, error: doneErr } = await sb
     .from(V11_DECISIONS_TABLE)
