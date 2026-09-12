@@ -1,7 +1,10 @@
-// Version 1.1 tile — combined V1 + improved T45 R2 fallback, SHADOW ONLY.
+// Version 1.1 tile — combined V1 + improved T45 R2 fallback.
 //
 // Live and research evidence are shown in separate blocks and never summed.
-// Nothing here can place a bet: the model has no dispatch path.
+// The delivery status shown here is read from the real server controls and the
+// real destination count; it describes this project's CONFIGURATION only, not
+// whether the external betting bot acted on anything.
+
 
 interface LegRecord {
   calls: number;
