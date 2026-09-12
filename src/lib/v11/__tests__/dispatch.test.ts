@@ -533,6 +533,9 @@ describe("real Supabase deps for the fallback leg", () => {
           daily_floor: { ordinary_floor_allows: false },
         },
       },
+      // The original V1 leg already touched this interval.
+      { ...V1_SOURCE_TARGET, webhook_status: "SENT" },
+      { ...V1_SOURCE_TARGET, ticker: "OTHER-TICKER" },
     ]) {
       const db = fakeDb({ v1Target: bad });
       const deps = supabaseV11DispatchDeps(
