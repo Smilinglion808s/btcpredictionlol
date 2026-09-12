@@ -580,6 +580,8 @@ export async function upsertVector(
 export interface V11State {
   lastProcessedTs: string | null;
   lastFitDate: string | null;
+  /** Monotonic counter bumped by every committed observation. */
+  stateVersion?: number | null;
 }
 
 export async function readState(sb: SupabaseClient): Promise<V11State> {
