@@ -616,3 +616,83 @@ export async function advanceState(
     .upsert(next, { onConflict: "state_key" });
   if (error) throw error;
 }
+
+/**
+ * ATOMIC ORDERED COMMIT.
+ *
+ * Score, decision and checkpoint are written by ONE database transaction that
+ * takes a per-interval advisory lock. Consequences that the previous
+ * append-then-append-then-checkpoint sequence could not provide:
+ *  - a crash after the score can never leave a permanently missing decision;
+ *  - two concurrent invocations cannot interleave two different snapshots;
+ *  - the checkpoint uses GREATEST(), so it can never regress.
+ */
+export async function commitObservation(
+  sb: SupabaseClient,
+  targetTs: string,
+  score: Record<string, unknown>,
+  decision: Record<string, unknown>,
+): Promise<{ scoreWritten: boolean; decisionWritten: boolean; lastProcessedTs: string | null }> {
+  const { data, error } = await sb.rpc("v11_commit_observation", {
+    p_target_ts: targetTs,
+    p_score: score,
+    p_decision: decision,
+  });
+  if (error) throw error;
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    scoreWritten: r.score_written === true,
+    decisionWritten: r.decision_written === true,
+    lastProcessedTs: (r.last_processed_ts as string | null) ?? null,
+  };
+}
+
+/** Is a committed decision already present for this interval? */
+export async function decisionExists(
+  sb: SupabaseClient,
+  targetTs: string,
+): Promise<boolean> {
+  const { data, error } = await sb
+    .from(V11_DECISIONS_TABLE)
+    .select("target_ts")
+    .eq("target_ts", targetTs)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
+ * Official opportunities between the checkpoint and `targetTs` that have no
+ * committed decision. A non-empty list means the chronological chain has holes
+ * and must be recovered in order before this interval is treated as continuous.
+ */
+export async function readMissingPredecessors(
+  sb: SupabaseClient,
+  targetTs: string,
+  limit = 96,
+): Promise<string[]> {
+  const state = await readState(sb);
+  if (!state.lastProcessedTs) return [];
+  const { data: ctx, error: ctxErr } = await sb
+    .from(V11_CONTEXT_TABLE)
+    .select("target_ts")
+    .gt("target_ts", state.lastProcessedTs)
+    .lt("target_ts", targetTs)
+    .order("target_ts", { ascending: true })
+    .limit(limit);
+  if (ctxErr) throw ctxErr;
+  const wanted = ((ctx ?? []) as { target_ts: string }[]).map((r) =>
+    new Date(r.target_ts).toISOString(),
+  );
+  if (wanted.length === 0) return [];
+  const { data: done, error: doneErr } = await sb
+    .from(V11_DECISIONS_TABLE)
+    .select("target_ts")
+    .gt("target_ts", state.lastProcessedTs)
+    .lt("target_ts", targetTs);
+  if (doneErr) throw doneErr;
+  const have = new Set(
+    ((done ?? []) as { target_ts: string }[]).map((r) => new Date(r.target_ts).toISOString()),
+  );
+  return wanted.filter((ts) => !have.has(ts));
+}
