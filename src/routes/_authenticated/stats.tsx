@@ -97,6 +97,10 @@ function StatsPage() {
   const liteAFn = useServerFn(getLiteAStats);
   const liteAQ = useQuery({ queryKey: ["litea-stats"], queryFn: () => liteAFn(), refetchInterval: 15_000, staleTime: 5_000 });
 
+  // Version 1.1 — combined shadow candidate. Read-only, no dispatch path.
+  const v11Fn = useServerFn(getV11Stats);
+  const v11Q = useQuery({ queryKey: ["v11-stats"], queryFn: () => v11Fn(), refetchInterval: 30_000, staleTime: 10_000 });
+
   const [exportingPf, setExportingPf] = useState(false);
   const [exportingT30, setExportingT30] = useState(false);
 
