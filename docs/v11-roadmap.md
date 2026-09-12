@@ -24,3 +24,38 @@ Constraints: no V1 math/identity/state changes; no real sends; dispatch_enabled 
 - [x] Fit parity vs Python sklearn 1.9.1 on identical rows: coef 1.1e-14, intercept 6.7e-16, prob 3.5e-14, 0 side disagreements
 - [ ] Residual: Aug 31 window yields 8,222 rows vs reference 8,217 (5-row gap, cause unidentified)
 - [x] Timing: 45s event cutoff recorded separately from measured receipt/decision; 60s publication ceiling enforced
+
+## Review corrections applied (this pass)
+
+1. Strict `features.input_valid === true` and nested `features.lite_a.reason`;
+   run mode + timing read; database failures raise instead of looking like
+   "no row".
+2. Rank uses the newest 768 FINITE confidences (filter before slice);
+   availability uses the last 768 official opportunities including invalid ones.
+   Regression test covers 1,200 mixed rows.
+3. SQL NULL survives as NaN everywhere (`numOrNaN`); no `Number(null)` → 0.
+4. Score + decision + checkpoint commit in ONE transaction
+   (`v11_commit_observation`, advisory-locked, `GREATEST()` checkpoint), with
+   predecessor-gap detection, duplicate no-op and crash/concurrency tests.
+5. Observer is wired into the signed T+45 collector hook, isolated from the
+   legacy T45 legs. LIVE_SHADOW requires a signed trigger, a real receipt, a
+   LIVE V1 row, no gaps and a decision inside the 60s ceiling; everything else
+   is RESEARCH/RECOVERY.
+6. Maintenance (labels, vectors, daily head, gap recovery) runs only in
+   `mode=resolve`, off the decision path. Labels are filled, never cleared.
+7. Heads are bound to the feature-order hash, config fingerprint, cutoff and
+   max training settlement; future-dated fitting is refused and future heads are
+   quarantined.
+8. Direction is pure: `p >= .5` is UP, otherwise DOWN. Availability 0 blocks
+   admission instead of yielding a gate of 1.
+9. Authenticated Version 1.1 tile with source-leg records and separate
+   live/research blocks.
+10. Original C85 roadmap restored to `roadmap.md`; V11 work lives here.
+
+### Still unavailable
+
+The frozen R2 research weights and the parity ledger were never transferred
+(the upload was blocked), so this candidate is NOT proven parity-equivalent to
+the original research strategy. The Aug 31 corrected fit uses 8,222 rows against
+the stated 8,217 — an unexplained row-selection difference, not solver
+precision.
