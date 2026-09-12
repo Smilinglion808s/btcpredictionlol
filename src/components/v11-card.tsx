@@ -141,7 +141,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
 
   const phase = PHASES[stats?.phase as string] ?? PHASES.PREPARING;
   const live = stats?.live ?? {};
-  const research = stats?.research;
   const combined = live?.combined ?? {};
   const today = live?.today ?? {};
   const latest = stats?.latest ?? null;
