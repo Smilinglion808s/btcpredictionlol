@@ -45,6 +45,8 @@
   --color-magenta: var(--magenta);
   --color-steel: var(--steel);
   --color-signal-orange: var(--signal-orange);
+  --color-steel-vivid: var(--steel-vivid);
+  --color-signal-orange-vivid: var(--signal-orange-vivid);
 
 
 
@@ -106,6 +108,9 @@
   --magenta: oklch(0.65 0.29 325);
   --steel: oklch(0.72 0.035 240);
   --signal-orange: oklch(0.76 0.18 55);
+  /* Version 1.1: same hues as Version 1, reversed roles and more vibrant. */
+  --steel-vivid: oklch(0.82 0.11 232);
+  --signal-orange-vivid: oklch(0.80 0.24 52);
 
   --grid: oklch(0.28 0.02 250);
 
@@ -733,6 +738,97 @@
 @media (prefers-reduced-motion: reduce) {
   .v1-orbit-ring,
   .v1-live-dot {
+    animation: none;
+  }
+}
+
+/* ---- Version 1.1 card visuals: Version 1's palette, reversed and more vibrant ---- */
+@keyframes v11-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--steel-vivid) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--steel-vivid) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--steel-vivid) 0%, transparent); }
+}
+
+@utility v11-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--steel-vivid) 34%, var(--signal-orange-vivid));
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in oklab, var(--signal-orange-vivid) 26%, transparent) 0%, transparent 58%),
+    radial-gradient(110% 80% at 105% 0%, color-mix(in oklab, var(--steel-vivid) 24%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 92%, var(--signal-orange-vivid)) 0%, var(--card) 62%);
+  box-shadow:
+    0 26px 60px -28px color-mix(in oklab, var(--steel-vivid) 55%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, var(--signal-orange-vivid) 24%, transparent);
+  transition: box-shadow 320ms ease, border-color 320ms ease, transform 320ms ease;
+
+  &:hover {
+    border-color: color-mix(in oklab, var(--steel-vivid) 58%, var(--signal-orange-vivid));
+    box-shadow:
+      0 34px 76px -26px color-mix(in oklab, var(--steel-vivid) 66%, transparent),
+      inset 0 1px 0 0 color-mix(in oklab, var(--signal-orange-vivid) 30%, transparent);
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--signal-orange-vivid) 14%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--signal-orange-vivid) 14%, transparent) 1px, transparent 1px);
+    background-size: 34px 34px;
+    mask-image: radial-gradient(120% 90% at 50% 0%, black 0%, transparent 72%);
+    opacity: 0.62;
+  }
+}
+
+@utility v11-title {
+  background: linear-gradient(100deg, color-mix(in oklab, white 92%, var(--signal-orange-vivid)) 0%, var(--signal-orange-vivid) 42%, var(--steel-vivid) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility v11-orbit-ring {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  pointer-events: none;
+  background: conic-gradient(
+    from 180deg,
+    transparent 0deg,
+    color-mix(in oklab, var(--signal-orange-vivid) 40%, transparent) 48deg,
+    transparent 124deg,
+    color-mix(in oklab, var(--steel-vivid) 40%, transparent) 205deg,
+    transparent 304deg
+  );
+  animation: v6-orbit 20s linear infinite reverse;
+  opacity: 0.36;
+  mask-image: radial-gradient(closest-side, transparent 62%, black 76%, transparent 92%);
+}
+
+@utility v11-chip {
+  position: relative;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--signal-orange-vivid) 22%, var(--border));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--signal-orange-vivid) 8%, transparent), color-mix(in oklab, var(--card) 90%, transparent));
+  transition: border-color 220ms ease, transform 220ms ease, background 220ms ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--steel-vivid) 44%, var(--signal-orange-vivid));
+  }
+}
+
+@utility v11-live-dot {
+  animation: v11-pulse-ring 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v11-orbit-ring,
+  .v11-live-dot {
     animation: none;
   }
 }
