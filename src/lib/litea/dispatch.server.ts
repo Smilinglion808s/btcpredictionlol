@@ -112,7 +112,10 @@ export interface LiteAEvaluateOptions {
   executionEnabled: boolean;
   allowedModels: ReadonlySet<string>;
   alreadySent: boolean;
+  /** The send GOAL (8000 ms). Recorded and aimed for; never a drop. */
   transportDeadlineMs: number;
+  /** The hard cap: candle close. At or past it the signal is EXPIRED. */
+  hardCapMs: number;
 }
 
 function finiteNumber(value: unknown): number | null {
