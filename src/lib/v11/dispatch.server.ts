@@ -467,16 +467,19 @@ export async function dispatchV11Fallback(
     commitOffsetMs: number | null;
     effectiveRunMode: string | null;
     ceilingMs?: number;
+    hardCapMs?: number;
     owner?: string;
   },
 ): Promise<V11DispatchResult> {
   const ceilingMs = args.ceilingMs ?? V11_PUBLICATION_CEILING_MS;
+  const hardCapMs = args.hardCapMs ?? V11_SEND_HARD_CAP_MS;
   const enabledNow = deps.isEnabledNow ?? v11ServerExecutionEnabled;
   const v1OffNow = deps.v1OffNow ?? v1DeliveryDisabled;
   const base = {
     commitOffsetMs: args.commitOffsetMs,
     effectiveRunMode: args.effectiveRunMode,
     ceilingMs,
+    hardCapMs,
   };
 
   const intake = evaluateV11Dispatch(row, {
@@ -498,7 +501,9 @@ export async function dispatchV11Fallback(
     dedupeKey,
     owner,
     payload,
-    expiresAt: new Date(openMs + ceilingMs).toISOString(),
+    // Ownership must outlive a slow send: the claim expires at the hard cap
+    // (candle close), not at the 60-second publication goal.
+    expiresAt: new Date(openMs + hardCapMs).toISOString(),
   });
   if (claimed.outcome === "ALREADY_SENT") {
     return { verdict: "ALREADY_CLAIMED", dedupeKey, claim: claimed.outcome };
