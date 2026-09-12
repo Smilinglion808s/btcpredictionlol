@@ -38,6 +38,7 @@ import {
 import { decideV11, type V11CandidateScore, type V1LegSnapshot } from "./decision";
 import {
   commitObservation,
+  readState,
   decisionExists,
   readContextRow,
   readHeadForDate,
@@ -70,6 +71,11 @@ export interface V11ObserveOptions {
   requestedRunMode?: V11RunMode;
   live?: V11LiveEvidence;
   now?: Date;
+  /**
+   * Historical bootstrap only: allows a commit at or before the checkpoint.
+   * Live and recovery paths leave this off so the chain stays forward-only.
+   */
+  allowBackfill?: boolean;
 }
 
 export interface V11ObservationResult {
@@ -85,6 +91,8 @@ export interface V11ObservationResult {
   gate: number | null;
   probability: number | null;
   missingPredecessors: string[];
+  /** Raw outcome of the ordered transaction; null when nothing was attempted. */
+  commit?: V11CommitOutcome | null;
 }
 
 /**
@@ -135,6 +143,7 @@ async function observeV11TargetOnce(
       gate: null,
       probability: null,
       missingPredecessors: [],
+      commit: null,
     };
   }
 
@@ -370,7 +379,6 @@ async function observeV11TargetOnce(
       probability: null,
       missingPredecessors,
       commit: commitOutcome,
-      processedOverride: undefined,
     } as V11ObservationResult;
   };
 
