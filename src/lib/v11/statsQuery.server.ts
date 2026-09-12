@@ -235,7 +235,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
       .eq("event", "prediction.created")
       .gte("status_code", 200)
       .lt("status_code", 300)
-      .order("created_at", { ascending: false })
+      .order("delivered_at", { ascending: false })
       .limit(500);
     if (dErr) throw dErr;
     for (const row of (deliveries ?? []) as Record<string, unknown>[]) {
