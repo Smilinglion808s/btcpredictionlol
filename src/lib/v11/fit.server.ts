@@ -184,7 +184,8 @@ async function readT45Range(
     for (const r of rows) {
       const ts = new Date(r.target_ts as string).toISOString();
       const rec: Record<string, number> = {};
-      for (const n of V11_T45_BASE_ORDER) rec[n] = Number(r[n]);
+      // NULL must survive as NaN so the finite-only gate rejects the row.
+      for (const n of V11_T45_BASE_ORDER) rec[n] = numOrNaN(r[n]);
       out.set(ts, rec);
     }
     if (rows.length < page) break;
