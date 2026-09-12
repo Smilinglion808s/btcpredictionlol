@@ -686,6 +686,17 @@ export function supabaseV11DispatchDeps(
       };
     },
     async ownsClaim(dedupeKey, owner) {
+      // Fail closed on a key that is not this interval's canonical key, and on
+      // a source abstention that was revoked or replaced after the claim.
+      if (!claimedSourceId) return false;
+      if (dedupeKey !== v11EventDedupeKey(source.ticker, source.targetOpenIso)) return false;
+      let current: string | null = null;
+      try {
+        current = await resolveV1SourceTargetId(supabase, source);
+      } catch {
+        return false;
+      }
+      if (current !== claimedSourceId) return false;
       const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
         .select("state,claim_owner,claim_expires_at")
