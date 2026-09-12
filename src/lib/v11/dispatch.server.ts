@@ -23,6 +23,7 @@
 
 import {
   C85_OUTBOX_TABLE,
+  C85_TARGETS_TABLE,
   LITE_A_MODEL_VERSION,
 } from "@/lib/c85/config";
 import {
@@ -151,12 +152,11 @@ export function v11V1LegDeliver(
  * metadata the transport sends. Key, target id, expiry, ownership and the V1
  * guard accounting are untouched.
  */
-export function v11V1LegClaimRelabel<
-  D extends { claim: (e: { payload: Record<string, unknown> } & Record<string, any>) => any },
->(deps: D): Pick<D, "claim"> {
+export function v11V1LegClaimRelabel<E extends { payload: Record<string, unknown> }, R>(deps: {
+  claim: (e: E) => R;
+}): { claim: (e: E) => R } {
   return {
-    claim: ((entry: any) =>
-      deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) })) as D["claim"],
+    claim: (entry: E) => deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) }),
   };
 }
 
@@ -575,6 +575,53 @@ const CLAIM_OUTCOMES: ReadonlySet<string> = new Set([
   "UNAVAILABLE",
 ]);
 
+export interface V11ClaimSource {
+  ticker: string;
+  targetOpenIso: string;
+}
+
+/**
+ * Resolve the REAL same-interval original V1 decision row that this fallback
+ * is attached to.
+ *
+ * `c85_outbox.target_id` is NOT NULL with a FK to `c85_targets(id)`, so a claim
+ * without it can never be inserted. The link is a provenance link only: the
+ * fallback settles the outbox row and nothing else, and original V1 stats count
+ * calls from `c85_targets.final_side` (±1), never from outbox rows — so an
+ * abstained V1 target linked here is still not counted as a V1 call.
+ *
+ * Re-read at the claim seam and validated independently of in-memory state:
+ * exact model/ticker/open, LIVE, input_valid, CONFIDENCE_ABSTAIN, ordinary
+ * floor open, final_side 0. Anything else returns null and the claim fails
+ * closed.
+ */
+export async function resolveV1SourceTargetId(
+  supabase: MinimalClient,
+  source: V11ClaimSource,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from(C85_TARGETS_TABLE)
+    .select("id,model_version,ticker,target_open_utc,run_mode,final_side,features")
+    .eq("model_version", LITE_A_MODEL_VERSION)
+    .eq("ticker", source.ticker)
+    .eq("target_open_utc", source.targetOpenIso)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as Record<string, any>;
+  if (String(row['model_version']) !== LITE_A_MODEL_VERSION) return null;
+  if (String(row['ticker']) !== source.ticker) return null;
+  const openMs = new Date(String(row['target_open_utc'])).getTime();
+  if (openMs !== new Date(source.targetOpenIso).getTime()) return null;
+  if (String(row['run_mode']) !== "LIVE") return null;
+  if (Number(row['final_side']) !== 0) return null;
+  const features = (row['features'] ?? {}) as Record<string, any>;
+  if (features['input_valid'] !== true) return null;
+  if (String((features['lite_a'] ?? {})['reason']) !== V1_LOW_CONFIDENCE_REASON) return null;
+  if ((features['daily_floor'] ?? {})['ordinary_floor_allows'] !== true) return null;
+  const id = row['id'];
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
 /**
  * Real Supabase deps for the fallback leg.
  *
@@ -586,6 +633,7 @@ const CLAIM_OUTCOMES: ReadonlySet<string> = new Set([
 export function supabaseV11DispatchDeps(
   supabase: MinimalClient,
   deliver: V11DispatchDeps["deliver"],
+  source: V11ClaimSource,
 ): V11DispatchDeps {
   return {
     now: () => Date.now(),
@@ -593,10 +641,13 @@ export function supabaseV11DispatchDeps(
     isEnabledNow: () => v11ServerExecutionEnabled(),
     v1OffNow: () => v1DeliveryDisabled(),
     async claim(entry) {
+      // NOT NULL + FK: no target id, no claim. Never send p_target_id null.
+      const targetId = await resolveV1SourceTargetId(supabase, source);
+      if (!targetId) return { outcome: "UNAVAILABLE" };
       const { data, error } = await supabase.rpc(LITEA_CLAIM_RPC, {
         p_dedupe_key: entry.dedupeKey,
         p_owner: entry.owner,
-        p_target_id: null,
+        p_target_id: targetId,
         p_payload: entry.payload,
         p_expires_at: entry.expiresAt,
       });
@@ -674,6 +725,12 @@ export async function dispatchV11FallbackFromCommit(
       );
       void delivery.settle;
       return { delivered: delivery.delivered, sendStartedAtMs: delivery.sendStartedAtMs };
+    },
+    {
+      ticker: String(row.ticker ?? ""),
+      targetOpenIso: Number.isFinite(openMs)
+        ? new Date(openMs).toISOString()
+        : String(row.target_ts ?? ""),
     },
   );
   return dispatchV11Fallback(deps, row, {

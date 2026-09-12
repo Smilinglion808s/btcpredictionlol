@@ -49,7 +49,8 @@ function liveShadowRow(over: Partial<V11DecisionRecord> = {}): V11DecisionRecord
     run_mode: V11_RUN_MODES.LIVE,
     leg: "T45R2",
     side: 1,
-    reason: "FALLBACK_CALL",
+    // Exactly what decision.ts persists.
+    reason: "V11_T45R2_FALLBACK_CALL",
     probability: 0.6314,
     rank: 0.94,
     admission_gate: 0.62,
@@ -347,14 +348,47 @@ const ENDPOINT = {
   is_active: true,
 };
 
+/** The eligible same-interval ORIGINAL V1 row this fallback attaches to. */
+const V1_SOURCE_TARGET = {
+  id: "11111111-2222-3333-4444-555555555555",
+  model_version: "lite-a-floor4-top10-r1",
+  ticker: TICKER,
+  target_open_utc: new Date(OPEN_MS).toISOString(),
+  run_mode: "LIVE",
+  final_side: 0,
+  features: {
+    input_valid: true,
+    lite_a: { reason: "CONFIDENCE_ABSTAIN" },
+    daily_floor: { ordinary_floor_allows: true },
+  },
+};
+
 /** In-memory Supabase stand-in that records every statement it is given. */
-function fakeDb(opts: { decision?: V11DecisionRecord | null; endpoints?: unknown[] } = {}) {
+function fakeDb(
+  opts: {
+    decision?: V11DecisionRecord | null;
+    endpoints?: unknown[];
+    v1Target?: Record<string, unknown> | null;
+  } = {},
+) {
   const log: { table: string; op: string; args: unknown }[] = [];
   const rpc: { name: string; args: Record<string, unknown> }[] = [];
   const outbox = new Map<string, { state: string; claim_owner: string | null; claim_expires_at: string }>();
   const client: any = {
     rpc: async (name: string, args: Record<string, unknown>) => {
       rpc.push({ name, args });
+      // Production contract: c85_outbox.target_id is NOT NULL with an FK to
+      // c85_targets(id). A null id is a hard database error, not a soft miss.
+      if (args.p_target_id === null || args.p_target_id === undefined) {
+        throw new Error(
+          'null value in column "target_id" of relation "c85_outbox" violates not-null constraint',
+        );
+      }
+      if (args.p_target_id !== V1_SOURCE_TARGET.id) {
+        throw new Error(
+          'insert or update on table "c85_outbox" violates foreign key constraint "c85_outbox_target_id_fkey"',
+        );
+      }
       const key = String(args.p_dedupe_key);
       if (outbox.has(key)) return { data: { outcome: "HELD_BY_OTHER" }, error: null };
       outbox.set(key, {
@@ -376,6 +410,10 @@ function fakeDb(opts: { decision?: V11DecisionRecord | null; endpoints?: unknown
         maybeSingle: async () => {
           log.push({ table, op: "select", args: { ...filters } });
           if (table === "v11_decisions") return { data: opts.decision ?? null, error: null };
+          if (table === "c85_targets") {
+            const row = opts.v1Target === undefined ? V1_SOURCE_TARGET : opts.v1Target;
+            return { data: row ?? null, error: null };
+          }
           if (table === "c85_outbox") {
             const row = outbox.get(String(filters['dedupe_key']));
             return { data: row ? { dedupe_key: filters['dedupe_key'], ...row } : null, error: null };
@@ -414,15 +452,21 @@ function fakeDb(opts: { decision?: V11DecisionRecord | null; endpoints?: unknown
   return { client, log, rpc, outbox };
 }
 
+const SOURCE = { ticker: TICKER, targetOpenIso: new Date(OPEN_MS).toISOString() };
+
 describe("real Supabase deps for the fallback leg", () => {
-  it("claims through the shared RPC and settles ONLY its own outbox entry", async () => {
+  it("claims through the shared RPC with the REAL V1 target id, settling only its outbox entry", async () => {
     const db = fakeDb();
     const sent: Record<string, unknown>[] = [];
-    const deps = supabaseV11DispatchDeps(db.client, async (payload, guard) => {
-      expect(await guard()).toBe(true);
-      sent.push(payload);
-      return { delivered: 1, sendStartedAtMs: Date.now() };
-    });
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async (payload, guard) => {
+        expect(await guard()).toBe(true);
+        sent.push(payload);
+        return { delivered: 1, sendStartedAtMs: Date.now() };
+      },
+      SOURCE,
+    );
     process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
     // Pin the clock inside the real 60s ceiling for the fixture interval.
     vi.useFakeTimers();
@@ -434,13 +478,70 @@ describe("real Supabase deps for the fallback leg", () => {
     expect(db.rpc[0]?.args['p_dedupe_key']).toBe(
       liteaDedupeKey(TICKER, new Date(OPEN_MS).toISOString()),
     );
-    expect(db.rpc[0]?.args['p_target_id']).toBeNull();
-    // The Version 1 target row and its guard accounting are never amended.
-    expect(db.log.some((l) => l.table === "c85_targets")).toBe(false);
+    // NOT NULL + FK satisfied by the actual same-interval V1 row.
+    expect(db.rpc[0]?.args['p_target_id']).toBe(V1_SOURCE_TARGET.id);
+    // The V1 target row is READ only: never updated, so V1 accounting is untouched.
+    expect(db.log.some((l) => l.table === "c85_targets" && l.op === "update")).toBe(false);
     const settle = db.log.find((l) => l.op === "update");
     expect(settle?.table).toBe("c85_outbox");
     expect((settle?.args as any).filters.state).toBe("PENDING");
     expect(sent).toHaveLength(1);
+  });
+
+  it("never sends a null target id: with no eligible V1 row it fails closed, no insert attempted", async () => {
+    const db = fakeDb({ v1Target: null });
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async () => {
+        throw new Error("must not deliver");
+      },
+      SOURCE,
+    );
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    vi.useFakeTimers();
+    vi.setSystemTime(OPEN_MS + 48_000);
+    const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+    vi.useRealTimers();
+    expect(out.verdict).not.toBe("SENT");
+    expect(db.rpc).toHaveLength(0);
+  });
+
+  it("rejects a same-interval V1 row that is not a valid ordinary-floor confidence abstention", async () => {
+    for (const bad of [
+      { ...V1_SOURCE_TARGET, final_side: 1 },
+      { ...V1_SOURCE_TARGET, run_mode: "RESEARCH_BACKFILL" },
+      {
+        ...V1_SOURCE_TARGET,
+        features: { ...V1_SOURCE_TARGET.features, input_valid: false },
+      },
+      {
+        ...V1_SOURCE_TARGET,
+        features: { ...V1_SOURCE_TARGET.features, lite_a: { reason: "FIT_UNAVAILABLE" } },
+      },
+      {
+        ...V1_SOURCE_TARGET,
+        features: {
+          ...V1_SOURCE_TARGET.features,
+          daily_floor: { ordinary_floor_allows: false },
+        },
+      },
+    ]) {
+      const db = fakeDb({ v1Target: bad });
+      const deps = supabaseV11DispatchDeps(
+        db.client,
+        async () => {
+          throw new Error("must not deliver");
+        },
+        SOURCE,
+      );
+      process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+      vi.useFakeTimers();
+      vi.setSystemTime(OPEN_MS + 48_000);
+      const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+      vi.useRealTimers();
+      expect(out.verdict).not.toBe("SENT");
+      expect(db.rpc).toHaveLength(0);
+    }
   });
 });
 
