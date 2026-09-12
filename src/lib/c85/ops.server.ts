@@ -379,28 +379,40 @@ export async function runC85Op(
           return { status: 200, result: { ...res, dispatch: "NO_PERSISTED_RECORD" } };
         }
         const targetOpenMs = new Date(String((persisted as any).target_open_utc)).getTime();
-        const dispatch = await dispatchLiteaDecision(
-          supabaseLiteaDispatchDeps(supabase, async (payload, guard) => {
-            // Exactly ONE automatic attempt per configured endpoint. `settle`
-            // here is logging and endpoint bookkeeping only: with
-            // maxAttempts 1 it cannot schedule a Version 1 retransmission.
-            const delivery = await deliverWebhookNow(supabase, "prediction.created", payload, {
-              guard,
-              maxAttempts: 1,
-              targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
-            });
-            void delivery.settle;
-            return {
-              delivered: delivery.delivered,
-              sendStartedAtMs: delivery.sendStartedAtMs,
+        if (!liteaExecution && !v11Combined) {
+          return { status: 200, result: { ...res, dispatch: "EXECUTION_DISABLED" } };
+        }
+        // Exactly ONE automatic attempt per configured endpoint. `settle` in the
+        // transport is logging and endpoint bookkeeping only: with maxAttempts 1
+        // it cannot schedule a retransmission.
+        //
+        // Combined route: identical Version 1 evaluation, claim, guard, single
+        // attempt, transport ceiling and target/guard accounting — only the
+        // outbound identity on the wire is the Version 1.1 "V1" leg.
+        const deliver = v11Combined
+          ? v11V1LegDeliver(supabase, targetOpenMs)
+          : async (payload: Record<string, unknown>, guard: () => Promise<boolean>) => {
+              const delivery = await deliverWebhookNow(supabase, "prediction.created", payload, {
+                guard,
+                maxAttempts: 1,
+                targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
+              });
+              void delivery.settle;
+              return {
+                delivered: delivery.delivered,
+                sendStartedAtMs: delivery.sendStartedAtMs,
+              };
             };
-          }),
-
+        const liveReaders = v11Combined ? v11V1LegGateReaders() : {};
+        const dispatch = await dispatchLiteaDecision(
+          { ...supabaseLiteaDispatchDeps(supabase, deliver), ...liveReaders },
           persisted as LiteADecisionRecord,
           {
             targetId,
-            executionEnabled: liteaExecution,
-            allowedModels: liteaEffectiveAllowlist(),
+            executionEnabled: liteaExecution || v11Combined,
+            allowedModels: v11Combined
+              ? v11V1LegGateReaders().allowedNow()
+              : liteaEffectiveAllowlist(),
             transportDeadlineMs: liteaTransportDeadlineMs(),
           },
         );
@@ -409,9 +421,11 @@ export async function runC85Op(
           result: {
             ...res,
             dispatch: dispatch.verdict,
+            dispatch_route: v11Combined ? "V11_COMBINED_V1_LEG" : "V1",
             dispatch_send_start_offset_ms: dispatch.sendStartOffsetMs ?? null,
           },
         };
+
       }
 
       return { status: 200, result: res };
