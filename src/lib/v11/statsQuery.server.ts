@@ -251,7 +251,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
     publicationMode: V11_PUBLICATION_MODE,
     stakeFractionOfBoiseOpen: V11_STAKE_FRACTION_OF_BOISE_OPEN,
     sizingOwner: "external-betting-bot",
-    dispatchEnabled: false,
+    dispatchEnabled: v11DeliveryArmed(),
     phase,
     headDate: (head?.fit_date as string | null) ?? null,
     headQuarantined: head?.quarantined === true,
