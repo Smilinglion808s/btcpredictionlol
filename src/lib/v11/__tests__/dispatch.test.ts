@@ -219,9 +219,14 @@ describe("evaluateV11Dispatch over the real LIVE_SHADOW row", () => {
     expect(
       evaluateV11Dispatch(liveShadowRow({ within_publication_ceiling: false }), ON),
     ).toBe("LATE_COMMIT");
+    // Past the 60s publication ceiling the SEND is late, not dead: it still
+    // goes out while the candle is open, and only the candle close expires it.
     expect(evaluateV11Dispatch(liveShadowRow(), { ...ON, nowMs: OPEN_MS + CEILING })).toBe(
-      "EXPIRED",
+      "WOULD_SEND",
     );
+    expect(
+      evaluateV11Dispatch(liveShadowRow(), { ...ON, nowMs: OPEN_MS + 900_000 }),
+    ).toBe("EXPIRED");
   });
 
   it("never admits an abstention or a non-fallback leg", () => {
