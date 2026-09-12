@@ -52,6 +52,7 @@ import {
   V11_PUBLICATION_CEILING_MS,
   V11_REASONS,
   V11_RUN_MODES,
+  V11_SEND_HARD_CAP_MS,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
 
@@ -347,7 +348,10 @@ export function evaluateV11Dispatch(
   }
   if (age < commitOffset) return "TIMING_INCOHERENT"; // commit in the future
   if (row.within_publication_ceiling !== true) return "LATE_COMMIT";
-  if (age >= ceiling) return "EXPIRED";
+  // Past the publication ceiling the signal is late, not dead: it still
+  // sends. Only a closed target candle expires it.
+  const hardCap = o.hardCapMs ?? V11_SEND_HARD_CAP_MS;
+  if (age >= hardCap) return "EXPIRED";
 
   return "WOULD_SEND";
 }
