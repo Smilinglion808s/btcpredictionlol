@@ -10,8 +10,6 @@ import {
 
 import { T45Card } from "@/components/t45-card";
 import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
-import { T30Card } from "@/components/t30-card";
-import { T10Card } from "@/components/t10-card";
 
 import { LiteACard } from "@/components/litea-card";
 import { V11Card } from "@/components/v11-card";
@@ -22,8 +20,6 @@ const SHOW_LEGACY_T45 = false as boolean;
 
 import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
 import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
-import { getT30Stats, getT30Pending } from "@/lib/t30.functions";
-import { getT10Stats, getT10Pending } from "@/lib/t10.functions";
 
 import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
@@ -82,16 +78,8 @@ function StatsPage() {
   const pfPendingFn = useServerFn(getPriceFlowPending);
   const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
 
-  // T30 PriceFlow Balanced R1 — independent shadow model (T+30s, dual rank).
-  const t30Fn = useServerFn(getT30Stats);
-  const t30Q = useQuery({ queryKey: ["t30-stats"], queryFn: () => t30Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const t30PendingFn = useServerFn(getT30Pending);
-  const t30PendingQ = useQuery({ queryKey: ["t30-pending"], queryFn: () => t30PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-  // T10 Bridge R1 — independent shadow model (T+10s, dual rank).
-  const t10Fn = useServerFn(getT10Stats);
-  const t10Q = useQuery({ queryKey: ["t10-stats"], queryFn: () => t10Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const t10PendingFn = useServerFn(getT10Pending);
-  const t10PendingQ = useQuery({ queryKey: ["t10-pending"], queryFn: () => t10PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
+  // T30/T10 tiles removed from the dashboard per user request; data still
+  // collected server-side, exports remain available via /api/export/*.
 
   // Version 1 (lite-a-floor4-top10-r1) — shadow only, never dispatches.
   const liteAFn = useServerFn(getLiteAStats);
@@ -102,7 +90,6 @@ function StatsPage() {
   const v11Q = useQuery({ queryKey: ["v11-stats"], queryFn: () => v11Fn(), refetchInterval: 30_000, staleTime: 10_000 });
 
   const [exportingPf, setExportingPf] = useState(false);
-  const [exportingT30, setExportingT30] = useState(false);
 
   async function downloadT45Csv() {
     try {
@@ -126,18 +113,8 @@ function StatsPage() {
     }
   }
 
-  function downloadT30Csv() {
-    // Full history is streamed straight from the server as text/csv; a JSON
-    // server-function payload of this size timed out before completing.
-    window.location.href = "/api/export/t30-csv";
-  }
-
   function downloadPriceFlowCsv() {
     window.location.href = "/api/export/t45pf-csv";
-  }
-
-  function downloadT10Csv() {
-    window.location.href = "/api/export/t10-csv";
   }
 
 
@@ -249,19 +226,6 @@ function StatsPage() {
           pending={(pfPendingQ.data as any) ?? null}
           onExport={downloadPriceFlowCsv}
           exporting={exportingPf}
-        />
-
-        <T30Card
-          stats={(t30Q.data as any) ?? {}}
-          pending={(t30PendingQ.data as any) ?? null}
-          onExport={downloadT30Csv}
-          exporting={exportingT30}
-        />
-
-        <T10Card
-          stats={(t10Q.data as any) ?? {}}
-          pending={(t10PendingQ.data as any) ?? null}
-          onExport={downloadT10Csv}
         />
 
         <LiteACard
