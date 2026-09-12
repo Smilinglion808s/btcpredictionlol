@@ -639,6 +639,9 @@ export function supabaseV11DispatchDeps(
   deliver: V11DispatchDeps["deliver"],
   source: V11ClaimSource,
 ): V11DispatchDeps {
+  // The source row id this attempt claimed against, so ownership can be
+  // re-proved — and revoked — right before the transport.
+  let claimedSourceId: string | null = null;
   return {
     now: () => Date.now(),
     deliver,
