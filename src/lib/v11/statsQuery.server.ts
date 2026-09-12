@@ -16,6 +16,7 @@ import {
 } from "./config";
 import { v1DeliveryDisabled, v11ServerExecutionEnabled } from "./dispatch.server";
 import { countActiveEndpointsForEvent } from "@/lib/webhooks.server";
+import { liteaDedupeKey } from "@/lib/litea/webhook.server";
 
 
 
@@ -106,6 +107,8 @@ export interface V11Stats {
     rank: number | null;
     label: number | null;
     outcome: "WIN" | "LOSS" | "PENDING" | "NO_CALL";
+    /** True only when a webhook delivery for this interval returned HTTP 2xx. */
+    sent: boolean;
   }[];
 }
 
@@ -170,7 +173,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
     const from = page * V11_STATS_PAGE;
     const { data: rows, error } = await sb
       .from("v11_decisions")
-      .select("target_ts, run_mode, leg, side, reason, rank, probability")
+      .select("target_ts, run_mode, leg, side, reason, rank, probability, ticker")
       .order("target_ts", { ascending: false })
       .range(from, from + V11_STATS_PAGE - 1);
     if (error) throw error;
