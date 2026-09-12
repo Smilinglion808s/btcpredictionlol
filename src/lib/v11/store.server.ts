@@ -458,14 +458,14 @@ export async function readV1SendClaim(
   const key = dedupeKey ?? `${V1_MODEL_VERSION}:${ticker}:${new Date(targetTs).toISOString()}`;
   const { data, error } = await sb
     .from("c85_outbox")
-    .select("dedupe_key, status")
+    .select("dedupe_key, state")
     .eq("dedupe_key", key)
     // A claim read failure is "unknown", which is never fallback-eligible.
     .limit(1);
   if (error) return "unknown";
-  const rows = (data ?? []) as { status: string | null }[];
+  const rows = (data ?? []) as { state: string | null }[];
   if (rows.length === 0) return "none";
-  const s = (rows[0].status ?? "").toUpperCase();
+  const s = (rows[0].state ?? "").toUpperCase();
   if (s === "SENT" || s === "DELIVERED") return "sent";
   if (s === "FAILED" || s === "ERROR" || s === "EXPIRED") return "failed";
   return "claimed";
