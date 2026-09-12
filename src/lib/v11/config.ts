@@ -242,6 +242,11 @@ export const V11_REASONS = {
   V1_LEG_OCCUPIES_INTERVAL: "V11_ABSTAIN_V1_LEG_OCCUPIES_INTERVAL",
   V1_DELIVERY_AMBIGUOUS: "V11_ABSTAIN_V1_DELIVERY_AMBIGUOUS",
   FALLBACK_CALL: "V11_T45R2_FALLBACK_CALL",
+  HEAD_QUARANTINED: "V11_ABSTAIN_HEAD_QUARANTINED",
+  HEAD_CONFIG_MISMATCH: "V11_ABSTAIN_HEAD_CONFIG_MISMATCH",
+  AVAILABILITY_ZERO: "V11_ABSTAIN_AVAILABILITY_ZERO",
+  V1_READ_FAILED: "V11_ABSTAIN_V1_READ_FAILED",
+  LATE_PUBLICATION: "V11_ABSTAIN_LATE_PUBLICATION",
 } as const;
 
 export function utcDate(ts: string | Date): string {
@@ -305,3 +310,39 @@ export const V11_CONFIG_CANONICAL = JSON.stringify({
   publication_mode: V11_PUBLICATION_MODE,
   policy_version: V11_POLICY_VERSION,
 });
+
+/**
+ * How an observation was produced. Only LIVE_SHADOW rows may be presented as
+ * live evidence; they require the signed T+45 hook, a receipt that actually
+ * arrived, and a decision inside the publication ceiling.
+ */
+export type V11RunMode = "LIVE_SHADOW" | "RESEARCH" | "RECOVERY";
+
+export const V11_RUN_MODES = {
+  LIVE: "LIVE_SHADOW",
+  RESEARCH: "RESEARCH",
+  RECOVERY: "RECOVERY",
+} as const;
+
+/** Stable 64-bit FNV-style digest used to bind heads to their configuration. */
+export function v11Digest(s: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0;
+    h2 = Math.imul(h2 + s.charCodeAt(i) + 1, 2246822519) >>> 0;
+  }
+  return `${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
+}
+
+export const V11_FEATURE_ORDER_HASH = v11Digest(V11_FEATURE_ORDER.join(","));
+export const V11_CONFIG_FINGERPRINT = v11Digest(V11_CONFIG_CANONICAL);
+
+export const V11_EXTRA_REASONS = {
+  HEAD_QUARANTINED: "V11_ABSTAIN_HEAD_QUARANTINED",
+  HEAD_CONFIG_MISMATCH: "V11_ABSTAIN_HEAD_CONFIG_MISMATCH",
+  AVAILABILITY_ZERO: "V11_ABSTAIN_AVAILABILITY_ZERO",
+  V1_READ_FAILED: "V11_ABSTAIN_V1_READ_FAILED",
+  LATE_PUBLICATION: "V11_ABSTAIN_LATE_PUBLICATION",
+  PREDECESSOR_MISSING: "V11_PREDECESSOR_MISSING",
+} as const;
