@@ -7,7 +7,7 @@ Read-only inspection of commit `49e45e24`. No edits, no database writes, no send
 - Decision is made by the Railway worker: `services/c85-worker/src/litea/engine.py` (rank/confidence) then `guard.py` `DailyFloor.decide()` (daily floor + 0.90 exception).
 - The engine's low-confidence outcome is already a literal reason string `CONFIDENCE_ABSTAIN` (`engine.py:168`); `RANK_WARMUP` is the separate not-ready case.
 - There is no field named `ordinary_floor_open`. The equivalent boolean is `ordinary_floor_allows` (`guard.py:65,74`), and it is **already persisted** on every row inside `c85_targets.features.daily_floor` (`store.py:105`). The engine reason is at `features.lite_a.reason`, the merged list in the `gate_reasons` column, and the headline in `status`.
-- Consequence: the trigger condition Version 1.1 needs (a committed, valid V1 row with `status = CONFIDENCE_ABSTAIN` and `features.daily_floor.ordinary_floor_allows = true`) is **readable today with no schema change and no worker change**.
+- Consequence: the trigger condition Version 1.1 needs (a committed, valid V1 row with `features.lite_a.reason = CONFIDENCE_ABSTAIN` and `features.daily_floor.ordinary_floor_allows = true`) is **readable today with no schema change and no worker change**.
 - Sender path: `src/lib/c85/ops.server.ts` (`decision.commit`) writes durably via `c85_commit_decision`, then `src/lib/litea/dispatch.server.ts` runs the gate order (kill switch, allowlist, identity, LIVE, admitted side, input/head validity, target identity, timing, atomic claim, re-check, deliver, settle) and `src/lib/webhooks.server.ts` performs the single HTTP attempt. Dedupe key: `lite-a-floor4-top10-r1:<ticker>:<isoZ>`. Pre-send latency instrumentation (`attempt_started_at`, `attempt_start_offset_ms`) stays untouched.
 
 ## 2. The improved T45 R2 does not exist in this repo — this is the blocker
@@ -23,7 +23,7 @@ Read-only inspection of commit `49e45e24`. No edits, no database writes, no send
 
 ## 4. Immutability and one-bet-per-interval
 
-- V1 keeps absolute priority: the T+45 step reads the committed V1 row and runs only when it is LIVE, valid, `final_side = 0`, `status = CONFIDENCE_ABSTAIN`, and `ordinary_floor_allows = true`. Guard-blocked, missing-input, warmup, floor-abstain and no-model rows are excluded.
+- V1 keeps absolute priority: the T+45 step reads the committed V1 row and runs only when it is LIVE, valid, `final_side = 0`, `features.lite_a.reason = CONFIDENCE_ABSTAIN`, and `ordinary_floor_allows = true`. Guard-blocked, missing-input, warmup, floor-abstain and no-model rows are excluded.
 - Duplicate prevention reuses the existing atomic claim with a Version 1.1 key `lite-a-floor4-top10-r1+t45r2:<ticker>:<isoZ>`, so one interval can never yield two bets even with concurrent workers or retries.
 - The combined decision row is written once and never rewritten; late official strikes/labels are appended as audit fields only.
 - T45 never touches V1 guard state, never settles into the daily floor ledger, and never advances V1 pending counts.
@@ -56,3 +56,12 @@ Working tree is clean at `49e45e24`; the pre-send latency work (`336f58cf`, `49e
 2. Focused isolated tests (eligibility, priority, single-bet claim, no guard mutation).
 3. On receipt of your R2 upload: verify heads against your parity ledger, wire the adapter, replay the Apr 13 – Aug 30 window and reconcile against 4,003 V1 + 746 T45 calls.
 4. Only after parity matches: propose the human activation step for real dispatch, as a separate approval.
+
+## Correction (verified against production rows, 2026-09-12)
+
+`status` is a headline only. `BASE_NO_CALL` covers three different outcomes:
+`features.lite_a.reason` = `CONFIDENCE_ABSTAIN` (88 rows), `INPUT_UNAVAILABLE`
+(29) and `FIT_UNAVAILABLE` (2). Eligibility therefore MUST test the nested
+`features.lite_a.reason`, together with `features.input_valid = true`,
+`features.daily_floor.ordinary_floor_allows = true` and `final_side = 0`.
+Also note `input_valid` is a JSON field inside `features`, not a column.

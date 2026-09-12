@@ -59,7 +59,7 @@ export async function readLiveContext(
 ): Promise<V11ContextRow | null> {
   const { data } = await sb
     .from("c85_targets")
-    .select("target_open_utc, ticker, input_valid, features")
+    .select("target_open_utc, ticker, features")
     .eq("model_version", V1_MODEL_VERSION)
     .eq("target_open_utc", targetTs)
     .maybeSingle();
@@ -70,7 +70,7 @@ export async function readLiveContext(
   return {
     targetTs: new Date(data.target_open_utc as string).toISOString(),
     ticker: (data.ticker as string) ?? "",
-    inputValid: Boolean(data.input_valid),
+    inputValid: features["input_valid"] === true,
     label: null,
     settlementTs: null,
     feats: d60,
@@ -221,7 +221,7 @@ export async function readV1Snapshot(
   const { data, error } = await sb
     .from("c85_targets")
     .select(
-      "ticker, status, input_valid, final_side, features, gate_reasons, webhook_status, webhook_dedupe_key",
+      "ticker, status, final_side, features, gate_reasons, webhook_status, webhook_dedupe_key",
     )
     .eq("model_version", V1_MODEL_VERSION)
     .eq("target_open_utc", targetTs)
@@ -261,7 +261,7 @@ export async function readV1Snapshot(
   return {
     committed: true,
     status: (data.status as string | null) ?? null,
-    inputValid: Boolean(data.input_valid),
+    inputValid: features["input_valid"] === true,
     finalSide:
       data.final_side === null || data.final_side === undefined
         ? null
