@@ -5,8 +5,6 @@
 // are shown in separate blocks and never summed. A ✓ in the history is shown
 // only for an interval whose delivery ledger holds a real HTTP 2xx response.
 
-import { Check } from "lucide-react";
-
 type Stats = Record<string, any>;
 
 interface V11Props {
