@@ -1,9 +1,7 @@
 // Version 1.1 tile — combined V1 + improved T45 R2 fallback.
 //
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
-// (orange body, steel accent) and more vibrant. Live and research evidence
-// are shown in separate blocks and never summed. A ✓ in the history is shown
-// only for an interval whose delivery ledger holds a real HTTP 2xx response.
+// (orange body, steel accent) and more vibrant.
 
 type Stats = Record<string, any>;
 
