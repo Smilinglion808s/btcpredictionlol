@@ -457,7 +457,7 @@ function fakeDb(
       return chain;
     },
   };
-  return { client, log, rpc, outbox };
+  return { client, log, rpc, outbox, setV1Target };
 }
 
 const SOURCE = { ticker: TICKER, targetOpenIso: new Date(OPEN_MS).toISOString() };
