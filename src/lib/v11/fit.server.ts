@@ -14,6 +14,7 @@ import { buildV11Vector, computeV11Vol } from "./features";
 import { fitV11Head, v11FitCutoff, v11HeadCertified, type V11Head } from "./head";
 import {
   advanceState,
+  numOrNaN,
   readHeadForDate,
   readTrainingRows,
   upsertVector,
@@ -126,7 +127,8 @@ export async function backfillV11Vectors(
     .limit(95);
   const volClock: number[] = ((warmData ?? []) as { feats: Record<string, number> }[])
     .reverse()
-    .map((r) => Number(r.feats?.[V11_VOL_SOURCE]));
+    // SQL NULL stays NaN: Number(null) is 0 and would fake a zero return.
+    .map((r) => numOrNaN(r.feats?.[V11_VOL_SOURCE]));
 
   const t45Map = await readT45Range(sb, fromTs, toTs);
 
@@ -134,7 +136,7 @@ export async function backfillV11Vectors(
   let valid = 0;
   for (const row of ctxRows) {
     const ts = new Date(row.target_ts).toISOString();
-    const current = Number(row.feats?.[V11_VOL_SOURCE]);
+    const current = numOrNaN(row.feats?.[V11_VOL_SOURCE]);
     const vol = computeV11Vol(volClock, current);
     volClock.push(current);
     if (volClock.length > 200) volClock.splice(0, volClock.length - 200);

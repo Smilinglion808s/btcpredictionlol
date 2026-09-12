@@ -62,7 +62,7 @@ async function refreshLabels(sb: SupabaseClient, limit: number): Promise<number>
         settlementTs:
           (row.official_settlement_ts as string | null) ?? existing.settlementTs,
       },
-      existing.source ?? "c85_targets",
+      "c85_targets",
     );
     n++;
   }
@@ -113,8 +113,13 @@ export async function runV11Maintenance(
   };
 
   report.labelsRefreshed = await refreshLabels(sb, opts.labelLimit ?? 400);
-  const built = await backfillV11Vectors(sb, { limit: 500 });
-  report.vectorsBuilt = built.built ?? 0;
+  // Trailing window only: full history is rebuilt by the offline backfill script.
+  const built = await backfillV11Vectors(
+    sb,
+    new Date(now.getTime() - 3 * 86_400_000).toISOString(),
+    new Date(now.getTime() + 60_000).toISOString(),
+  );
+  report.vectorsBuilt = built.written;
 
   // Today's head only. A head for a cutoff that has not passed is refused by
   // the fitter itself, so no future-dated head can be created here.
