@@ -1,6 +1,7 @@
 # Version 1.1 — manual cutover (NOTHING is armed)
 
-Version 1.1 is one stream with two legs and **at most one bet per interval**:
+Version 1.1 is one stream with two legs, and this project makes **at most one
+automatic outbound attempt per interval**:
 
 | Leg | When | Source | Claim |
 | --- | --- | --- | --- |
