@@ -10,9 +10,11 @@
 //   2. the model is sender-allow-listed                (derived from 1)
 //   3. the persisted decision is LIVE, admitted (side ±1), input-valid,
 //      scored by a real head, under this exact model identity
-//   4. measured timing is finite, non-negative and inside the Version 1
-//      transport ceiling, checked against the wire clock at intake AND again
-//      immediately before the send/retry
+//   4. measured timing is finite, non-negative and the target candle is still
+//      open. The 8-second transport deadline is the GOAL, checked against the
+//      wire clock at intake AND again immediately before the send/retry — but
+//      missing it no longer drops the signal: a late send still goes out until
+//      the candle closes (the hard cap).
 //   5. no entry for this event identity has already been sent
 //
 // The T45 sender, the C85 T+5s ceiling and every other model are untouched.
@@ -26,10 +28,11 @@ import { buildLiteAWebhookPayload, liteaDedupeKey } from "./webhook.server";
 import { WEBHOOK_ALLOWED_MODELS } from "@/lib/webhooks.server";
 
 /**
- * Version 1 has its own transport ceiling, deliberately separate from C85's
+ * Version 1 has its own transport GOAL, deliberately separate from C85's
  * 5000 ms. The [T, T+5s) feature window is a model rule and is NOT retimed to
- * fit a transport number. 8000 ms is a documented preparation ceiling, not a
- * guarantee that an order can be placed inside it; a human may change it via
+ * fit a transport number. 8000 ms is the documented target for the send — a
+ * goal, not a drop: a decision that misses it is still sent, late, as long as
+ * its target candle is still open. A human may change the goal via
  * LITEA_TRANSPORT_DEADLINE_MS before activation.
  */
 export const LITEA_DEFAULT_TRANSPORT_DEADLINE_MS = 8_000;
@@ -39,6 +42,22 @@ export function liteaTransportDeadlineMs(): number {
   const raw = Number(process.env['LITEA_TRANSPORT_DEADLINE_MS']);
   if (!Number.isFinite(raw) || raw <= 0 || raw > LITEA_MAX_TRANSPORT_DEADLINE_MS) {
     return LITEA_DEFAULT_TRANSPORT_DEADLINE_MS;
+  }
+  return Math.floor(raw);
+}
+
+/**
+ * The hard cap: the one moment a send is genuinely pointless, the close of
+ * the 15-minute target candle. Until then a late send still goes out. A human
+ * may lower it via LITEA_SEND_HARD_CAP_MS; it can never exceed the candle.
+ */
+export const LITEA_DEFAULT_SEND_HARD_CAP_MS = 900_000;
+const LITEA_MAX_SEND_HARD_CAP_MS = 900_000;
+
+export function liteaSendHardCapMs(): number {
+  const raw = Number(process.env['LITEA_SEND_HARD_CAP_MS']);
+  if (!Number.isFinite(raw) || raw <= 0 || raw > LITEA_MAX_SEND_HARD_CAP_MS) {
+    return LITEA_DEFAULT_SEND_HARD_CAP_MS;
   }
   return Math.floor(raw);
 }
@@ -93,7 +112,10 @@ export interface LiteAEvaluateOptions {
   executionEnabled: boolean;
   allowedModels: ReadonlySet<string>;
   alreadySent: boolean;
+  /** The send GOAL (8000 ms). Recorded and aimed for; never a drop. */
   transportDeadlineMs: number;
+  /** The hard cap: candle close. At or past it the signal is EXPIRED. */
+  hardCapMs: number;
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -133,7 +155,9 @@ export function evaluateLiteaDispatch(
 
   const age = o.nowMs - openMs;
   if (!Number.isFinite(age) || age < 0) return "TIMING_UNAVAILABLE";
-  if (age >= o.transportDeadlineMs) return "EXPIRED";
+  // Past the 8s goal the signal is late, not dead: it still sends. Only a
+  // closed target candle expires it.
+  if (age >= o.hardCapMs) return "EXPIRED";
 
   if (o.alreadySent) return "ALREADY_SENT";
   return "WOULD_SEND";
@@ -270,16 +294,20 @@ export async function dispatchLiteaDecision(
     executionEnabled: boolean;
     allowedModels: ReadonlySet<string>;
     transportDeadlineMs: number;
+    /** Hard cap (candle close). Defaults to the 15-minute candle length. */
+    hardCapMs?: number;
     alreadySent?: boolean;
     owner?: string;
   },
 ): Promise<LiteADispatchResult> {
+  const hardCapMs = args.hardCapMs ?? LITEA_DEFAULT_SEND_HARD_CAP_MS;
   const intake = evaluateLiteaDispatch(row, {
     nowMs: deps.now(),
     executionEnabled: args.executionEnabled,
     allowedModels: args.allowedModels,
     alreadySent: args.alreadySent === true,
     transportDeadlineMs: args.transportDeadlineMs,
+    hardCapMs,
   });
   if (intake !== "WOULD_SEND") return { verdict: intake, dedupeKey: null };
 
@@ -287,7 +315,9 @@ export async function dispatchLiteaDecision(
   const targetOpenIso = new Date(String(row.target_open_utc)).toISOString();
   const openMs = new Date(targetOpenIso).getTime();
   const dedupeKey = liteaDedupeKey(ticker, targetOpenIso);
-  const expiresAt = new Date(openMs + args.transportDeadlineMs).toISOString();
+  // Ownership must outlive a slow send: the claim expires at the hard cap
+  // (candle close), not at the 8-second goal.
+  const expiresAt = new Date(openMs + hardCapMs).toISOString();
   const payload = liteaPayloadFromRecord(row);
   const owner = args.owner ?? newDispatchOwner();
 
@@ -308,10 +338,9 @@ export async function dispatchLiteaDecision(
   /**
    * Re-evaluated immediately before the single real attempt this path allows
    * per endpoint. Ownership is read FIRST, because that read is the only
-   * awaited network gap here; the kill switch, allow-list and ORIGINAL
-   * (never extended) ceiling are then evaluated against the clock as it is
-   * after that wait, with nothing awaited between them and the transport.
-   * Any ownership error fails closed.
+   * awaited network gap here; the kill switch, allow-list and hard cap are
+   * then evaluated against the clock as it is after that wait, with nothing
+   * awaited between them and the transport. Any ownership error fails closed.
    */
   const guard = async (): Promise<boolean> => {
     let owns = false;
@@ -328,17 +357,19 @@ export async function dispatchLiteaDecision(
         allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
         alreadySent: false,
         transportDeadlineMs: args.transportDeadlineMs,
+        hardCapMs,
       }) === "WOULD_SEND"
     );
   };
 
-  // Re-check the ceiling with the clock as it is NOW, after the durable write.
+  // Re-check the hard cap with the clock as it is NOW, after the durable write.
   const preSend = evaluateLiteaDispatch(row, {
     nowMs: deps.now(),
     executionEnabled: args.executionEnabled,
     allowedModels: args.allowedModels,
     alreadySent: false,
     transportDeadlineMs: args.transportDeadlineMs,
+    hardCapMs,
   });
   if (preSend !== "WOULD_SEND") {
     const settled = await deps.settle({

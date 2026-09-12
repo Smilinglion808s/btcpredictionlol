@@ -23,6 +23,7 @@ import {
   dispatchLiteaDecision,
   liteaEffectiveAllowlist,
   liteaServerExecutionEnabled,
+  liteaSendHardCapMs,
   liteaTransportDeadlineMs,
   supabaseLiteaDispatchDeps,
   type LiteADecisionRecord,
@@ -428,6 +429,7 @@ export async function runC85Op(
               ? v11V1LegGateReaders().allowedNow()
               : liteaEffectiveAllowlist(),
             transportDeadlineMs: liteaTransportDeadlineMs(),
+            hardCapMs: liteaSendHardCapMs(),
           },
         );
         return {

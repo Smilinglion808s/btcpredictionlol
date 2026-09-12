@@ -143,11 +143,21 @@ describe("Version 1 duplicate-send protection", () => {
     expect(h.received).toHaveLength(1);
   });
 
-  it("cancels the attempt when the deadline lapses while waiting", async () => {
+  it("still sends when the 8s goal lapses while waiting", async () => {
     process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
     const h = harness();
     const row = liveRow(Date.now() - 7_900);
-    h.advance(200); // now past the 8000 ms ceiling
+    h.advance(200); // now past the 8000 ms goal, but the candle is open
+    const out = await dispatchLiteaDecision(h.deps, row, ON);
+    expect(out.verdict).toBe("SENT");
+    expect(h.received).toHaveLength(1);
+  });
+
+  it("cancels the attempt only once the target candle has closed", async () => {
+    process.env['LITEA_SERVER_EXECUTION_ENABLED'] = "true";
+    const h = harness();
+    const row = liveRow(Date.now() - 899_900);
+    h.advance(200); // now past the candle close
     const out = await dispatchLiteaDecision(h.deps, row, ON);
     expect(out.verdict).toBe("EXPIRED");
     expect(h.received).toHaveLength(0);

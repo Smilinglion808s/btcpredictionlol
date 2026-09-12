@@ -52,6 +52,7 @@ import {
   V11_PUBLICATION_CEILING_MS,
   V11_REASONS,
   V11_RUN_MODES,
+  V11_SEND_HARD_CAP_MS,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
 
@@ -233,6 +234,8 @@ export interface V11EvaluateOptions {
   /** Mode the TRANSACTION actually persisted, from the RPC. */
   effectiveRunMode: string | null;
   ceilingMs?: number;
+  /** Hard cap on the SEND (candle close). Defaults to V11_SEND_HARD_CAP_MS. */
+  hardCapMs?: number;
 }
 
 /**
@@ -345,7 +348,10 @@ export function evaluateV11Dispatch(
   }
   if (age < commitOffset) return "TIMING_INCOHERENT"; // commit in the future
   if (row.within_publication_ceiling !== true) return "LATE_COMMIT";
-  if (age >= ceiling) return "EXPIRED";
+  // Past the publication ceiling the signal is late, not dead: it still
+  // sends. Only a closed target candle expires it.
+  const hardCap = o.hardCapMs ?? V11_SEND_HARD_CAP_MS;
+  if (age >= hardCap) return "EXPIRED";
 
   return "WOULD_SEND";
 }
@@ -461,16 +467,19 @@ export async function dispatchV11Fallback(
     commitOffsetMs: number | null;
     effectiveRunMode: string | null;
     ceilingMs?: number;
+    hardCapMs?: number;
     owner?: string;
   },
 ): Promise<V11DispatchResult> {
   const ceilingMs = args.ceilingMs ?? V11_PUBLICATION_CEILING_MS;
+  const hardCapMs = args.hardCapMs ?? V11_SEND_HARD_CAP_MS;
   const enabledNow = deps.isEnabledNow ?? v11ServerExecutionEnabled;
   const v1OffNow = deps.v1OffNow ?? v1DeliveryDisabled;
   const base = {
     commitOffsetMs: args.commitOffsetMs,
     effectiveRunMode: args.effectiveRunMode,
     ceilingMs,
+    hardCapMs,
   };
 
   const intake = evaluateV11Dispatch(row, {
@@ -492,7 +501,9 @@ export async function dispatchV11Fallback(
     dedupeKey,
     owner,
     payload,
-    expiresAt: new Date(openMs + ceilingMs).toISOString(),
+    // Ownership must outlive a slow send: the claim expires at the hard cap
+    // (candle close), not at the 60-second publication goal.
+    expiresAt: new Date(openMs + hardCapMs).toISOString(),
   });
   if (claimed.outcome === "ALREADY_SENT") {
     return { verdict: "ALREADY_CLAIMED", dedupeKey, claim: claimed.outcome };
