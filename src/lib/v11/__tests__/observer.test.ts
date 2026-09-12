@@ -9,6 +9,7 @@ vi.mock("../store.server", () => ({
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
   readT45Inputs: vi.fn(),
+  readT45InputsTimed: vi.fn(),
   readVolHistory: vi.fn(),
   upsertVector: vi.fn(),
   readHeadForDate: vi.fn(),
@@ -46,6 +47,7 @@ beforeEach(() => {
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45Inputs.mockResolvedValue(null);
+  m.readT45InputsTimed.mockResolvedValue(null);
   m.readVolHistory.mockResolvedValue([]);
   m.readHeadForDate.mockResolvedValue(null);
   m.readPriorScores.mockResolvedValue([]);
@@ -104,7 +106,7 @@ describe("observeV11Target", () => {
         [...new Array(60).keys()].map((i) => [`f${i}`, 1]),
       ),
     });
-    m.readT45Inputs.mockResolvedValue({});
+    m.readT45InputsTimed.mockResolvedValue({ feats: {}, persistedAt: null });
     m.readVolHistory.mockResolvedValue(new Array(96).fill(10));
     const res = await observeV11Target(sb, TARGET);
     expect(res.scoreValid).toBe(false);
