@@ -55,11 +55,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.decisionExists.mockResolvedValue(false);
   m.readMissingPredecessors.mockResolvedValue([]);
+  m.readState.mockResolvedValue({ lastProcessedTs: null, stateVersion: 1 });
   m.commitObservation.mockResolvedValue({
+    committed: true,
+    duplicate: false,
+    stale: false,
+    gap: false,
+    excluded: false,
+    outOfOrder: false,
+    repaired: false,
+    reason: null,
     scoreWritten: true,
     decisionWritten: true,
     lastProcessedTs: TARGET,
+    stateVersion: 2,
+    firstMissingTs: null,
   });
+
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45InputsTimed.mockResolvedValue(null);
