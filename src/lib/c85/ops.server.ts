@@ -428,6 +428,7 @@ export async function runC85Op(
               ? v11V1LegGateReaders().allowedNow()
               : liteaEffectiveAllowlist(),
             transportDeadlineMs: liteaTransportDeadlineMs(),
+            hardCapMs: liteaSendHardCapMs(),
           },
         );
         return {
