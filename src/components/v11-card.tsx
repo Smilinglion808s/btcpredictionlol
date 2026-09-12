@@ -55,6 +55,11 @@ export function V11Card({ stats, loading, error }: V11Props) {
   const research = stats?.research;
   const latest = stats?.latest;
   const phase: string = stats?.phase ?? "PREPARING";
+  const control = stats?.control;
+  const delivery = DELIVERY_STATUS[control?.status as string] ?? {
+    badge: "Delivery: unknown",
+    detail: "Delivery configuration could not be read.",
+  };
 
   return (
     <section className="litea-tile rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -65,9 +70,10 @@ export function V11Card({ stats, loading, error }: V11Props) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="litea-badge">{phase.replace(/_/g, " ")}</span>
-          <span className="litea-badge">Betting off</span>
+          <span className="litea-badge">{delivery.badge}</span>
         </div>
       </header>
+
 
       <div className="p-4 space-y-4">
         {error ? (
