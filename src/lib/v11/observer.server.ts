@@ -15,6 +15,8 @@ import {
   V11_REASONS,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
   V11_VOL_SOURCE,
+  V11_EVENT_CUTOFF_OFFSET_MS,
+  V11_PUBLICATION_CEILING_MS,
   utcDate,
 } from "./config";
 import { buildV11Vector, computeV11Vol } from "./features";
@@ -34,7 +36,7 @@ import {
   readHeadForDate,
   readLiveContext,
   readPriorScores,
-  readT45Inputs,
+  readT45InputsTimed,
   readV1Snapshot,
   readVolHistory,
   scoreExists,
@@ -87,7 +89,24 @@ export async function observeV11Target(
   } else {
     ctx = await readContextRow(sb, targetTs);
   }
-  const t45 = await readT45Inputs(sb, targetTs);
+  const t45Timed = await readT45InputsTimed(sb, targetTs);
+  const t45 = t45Timed?.feats ?? null;
+  const openMs = Date.parse(targetTs);
+  const timing = {
+    eventCutoffOffsetMs: V11_EVENT_CUTOFF_OFFSET_MS,
+    inputsPersistedOffsetMs: t45Timed?.persistedAt
+      ? Math.round(Date.parse(t45Timed.persistedAt) - openMs)
+      : null,
+  };
+  const decisionTiming = () => {
+    const decisionOffsetMs = Math.round(Date.now() - openMs);
+    return {
+      ...timing,
+      decisionOffsetMs,
+      publicationCeilingMs: V11_PUBLICATION_CEILING_MS,
+      withinPublicationCeiling: decisionOffsetMs <= V11_PUBLICATION_CEILING_MS,
+    };
+  };
   const ticker = ctx?.ticker ?? "";
 
   const fail = async (reason: string): Promise<V11ObservationResult> => {
@@ -116,7 +135,7 @@ export async function observeV11Target(
       headCertified: false,
       invalidReason: reason,
     });
-    await writeDecision(sb, targetTs, ticker, v1, decision, null);
+    await writeDecision(sb, targetTs, ticker, v1, decision, null, decisionTiming());
     await advanceState(sb, { lastProcessedTs: targetTs });
     return {
       targetTs,
@@ -196,7 +215,7 @@ export async function observeV11Target(
 
   const v1 = await readV1Snapshot(sb, targetTs);
   const decision = decideV11(v1, candidate);
-  await writeDecision(sb, targetTs, ticker, v1, decision, headDate);
+  await writeDecision(sb, targetTs, ticker, v1, decision, headDate, decisionTiming());
   await advanceState(sb, { lastProcessedTs: targetTs });
 
   return {
@@ -220,10 +239,18 @@ async function writeDecision(
   v1: Awaited<ReturnType<typeof readV1Snapshot>>,
   decision: ReturnType<typeof decideV11>,
   headDate: string | null,
+  timing: {
+    eventCutoffOffsetMs: number;
+    inputsPersistedOffsetMs: number | null;
+    decisionOffsetMs: number;
+    publicationCeilingMs: number;
+    withinPublicationCeiling: boolean;
+  },
 ): Promise<void> {
   await insertDecision(sb, {
     targetTs,
     ticker,
+    ...timing,
     leg: decision.leg,
     side: decision.side,
     reason: decision.reason,
