@@ -172,7 +172,7 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
 
     const out = await runC85Op(db.client, "c85-worker-1", commit(openUtc), LITE_A_MODEL_VERSION);
 
-    console.log("DBG", JSON.stringify(out.result), posts.length, JSON.stringify(posts[0]?.url));
+    expect(out.status).toBe(200);
     expect(out.result.dispatch).toBe("SENT");
     expect(out.result.dispatch_route).toBe("V11_COMBINED_V1_LEG");
 
