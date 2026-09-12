@@ -615,7 +615,7 @@ export async function resolveV1SourceTargetId(
   const openMs = new Date(String(row['target_open_utc'])).getTime();
   if (openMs !== new Date(source.targetOpenIso).getTime()) return null;
   if (String(row['run_mode']) !== "LIVE") return null;
-  if (Number(row['final_side']) !== 0) return null;
+  if (row['final_side'] !== 0) return null;
   // The original V1 leg must not have touched this interval at all.
   if (row['webhook_status'] != null) return null;
   const features = (row['features'] ?? {}) as Record<string, any>;
