@@ -500,6 +500,10 @@ async function observeV11TargetOnce(
   };
 
   const decision = decideV11(v1, candidate);
+  // Name the real blocker: an unreadable V1 leg is not "V1 did not resolve".
+  if (v1ReadFailed && decision.leg === null) {
+    decision.reason = V11_REASONS.V1_READ_FAILED;
+  }
   await commit(
     {
       probability,
