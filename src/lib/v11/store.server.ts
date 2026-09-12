@@ -41,6 +41,14 @@ export interface V11ContextRow {
   inputValid: boolean;
   label: number | null;
   settlementTs: string | null;
+  /**
+   * Provenance of `settlementTs`. `native` means the venue itself reported the
+   * settlement instant; `observed` means we only know when WE first saw the
+   * resolved market, which is conservative (never earlier than the truth) and
+   * must never be presented as a native settlement time.
+   */
+  settlementTsSource?: string | null;
+  settlementKnownAt?: string | null;
   feats: Record<string, number>;
 }
 
@@ -50,17 +58,22 @@ export async function readContextRow(
 ): Promise<V11ContextRow | null> {
   const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
-    .select("target_ts, ticker, input_valid, label, settlement_ts, feats")
+    .select(
+      "target_ts, ticker, input_valid, label, settlement_ts, settlement_ts_source, settlement_known_at, feats",
+    )
     .eq("target_ts", targetTs)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  const d = data as Record<string, unknown>;
   return {
     targetTs: new Date(data.target_ts as string).toISOString(),
     ticker: (data.ticker as string) ?? "",
     inputValid: Boolean(data.input_valid),
     label: data.label === null || data.label === undefined ? null : Number(data.label),
     settlementTs: (data.settlement_ts as string | null) ?? null,
+    settlementTsSource: (d["settlement_ts_source"] as string | null) ?? null,
+    settlementKnownAt: (d["settlement_known_at"] as string | null) ?? null,
     feats: (data.feats ?? {}) as Record<string, number>,
   };
 }
