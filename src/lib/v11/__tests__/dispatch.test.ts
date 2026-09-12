@@ -238,7 +238,10 @@ function harness(opts: { claim?: V11ClaimOutcome; throwOnSend?: boolean } = {}) 
     v1OffNow: () => true,
     async claim(entry) {
       if (opts.claim && opts.claim !== "CLAIMED") return { outcome: opts.claim };
-      if (rows.has(entry.dedupeKey)) return { outcome: "HELD_BY_OTHER" };
+      const existing = rows.get(entry.dedupeKey);
+      if (existing) {
+        return { outcome: existing.state === "SENT" ? "ALREADY_SENT" : "HELD_BY_OTHER" };
+      }
       rows.set(entry.dedupeKey, { state: "PENDING", owner: entry.owner });
       return { outcome: "CLAIMED" };
     },
@@ -421,10 +424,11 @@ describe("real Supabase deps for the fallback leg", () => {
       return { delivered: 1, sendStartedAtMs: Date.now() };
     });
     process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
-    const out = await dispatchV11Fallback(deps, liveShadowRow(), {
-      ...COMMIT,
-      ceilingMs: 10 * 60_000, // the fixture interval is in the past in test time
-    });
+    // Pin the clock inside the real 60s ceiling for the fixture interval.
+    vi.useFakeTimers();
+    vi.setSystemTime(OPEN_MS + 48_000);
+    const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+    vi.useRealTimers();
     expect(out.verdict).toBe("SENT");
     expect(db.rpc[0]?.name).toBe("c85_litea_claim_outbox");
     expect(db.rpc[0]?.args['p_dedupe_key']).toBe(
