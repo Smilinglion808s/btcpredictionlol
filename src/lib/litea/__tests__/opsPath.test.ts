@@ -94,8 +94,12 @@ afterEach(() => {
 });
 
 describe("decision.commit for Version 1", () => {
-  it("refuses a worker outbox request while the server control is off", async () => {
+  it("commits the decision but sends nothing while both delivery controls are off", async () => {
+    // The worker's outbox request must never cost it its decision: the record
+    // is committed, the transactional outbox field is dropped, and dispatch
+    // reports EXECUTION_DISABLED without a claim or a byte on the wire.
     delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
+    delete process.env['V11_SERVER_EXECUTION_ENABLED'];
     const db = fakeDb(admittedTarget);
     const out = await runC85Op(
       db.client,
@@ -103,12 +107,14 @@ describe("decision.commit for Version 1", () => {
       { op: "decision.commit", target: admittedTarget, checkpoint: null, outbox: outboxRequest } as any,
       LITE_A_MODEL_VERSION,
     );
-    expect(out.status).toBe(400);
-    expect(String(out.result.error)).toContain("shadow-only");
-    expect(db.rpcCalls).toHaveLength(0);
+    expect(out.status).toBe(200);
+    expect(out.result.dispatch).toBe("EXECUTION_DISABLED");
+    expect(db.rpcCalls).toHaveLength(1);
+    expect(db.rpcCalls[0]?.args?.p_outbox ?? null).toBeNull();
     expect(db.writes["c85_outbox"]).toBeUndefined();
     expect(isModelAllowedToSend(LITE_A_MODEL_VERSION)).toBe(false);
   });
+
 
   it("still records the shadow decision normally with no outbox at all", async () => {
     const db = fakeDb(admittedTarget);
