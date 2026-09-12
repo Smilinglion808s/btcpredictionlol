@@ -451,15 +451,21 @@ function fakeDb(
   return { client, log, rpc, outbox };
 }
 
+const SOURCE = { ticker: TICKER, targetOpenIso: new Date(OPEN_MS).toISOString() };
+
 describe("real Supabase deps for the fallback leg", () => {
-  it("claims through the shared RPC and settles ONLY its own outbox entry", async () => {
+  it("claims through the shared RPC with the REAL V1 target id, settling only its outbox entry", async () => {
     const db = fakeDb();
     const sent: Record<string, unknown>[] = [];
-    const deps = supabaseV11DispatchDeps(db.client, async (payload, guard) => {
-      expect(await guard()).toBe(true);
-      sent.push(payload);
-      return { delivered: 1, sendStartedAtMs: Date.now() };
-    });
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async (payload, guard) => {
+        expect(await guard()).toBe(true);
+        sent.push(payload);
+        return { delivered: 1, sendStartedAtMs: Date.now() };
+      },
+      SOURCE,
+    );
     process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
     // Pin the clock inside the real 60s ceiling for the fixture interval.
     vi.useFakeTimers();
@@ -471,13 +477,70 @@ describe("real Supabase deps for the fallback leg", () => {
     expect(db.rpc[0]?.args['p_dedupe_key']).toBe(
       liteaDedupeKey(TICKER, new Date(OPEN_MS).toISOString()),
     );
-    expect(db.rpc[0]?.args['p_target_id']).toBeNull();
-    // The Version 1 target row and its guard accounting are never amended.
-    expect(db.log.some((l) => l.table === "c85_targets")).toBe(false);
+    // NOT NULL + FK satisfied by the actual same-interval V1 row.
+    expect(db.rpc[0]?.args['p_target_id']).toBe(V1_SOURCE_TARGET.id);
+    // The V1 target row is READ only: never updated, so V1 accounting is untouched.
+    expect(db.log.some((l) => l.table === "c85_targets" && l.op === "update")).toBe(false);
     const settle = db.log.find((l) => l.op === "update");
     expect(settle?.table).toBe("c85_outbox");
     expect((settle?.args as any).filters.state).toBe("PENDING");
     expect(sent).toHaveLength(1);
+  });
+
+  it("never sends a null target id: with no eligible V1 row it fails closed, no insert attempted", async () => {
+    const db = fakeDb({ v1Target: null });
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async () => {
+        throw new Error("must not deliver");
+      },
+      SOURCE,
+    );
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    vi.useFakeTimers();
+    vi.setSystemTime(OPEN_MS + 48_000);
+    const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+    vi.useRealTimers();
+    expect(out.verdict).not.toBe("SENT");
+    expect(db.rpc).toHaveLength(0);
+  });
+
+  it("rejects a same-interval V1 row that is not a valid ordinary-floor confidence abstention", async () => {
+    for (const bad of [
+      { ...V1_SOURCE_TARGET, final_side: 1 },
+      { ...V1_SOURCE_TARGET, run_mode: "RESEARCH_BACKFILL" },
+      {
+        ...V1_SOURCE_TARGET,
+        features: { ...V1_SOURCE_TARGET.features, input_valid: false },
+      },
+      {
+        ...V1_SOURCE_TARGET,
+        features: { ...V1_SOURCE_TARGET.features, lite_a: { reason: "FIT_UNAVAILABLE" } },
+      },
+      {
+        ...V1_SOURCE_TARGET,
+        features: {
+          ...V1_SOURCE_TARGET.features,
+          daily_floor: { ordinary_floor_allows: false },
+        },
+      },
+    ]) {
+      const db = fakeDb({ v1Target: bad });
+      const deps = supabaseV11DispatchDeps(
+        db.client,
+        async () => {
+          throw new Error("must not deliver");
+        },
+        SOURCE,
+      );
+      process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+      vi.useFakeTimers();
+      vi.setSystemTime(OPEN_MS + 48_000);
+      const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+      vi.useRealTimers();
+      expect(out.verdict).not.toBe("SENT");
+      expect(db.rpc).toHaveLength(0);
+    }
   });
 });
 
