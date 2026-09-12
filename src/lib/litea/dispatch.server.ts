@@ -26,10 +26,11 @@ import { buildLiteAWebhookPayload, liteaDedupeKey } from "./webhook.server";
 import { WEBHOOK_ALLOWED_MODELS } from "@/lib/webhooks.server";
 
 /**
- * Version 1 has its own transport ceiling, deliberately separate from C85's
+ * Version 1 has its own transport GOAL, deliberately separate from C85's
  * 5000 ms. The [T, T+5s) feature window is a model rule and is NOT retimed to
- * fit a transport number. 8000 ms is a documented preparation ceiling, not a
- * guarantee that an order can be placed inside it; a human may change it via
+ * fit a transport number. 8000 ms is the documented target for the send — a
+ * goal, not a drop: a decision that misses it is still sent, late, as long as
+ * its target candle is still open. A human may change the goal via
  * LITEA_TRANSPORT_DEADLINE_MS before activation.
  */
 export const LITEA_DEFAULT_TRANSPORT_DEADLINE_MS = 8_000;
@@ -39,6 +40,22 @@ export function liteaTransportDeadlineMs(): number {
   const raw = Number(process.env['LITEA_TRANSPORT_DEADLINE_MS']);
   if (!Number.isFinite(raw) || raw <= 0 || raw > LITEA_MAX_TRANSPORT_DEADLINE_MS) {
     return LITEA_DEFAULT_TRANSPORT_DEADLINE_MS;
+  }
+  return Math.floor(raw);
+}
+
+/**
+ * The hard cap: the one moment a send is genuinely pointless, the close of
+ * the 15-minute target candle. Until then a late send still goes out. A human
+ * may lower it via LITEA_SEND_HARD_CAP_MS; it can never exceed the candle.
+ */
+export const LITEA_DEFAULT_SEND_HARD_CAP_MS = 900_000;
+const LITEA_MAX_SEND_HARD_CAP_MS = 900_000;
+
+export function liteaSendHardCapMs(): number {
+  const raw = Number(process.env['LITEA_SEND_HARD_CAP_MS']);
+  if (!Number.isFinite(raw) || raw <= 0 || raw > LITEA_MAX_SEND_HARD_CAP_MS) {
+    return LITEA_DEFAULT_SEND_HARD_CAP_MS;
   }
   return Math.floor(raw);
 }
