@@ -50,6 +50,40 @@ function Record({ title, r }: { title: string; r: LegRecord | undefined }) {
   );
 }
 
+/**
+ * Honest delivery wording. "Sending" here means this project would transmit a
+ * message; placing and sizing an order remains entirely the external betting
+ * bot's decision, which this dashboard cannot observe.
+ */
+const DELIVERY_STATUS: Record<string, { badge: string; detail: string }> = {
+  PAUSED_NO_FLAG: {
+    badge: "Sending paused",
+    detail:
+      "Sending is switched off on the server, so no message leaves this project for any interval.",
+  },
+  BLOCKED_V1_SENDER_ON: {
+    badge: "Sending blocked",
+    detail:
+      "The original Version 1 sender is still switched on, so Version 1.1 refuses to send — the two share one interval.",
+  },
+  ARMED_NO_DESTINATION: {
+    badge: "Switched on · no destination",
+    detail:
+      "Sending is switched on, but no active destination is configured, so nothing can actually be transmitted.",
+  },
+  ARMED_MULTIPLE_DESTINATIONS: {
+    badge: "Switched on · too many destinations",
+    detail:
+      "Sending is switched on but more than one active destination is configured. Version 1.1 refuses to transmit, because one interval must reach exactly one destination.",
+  },
+  ARMED_DELIVERY_CONFIGURED: {
+    badge: "Sending on",
+    detail:
+      "Sending is switched on with one active destination, so an admitted call would be transmitted. Whether an order is then placed is decided by the external betting bot.",
+  },
+};
+
+
 export function V11Card({ stats, loading, error }: V11Props) {
   const live = stats?.live;
   const research = stats?.research;
