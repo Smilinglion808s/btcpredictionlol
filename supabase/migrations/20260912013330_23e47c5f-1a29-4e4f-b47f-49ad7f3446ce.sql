@@ -1,0 +1,1 @@
+DELETE FROM public.v11_heads WHERE fit_date >= '2000-01-01';
