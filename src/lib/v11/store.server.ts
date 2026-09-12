@@ -756,6 +756,15 @@ export interface V11CommitOutcome {
   lastProcessedTs: string | null;
   stateVersion: number | null;
   firstMissingTs: string | null;
+  /**
+   * Mode the transaction ACTUALLY persisted. The pre-commit stamp is only a
+   * request: a live-shadow row that lands past the ceiling is persisted as
+   * RECOVERY, and the caller must report that, not its own optimistic guess.
+   */
+  effectiveRunMode: string | null;
+  /** True elapsed ms from target open to the final transaction boundary. */
+  commitOffsetMs: number | null;
+  withinPublicationCeiling: boolean | null;
 }
 
 export async function commitObservation(
@@ -800,6 +809,16 @@ export async function commitObservation(
     firstMissingTs: r.first_missing_ts
       ? new Date(r.first_missing_ts as string).toISOString()
       : null,
+    effectiveRunMode: (r.effective_run_mode as string | null) ?? null,
+    commitOffsetMs:
+      r.commit_offset_ms === null || r.commit_offset_ms === undefined
+        ? null
+        : Number(r.commit_offset_ms),
+    withinPublicationCeiling:
+      r.within_publication_ceiling === null ||
+      r.within_publication_ceiling === undefined
+        ? null
+        : r.within_publication_ceiling === true,
   };
 }
 
