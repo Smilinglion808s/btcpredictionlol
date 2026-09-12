@@ -99,6 +99,10 @@ afterEach(() => {
 
 describe("Version 1.1 execution controls", () => {
   it("is off with no environment at all", () => {
+    // The sandbox may legitimately carry the real switches; this case is about
+    // the ABSENT-env behavior, so clear them explicitly.
+    delete process.env['V11_SERVER_EXECUTION_ENABLED'];
+    delete process.env['LITEA_SERVER_EXECUTION_ENABLED'];
     expect(v11ServerExecutionEnabled()).toBe(false);
     expect(v11DeliveryArmed()).toBe(false);
   });
