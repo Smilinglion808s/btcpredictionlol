@@ -233,6 +233,8 @@ export interface V11EvaluateOptions {
   /** Mode the TRANSACTION actually persisted, from the RPC. */
   effectiveRunMode: string | null;
   ceilingMs?: number;
+  /** Hard cap on the SEND (candle close). Defaults to V11_SEND_HARD_CAP_MS. */
+  hardCapMs?: number;
 }
 
 /**
