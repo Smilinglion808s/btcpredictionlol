@@ -49,7 +49,8 @@ function liveShadowRow(over: Partial<V11DecisionRecord> = {}): V11DecisionRecord
     run_mode: V11_RUN_MODES.LIVE,
     leg: "T45R2",
     side: 1,
-    reason: "FALLBACK_CALL",
+    // Exactly what decision.ts persists.
+    reason: "V11_T45R2_FALLBACK_CALL",
     probability: 0.6314,
     rank: 0.94,
     admission_gate: 0.62,
