@@ -180,11 +180,29 @@ async function observeV11TargetOnce(
     ctx = await readContextRow(sb, targetTs);
   }
 
-  const t45Timed = await readT45InputsTimed(sb, targetTs);
-  const t45 = t45Timed?.feats ?? null;
-  const inputsPersistedOffsetMs = t45Timed?.persistedAt
-    ? Math.round(Date.parse(t45Timed.persistedAt) - openMs)
+  // Primary input path: the collector's own finalized one-second bars. The
+  // legacy derived `t45_features` row is RESEARCH/RECOVERY material only — its
+  // `created_at` proves when a derived row was written, never when the raw
+  // packet arrived, so it can never support a LIVE_SHADOW claim.
+  const samples = await readT45InputsFromSamples(sb, targetTs);
+  let t45: Record<string, number> | null = samples?.feats ?? null;
+  let inputSource: "t45_second_samples" | "t45_features" | null = samples
+    ? "t45_second_samples"
     : null;
+  let lastInputReceivedAt: string | null = samples?.lastBarReceivedAt ?? null;
+  let lastInputPersistedAt: string | null = samples?.lastBarPersistedAt ?? null;
+  if (!t45) {
+    const legacy = await readT45InputsTimed(sb, targetTs);
+    if (legacy) {
+      t45 = legacy.feats;
+      inputSource = "t45_features";
+      lastInputPersistedAt = legacy.persistedAt;
+    }
+  }
+  const offsetOf = (iso: string | null): number | null =>
+    iso && Number.isFinite(Date.parse(iso)) ? Math.round(Date.parse(iso) - openMs) : null;
+  const inputsReceivedOffsetMs = offsetOf(lastInputReceivedAt);
+  const inputsPersistedOffsetMs = offsetOf(lastInputPersistedAt);
   const ticker = ctx?.ticker ?? "";
 
   let v1: V1LegSnapshot;
