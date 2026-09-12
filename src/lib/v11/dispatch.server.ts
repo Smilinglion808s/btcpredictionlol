@@ -727,6 +727,12 @@ export async function dispatchV11FallbackFromCommit(
       void delivery.settle;
       return { delivered: delivery.delivered, sendStartedAtMs: delivery.sendStartedAtMs };
     },
+    {
+      ticker: String(row.ticker ?? ""),
+      targetOpenIso: Number.isFinite(openMs)
+        ? new Date(openMs).toISOString()
+        : String(row.target_ts ?? ""),
+    },
   );
   return dispatchV11Fallback(deps, row, {
     commitOffsetMs: commit.commitOffsetMs,
