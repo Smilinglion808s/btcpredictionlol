@@ -43,7 +43,7 @@ ok("backfill commit applies", r2.committed === true && r2.score_written && r2.de
 // 3. gap: skipping T(1) -> commit T(3) without backfill
 const st1 = (await sb.from("v11_state").select("*").eq("state_key", "v11-shadow").maybeSingle()).data as any;
 const r3 = await call(T(3), st1.last_processed_ts, st1.state_version, false);
-ok("skipped opportunity rejected", r3.committed === false && r3.gap === true, JSON.stringify(r3.first_missing_ts));
+ok("skipped opportunity rejected", r3.committed === false && r3.gap === true, JSON.stringify(r3));
 
 // 4. duplicate is a no-op, not a second pair
 const r4 = await call(T(0), st1.last_processed_ts, st1.state_version, true);
