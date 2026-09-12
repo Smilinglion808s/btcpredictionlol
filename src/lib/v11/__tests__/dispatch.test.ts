@@ -356,6 +356,8 @@ const V1_SOURCE_TARGET = {
   target_open_utc: new Date(OPEN_MS).toISOString(),
   run_mode: "LIVE",
   final_side: 0,
+  // The original V1 leg never touched this interval.
+  webhook_status: null,
   features: {
     input_valid: true,
     lite_a: { reason: "CONFIDENCE_ABSTAIN" },
@@ -373,6 +375,12 @@ function fakeDb(
 ) {
   const log: { table: string; op: string; args: unknown }[] = [];
   const rpc: { name: string; args: Record<string, unknown> }[] = [];
+  // Mutable so a test can revoke the source abstention mid-flight.
+  let v1Target: Record<string, unknown> | null =
+    opts.v1Target === undefined ? V1_SOURCE_TARGET : opts.v1Target;
+  const setV1Target = (row: Record<string, unknown> | null) => {
+    v1Target = row;
+  };
   const outbox = new Map<string, { state: string; claim_owner: string | null; claim_expires_at: string }>();
   const client: any = {
     rpc: async (name: string, args: Record<string, unknown>) => {
@@ -411,7 +419,7 @@ function fakeDb(
           log.push({ table, op: "select", args: { ...filters } });
           if (table === "v11_decisions") return { data: opts.decision ?? null, error: null };
           if (table === "c85_targets") {
-            const row = opts.v1Target === undefined ? V1_SOURCE_TARGET : opts.v1Target;
+            const row = v1Target;
             return { data: row ?? null, error: null };
           }
           if (table === "c85_outbox") {
@@ -449,7 +457,7 @@ function fakeDb(
       return chain;
     },
   };
-  return { client, log, rpc, outbox };
+  return { client, log, rpc, outbox, setV1Target };
 }
 
 const SOURCE = { ticker: TICKER, targetOpenIso: new Date(OPEN_MS).toISOString() };
@@ -525,6 +533,9 @@ describe("real Supabase deps for the fallback leg", () => {
           daily_floor: { ordinary_floor_allows: false },
         },
       },
+      // The original V1 leg already touched this interval.
+      { ...V1_SOURCE_TARGET, webhook_status: "SENT" },
+      { ...V1_SOURCE_TARGET, ticker: "OTHER-TICKER" },
     ]) {
       const db = fakeDb({ v1Target: bad });
       const deps = supabaseV11DispatchDeps(
@@ -542,6 +553,34 @@ describe("real Supabase deps for the fallback leg", () => {
       expect(out.verdict).not.toBe("SENT");
       expect(db.rpc).toHaveLength(0);
     }
+  });
+
+  it("cancels before the transport when the source abstention is revoked after the claim", async () => {
+    const db = fakeDb();
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async (_payload, guard) => {
+        // Guard revoked: the source row no longer qualifies.
+        expect(await guard()).toBe(false);
+        throw new Error("must not deliver");
+      },
+      SOURCE,
+    );
+    const claim = deps.claim;
+    deps.claim = async (entry) => {
+      const out = await claim(entry);
+      // Between the durable claim and the transport, the V1 leg took the interval.
+      db.setV1Target({ ...V1_SOURCE_TARGET, final_side: 1, webhook_status: "SENT" });
+      return out;
+    };
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    vi.useFakeTimers();
+    vi.setSystemTime(OPEN_MS + 48_000);
+    const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+    vi.useRealTimers();
+    expect(out.verdict).not.toBe("SENT");
+    // Exactly one claim, and the durable entry is released, not left PENDING.
+    expect(db.rpc).toHaveLength(1);
   });
 });
 

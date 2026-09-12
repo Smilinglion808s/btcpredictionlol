@@ -601,7 +601,9 @@ export async function resolveV1SourceTargetId(
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from(C85_TARGETS_TABLE)
-    .select("id,model_version,ticker,target_open_utc,run_mode,final_side,features")
+    .select(
+      "id,model_version,ticker,target_open_utc,run_mode,final_side,features,webhook_status",
+    )
     .eq("model_version", LITE_A_MODEL_VERSION)
     .eq("ticker", source.ticker)
     .eq("target_open_utc", source.targetOpenIso)
@@ -614,6 +616,8 @@ export async function resolveV1SourceTargetId(
   if (openMs !== new Date(source.targetOpenIso).getTime()) return null;
   if (String(row['run_mode']) !== "LIVE") return null;
   if (Number(row['final_side']) !== 0) return null;
+  // The original V1 leg must not have touched this interval at all.
+  if (row['webhook_status'] != null) return null;
   const features = (row['features'] ?? {}) as Record<string, any>;
   if (features['input_valid'] !== true) return null;
   if (String((features['lite_a'] ?? {})['reason']) !== V1_LOW_CONFIDENCE_REASON) return null;
@@ -635,15 +639,39 @@ export function supabaseV11DispatchDeps(
   deliver: V11DispatchDeps["deliver"],
   source: V11ClaimSource,
 ): V11DispatchDeps {
+  // The source row id this attempt claimed against, so ownership can be
+  // re-proved — and revoked — right before the transport.
+  let claimedSourceId: string | null = null;
   return {
     now: () => Date.now(),
     deliver,
     isEnabledNow: () => v11ServerExecutionEnabled(),
     v1OffNow: () => v1DeliveryDisabled(),
     async claim(entry) {
+      claimedSourceId = null;
+      // The payload actually being made durable must describe this exact
+      // combined leg and this exact interval, under the canonical shared key.
+      const payload = entry.payload as Record<string, unknown>;
+      const openMs = Date.parse(String(payload['candle_starts_at']));
+      if (
+        payload['model'] !== V11_MODEL_VERSION ||
+        payload['leg'] !== "T45R2" ||
+        String(payload['market_ticker'] ?? "") !== source.ticker ||
+        !Number.isFinite(openMs) ||
+        openMs !== Date.parse(source.targetOpenIso) ||
+        entry.dedupeKey !== v11EventDedupeKey(source.ticker, source.targetOpenIso)
+      ) {
+        return { outcome: "UNAVAILABLE" };
+      }
       // NOT NULL + FK: no target id, no claim. Never send p_target_id null.
-      const targetId = await resolveV1SourceTargetId(supabase, source);
+      let targetId: string | null = null;
+      try {
+        targetId = await resolveV1SourceTargetId(supabase, source);
+      } catch {
+        return { outcome: "UNAVAILABLE" };
+      }
       if (!targetId) return { outcome: "UNAVAILABLE" };
+      claimedSourceId = targetId;
       const { data, error } = await supabase.rpc(LITEA_CLAIM_RPC, {
         p_dedupe_key: entry.dedupeKey,
         p_owner: entry.owner,
@@ -658,6 +686,17 @@ export function supabaseV11DispatchDeps(
       };
     },
     async ownsClaim(dedupeKey, owner) {
+      // Fail closed on a key that is not this interval's canonical key, and on
+      // a source abstention that was revoked or replaced after the claim.
+      if (!claimedSourceId) return false;
+      if (dedupeKey !== v11EventDedupeKey(source.ticker, source.targetOpenIso)) return false;
+      let current: string | null = null;
+      try {
+        current = await resolveV1SourceTargetId(supabase, source);
+      } catch {
+        return false;
+      }
+      if (current !== claimedSourceId) return false;
       const { data, error } = await supabase
         .from(C85_OUTBOX_TABLE)
         .select("state,claim_owner,claim_expires_at")
