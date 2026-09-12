@@ -14,6 +14,8 @@ import {
   V11_RUN_MODES,
   V11_STAKE_FRACTION_OF_BOISE_OPEN,
 } from "./config";
+import { v11DeliveryArmed } from "./dispatch.server";
+
 
 export interface V11LegRecord {
   calls: number;
