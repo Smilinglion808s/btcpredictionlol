@@ -16,9 +16,11 @@ module returns no outbox request at all and the decision is committed exactly
 as it is today: recorded, shadow, unsent.
 
 Timing: the [T, T+5s) feature window is a MODEL rule and is not touched here.
-The transport ceiling is a separate, Version-1-only configuration
+The transport deadline is a separate, Version-1-only configuration
 (``LITEA_TRANSPORT_DEADLINE_MS``, default 8000 ms measured from target open).
-It is a send ceiling for preparation, not a promise that an order can be placed.
+It is the send GOAL, not a drop: a decision that misses it is still requested,
+late, while its target candle is open. The hard cap is the candle close
+(``LITEA_SEND_HARD_CAP_MS``, default 900000 ms).
 """
 from __future__ import annotations
 
@@ -33,6 +35,10 @@ EXECUTION_ENV = "LITEA_EXECUTION_ENABLED"
 DEADLINE_ENV = "LITEA_TRANSPORT_DEADLINE_MS"
 DEFAULT_TRANSPORT_DEADLINE_MS = 8_000
 MAX_TRANSPORT_DEADLINE_MS = 60_000
+
+HARD_CAP_ENV = "LITEA_SEND_HARD_CAP_MS"
+DEFAULT_SEND_HARD_CAP_MS = 900_000
+MAX_SEND_HARD_CAP_MS = 900_000
 
 
 def execution_enabled(env: Mapping[str, str] | None = None) -> bool:
@@ -52,6 +58,20 @@ def transport_deadline_ms(env: Mapping[str, str] | None = None) -> int:
         return DEFAULT_TRANSPORT_DEADLINE_MS
     if value <= 0 or value > MAX_TRANSPORT_DEADLINE_MS:
         return DEFAULT_TRANSPORT_DEADLINE_MS
+    return value
+
+
+def send_hard_cap_ms(env: Mapping[str, str] | None = None) -> int:
+    source = os.environ if env is None else env
+    raw = str(source.get(HARD_CAP_ENV, "")).strip()
+    if not raw:
+        return DEFAULT_SEND_HARD_CAP_MS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_SEND_HARD_CAP_MS
+    if value <= 0 or value > MAX_SEND_HARD_CAP_MS:
+        return DEFAULT_SEND_HARD_CAP_MS
     return value
 
 
