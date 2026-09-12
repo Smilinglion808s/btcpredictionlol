@@ -175,3 +175,41 @@ describe("head freshness and fit minimums", () => {
     expect(fitV11Head("2026-07-01", rows)).toBeNull();
   });
 });
+
+describe("V1 headline status is not sufficient for eligibility", () => {
+  const base = {
+    committed: true,
+    status: "BASE_NO_CALL",
+    inputValid: true,
+    finalSide: 0,
+    ordinaryFloorOpen: true,
+    sendClaim: "none" as const,
+  };
+
+  it("accepts only a genuine nested CONFIDENCE_ABSTAIN reason", () => {
+    expect(v1FallbackEligible({ ...base, reason: "CONFIDENCE_ABSTAIN" }).eligible).toBe(true);
+  });
+
+  it("rejects FIT_UNAVAILABLE and INPUT_UNAVAILABLE under the same headline", () => {
+    expect(v1FallbackEligible({ ...base, reason: "FIT_UNAVAILABLE" }).eligible).toBe(false);
+    expect(v1FallbackEligible({ ...base, reason: "INPUT_UNAVAILABLE" }).eligible).toBe(false);
+    expect(v1FallbackEligible({ ...base, reason: null }).eligible).toBe(false);
+  });
+
+  it("rejects a CONFIDENCE_ABSTAIN row whose inputs were not valid", () => {
+    expect(
+      v1FallbackEligible({ ...base, inputValid: false, reason: "CONFIDENCE_ABSTAIN" }).eligible,
+    ).toBe(false);
+  });
+
+  it("rejects a CONFIDENCE_ABSTAIN row with the ordinary floor closed", () => {
+    expect(
+      v1FallbackEligible({ ...base, ordinaryFloorOpen: false, reason: "CONFIDENCE_ABSTAIN" })
+        .eligible,
+    ).toBe(false);
+    expect(
+      v1FallbackEligible({ ...base, ordinaryFloorOpen: null, reason: "CONFIDENCE_ABSTAIN" })
+        .eligible,
+    ).toBe(false);
+  });
+});
