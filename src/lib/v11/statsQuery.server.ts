@@ -184,19 +184,31 @@ export async function buildV11Stats(): Promise<V11Stats> {
     if (batch.length < V11_STATS_PAGE) break;
   }
 
+  // Labels are read by time range rather than one `.in(...)` request per 100
+  // timestamps: the batched form cost ~40 sequential round-trips (≈10s) for the
+  // same rows. The range starts at the oldest decision in the window, so every
+  // counted decision is still labelled here.
   const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
+  const oldestTs = tsList.length ? tsList[tsList.length - 1] : null;
   const labels = new Map<string, number | null>();
-  for (let i = 0; i < tsList.length; i += V11_LABEL_BATCH_SIZE) {
-    const { data: ctx, error: cErr } = await sb
-      .from("v11_context_rows")
-      .select("target_ts, label")
-      .in("target_ts", tsList.slice(i, i + V11_LABEL_BATCH_SIZE));
-    if (cErr) throw cErr;
-    for (const row of (ctx ?? []) as Record<string, unknown>[]) {
-      labels.set(
-        new Date(row.target_ts as string).toISOString(),
-        row.label === null || row.label === undefined ? null : Number(row.label),
-      );
+  if (oldestTs) {
+    for (let page = 0; page < V11_STATS_MAX_PAGES; page++) {
+      const from = page * V11_STATS_PAGE;
+      const { data: ctx, error: cErr } = await sb
+        .from("v11_context_rows")
+        .select("target_ts, label")
+        .gte("target_ts", oldestTs)
+        .order("target_ts", { ascending: false })
+        .range(from, from + V11_STATS_PAGE - 1);
+      if (cErr) throw cErr;
+      const batch = (ctx ?? []) as Record<string, unknown>[];
+      for (const row of batch) {
+        labels.set(
+          new Date(row.target_ts as string).toISOString(),
+          row.label === null || row.label === undefined ? null : Number(row.label),
+        );
+      }
+      if (batch.length < V11_STATS_PAGE) break;
     }
   }
 
