@@ -166,20 +166,54 @@ export async function buildV11Stats(): Promise<V11Stats> {
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
+  // Independent reads are started up front so they overlap the paged scans
+  // instead of queueing behind them.
+  const headsPromise = sb
+    .from("v11_heads")
+    .select("fit_date, quarantined")
+    .order("fit_date", { ascending: false })
+    .limit(1);
+  const deliveriesPromise = sb
+    .from("webhook_deliveries")
+    .select("payload, status_code")
+    .eq("event", "prediction.created")
+    .gte("status_code", 200)
+    .lt("status_code", 300)
+    .order("delivered_at", { ascending: false })
+    .limit(500);
+
   // Aggregation window, paged. Every decision counted here is also LABELLED
   // here: a row whose label was never fetched must not be reported as pending.
+  // Pages are fetched in parallel groups: sequential paging dominated the
+  // request time and produced identical rows.
+  const V11_STATS_PAGE_CONCURRENCY = 4;
   const decisions: Record<string, unknown>[] = [];
-  for (let page = 0; page < V11_STATS_MAX_PAGES; page++) {
-    const from = page * V11_STATS_PAGE;
-    const { data: rows, error } = await sb
-      .from("v11_decisions")
-      .select("target_ts, run_mode, leg, side, reason, rank, probability, ticker")
-      .order("target_ts", { ascending: false })
-      .range(from, from + V11_STATS_PAGE - 1);
-    if (error) throw error;
-    const batch = (rows ?? []) as Record<string, unknown>[];
-    decisions.push(...batch);
-    if (batch.length < V11_STATS_PAGE) break;
+  let exhausted = false;
+  for (
+    let group = 0;
+    group < V11_STATS_MAX_PAGES && !exhausted;
+    group += V11_STATS_PAGE_CONCURRENCY
+  ) {
+    const pages = Array.from(
+      { length: Math.min(V11_STATS_PAGE_CONCURRENCY, V11_STATS_MAX_PAGES - group) },
+      (_, i) => group + i,
+    );
+    const results = await Promise.all(
+      pages.map((page) => {
+        const from = page * V11_STATS_PAGE;
+        return sb
+          .from("v11_decisions")
+          .select("target_ts, run_mode, leg, side, reason, rank, probability, ticker")
+          .order("target_ts", { ascending: false })
+          .range(from, from + V11_STATS_PAGE - 1);
+      }),
+    );
+    for (const { data: rows, error } of results) {
+      if (error) throw error;
+      const batch = (rows ?? []) as Record<string, unknown>[];
+      decisions.push(...batch);
+      if (batch.length < V11_STATS_PAGE) exhausted = true;
+    }
   }
 
   // Labels are read by time range rather than one `.in(...)` request per 100
@@ -190,31 +224,33 @@ export async function buildV11Stats(): Promise<V11Stats> {
   const oldestTs = tsList.length ? tsList[tsList.length - 1] : null;
   const labels = new Map<string, number | null>();
   if (oldestTs) {
-    for (let page = 0; page < V11_STATS_MAX_PAGES; page++) {
-      const from = page * V11_STATS_PAGE;
-      const { data: ctx, error: cErr } = await sb
-        .from("v11_context_rows")
-        .select("target_ts, label")
-        .gte("target_ts", oldestTs)
-        .order("target_ts", { ascending: false })
-        .range(from, from + V11_STATS_PAGE - 1);
+    const labelPages = Math.min(
+      V11_STATS_MAX_PAGES,
+      Math.ceil(tsList.length / V11_STATS_PAGE) + 1,
+    );
+    const results = await Promise.all(
+      Array.from({ length: labelPages }, (_, page) => {
+        const from = page * V11_STATS_PAGE;
+        return sb
+          .from("v11_context_rows")
+          .select("target_ts, label")
+          .gte("target_ts", oldestTs)
+          .order("target_ts", { ascending: false })
+          .range(from, from + V11_STATS_PAGE - 1);
+      }),
+    );
+    for (const { data: ctx, error: cErr } of results) {
       if (cErr) throw cErr;
-      const batch = (ctx ?? []) as Record<string, unknown>[];
-      for (const row of batch) {
+      for (const row of (ctx ?? []) as Record<string, unknown>[]) {
         labels.set(
           new Date(row.target_ts as string).toISOString(),
           row.label === null || row.label === undefined ? null : Number(row.label),
         );
       }
-      if (batch.length < V11_STATS_PAGE) break;
     }
   }
 
-  const { data: headRows, error: hErr } = await sb
-    .from("v11_heads")
-    .select("fit_date, quarantined")
-    .order("fit_date", { ascending: false })
-    .limit(1);
+  const { data: headRows, error: hErr } = await headsPromise;
   if (hErr) throw hErr;
   const head = (headRows ?? [])[0] as Record<string, unknown> | undefined;
 
