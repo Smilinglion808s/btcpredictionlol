@@ -277,14 +277,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
   // ledger — never inferred from flags, claims, or configuration.
   const sentKeys = new Set<string>();
   {
-    const { data: deliveries, error: dErr } = await sb
-      .from("webhook_deliveries")
-      .select("payload, status_code")
-      .eq("event", "prediction.created")
-      .gte("status_code", 200)
-      .lt("status_code", 300)
-      .order("delivered_at", { ascending: false })
-      .limit(500);
+    const { data: deliveries, error: dErr } = await deliveriesPromise;
     if (dErr) throw dErr;
     for (const row of (deliveries ?? []) as Record<string, unknown>[]) {
       const key = (row.payload as Record<string, unknown> | null)?.["dedupe_key"];
