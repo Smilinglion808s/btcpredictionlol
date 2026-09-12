@@ -375,6 +375,12 @@ function fakeDb(
 ) {
   const log: { table: string; op: string; args: unknown }[] = [];
   const rpc: { name: string; args: Record<string, unknown> }[] = [];
+  // Mutable so a test can revoke the source abstention mid-flight.
+  let v1Target: Record<string, unknown> | null =
+    opts.v1Target === undefined ? V1_SOURCE_TARGET : opts.v1Target;
+  const setV1Target = (row: Record<string, unknown> | null) => {
+    v1Target = row;
+  };
   const outbox = new Map<string, { state: string; claim_owner: string | null; claim_expires_at: string }>();
   const client: any = {
     rpc: async (name: string, args: Record<string, unknown>) => {
