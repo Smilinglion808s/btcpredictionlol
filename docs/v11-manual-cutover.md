@@ -1,6 +1,7 @@
 # Version 1.1 — manual cutover (NOTHING is armed)
 
-Version 1.1 is one stream with two legs and **at most one bet per interval**:
+Version 1.1 is one stream with two legs, and this project makes **at most one
+automatic outbound attempt per interval**:
 
 | Leg | When | Source | Claim |
 | --- | --- | --- | --- |
@@ -8,7 +9,10 @@ Version 1.1 is one stream with two legs and **at most one bet per interval**:
 | `T45R2` | T+45s, only after a signed, on-time `LIVE_SHADOW` observation committed atomically | `v11_decisions` row, rank >= admission gate AND >= 0.80, original V1 recorded `CONFIDENCE_ABSTAIN` with its floor open | the SAME canonical interval key |
 
 Both legs claim the same key in the same durable table, and both require
-**exactly one** active destination, so one interval can never produce two bets.
+**exactly one** active destination, so this project transmits at most one
+signal per interval. What the external betting bot then does with that signal —
+including whether it places an order, and how many — is owned by the bot and is
+not guaranteed by anything here.
 
 ## Current state (no delivery possible)
 
