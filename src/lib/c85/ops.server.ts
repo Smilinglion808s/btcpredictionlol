@@ -30,8 +30,10 @@ import {
 import { deliverWebhookNow, primeWebhookEndpoints } from "@/lib/webhooks.server";
 import {
   v11DeliveryArmed,
+  v11V1LegClaimRelabel,
   v11V1LegDeliver,
   v11V1LegGateReaders,
+
 } from "@/lib/v11/dispatch.server";
 
 // The identity a signed worker request writes under. Restricted to a closed
