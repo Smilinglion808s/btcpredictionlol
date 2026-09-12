@@ -37,7 +37,9 @@ async function isSignedIn(): Promise<boolean> {
   }
 }
 
-export const getV11Stats = createServerFn({ method: "GET" }).handler(
+// POST (not GET) on purpose: GET server-function responses can be cached by the
+// CDN in front of the published site, which pinned this tile to an old snapshot.
+export const getV11Stats = createServerFn({ method: "POST" }).handler(
   async (): Promise<Record<string, any>> => {
     if (!(await isSignedIn())) {
       return { phase: "PREPARING", unauthorized: true };
