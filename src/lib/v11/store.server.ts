@@ -133,6 +133,8 @@ export async function upsertContextRow(
       input_valid: row.inputValid,
       label: row.label,
       settlement_ts: row.settlementTs,
+      settlement_ts_source: row.settlementTsSource ?? null,
+      settlement_known_at: row.settlementKnownAt ?? null,
       feats: row.feats,
       source,
     },
