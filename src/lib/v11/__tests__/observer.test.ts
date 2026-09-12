@@ -347,3 +347,95 @@ describe("a rejected commit is never reported as processed", () => {
     expect(expected.stateVersion).toBe(41);
   });
 });
+
+describe("the database transaction is the timing authority", () => {
+  const liveSamples = () =>
+    m.readT45InputsFromSamples.mockResolvedValue({
+      feats: {},
+      lastBarReceivedAt: new Date(Date.parse(TARGET) + 45_100).toISOString(),
+      lastBarPersistedAt: new Date(Date.parse(TARGET) + 45_400).toISOString(),
+      barsUsed: 45,
+      source: "t45_second_samples",
+    });
+
+  it("adopts the DB downgrade when the commit lands past 60s AFTER the pre-commit stamp", async () => {
+    liveSamples();
+    m.commitObservation.mockResolvedValue({
+      committed: true,
+      duplicate: false,
+      stale: false,
+      gap: false,
+      excluded: false,
+      outOfOrder: false,
+      repaired: false,
+      reason: null,
+      scoreWritten: true,
+      decisionWritten: true,
+      lastProcessedTs: TARGET,
+      stateVersion: 2,
+      firstMissingTs: null,
+      // network/lock delay: stamped at 47s, actually committed at 93s
+      effectiveRunMode: V11_RUN_MODES.RECOVERY,
+      commitOffsetMs: 93_000,
+      withinPublicationCeiling: false,
+    });
+    const res = await observeV11Target(sb, TARGET, {
+      requestedRunMode: V11_RUN_MODES.LIVE,
+      live: { signed: true, source: "t45-boundary-run", receivedAtMs: Date.now() },
+      now: new Date(Date.parse(TARGET) + 47_000),
+    });
+    // The row it SENT was optimistic; what it REPORTS is what was persisted.
+    expect(lastDecision().run_mode).toBe(V11_RUN_MODES.LIVE);
+    expect(res.runMode).toBe(V11_RUN_MODES.RECOVERY);
+    expect(res.commitOffsetMs).toBe(93_000);
+  });
+
+  it("adopts the persisted mode of the excluded-then-no-call retry too", async () => {
+    liveSamples();
+    m.commitObservation
+      .mockResolvedValueOnce({
+        committed: false,
+        duplicate: false,
+        stale: false,
+        gap: false,
+        excluded: true,
+        outOfOrder: false,
+        repaired: false,
+        reason: "V1_LEG_NOT_EXCLUSIVE",
+        scoreWritten: false,
+        decisionWritten: false,
+        lastProcessedTs: null,
+        stateVersion: 1,
+        firstMissingTs: null,
+        effectiveRunMode: V11_RUN_MODES.LIVE,
+        commitOffsetMs: 47_100,
+        withinPublicationCeiling: true,
+      })
+      .mockResolvedValueOnce({
+        committed: true,
+        duplicate: false,
+        stale: false,
+        gap: false,
+        excluded: false,
+        outOfOrder: false,
+        repaired: false,
+        reason: null,
+        scoreWritten: true,
+        decisionWritten: true,
+        lastProcessedTs: TARGET,
+        stateVersion: 2,
+        firstMissingTs: null,
+        effectiveRunMode: V11_RUN_MODES.RECOVERY,
+        commitOffsetMs: 120_000,
+        withinPublicationCeiling: false,
+      });
+    const res = await observeV11Target(sb, TARGET, {
+      requestedRunMode: V11_RUN_MODES.LIVE,
+      live: { signed: true, source: "t45-boundary-run", receivedAtMs: Date.now() },
+      now: new Date(Date.parse(TARGET) + 47_000),
+    });
+    expect(m.commitObservation).toHaveBeenCalledTimes(2);
+    expect(res.runMode).toBe(V11_RUN_MODES.RECOVERY);
+    expect(res.commitOffsetMs).toBe(120_000);
+  });
+});
