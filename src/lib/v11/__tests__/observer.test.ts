@@ -8,6 +8,7 @@ vi.mock("../store.server", () => ({
   decisionExists: vi.fn(),
   readMissingPredecessors: vi.fn(),
   commitObservation: vi.fn(),
+  readState: vi.fn(),
   readLiveContext: vi.fn(),
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("../store.server", () => ({
   readPriorOpportunities: vi.fn(),
   readV1Snapshot: vi.fn(),
 }));
+
 
 import * as store from "../store.server";
 import { observeV11Target } from "../observer.server";
