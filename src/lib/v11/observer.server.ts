@@ -93,6 +93,8 @@ export interface V11ObservationResult {
   gate: number | null;
   probability: number | null;
   missingPredecessors: string[];
+  /** Elapsed ms from target open to the DB transaction boundary, if committed. */
+  commitOffsetMs?: number | null;
   /** Raw outcome of the ordered transaction; null when nothing was attempted. */
   commit?: V11CommitOutcome | null;
 }
@@ -294,6 +296,23 @@ async function observeV11TargetOnce(
   };
 
   let commitOutcome: V11CommitOutcome | null = null;
+  let persistedCommitOffsetMs: number | null = null;
+
+  /**
+   * The database, not this process, is the authority on what was persisted.
+   * The pre-commit stamp is only a request: if the transaction landed past the
+   * ceiling it stores RECOVERY, and that is the mode reported back to callers.
+   */
+  const adoptOutcome = (o: V11CommitOutcome): void => {
+    if (o.commitOffsetMs !== null && o.commitOffsetMs !== undefined) {
+      persistedCommitOffsetMs = o.commitOffsetMs;
+    }
+    if (o.withinPublicationCeiling === false) withinCeiling = false;
+    const m = o.effectiveRunMode;
+    if (m === V11_RUN_MODES.LIVE || m === V11_RUN_MODES.RECOVERY || m === V11_RUN_MODES.RESEARCH) {
+      effectiveRunMode = m as V11RunMode;
+    }
+  };
 
   const commit = async (
     score: Record<string, unknown>,
@@ -341,6 +360,7 @@ async function observeV11TargetOnce(
         allowBackfill: opts.allowBackfill === true,
       },
     );
+    adoptOutcome(commitOutcome);
 
     // The transaction re-checked the frozen V1 leg and found it NOT exclusive
     // (a V1 send landed, or the abstention is no longer the recorded one).
@@ -385,6 +405,7 @@ async function observeV11TargetOnce(
           allowBackfill: opts.allowBackfill === true,
         },
       );
+      adoptOutcome(commitOutcome);
       decision.side = 0;
       decision.leg = null;
       decision.reason = V11_REASONS.V1_LEG_NOT_EXCLUSIVE;
@@ -427,6 +448,7 @@ async function observeV11TargetOnce(
       duplicate: false,
       scoreValid: false,
       runMode: effectiveRunMode,
+    commitOffsetMs: persistedCommitOffsetMs,
       decisionLeg: decision.leg,
       side: decision.side,
       // The blocking cause is reported as itself: a failed V1 read must not be
@@ -533,6 +555,7 @@ async function observeV11TargetOnce(
     duplicate: false,
     scoreValid: true,
     runMode: effectiveRunMode,
+    commitOffsetMs: persistedCommitOffsetMs,
     decisionLeg: decision.leg,
     side: decision.side,
     reason: decision.reason,

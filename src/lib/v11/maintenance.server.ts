@@ -88,6 +88,7 @@ async function refreshLabels(
   limit: number,
   kalshiLimit: number,
   before: string,
+  nowMs: number = Date.now(),
 ): Promise<{ total: number; fromSettlements: number; fromKalshi: number }> {
   const { data, error } = await sb
     .from("v11_context_rows")
@@ -106,6 +107,7 @@ async function refreshLabels(
     ts: string,
     label: number,
     settlementTs: string | null,
+    settlementTsSource: string | null,
     source: string,
   ): Promise<boolean> => {
     if (label !== 1 && label !== -1) return false;
@@ -113,7 +115,15 @@ async function refreshLabels(
     if (!existing || existing.label !== null) return false;
     await upsertContextRow(
       sb,
-      { ...existing, label, settlementTs: settlementTs ?? existing.settlementTs },
+      {
+        ...existing,
+        label,
+        settlementTs: settlementTs ?? existing.settlementTs,
+        settlementTsSource: settlementTs
+          ? settlementTsSource
+          : (existing.settlementTsSource ?? null),
+        settlementKnownAt: new Date().toISOString(),
+      },
       source,
     );
     return true;
@@ -142,30 +152,51 @@ async function refreshLabels(
   }
   for (const ts of pending) {
     const hit = settled.get(ts);
-    if (hit && (await write(ts, hit.label, hit.ts, "c85_settlements"))) {
+    if (
+      hit &&
+      (await write(ts, hit.label, hit.ts, hit.ts ? "native" : null, "c85_settlements"))
+    ) {
       fromSettlements++;
     } else if (!hit) {
       stillPending.push(ts);
     }
   }
 
-  // 2) Native Kalshi resolver for every other official interval. Bounded per
-  //    pass so maintenance stays short; the rest are picked up next pass.
+  // 2) Native resolver for every other official interval, WITH timing
+  //    provenance. Market close is not proof of settlement, so no close-time
+  //    stamp is ever invented: either the venue publishes a settlement instant
+  //    or we record the conservative first-observation time and say so.
+  //
+  //    Selection is newest-first plus a rotating slot for old pending rows, so
+  //    a handful of permanently missing old markets cannot monopolise every
+  //    pass and starve freshly closed intervals.
   let fromKalshi = 0;
-  const { fetchKalshiResolution } = await import("@/lib/kalshi.server");
-  const oldestFirst = [...stillPending].sort((a, b) => Date.parse(a) - Date.parse(b));
-  for (const ts of oldestFirst.slice(0, kalshiLimit)) {
-    let res: Awaited<ReturnType<typeof fetchKalshiResolution>> = null;
+  const { fetchV11NativeResolution } = await import("./kalshi.server");
+  const newestFirst = [...stillPending].sort((a, b) => Date.parse(b) - Date.parse(a));
+  const oldSlots = Math.min(2, Math.max(0, kalshiLimit - 1));
+  const fresh = newestFirst.slice(0, Math.max(0, kalshiLimit - oldSlots));
+  const oldPool = newestFirst.slice(fresh.length).reverse(); // oldest first
+  const rotation: string[] = [];
+  if (oldPool.length > 0 && oldSlots > 0) {
+    const cursor = Math.floor(nowMs / (60 * 60_000)); // advances every hour
+    for (let i = 0; i < Math.min(oldSlots, oldPool.length); i++) {
+      rotation.push(oldPool[(cursor + i) % oldPool.length] as string);
+    }
+  }
+  const attempts = [...new Set([...fresh, ...rotation])];
+  for (const ts of attempts) {
+    let res: Awaited<ReturnType<typeof fetchV11NativeResolution>> = null;
     try {
-      res = await fetchKalshiResolution(ts);
+      res = await fetchV11NativeResolution(ts);
     } catch {
       res = null;
     }
     if (!res) continue;
     const label = res.result === "YES" ? 1 : -1;
-    // Kalshi settles the market at the close of the candle it resolves.
-    const settlementTs = new Date(Date.parse(ts) + CANDLE_MS).toISOString();
-    if (await write(ts, label, settlementTs, "kalshi")) fromKalshi++;
+    const native = res.nativeSettlementTs;
+    const settlementTs = native ?? new Date().toISOString();
+    const provenance = native ? "native" : "observed";
+    if (await write(ts, label, settlementTs, provenance, "kalshi")) fromKalshi++;
   }
 
   return {
@@ -254,6 +285,7 @@ export async function runV11Maintenance(
     opts.labelLimit ?? 400,
     opts.kalshiLimit ?? 12,
     before,
+    now.getTime(),
   );
   report.labelsRefreshed = labels.total;
   report.labelsFromSettlements = labels.fromSettlements;

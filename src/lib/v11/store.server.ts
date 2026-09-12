@@ -41,6 +41,14 @@ export interface V11ContextRow {
   inputValid: boolean;
   label: number | null;
   settlementTs: string | null;
+  /**
+   * Provenance of `settlementTs`. `native` means the venue itself reported the
+   * settlement instant; `observed` means we only know when WE first saw the
+   * resolved market, which is conservative (never earlier than the truth) and
+   * must never be presented as a native settlement time.
+   */
+  settlementTsSource?: string | null;
+  settlementKnownAt?: string | null;
   feats: Record<string, number>;
 }
 
@@ -50,17 +58,22 @@ export async function readContextRow(
 ): Promise<V11ContextRow | null> {
   const { data, error } = await sb
     .from(V11_CONTEXT_TABLE)
-    .select("target_ts, ticker, input_valid, label, settlement_ts, feats")
+    .select(
+      "target_ts, ticker, input_valid, label, settlement_ts, settlement_ts_source, settlement_known_at, feats",
+    )
     .eq("target_ts", targetTs)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  const d = data as Record<string, unknown>;
   return {
     targetTs: new Date(data.target_ts as string).toISOString(),
     ticker: (data.ticker as string) ?? "",
     inputValid: Boolean(data.input_valid),
     label: data.label === null || data.label === undefined ? null : Number(data.label),
     settlementTs: (data.settlement_ts as string | null) ?? null,
+    settlementTsSource: (d["settlement_ts_source"] as string | null) ?? null,
+    settlementKnownAt: (d["settlement_known_at"] as string | null) ?? null,
     feats: (data.feats ?? {}) as Record<string, number>,
   };
 }
@@ -120,6 +133,8 @@ export async function upsertContextRow(
       input_valid: row.inputValid,
       label: row.label,
       settlement_ts: row.settlementTs,
+      settlement_ts_source: row.settlementTsSource ?? null,
+      settlement_known_at: row.settlementKnownAt ?? null,
       feats: row.feats,
       source,
     },
@@ -741,6 +756,15 @@ export interface V11CommitOutcome {
   lastProcessedTs: string | null;
   stateVersion: number | null;
   firstMissingTs: string | null;
+  /**
+   * Mode the transaction ACTUALLY persisted. The pre-commit stamp is only a
+   * request: a live-shadow row that lands past the ceiling is persisted as
+   * RECOVERY, and the caller must report that, not its own optimistic guess.
+   */
+  effectiveRunMode: string | null;
+  /** True elapsed ms from target open to the final transaction boundary. */
+  commitOffsetMs: number | null;
+  withinPublicationCeiling: boolean | null;
 }
 
 export async function commitObservation(
@@ -785,6 +809,16 @@ export async function commitObservation(
     firstMissingTs: r.first_missing_ts
       ? new Date(r.first_missing_ts as string).toISOString()
       : null,
+    effectiveRunMode: (r.effective_run_mode as string | null) ?? null,
+    commitOffsetMs:
+      r.commit_offset_ms === null || r.commit_offset_ms === undefined
+        ? null
+        : Number(r.commit_offset_ms),
+    withinPublicationCeiling:
+      r.within_publication_ceiling === null ||
+      r.within_publication_ceiling === undefined
+        ? null
+        : r.within_publication_ceiling === true,
   };
 }
 

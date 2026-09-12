@@ -10168,7 +10168,9 @@ export type Database = {
           feats: Json
           input_valid: boolean
           label: number | null
+          settlement_known_at: string | null
           settlement_ts: string | null
+          settlement_ts_source: string | null
           source: string
           target_ts: string
           ticker: string
@@ -10179,7 +10181,9 @@ export type Database = {
           feats: Json
           input_valid?: boolean
           label?: number | null
+          settlement_known_at?: string | null
           settlement_ts?: string | null
+          settlement_ts_source?: string | null
           source?: string
           target_ts: string
           ticker?: string
@@ -10190,7 +10194,9 @@ export type Database = {
           feats?: Json
           input_valid?: boolean
           label?: number | null
+          settlement_known_at?: string | null
           settlement_ts?: string | null
+          settlement_ts_source?: string | null
           source?: string
           target_ts?: string
           ticker?: string
