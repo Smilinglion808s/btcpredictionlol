@@ -2,6 +2,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHmac } from "crypto";
 import { LITE_A_MODEL_VERSION } from "@/lib/c85/config";
+import { V11_MODEL_VERSION } from "@/lib/v11/config";
+
 
 export type WebhookEvent = "prediction.created" | "prediction.resolved";
 
