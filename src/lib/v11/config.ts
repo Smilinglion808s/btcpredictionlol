@@ -248,6 +248,9 @@ export const V11_REASONS = {
   V1_READ_FAILED: "V11_ABSTAIN_V1_READ_FAILED",
   /** The frozen V1 leg was not exclusive at commit time (send claim/no abstention). */
   V1_LEG_NOT_EXCLUSIVE: "V1_LEG_NOT_EXCLUSIVE",
+  /** The atomic commit refused to apply (stale state, gap, out of order). */
+  COMMIT_REJECTED: "V11_COMMIT_REJECTED",
+
   LATE_PUBLICATION: "V11_ABSTAIN_LATE_PUBLICATION",
 } as const;
 
