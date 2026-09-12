@@ -10202,11 +10202,15 @@ export type Database = {
         Row: {
           admission_gate: number | null
           created_at: string
+          decision_offset_ms: number | null
           dispatch_enabled: boolean
+          event_cutoff_offset_ms: number | null
           event_key: string
           head_date: string | null
+          inputs_persisted_offset_ms: number | null
           leg: string | null
           probability: number | null
+          publication_ceiling_ms: number | null
           rank: number | null
           reason: string
           side: number
@@ -10218,15 +10222,20 @@ export type Database = {
           v1_reason: string | null
           v1_send_claim: string
           v1_status: string | null
+          within_publication_ceiling: boolean | null
         }
         Insert: {
           admission_gate?: number | null
           created_at?: string
+          decision_offset_ms?: number | null
           dispatch_enabled?: boolean
+          event_cutoff_offset_ms?: number | null
           event_key: string
           head_date?: string | null
+          inputs_persisted_offset_ms?: number | null
           leg?: string | null
           probability?: number | null
+          publication_ceiling_ms?: number | null
           rank?: number | null
           reason: string
           side?: number
@@ -10238,15 +10247,20 @@ export type Database = {
           v1_reason?: string | null
           v1_send_claim?: string
           v1_status?: string | null
+          within_publication_ceiling?: boolean | null
         }
         Update: {
           admission_gate?: number | null
           created_at?: string
+          decision_offset_ms?: number | null
           dispatch_enabled?: boolean
+          event_cutoff_offset_ms?: number | null
           event_key?: string
           head_date?: string | null
+          inputs_persisted_offset_ms?: number | null
           leg?: string | null
           probability?: number | null
+          publication_ceiling_ms?: number | null
           rank?: number | null
           reason?: string
           side?: number
@@ -10258,6 +10272,7 @@ export type Database = {
           v1_reason?: string | null
           v1_send_claim?: string
           v1_status?: string | null
+          within_publication_ceiling?: boolean | null
         }
         Relationships: []
       }
