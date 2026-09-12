@@ -294,16 +294,20 @@ export async function dispatchLiteaDecision(
     executionEnabled: boolean;
     allowedModels: ReadonlySet<string>;
     transportDeadlineMs: number;
+    /** Hard cap (candle close). Defaults to the 15-minute candle length. */
+    hardCapMs?: number;
     alreadySent?: boolean;
     owner?: string;
   },
 ): Promise<LiteADispatchResult> {
+  const hardCapMs = args.hardCapMs ?? LITEA_DEFAULT_SEND_HARD_CAP_MS;
   const intake = evaluateLiteaDispatch(row, {
     nowMs: deps.now(),
     executionEnabled: args.executionEnabled,
     allowedModels: args.allowedModels,
     alreadySent: args.alreadySent === true,
     transportDeadlineMs: args.transportDeadlineMs,
+    hardCapMs,
   });
   if (intake !== "WOULD_SEND") return { verdict: intake, dedupeKey: null };
 
@@ -311,7 +315,9 @@ export async function dispatchLiteaDecision(
   const targetOpenIso = new Date(String(row.target_open_utc)).toISOString();
   const openMs = new Date(targetOpenIso).getTime();
   const dedupeKey = liteaDedupeKey(ticker, targetOpenIso);
-  const expiresAt = new Date(openMs + args.transportDeadlineMs).toISOString();
+  // Ownership must outlive a slow send: the claim expires at the hard cap
+  // (candle close), not at the 8-second goal.
+  const expiresAt = new Date(openMs + hardCapMs).toISOString();
   const payload = liteaPayloadFromRecord(row);
   const owner = args.owner ?? newDispatchOwner();
 
