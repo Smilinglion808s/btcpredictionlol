@@ -703,6 +703,41 @@ export async function readState(sb: SupabaseClient): Promise<V11State> {
 }
 
 /** Durable checkpoint; never moves backwards. */
+/**
+ * Fit-date-only write.
+ *
+ * A fit must NEVER touch the decision checkpoint. `advanceState` reads the whole
+ * state and writes it back, so a concurrent observation commit landing between
+ * that read and the write would have its checkpoint regressed to the stale value
+ * this process read. This updates the single column in one statement instead,
+ * so the checkpoint is untouched whatever else commits concurrently.
+ */
+export async function setLastFitDate(
+  sb: SupabaseClient,
+  fitDate: string,
+): Promise<void> {
+  const { data, error } = await sb
+    .from(V11_STATE_TABLE)
+    .update({ last_fit_date: fitDate, updated_at: new Date().toISOString() })
+    .eq("state_key", V11_STATE_KEY)
+    .select("state_key");
+  if (error) throw error;
+  if ((data ?? []).length > 0) return;
+  // First ever fit: create the row without claiming any checkpoint.
+  const { error: insErr } = await sb
+    .from(V11_STATE_TABLE)
+    .upsert(
+      { state_key: V11_STATE_KEY, last_fit_date: fitDate },
+      { onConflict: "state_key", ignoreDuplicates: true },
+    );
+  if (insErr) throw insErr;
+  const { error: retryErr } = await sb
+    .from(V11_STATE_TABLE)
+    .update({ last_fit_date: fitDate, updated_at: new Date().toISOString() })
+    .eq("state_key", V11_STATE_KEY);
+  if (retryErr) throw retryErr;
+}
+
 export async function advanceState(
   sb: SupabaseClient,
   patch: Partial<V11State>,
@@ -856,9 +891,31 @@ export async function readMissingPredecessors(
     .order("target_ts", { ascending: true })
     .limit(limit);
   if (ctxErr) throw ctxErr;
-  const wanted = ((ctx ?? []) as { target_ts: string }[]).map((r) =>
-    new Date(r.target_ts).toISOString(),
-  );
+  // The authoritative list of official opportunities is the original V1 target
+  // ledger, NOT what V11 happens to have imported. A live observation inserts
+  // its own context row, so an interval V11 never imported would otherwise be
+  // invisible here and skipped forever.
+  const { data: official, error: offErr } = await sb
+    .from("c85_targets")
+    .select("target_open_utc")
+    .eq("model_version", V1_MODEL_VERSION)
+    .gt("target_open_utc", state.lastProcessedTs)
+    .lt("target_open_utc", targetTs)
+    .order("target_open_utc", { ascending: true })
+    .limit(limit);
+  if (offErr) throw offErr;
+  const wanted = Array.from(
+    new Set([
+      ...((ctx ?? []) as { target_ts: string }[]).map((r) =>
+        new Date(r.target_ts).toISOString(),
+      ),
+      ...((official ?? []) as { target_open_utc: string }[]).map((r) =>
+        new Date(r.target_open_utc).toISOString(),
+      ),
+    ]),
+  )
+    .sort()
+    .slice(0, limit);
   if (wanted.length === 0) return [];
   const { data: done, error: doneErr } = await sb
     .from(V11_DECISIONS_TABLE)

@@ -13,7 +13,7 @@ import {
 import { buildV11Vector, computeV11Vol } from "./features";
 import { fitV11Head, v11FitCutoff, v11HeadCertified, type V11Head } from "./head";
 import {
-  advanceState,
+  setLastFitDate,
   numOrNaN,
   readHeadForDate,
   readTrainingRows,
@@ -74,7 +74,7 @@ export async function ensureV11Head(
     };
   }
   await writeHead(sb, head);
-  await advanceState(sb, { lastFitDate: fitDate });
+  await setLastFitDate(sb, fitDate);
   return {
     fitDate,
     created: true,

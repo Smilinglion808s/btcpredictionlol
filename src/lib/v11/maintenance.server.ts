@@ -42,12 +42,23 @@ async function importContext(
   before: string,
   limit: number,
 ): Promise<number> {
+  // Start from the COMMITTED CHECKPOINT, not from the newest imported context
+  // row. The signed live observer inserts its own newest context row, so a
+  // missed interval in between would never be looked at again if we resumed
+  // from MAX(target_ts). Anything at or after the checkpoint that has no
+  // context row yet is still owed an import.
+  const state = await readState(sb);
   const { data: lastCtx } = await sb
     .from("v11_context_rows")
     .select("target_ts")
     .order("target_ts", { ascending: false })
     .limit(1);
-  const from = (lastCtx ?? [])[0]?.target_ts as string | undefined;
+  const maxCtx = (lastCtx ?? [])[0]?.target_ts as string | undefined;
+  const candidates = [state.lastProcessedTs, maxCtx].filter(Boolean) as string[];
+  const from =
+    candidates.length > 0
+      ? candidates.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b))
+      : undefined;
 
   let q = sb
     .from("c85_targets")
