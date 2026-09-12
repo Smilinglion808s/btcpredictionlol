@@ -226,6 +226,19 @@ function StatsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        <V11Card
+          stats={(v11Q.data as any) ?? {}}
+          loading={v11Q.isLoading}
+          error={v11Q.isError}
+        />
+
+
+
+
+
+
+
         <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
         {/* B4x4-ES1 retired — model stopped and CSV archived. */}
 
@@ -254,18 +267,6 @@ function StatsPage() {
           loading={liteAQ.isLoading}
           error={liteAQ.isError}
         />
-
-        <V11Card
-          stats={(v11Q.data as any) ?? {}}
-          loading={v11Q.isLoading}
-          error={v11Q.isError}
-        />
-
-
-
-
-
-
 
       </div>
 
@@ -764,5 +765,4 @@ function TD1Card({
     </Card>
   );
 }
-
 
