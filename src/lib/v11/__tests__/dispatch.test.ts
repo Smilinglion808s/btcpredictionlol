@@ -517,6 +517,8 @@ describe("real Supabase deps for the fallback leg", () => {
   it("rejects a same-interval V1 row that is not a valid ordinary-floor confidence abstention", async () => {
     for (const bad of [
       { ...V1_SOURCE_TARGET, final_side: 1 },
+      // Nullable smallint: a reset-to-null source is not a completed abstention.
+      { ...V1_SOURCE_TARGET, final_side: null },
       { ...V1_SOURCE_TARGET, run_mode: "RESEARCH_BACKFILL" },
       {
         ...V1_SOURCE_TARGET,
