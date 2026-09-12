@@ -161,3 +161,34 @@ describe("rank and availability are two different clocks", () => {
     expect(availability).toBe(0);
   });
 });
+
+describe("certification refuses ABSENT metadata", () => {
+  const now = new Date("2026-09-11T12:00:00.000Z");
+
+  it("rejects a head with no cutoff", () => {
+    expect(v11HeadCertified(head({ cutoffTs: null } as any), now)).toBe(false);
+  });
+
+  it("rejects a head with no expiry, or an expiry at/before its cutoff", () => {
+    expect(v11HeadCertified(head({ expiresAt: null } as any), now)).toBe(false);
+    expect(
+      v11HeadCertified(head({ expiresAt: "2026-09-11T00:00:00.000Z" }), now),
+    ).toBe(false);
+  });
+
+  it("rejects a head that cannot prove its newest training settlement", () => {
+    expect(
+      v11HeadCertified(head({ maxTrainingSettlementTs: null } as any), now),
+    ).toBe(false);
+  });
+
+  it("rejects a head with no feature-order or config binding", () => {
+    expect(v11HeadCertified(head({ featureOrderHash: null } as any), now)).toBe(false);
+    expect(v11HeadCertified(head({ configFingerprint: null } as any), now)).toBe(false);
+  });
+
+  it("rejects a head fitted on too few rows", () => {
+    expect(v11HeadCertified(head({ trainingRowCount: 12 }), now)).toBe(false);
+    expect(v11HeadCertified(head({ trainingRowCount: NaN }), now)).toBe(false);
+  });
+});

@@ -13,6 +13,7 @@ vi.mock("../store.server", () => ({
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
   readT45InputsTimed: vi.fn(),
+  readT45InputsFromSamples: vi.fn(),
   readVolHistory: vi.fn(),
   upsertVector: vi.fn(),
   readHeadForDate: vi.fn(),
@@ -75,6 +76,7 @@ beforeEach(() => {
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45InputsTimed.mockResolvedValue(null);
+  m.readT45InputsFromSamples.mockResolvedValue(null);
   m.readVolHistory.mockResolvedValue([]);
   m.readHeadForDate.mockResolvedValue(null);
   m.readPriorConfidences.mockResolvedValue([]);
@@ -184,9 +186,13 @@ describe("run mode is earned, not requested", () => {
   });
 
   it("labels a signed live trigger LIVE_SHADOW only with a real receipt, a LIVE V1 row and no gaps", async () => {
-    m.readT45InputsTimed.mockResolvedValue({
+    // Live evidence comes ONLY from the collector's finalized one-second bars.
+    m.readT45InputsFromSamples.mockResolvedValue({
       feats: {},
-      persistedAt: new Date(Date.parse(TARGET) + 45_400).toISOString(),
+      lastBarReceivedAt: new Date(Date.parse(TARGET) + 45_100).toISOString(),
+      lastBarPersistedAt: new Date(Date.parse(TARGET) + 45_400).toISOString(),
+      barsUsed: 45,
+      source: "t45_second_samples",
     });
     const res = await observeV11Target(sb, TARGET, {
       requestedRunMode: V11_RUN_MODES.LIVE,

@@ -217,18 +217,23 @@ export function fitV11Head(
  */
 export function v11HeadCertified(head: V11Head, now: Date = new Date()): boolean {
   if (head.quarantined === true) return false;
-  if (head.featureOrderHash && head.featureOrderHash !== V11_FEATURE_ORDER_HASH) return false;
-  if (head.configFingerprint && head.configFingerprint !== V11_CONFIG_FINGERPRINT) return false;
-  if (head.cutoffTs) {
-    const cut = Date.parse(head.cutoffTs);
-    if (!Number.isFinite(cut) || cut > now.getTime()) return false;
-    if (
-      head.maxTrainingSettlementTs &&
-      !(Date.parse(head.maxTrainingSettlementTs) < cut)
-    ) {
-      return false;
-    }
+  // ABSENT metadata is NOT a pass. A head that cannot prove what it was fitted
+  // on, or when it was cut, is uncertified — every check below is mandatory.
+  if (head.featureOrderHash !== V11_FEATURE_ORDER_HASH) return false;
+  if (head.configFingerprint !== V11_CONFIG_FINGERPRINT) return false;
+
+  const cut = head.cutoffTs ? Date.parse(head.cutoffTs) : NaN;
+  if (!Number.isFinite(cut) || cut > now.getTime()) return false;
+  const expiry = Date.parse(head.expiresAt ?? "");
+  if (!Number.isFinite(expiry) || expiry <= cut) return false;
+  const maxSettle = head.maxTrainingSettlementTs
+    ? Date.parse(head.maxTrainingSettlementTs)
+    : NaN;
+  if (!Number.isFinite(maxSettle) || !(maxSettle < cut)) return false;
+  if (!Number.isFinite(head.trainingRowCount) || head.trainingRowCount < V11_MIN_TRAIN_ROWS) {
+    return false;
   }
+
   if (head.scaler.center.length !== V11_FEATURE_ORDER.length) return false;
   if (head.scaler.scale.length !== V11_FEATURE_ORDER.length) return false;
   return (

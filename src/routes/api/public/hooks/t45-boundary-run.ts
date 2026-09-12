@@ -143,6 +143,23 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         // so a failure in any other T45 model can never delay or block it.
         const executionPath =
           mode === "recover" ? "WATCHDOG" : explicit ? "CATCHUP" : "IMMEDIATE_BOUNDARY";
+        // Version 1.1 shadow observer STARTS FIRST and runs concurrently: it is
+        // timed against the boundary, so it must not queue behind the legacy
+        // legs. It builds its own 28 PriceFlow inputs from the collector's
+        // finalized one-second bars, so it does not need `runPriceFlowBoundary`
+        // to have written anything. It is fully isolated and has no send path.
+        // Only a genuinely signed collector trigger may ask for LIVE_SHADOW;
+        // the observer still downgrades it unless the receipt, the V1 run mode
+        // and the 60s ceiling all check out.
+        const v11Promise = observeV11Target(supabase, target, {
+          requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
+          live: signed
+            ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
+            : undefined,
+        }).catch((e: unknown) => ({
+          error: e instanceof Error ? e.message : String(e),
+        }));
+
         let priceFlow: unknown = null;
         try {
           priceFlow = await runPriceFlowBoundary(supabase, target, { allowLate, executionPath });
@@ -156,22 +173,8 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         } catch (e) {
           result = { error: e instanceof Error ? e.message : String(e) };
         }
-        // Version 1.1 shadow observer. It runs AFTER both legacy legs, is fully
-        // isolated (a throw here cannot affect them), and has no send path of
-        // any kind. Only a genuinely signed collector trigger may ask for
-        // LIVE_SHADOW; the observer still downgrades it unless the receipt,
-        // the V1 run mode and the 60s ceiling all check out.
-        let v11: unknown = null;
-        try {
-          v11 = await observeV11Target(supabase, target, {
-            requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
-            live: signed
-              ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
-              : undefined,
-          });
-        } catch (e) {
-          v11 = { error: e instanceof Error ? e.message : String(e) };
-        }
+
+        const v11: unknown = await v11Promise;
 
         const resolved = await resolveT45Backlog(supabase, { limit: 200 }).catch(() => ({
           resolved: 0,

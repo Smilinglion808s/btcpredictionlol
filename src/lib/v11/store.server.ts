@@ -160,6 +160,91 @@ export async function readT45InputsTimed(
   return { feats, persistedAt: (rec.created_at as string | null) ?? null };
 }
 
+const T45_COLLECTOR_VERSION = "t45-kline-collector-r1";
+/** The finalized one-second bars of the target candle, offsets 0..44. */
+const T45_EXPECTED_BARS = 45;
+
+export interface V11T45SampleInputs {
+  feats: Record<string, number>;
+  /** Instant the LAST required bar was actually received by the collector. */
+  lastBarReceivedAt: string | null;
+  /** Instant the last required bar row was durably written. */
+  lastBarPersistedAt: string | null;
+  barsUsed: number;
+  source: "t45_second_samples";
+}
+
+/**
+ * Build the 28 PriceFlow inputs DIRECTLY from the collector's finalized
+ * one-second bars, with no dependency on the legacy `t45_features` row.
+ *
+ * Every requirement is checked before a value is produced: 45 unique offsets
+ * 0..44, every bar final, every bar's event time exactly T+offset, and a real
+ * `received_at` on the last bar. A legacy feature row's `created_at` proves
+ * only when a derived row was written, never when the raw packet arrived, so it
+ * is not consulted here at all.
+ */
+export async function readT45InputsFromSamples(
+  sb: SupabaseClient,
+  targetTs: string,
+): Promise<V11T45SampleInputs | null> {
+  const { buildT45Features } = await import("@/lib/t45/features");
+  const { data, error } = await sb
+    .from("t45_second_samples")
+    .select(
+      "offset_seconds, open, high, low, close, volume, quote_volume, trade_count, taker_buy_quote_volume, bar_open_ts, is_final, received_at, created_at",
+    )
+    .eq("target_ts", targetTs)
+    .eq("collector_version", T45_COLLECTOR_VERSION)
+    .order("offset_seconds", { ascending: true });
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  if (rows.length === 0) return null;
+
+  const openMs = Date.parse(targetTs);
+  const byOffset = new Map<number, Record<string, unknown>>();
+  for (const r of rows) {
+    const off = Number(r.offset_seconds);
+    if (!Number.isInteger(off) || off < 0 || off >= T45_EXPECTED_BARS) return null;
+    // Duplicate offsets are ambiguous, not "the newest wins": fail closed.
+    if (byOffset.has(off)) return null;
+    if (r.is_final !== true) return null;
+    if (Date.parse(String(r.bar_open_ts)) !== openMs + off * 1000) return null;
+    if (!r.received_at) return null;
+    byOffset.set(off, r);
+  }
+  if (byOffset.size !== T45_EXPECTED_BARS) return null;
+
+  const bars = [];
+  for (let off = 0; off < T45_EXPECTED_BARS; off++) {
+    const r = byOffset.get(off)!;
+    bars.push({
+      offsetSeconds: off,
+      open: numOrNaN(r.open),
+      high: numOrNaN(r.high),
+      low: numOrNaN(r.low),
+      close: numOrNaN(r.close),
+      volume: numOrNaN(r.volume),
+      quoteVolume: numOrNaN(r.quote_volume),
+      tradeCount: numOrNaN(r.trade_count),
+      takerBuyQuoteVolume: numOrNaN(r.taker_buy_quote_volume),
+    });
+  }
+  const built = buildT45Features(bars, null);
+  if (!built.spotComplete) return null;
+  const feats: Record<string, number> = {};
+  for (const n of V11_T45_BASE_ORDER) feats[n] = numOrNaN(built.values[n]);
+
+  const last = byOffset.get(T45_EXPECTED_BARS - 1)!;
+  return {
+    feats,
+    lastBarReceivedAt: (last.received_at as string | null) ?? null,
+    lastBarPersistedAt: (last.created_at as string | null) ?? null,
+    barsUsed: T45_EXPECTED_BARS,
+    source: "t45_second_samples",
+  };
+}
+
 /**
  * The previous 95 official-opportunity values of the volatility source, in
  * chronological order (the current row's own value is supplied separately).
