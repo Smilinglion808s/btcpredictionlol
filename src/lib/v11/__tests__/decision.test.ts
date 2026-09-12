@@ -120,7 +120,9 @@ describe("combined Version 1.1 decision", () => {
 
   it("takes the side from the probability, never from the rank", () => {
     expect(decideV11(eligibleV1, { ...goodScore, probability: 0.38 }).side).toBe(-1);
-    expect(decideV11(eligibleV1, { ...goodScore, probability: 0.5 }).side).toBe(0);
+    // Pure direction: exactly .5 is UP, not a neutral abstention.
+    expect(decideV11(eligibleV1, { ...goodScore, probability: 0.5 }).side).toBe(1);
+    expect(decideV11(eligibleV1, { ...goodScore, probability: 0.62 }).side).toBe(1);
   });
 
   it("abstains when the candidate score is invalid", () => {

@@ -287,7 +287,9 @@ export async function observeV11Target(
       runMode,
       decisionLeg: decision.leg,
       side: decision.side,
-      reason: decision.reason,
+      // The blocking cause is reported as itself: a failed V1 read must not be
+      // presented as the ordinary "V1 not resolved" outcome.
+      reason: reason === V11_REASONS.V1_READ_FAILED ? reason : decision.reason,
       rank: null,
       gate: decision.gate,
       probability: null,
