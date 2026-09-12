@@ -299,6 +299,9 @@ async function observeV11TargetOnce(
     decision: ReturnType<typeof decideV11>,
     headDate: string | null,
   ): Promise<void> => {
+    // The decision is finished HERE: this is the only honest instant to stamp
+    // and the only clock the 60s ceiling may be judged against.
+    const { timing, evidence, runMode } = finalize();
     commitOutcome = await commitObservation(
       sb,
       targetTs,
