@@ -153,6 +153,7 @@ export type V11DispatchVerdict =
   | "V1_DELIVERY_STILL_ENABLED"
   | "NOT_LIVE_SHADOW"
   | "NOT_FALLBACK_LEG"
+  | "REASON_MISMATCH"
   | "ABSTAIN"
   | "IDENTITY_MISMATCH"
   | "EVIDENCE_UNSIGNED"
@@ -162,10 +163,12 @@ export type V11DispatchVerdict =
   | "V1_LEG_NOT_EXCLUSIVE"
   | "BAD_TARGET_IDENTITY"
   | "TIMING_UNAVAILABLE"
+  | "TIMING_INCOHERENT"
   | "LATE_COMMIT"
   | "EXPIRED"
   | "ALREADY_CLAIMED"
   | "WOULD_SEND";
+
 
 /** The persisted `v11_decisions` row, exactly as the transaction stored it. */
 export interface V11DecisionRecord {
