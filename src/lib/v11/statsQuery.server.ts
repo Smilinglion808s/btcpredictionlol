@@ -59,6 +59,14 @@ export interface V11Stats {
     v1Leg: V11LegRecord;
     fallbackLeg: V11LegRecord;
   };
+  aggregation: {
+    decisionsCounted: number;
+    maxWindow: number;
+    truncated: boolean;
+    oldestTargetTs: string | null;
+    newestTargetTs: string | null;
+    timezone: "America/Boise";
+  };
   history: {
     targetTs: string;
     runMode: string;
@@ -70,6 +78,19 @@ export interface V11Stats {
     outcome: "WIN" | "LOSS" | "PENDING" | "NO_CALL";
   }[];
 }
+
+/** Rows per page, and the honest ceiling of the aggregation window. */
+const V11_STATS_PAGE = 1000;
+const V11_STATS_MAX_PAGES = 12;
+
+/** Trading day is Boise, matching the daily floor the strategy is defined on. */
+const boiseFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Boise",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const boiseDate = (d: Date): string => boiseFmt.format(d);
 
 const emptyRecord = (): V11LegRecord => ({
   calls: 0,
@@ -167,7 +188,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
     fallbackLeg: emptyRecord(),
   };
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayBoise = boiseDate(new Date());
   const history: V11Stats["history"] = [];
 
   for (const d of decisions) {
@@ -184,7 +205,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
       grade(live.combined, side, label);
       if (leg === "V1") grade(live.v1Leg, side, label);
       if (leg === "T45R2") grade(live.fallbackLeg, side, label);
-      if (ts.slice(0, 10) === todayUtc) grade(live.today, side, label);
+      if (boiseDate(new Date(ts)) === todayBoise) grade(live.today, side, label);
     } else {
       research.opportunities++;
       grade(research.combined, side, label);
@@ -261,6 +282,14 @@ export async function buildV11Stats(): Promise<V11Stats> {
       combined: finish(research.combined),
       v1Leg: finish(research.v1Leg),
       fallbackLeg: finish(research.fallbackLeg),
+    },
+    aggregation: {
+      decisionsCounted: decisions.length,
+      maxWindow: V11_STATS_PAGE * V11_STATS_MAX_PAGES,
+      truncated: decisions.length >= V11_STATS_PAGE * V11_STATS_MAX_PAGES,
+      oldestTargetTs: tsList.length > 0 ? tsList[tsList.length - 1]! : null,
+      newestTargetTs: tsList.length > 0 ? tsList[0]! : null,
+      timezone: "America/Boise",
     },
     history,
   };
