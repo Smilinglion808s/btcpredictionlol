@@ -51,6 +51,7 @@ import {
   readVolHistory,
   upsertContextRow,
   upsertVector,
+  type V11CommitOutcome,
 } from "./store.server";
 
 /**
