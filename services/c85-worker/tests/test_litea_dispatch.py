@@ -43,7 +43,17 @@ def test_admitted_call_requests_one_entry():
     assert reason == "REQUESTED"
     assert outbox["dedupe_key"] == dedupe_key(ROW["ticker"], TARGET)
     assert outbox["payload"]["head_id"] == "litea-head-2026-09-10"
-    assert outbox["expires_at"].startswith("2026-09-10T18:15:08")
+    # The claim lives until the candle closes, not until the 8s goal.
+    assert outbox["expires_at"].startswith("2026-09-10T18:30:00")
+
+
+def test_late_is_still_requested_until_the_candle_closes():
+    # Past the 8000 ms goal: late, not dead.
+    outbox, reason = prepare_outbox(ROW, now_ms=OPEN_MS + 20_000, env=ON)
+    assert reason == "REQUESTED"
+    assert outbox["payload"]["transport_deadline_ms"] == 8000
+    # Once the target candle has closed there is nothing left to send.
+    assert prepare_outbox(ROW, now_ms=OPEN_MS + 900_000, env=ON)[1] == "EXPIRED"
 
 
 def test_retry_reuses_the_same_event_identity():

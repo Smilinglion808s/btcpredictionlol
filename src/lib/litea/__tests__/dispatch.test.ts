@@ -177,9 +177,24 @@ describe("Version 1 admitted call, fully enabled in-process", () => {
     expect(replay.received).toHaveLength(0);
   });
 
-  it("stops a prepared retry that expires between reservation and send", async () => {
-    // Intake inside the ceiling, wall clock past it by the time we send.
+  it("still sends when the 8s goal lapses before the attempt", async () => {
+    // Intake inside the goal, wall clock past it by the time we send: late,
+    // but the candle is open, so the signal goes out.
     const h = harness({ clock: [OPEN_MS + 7900, OPEN_MS + 8300] });
+    const out = await dispatchLiteaDecision(h.deps, admitted, {
+      targetId: "t1",
+      executionEnabled: true,
+      allowedModels: allowed,
+      transportDeadlineMs: 8000,
+    });
+    expect(out.verdict).toBe("SENT");
+    expect(h.received).toHaveLength(1);
+    expect(h.settled[0].status).toBe("SENT");
+  });
+
+  it("expires only once the target candle has closed", async () => {
+    // Intake just before the close, wall clock past it by the send.
+    const h = harness({ clock: [OPEN_MS + 899_000, OPEN_MS + 901_000] });
     const out = await dispatchLiteaDecision(h.deps, admitted, {
       targetId: "t1",
       executionEnabled: true,
@@ -214,6 +229,7 @@ describe("Version 1 row-level rejections", () => {
         allowedModels: allowed,
         alreadySent: false,
         transportDeadlineMs: 8000,
+        hardCapMs: 900_000,
       },
     );
 
