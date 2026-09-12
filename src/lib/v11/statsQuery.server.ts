@@ -1,0 +1,259 @@
+// Version 1.1 dashboard figures.
+//
+// Read-only. Live evidence and research/recovery evidence are counted
+// SEPARATELY and never merged: only rows the observer earned the LIVE_SHADOW
+// label for can appear as live. Grading uses the official settled label only;
+// an unsettled interval stays pending rather than being scored.
+
+import { createClient } from "@supabase/supabase-js";
+import {
+  V11_CANDIDATE_VERSION,
+  V11_MODEL_VERSION,
+  V11_POLICY_VERSION,
+  V11_PUBLICATION_MODE,
+  V11_RUN_MODES,
+  V11_STAKE_FRACTION_OF_BOISE_OPEN,
+} from "./config";
+
+export interface V11LegRecord {
+  calls: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number | null;
+  netWins: number;
+}
+
+export interface V11Stats {
+  modelVersion: string;
+  candidateVersion: string;
+  policyVersion: string;
+  publicationMode: string;
+  stakeFractionOfBoiseOpen: number;
+  sizingOwner: string;
+  dispatchEnabled: false;
+  phase: "PREPARING" | "RECORDING_ONLY" | "LIVE_SHADOW";
+  headDate: string | null;
+  headQuarantined: boolean;
+  latest: {
+    targetTs: string | null;
+    runMode: string | null;
+    leg: string | null;
+    side: number;
+    reason: string | null;
+    rank: number | null;
+    probability: number | null;
+  } | null;
+  live: {
+    opportunities: number;
+    scored: number;
+    coverage: number | null;
+    combined: V11LegRecord;
+    v1Leg: V11LegRecord;
+    fallbackLeg: V11LegRecord;
+    today: V11LegRecord;
+  };
+  research: {
+    opportunities: number;
+    combined: V11LegRecord;
+    v1Leg: V11LegRecord;
+    fallbackLeg: V11LegRecord;
+  };
+  history: {
+    targetTs: string;
+    runMode: string;
+    leg: string | null;
+    side: number;
+    reason: string;
+    rank: number | null;
+    label: number | null;
+    outcome: "WIN" | "LOSS" | "PENDING" | "NO_CALL";
+  }[];
+}
+
+const emptyRecord = (): V11LegRecord => ({
+  calls: 0,
+  wins: 0,
+  losses: 0,
+  pending: 0,
+  winRate: null,
+  netWins: 0,
+});
+
+function finish(r: V11LegRecord): V11LegRecord {
+  const settled = r.wins + r.losses;
+  return {
+    ...r,
+    winRate: settled > 0 ? r.wins / settled : null,
+    netWins: r.wins - r.losses,
+  };
+}
+
+/** A ±1 call is graded ONLY against a matching official label. */
+function grade(
+  r: V11LegRecord,
+  side: number,
+  label: number | null | undefined,
+): void {
+  if (side !== 1 && side !== -1) return;
+  r.calls++;
+  if (label !== 1 && label !== -1) {
+    r.pending++;
+    return;
+  }
+  if (label === side) r.wins++;
+  else r.losses++;
+}
+
+export async function buildV11Stats(): Promise<V11Stats> {
+  const sb = createClient(
+    process.env["SUPABASE_URL"]!,
+    process.env["SUPABASE_SERVICE_ROLE_KEY"]!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+
+  const { data: decisionRows, error } = await sb
+    .from("v11_decisions")
+    .select("target_ts, run_mode, leg, side, reason, rank, probability")
+    .order("target_ts", { ascending: false })
+    .limit(2000);
+  if (error) throw error;
+  const decisions = (decisionRows ?? []) as Record<string, unknown>[];
+
+  const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
+  const labels = new Map<string, number | null>();
+  if (tsList.length > 0) {
+    const { data: ctx, error: cErr } = await sb
+      .from("v11_context_rows")
+      .select("target_ts, label")
+      .in("target_ts", tsList.slice(0, 1000));
+    if (cErr) throw cErr;
+    for (const row of (ctx ?? []) as Record<string, unknown>[]) {
+      labels.set(
+        new Date(row.target_ts as string).toISOString(),
+        row.label === null || row.label === undefined ? null : Number(row.label),
+      );
+    }
+  }
+
+  const { data: headRows, error: hErr } = await sb
+    .from("v11_heads")
+    .select("fit_date, quarantined")
+    .order("fit_date", { ascending: false })
+    .limit(1);
+  if (hErr) throw hErr;
+  const head = (headRows ?? [])[0] as Record<string, unknown> | undefined;
+
+  const live = {
+    opportunities: 0,
+    scored: 0,
+    combined: emptyRecord(),
+    v1Leg: emptyRecord(),
+    fallbackLeg: emptyRecord(),
+    today: emptyRecord(),
+  };
+  const research = {
+    opportunities: 0,
+    combined: emptyRecord(),
+    v1Leg: emptyRecord(),
+    fallbackLeg: emptyRecord(),
+  };
+
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const history: V11Stats["history"] = [];
+
+  for (const d of decisions) {
+    const ts = new Date(d.target_ts as string).toISOString();
+    const runMode = (d.run_mode as string) ?? V11_RUN_MODES.RESEARCH;
+    const side = Number(d.side ?? 0);
+    const leg = (d.leg as string | null) ?? null;
+    const label = labels.get(ts) ?? null;
+    const isLive = runMode === V11_RUN_MODES.LIVE;
+
+    if (isLive) {
+      live.opportunities++;
+      if (d.probability !== null && d.probability !== undefined) live.scored++;
+      grade(live.combined, side, label);
+      if (leg === "V1") grade(live.v1Leg, side, label);
+      if (leg === "T45R2") grade(live.fallbackLeg, side, label);
+      if (ts.slice(0, 10) === todayUtc) grade(live.today, side, label);
+    } else {
+      research.opportunities++;
+      grade(research.combined, side, label);
+      if (leg === "V1") grade(research.v1Leg, side, label);
+      if (leg === "T45R2") grade(research.fallbackLeg, side, label);
+    }
+
+    if (history.length < 40) {
+      history.push({
+        targetTs: ts,
+        runMode,
+        leg,
+        side,
+        reason: (d.reason as string) ?? "",
+        rank: d.rank === null || d.rank === undefined ? null : Number(d.rank),
+        label,
+        outcome:
+          side !== 1 && side !== -1
+            ? "NO_CALL"
+            : label !== 1 && label !== -1
+              ? "PENDING"
+              : label === side
+                ? "WIN"
+                : "LOSS",
+      });
+    }
+  }
+
+  const latest = decisions[0];
+  const phase: V11Stats["phase"] =
+    live.opportunities > 0 && live.scored > 0
+      ? "LIVE_SHADOW"
+      : decisions.length > 0
+        ? "RECORDING_ONLY"
+        : "PREPARING";
+
+  return {
+    modelVersion: V11_MODEL_VERSION,
+    candidateVersion: V11_CANDIDATE_VERSION,
+    policyVersion: V11_POLICY_VERSION,
+    publicationMode: V11_PUBLICATION_MODE,
+    stakeFractionOfBoiseOpen: V11_STAKE_FRACTION_OF_BOISE_OPEN,
+    sizingOwner: "external-betting-bot",
+    dispatchEnabled: false,
+    phase,
+    headDate: (head?.fit_date as string | null) ?? null,
+    headQuarantined: head?.quarantined === true,
+    latest: latest
+      ? {
+          targetTs: new Date(latest.target_ts as string).toISOString(),
+          runMode: (latest.run_mode as string) ?? null,
+          leg: (latest.leg as string | null) ?? null,
+          side: Number(latest.side ?? 0),
+          reason: (latest.reason as string) ?? null,
+          rank: latest.rank === null || latest.rank === undefined ? null : Number(latest.rank),
+          probability:
+            latest.probability === null || latest.probability === undefined
+              ? null
+              : Number(latest.probability),
+        }
+      : null,
+    live: {
+      opportunities: live.opportunities,
+      scored: live.scored,
+      coverage:
+        live.opportunities > 0 ? live.combined.calls / live.opportunities : null,
+      combined: finish(live.combined),
+      v1Leg: finish(live.v1Leg),
+      fallbackLeg: finish(live.fallbackLeg),
+      today: finish(live.today),
+    },
+    research: {
+      opportunities: research.opportunities,
+      combined: finish(research.combined),
+      v1Leg: finish(research.v1Leg),
+      fallbackLeg: finish(research.fallbackLeg),
+    },
+    history,
+  };
+}
