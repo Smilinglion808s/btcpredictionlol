@@ -13,6 +13,7 @@ vi.mock("../store.server", () => ({
   readContextRow: vi.fn(),
   upsertContextRow: vi.fn(),
   readT45InputsTimed: vi.fn(),
+  readT45InputsFromSamples: vi.fn(),
   readVolHistory: vi.fn(),
   upsertVector: vi.fn(),
   readHeadForDate: vi.fn(),
@@ -75,6 +76,7 @@ beforeEach(() => {
   m.readLiveContext.mockResolvedValue(null);
   m.readContextRow.mockResolvedValue(null);
   m.readT45InputsTimed.mockResolvedValue(null);
+  m.readT45InputsFromSamples.mockResolvedValue(null);
   m.readVolHistory.mockResolvedValue([]);
   m.readHeadForDate.mockResolvedValue(null);
   m.readPriorConfidences.mockResolvedValue([]);
