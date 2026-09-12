@@ -115,6 +115,8 @@ export interface V11Stats {
 /** Rows per page, and the honest ceiling of the aggregation window. */
 const V11_STATS_PAGE = 1000;
 const V11_STATS_MAX_PAGES = 12;
+/** Keep timestamp filters below the runtime's HTTP header ceiling. */
+const V11_LABEL_BATCH_SIZE = 100;
 
 /** Trading day is Boise, matching the daily floor the strategy is defined on. */
 const boiseFmt = new Intl.DateTimeFormat("en-CA", {
@@ -184,11 +186,11 @@ export async function buildV11Stats(): Promise<V11Stats> {
 
   const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
   const labels = new Map<string, number | null>();
-  for (let i = 0; i < tsList.length; i += 500) {
+  for (let i = 0; i < tsList.length; i += V11_LABEL_BATCH_SIZE) {
     const { data: ctx, error: cErr } = await sb
       .from("v11_context_rows")
       .select("target_ts, label")
-      .in("target_ts", tsList.slice(i, i + 500));
+      .in("target_ts", tsList.slice(i, i + V11_LABEL_BATCH_SIZE));
     if (cErr) throw cErr;
     for (const row of (ctx ?? []) as Record<string, unknown>[]) {
       labels.set(
