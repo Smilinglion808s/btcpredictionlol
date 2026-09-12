@@ -57,7 +57,7 @@ describe("head fitting refuses dishonest heads", () => {
   it("refuses a head whose midnight cutoff has not happened yet", () => {
     const fitted = fitV11Head(
       "2026-09-14",
-      rows(4000, "2026-08-20"),
+      rows(4000, "2026-07-01"),
       new Date("2026-09-12T10:00:00.000Z"),
     );
     expect(fitted).toBeNull();
@@ -66,7 +66,7 @@ describe("head fitting refuses dishonest heads", () => {
   it("binds a fitted head to this feature order and configuration", () => {
     const fitted = fitV11Head(
       "2026-09-11",
-      rows(4000, "2026-08-20"),
+      rows(4000, "2026-07-01"),
       new Date("2026-09-11T10:00:00.000Z"),
     );
     expect(fitted).not.toBeNull();
@@ -78,7 +78,7 @@ describe("head fitting refuses dishonest heads", () => {
   });
 
   it("refuses labels that are not exactly +1 or -1", () => {
-    const bad = rows(4000, "2026-08-20").map((r) => ({ ...r, label: 0 }));
+    const bad = rows(4000, "2026-07-01").map((r) => ({ ...r, label: 0 }));
     expect(
       fitV11Head("2026-09-11", bad, new Date("2026-09-11T10:00:00.000Z")),
     ).toBeNull();
