@@ -270,6 +270,17 @@ export async function buildV11Stats(): Promise<V11Stats> {
         ? "RECORDING_ONLY"
         : "PREPARING";
 
+  // Delivery configuration, read only. Counting destinations never exposes a
+  // URL, a secret or an endpoint id, and nothing here activates anything.
+  const v11FlagSet = v11ServerExecutionEnabled();
+  const v1DeliveryOff = v1DeliveryDisabled();
+  const armed = v11FlagSet && v1DeliveryOff;
+  const activeEndpoints = await countActiveEndpointsForEvent(
+    sb as never,
+    "prediction.created",
+  ).catch(() => 0);
+
+
   return {
     modelVersion: V11_MODEL_VERSION,
     candidateVersion: V11_CANDIDATE_VERSION,
