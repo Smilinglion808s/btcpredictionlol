@@ -108,10 +108,14 @@ describe("combined Version 1.1 decision", () => {
     expect(decideV11(eligibleV1, { ...goodScore, rank: 0.79 }).reason).toBe(
       V11_REASONS.BELOW_FALLBACK_RANK,
     );
-    // gate above 0.80 still binds
+    // the inner admission gate (max 0.62 at full availability) is checked first
     expect(
-      decideV11(eligibleV1, { ...goodScore, rank: 0.85, availability: 0.4 }).reason,
+      decideV11(eligibleV1, { ...goodScore, rank: 0.3, availability: 1 }).reason,
     ).toBe(V11_REASONS.BELOW_ADMISSION_GATE);
+    // availability that is not yet observable fails closed
+    expect(
+      decideV11(eligibleV1, { ...goodScore, availability: null }).reason,
+    ).toBe(V11_REASONS.AVAILABILITY_NOT_READY);
   });
 
   it("takes the side from the probability, never from the rank", () => {
