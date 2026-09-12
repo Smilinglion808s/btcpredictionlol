@@ -131,12 +131,35 @@ export function v11V1LegDeliver(
         guard,
         maxAttempts: 1,
         targetOpenMs: Number.isFinite(targetOpenMs) ? targetOpenMs : undefined,
+        // Combined stream: both legs must resolve to ONE destination, or the
+        // at-most-one-bet property cannot be honoured. Fails closed.
+        requireSingleEndpoint: true,
       },
     );
     void delivery.settle;
     return { delivered: delivery.delivered, sendStartedAtMs: delivery.sendStartedAtMs };
   };
 }
+
+/**
+ * Claim wrapper for the combined route.
+ *
+ * The ORIGINAL dispatcher builds the durable outbox payload from the V1 record
+ * and is NOT modified. When the interval is routed through Version 1.1 the
+ * durable row must describe what actually goes on the wire, so the claim
+ * payload is re-labelled with the same combined identity, leg and stake
+ * metadata the transport sends. Key, target id, expiry, ownership and the V1
+ * guard accounting are untouched.
+ */
+export function v11V1LegClaimRelabel<
+  D extends { claim: (e: { payload: Record<string, unknown> } & Record<string, any>) => any },
+>(deps: D): Pick<D, "claim"> {
+  return {
+    claim: ((entry: any) =>
+      deps.claim({ ...entry, payload: relabelV1PayloadAsV11(entry.payload) })) as D["claim"],
+  };
+}
+
 
 /** Live readers the V1-leg guard must use while routed through Version 1.1. */
 export function v11V1LegGateReaders() {
