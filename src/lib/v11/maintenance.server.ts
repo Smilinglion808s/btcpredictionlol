@@ -106,6 +106,7 @@ async function refreshLabels(
     ts: string,
     label: number,
     settlementTs: string | null,
+    settlementTsSource: string | null,
     source: string,
   ): Promise<boolean> => {
     if (label !== 1 && label !== -1) return false;
@@ -113,7 +114,15 @@ async function refreshLabels(
     if (!existing || existing.label !== null) return false;
     await upsertContextRow(
       sb,
-      { ...existing, label, settlementTs: settlementTs ?? existing.settlementTs },
+      {
+        ...existing,
+        label,
+        settlementTs: settlementTs ?? existing.settlementTs,
+        settlementTsSource: settlementTs
+          ? settlementTsSource
+          : (existing.settlementTsSource ?? null),
+        settlementKnownAt: new Date().toISOString(),
+      },
       source,
     );
     return true;
