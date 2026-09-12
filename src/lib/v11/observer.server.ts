@@ -272,7 +272,60 @@ async function observeV11TargetOnce(
           sizing_owner: "external-betting-bot",
         },
       },
+      {
+        prevTs: expectedState.lastProcessedTs,
+        stateVersion: expectedState.stateVersion ?? null,
+        allowBackfill: opts.allowBackfill === true,
+      },
     );
+
+    // The transaction re-checked the frozen V1 leg and found it NOT exclusive
+    // (a V1 send landed, or the abstention is no longer the recorded one).
+    // The score is still history, so the pair is re-committed as a no-call
+    // instead of being dropped: the chain must not develop a hole.
+    if (commitOutcome.excluded) {
+      commitOutcome = await commitObservation(
+        sb,
+        targetTs,
+        { ticker, head_date: headDate, run_mode: runMode, ...timing, ...score },
+        {
+          ticker,
+          event_key: v11EventKey(ticker, targetTs),
+          leg: null,
+          side: 0,
+          reason: V11_REASONS.V1_LEG_NOT_EXCLUSIVE,
+          probability: decision.probability,
+          rank: decision.rank,
+          admission_gate: decision.gate,
+          head_date: headDate,
+          v1_status: v1.status,
+          v1_reason: v1.reason,
+          v1_final_side: v1.finalSide,
+          v1_floor_open: v1.ordinaryFloorOpen,
+          v1_send_claim: v1.sendClaim,
+          run_mode: runMode,
+          evidence: { ...evidence, downgraded_by: "V1_LEG_NOT_EXCLUSIVE" },
+          ...timing,
+          strategy: {
+            model_version: V11_MODEL_VERSION,
+            candidate_version: V11_CANDIDATE_VERSION,
+            policy_version: V11_POLICY_VERSION,
+            publication_mode: V11_PUBLICATION_MODE,
+            stake_fraction_of_boise_day_opening_principal:
+              V11_STAKE_FRACTION_OF_BOISE_OPEN,
+            sizing_owner: "external-betting-bot",
+          },
+        },
+        {
+          prevTs: expectedState.lastProcessedTs,
+          stateVersion: expectedState.stateVersion ?? null,
+          allowBackfill: opts.allowBackfill === true,
+        },
+      );
+      decision.side = 0;
+      decision.leg = null;
+      decision.reason = V11_REASONS.V1_LEG_NOT_EXCLUSIVE;
+    }
   };
 
   const fail = async (reason: string): Promise<V11ObservationResult> => {
@@ -316,7 +369,9 @@ async function observeV11TargetOnce(
       gate: decision.gate,
       probability: null,
       missingPredecessors,
-    };
+      commit: commitOutcome,
+      processedOverride: undefined,
+    } as V11ObservationResult;
   };
 
   if (v1ReadFailed) return fail(V11_REASONS.V1_READ_FAILED);
@@ -409,6 +464,7 @@ async function observeV11TargetOnce(
     gate: decision.gate,
     probability,
     missingPredecessors,
+    commit: commitOutcome,
   };
 }
 
