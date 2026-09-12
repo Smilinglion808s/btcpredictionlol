@@ -206,12 +206,28 @@ export function V11Card({ stats, loading, error }: V11Props) {
               </div>
             )}
 
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Strategy metadata records a stake of{" "}
-              {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the
-              Boise-day opening principal per leg. Sizing and order placement stay with
-              the external betting bot; this model sends nothing.
-            </p>
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Delivery
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {delivery.detail}
+                {control ? (
+                  <>
+                    {" "}
+                    Active destinations for new calls: {control.activeEndpoints}.
+                  </>
+                ) : null}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Strategy metadata records a stake of{" "}
+                {((stats?.stakeFractionOfBoiseOpen ?? 0.04) * 100).toFixed(0)}% of the
+                Boise-day opening principal per leg. Sizing and order placement stay
+                with the external betting bot; this dashboard shows what was sent, never
+                what was traded.
+              </p>
+            </div>
+
           </>
         )}
       </div>
