@@ -10,9 +10,11 @@
 //   2. the model is sender-allow-listed                (derived from 1)
 //   3. the persisted decision is LIVE, admitted (side ±1), input-valid,
 //      scored by a real head, under this exact model identity
-//   4. measured timing is finite, non-negative and inside the Version 1
-//      transport ceiling, checked against the wire clock at intake AND again
-//      immediately before the send/retry
+//   4. measured timing is finite, non-negative and the target candle is still
+//      open. The 8-second transport deadline is the GOAL, checked against the
+//      wire clock at intake AND again immediately before the send/retry — but
+//      missing it no longer drops the signal: a late send still goes out until
+//      the candle closes (the hard cap).
 //   5. no entry for this event identity has already been sent
 //
 // The T45 sender, the C85 T+5s ceiling and every other model are untouched.
