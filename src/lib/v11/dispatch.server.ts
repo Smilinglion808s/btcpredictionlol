@@ -667,6 +667,9 @@ export async function dispatchV11FallbackFromCommit(
           guard,
           maxAttempts: 1,
           targetOpenMs: Number.isFinite(openMs) ? openMs : undefined,
+          // One destination for the combined stream, or nothing at all.
+          requireSingleEndpoint: true,
+
         },
       );
       void delivery.settle;
