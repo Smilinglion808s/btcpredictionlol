@@ -1,4 +1,4 @@
-# Roadmap
+# Version 1.1 roadmap (shadow only)
 
 ## Version 1.1 (combined V1 + improved T45 R2 CONTEXT69_NORM_38) — shadow only
 

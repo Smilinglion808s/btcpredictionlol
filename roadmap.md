@@ -153,3 +153,7 @@ ACCESS GAP
 - [ ] No Railway token/config in this sandbox: service settings and volume state
       could not be inspected. Runtime state reuses the existing checkpoint
       backend; no new paid resource provisioned.
+
+## Version 1.1 (shadow only)
+
+Tracked separately in `docs/v11-roadmap.md`.
