@@ -269,7 +269,7 @@ export const V11_CONFIG_CANONICAL = JSON.stringify({
     cadence: "daily-utc-midnight",
   },
   vol: {
-    source: V11_VOL_SOURCE,
+    source: V11_VOL_SOURCE_MODEL_NAME,
     window: V11_VOL_WINDOW,
     min_finite: V11_VOL_MIN_FINITE,
     clip: V11_VOL_CLIP,
