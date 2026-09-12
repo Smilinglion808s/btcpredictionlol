@@ -13,7 +13,7 @@ import { cachedStats } from "./statsCache.server";
 // CDN in front of the published site, which pinned this tile to an old snapshot.
 export const getV11Stats = createServerFn({ method: "POST" })
   .handler(async (): Promise<Record<string, any>> => {
-    return (await cachedStats("v11-stats", buildV11Stats, 5_000)) as Record<
+    return (await cachedStats("v11-stats", buildV11Stats, 8_000)) as Record<
       string,
       any
     >;

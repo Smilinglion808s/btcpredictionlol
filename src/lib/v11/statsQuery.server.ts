@@ -115,8 +115,6 @@ export interface V11Stats {
 /** Rows per page, and the honest ceiling of the aggregation window. */
 const V11_STATS_PAGE = 1000;
 const V11_STATS_MAX_PAGES = 12;
-/** Keep timestamp filters below the runtime's HTTP header ceiling. */
-const V11_LABEL_BATCH_SIZE = 100;
 
 /** Trading day is Boise, matching the daily floor the strategy is defined on. */
 const boiseFmt = new Intl.DateTimeFormat("en-CA", {
@@ -168,43 +166,91 @@ export async function buildV11Stats(): Promise<V11Stats> {
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
-  // Aggregation window, paged. Every decision counted here is also LABELLED
-  // here: a row whose label was never fetched must not be reported as pending.
-  const decisions: Record<string, unknown>[] = [];
-  for (let page = 0; page < V11_STATS_MAX_PAGES; page++) {
-    const from = page * V11_STATS_PAGE;
-    const { data: rows, error } = await sb
-      .from("v11_decisions")
-      .select("target_ts, run_mode, leg, side, reason, rank, probability, ticker")
-      .order("target_ts", { ascending: false })
-      .range(from, from + V11_STATS_PAGE - 1);
-    if (error) throw error;
-    const batch = (rows ?? []) as Record<string, unknown>[];
-    decisions.push(...batch);
-    if (batch.length < V11_STATS_PAGE) break;
-  }
-
-  const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
-  const labels = new Map<string, number | null>();
-  for (let i = 0; i < tsList.length; i += V11_LABEL_BATCH_SIZE) {
-    const { data: ctx, error: cErr } = await sb
-      .from("v11_context_rows")
-      .select("target_ts, label")
-      .in("target_ts", tsList.slice(i, i + V11_LABEL_BATCH_SIZE));
-    if (cErr) throw cErr;
-    for (const row of (ctx ?? []) as Record<string, unknown>[]) {
-      labels.set(
-        new Date(row.target_ts as string).toISOString(),
-        row.label === null || row.label === undefined ? null : Number(row.label),
-      );
-    }
-  }
-
-  const { data: headRows, error: hErr } = await sb
+  // Independent reads are started up front so they overlap the paged scans
+  // instead of queueing behind them.
+  const headsPromise = sb
     .from("v11_heads")
     .select("fit_date, quarantined")
     .order("fit_date", { ascending: false })
     .limit(1);
+  const deliveriesPromise = sb
+    .from("webhook_deliveries")
+    .select("payload, status_code")
+    .eq("event", "prediction.created")
+    .gte("status_code", 200)
+    .lt("status_code", 300)
+    .order("delivered_at", { ascending: false })
+    .limit(500);
+
+  // Aggregation window, paged. Every decision counted here is also LABELLED
+  // here: a row whose label was never fetched must not be reported as pending.
+  // Pages are fetched in parallel groups: sequential paging dominated the
+  // request time and produced identical rows.
+  const V11_STATS_PAGE_CONCURRENCY = 4;
+  const decisions: Record<string, unknown>[] = [];
+  let exhausted = false;
+  for (
+    let group = 0;
+    group < V11_STATS_MAX_PAGES && !exhausted;
+    group += V11_STATS_PAGE_CONCURRENCY
+  ) {
+    const pages = Array.from(
+      { length: Math.min(V11_STATS_PAGE_CONCURRENCY, V11_STATS_MAX_PAGES - group) },
+      (_, i) => group + i,
+    );
+    const results = await Promise.all(
+      pages.map((page) => {
+        const from = page * V11_STATS_PAGE;
+        return sb
+          .from("v11_decisions")
+          .select("target_ts, run_mode, leg, side, reason, rank, probability, ticker")
+          .order("target_ts", { ascending: false })
+          .range(from, from + V11_STATS_PAGE - 1);
+      }),
+    );
+    for (const { data: rows, error } of results) {
+      if (error) throw error;
+      const batch = (rows ?? []) as Record<string, unknown>[];
+      decisions.push(...batch);
+      if (batch.length < V11_STATS_PAGE) exhausted = true;
+    }
+  }
+
+  // Labels are read by time range rather than one `.in(...)` request per 100
+  // timestamps: the batched form cost ~40 sequential round-trips (≈10s) for the
+  // same rows. The range starts at the oldest decision in the window, so every
+  // counted decision is still labelled here.
+  const tsList = decisions.map((d) => new Date(d.target_ts as string).toISOString());
+  const oldestTs = tsList.length ? tsList[tsList.length - 1] : null;
+  const labels = new Map<string, number | null>();
+  if (oldestTs) {
+    const labelPages = Math.min(
+      V11_STATS_MAX_PAGES,
+      Math.ceil(tsList.length / V11_STATS_PAGE) + 1,
+    );
+    const results = await Promise.all(
+      Array.from({ length: labelPages }, (_, page) => {
+        const from = page * V11_STATS_PAGE;
+        return sb
+          .from("v11_context_rows")
+          .select("target_ts, label")
+          .gte("target_ts", oldestTs)
+          .order("target_ts", { ascending: false })
+          .range(from, from + V11_STATS_PAGE - 1);
+      }),
+    );
+    for (const { data: ctx, error: cErr } of results) {
+      if (cErr) throw cErr;
+      for (const row of (ctx ?? []) as Record<string, unknown>[]) {
+        labels.set(
+          new Date(row.target_ts as string).toISOString(),
+          row.label === null || row.label === undefined ? null : Number(row.label),
+        );
+      }
+    }
+  }
+
+  const { data: headRows, error: hErr } = await headsPromise;
   if (hErr) throw hErr;
   const head = (headRows ?? [])[0] as Record<string, unknown> | undefined;
 
@@ -231,14 +277,7 @@ export async function buildV11Stats(): Promise<V11Stats> {
   // ledger — never inferred from flags, claims, or configuration.
   const sentKeys = new Set<string>();
   {
-    const { data: deliveries, error: dErr } = await sb
-      .from("webhook_deliveries")
-      .select("payload, status_code")
-      .eq("event", "prediction.created")
-      .gte("status_code", 200)
-      .lt("status_code", 300)
-      .order("delivered_at", { ascending: false })
-      .limit(500);
+    const { data: deliveries, error: dErr } = await deliveriesPromise;
     if (dErr) throw dErr;
     for (const row of (deliveries ?? []) as Record<string, unknown>[]) {
       const key = (row.payload as Record<string, unknown> | null)?.["dedupe_key"];
