@@ -554,6 +554,34 @@ describe("real Supabase deps for the fallback leg", () => {
       expect(db.rpc).toHaveLength(0);
     }
   });
+
+  it("cancels before the transport when the source abstention is revoked after the claim", async () => {
+    const db = fakeDb();
+    const deps = supabaseV11DispatchDeps(
+      db.client,
+      async (_payload, guard) => {
+        // Guard revoked: the source row no longer qualifies.
+        expect(await guard()).toBe(false);
+        throw new Error("must not deliver");
+      },
+      SOURCE,
+    );
+    const claim = deps.claim;
+    deps.claim = async (entry) => {
+      const out = await claim(entry);
+      // Between the durable claim and the transport, the V1 leg took the interval.
+      db.setV1Target({ ...V1_SOURCE_TARGET, final_side: 1, webhook_status: "SENT" });
+      return out;
+    };
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    vi.useFakeTimers();
+    vi.setSystemTime(OPEN_MS + 48_000);
+    const out = await dispatchV11Fallback(deps, liveShadowRow(), COMMIT);
+    vi.useRealTimers();
+    expect(out.verdict).not.toBe("SENT");
+    // Exactly one claim, and the durable entry is released, not left PENDING.
+    expect(db.rpc).toHaveLength(1);
+  });
 });
 
 describe("signed T+45 hook seam", () => {
