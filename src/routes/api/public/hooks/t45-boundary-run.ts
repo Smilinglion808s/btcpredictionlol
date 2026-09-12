@@ -19,6 +19,7 @@ import {
 import { observeV11Target } from "@/lib/v11/observer.server";
 import { runV11Maintenance } from "@/lib/v11/maintenance.server";
 import { V11_RUN_MODES } from "@/lib/v11/config";
+import { v11ObservationGate } from "@/lib/v11/hookGate";
 import { T45_CUTOFF_OFFSET_MS, T45_PUBLISH_DEADLINE_MS, TF_MS } from "@/lib/t45/config";
 
 /** Never sit longer than this waiting for the T+45s cutoff. */
