@@ -435,7 +435,10 @@ async function observeV11TargetOnce(
     } as V11ObservationResult;
   };
 
-  if (v1ReadFailed) return fail(V11_REASONS.V1_READ_FAILED);
+  // A failed V1/outbox read is an INFRASTRUCTURE failure, not a bad score. It
+  // blocks the fallback leg (the interval's ownership is unknown) but the R2
+  // score itself is still computed and recorded, so the rank/availability
+  // history stays honest.
   if (!ctx) return fail(V11_REASONS.MISSING_CONTEXT);
   if (!t45) return fail(V11_REASONS.MISSING_T45);
 
