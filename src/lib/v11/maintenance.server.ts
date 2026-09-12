@@ -7,7 +7,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { V11_RUN_MODES, utcDate } from "./config";
-import { backfillVectors, fitDailyHead } from "./fit.server";
+import { backfillV11Vectors, ensureV11Head } from "./fit.server";
 import { observeV11Target } from "./observer.server";
 import { readState, upsertContextRow, readContextRow } from "./store.server";
 
@@ -113,13 +113,13 @@ export async function runV11Maintenance(
   };
 
   report.labelsRefreshed = await refreshLabels(sb, opts.labelLimit ?? 400);
-  const built = await backfillVectors(sb, { limit: 500 });
+  const built = await backfillV11Vectors(sb, { limit: 500 });
   report.vectorsBuilt = built.built ?? 0;
 
   // Today's head only. A head for a cutoff that has not passed is refused by
   // the fitter itself, so no future-dated head can be created here.
   const today = utcDate(now);
-  const fit = await fitDailyHead(sb, today, { now });
+  const fit = await ensureV11Head(sb, today);
   if (fit.head) report.headFitted = today;
   else report.headSkippedReason = fit.reason ?? "UNKNOWN";
 
