@@ -9,8 +9,6 @@
 
 import { buildKalshiEventTicker } from "@/lib/kalshi.server";
 
-export type { KalshiMarket };
-
 export interface V11NativeResolution {
   result: "YES" | "NO";
   ticker: string;
@@ -19,7 +17,7 @@ export interface V11NativeResolution {
   settlementValue: number | null;
 }
 
-interface KalshiMarket {
+export interface KalshiMarket {
   ticker?: string;
   status?: string;
   result?: string;
