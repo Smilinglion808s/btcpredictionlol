@@ -338,10 +338,9 @@ export async function dispatchLiteaDecision(
   /**
    * Re-evaluated immediately before the single real attempt this path allows
    * per endpoint. Ownership is read FIRST, because that read is the only
-   * awaited network gap here; the kill switch, allow-list and ORIGINAL
-   * (never extended) ceiling are then evaluated against the clock as it is
-   * after that wait, with nothing awaited between them and the transport.
-   * Any ownership error fails closed.
+   * awaited network gap here; the kill switch, allow-list and hard cap are
+   * then evaluated against the clock as it is after that wait, with nothing
+   * awaited between them and the transport. Any ownership error fails closed.
    */
   const guard = async (): Promise<boolean> => {
     let owns = false;
@@ -358,17 +357,19 @@ export async function dispatchLiteaDecision(
         allowedModels: (deps.allowedNow ?? liteaEffectiveAllowlist)(),
         alreadySent: false,
         transportDeadlineMs: args.transportDeadlineMs,
+        hardCapMs,
       }) === "WOULD_SEND"
     );
   };
 
-  // Re-check the ceiling with the clock as it is NOW, after the durable write.
+  // Re-check the hard cap with the clock as it is NOW, after the durable write.
   const preSend = evaluateLiteaDispatch(row, {
     nowMs: deps.now(),
     executionEnabled: args.executionEnabled,
     allowedModels: args.allowedModels,
     alreadySent: false,
     transportDeadlineMs: args.transportDeadlineMs,
+    hardCapMs,
   });
   if (preSend !== "WOULD_SEND") {
     const settled = await deps.settle({
