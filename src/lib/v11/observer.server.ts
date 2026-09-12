@@ -46,6 +46,7 @@ import {
   readMissingPredecessors,
   readPriorConfidences,
   readPriorOpportunities,
+  readT45InputsFromSamples,
   readT45InputsTimed,
   readV1Snapshot,
   readVolHistory,
