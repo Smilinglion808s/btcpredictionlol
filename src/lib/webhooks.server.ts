@@ -656,6 +656,10 @@ export async function deliverWebhookNow(
     e.events?.includes(event),
   );
   if (!endpoints.length) return noop;
+  // Scoped, opt-in: several destinations would mean several bets for one
+  // interval, so the combined stream refuses rather than fanning out.
+  if (options?.requireSingleEndpoint && endpoints.length !== 1) return noop;
+
 
   const body = JSON.stringify({ event, ...payloadObj });
   const signatures = endpoints.map((ep) =>
