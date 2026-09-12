@@ -35,6 +35,30 @@ export interface V11Stats {
   sizingOwner: string;
   /** True only when V11_SERVER_EXECUTION_ENABLED=true AND V1 delivery is off. */
   dispatchEnabled: boolean;
+  /**
+   * Truthful, read-only operator view of the delivery configuration. This
+   * describes what THIS project would do, never what the external betting bot
+   * does with a message it receives.
+   */
+  control: {
+    /** V11_SERVER_EXECUTION_ENABLED=true */
+    v11FlagSet: boolean;
+    /** The original Version 1 sender is off (required for the combined route). */
+    v1DeliveryOff: boolean;
+    /** Both server conditions hold. */
+    armed: boolean;
+    /** Active destinations subscribed to prediction.created. Never any URL. */
+    activeEndpoints: number;
+    /** Armed AND exactly one destination: a message would actually be sent. */
+    wouldSend: boolean;
+    status:
+      | "PAUSED_NO_FLAG"
+      | "BLOCKED_V1_SENDER_ON"
+      | "ARMED_NO_DESTINATION"
+      | "ARMED_MULTIPLE_DESTINATIONS"
+      | "ARMED_DELIVERY_CONFIGURED";
+  };
+
 
   phase: "PREPARING" | "RECORDING_ONLY" | "LIVE_SHADOW";
   headDate: string | null;
