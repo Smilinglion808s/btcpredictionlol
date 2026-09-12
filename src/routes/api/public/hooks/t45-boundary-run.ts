@@ -150,15 +150,21 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
         // to have written anything. It is fully isolated and has no send path.
         // Only a genuinely signed collector trigger may ask for LIVE_SHADOW;
         // the observer still downgrades it unless the receipt, the V1 run mode
-        // and the 60s ceiling all check out.
-        const v11Promise = observeV11Target(supabase, target, {
-          requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
-          live: signed
-            ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
-            : undefined,
-        }).catch((e: unknown) => ({
-          error: e instanceof Error ? e.message : String(e),
-        }));
+        // and the 60s ceiling all check out. Inside the 60s ceiling the signed
+        // collector has the EXCLUSIVE observation opportunity: unsigned
+        // watchdog/manual invocations skip the observer entirely so their
+        // immutable RECOVERY row cannot pre-empt the on-time signed trigger.
+        const v11Gate = v11ObservationGate({ signed, targetMs, nowMs: Date.now() });
+        const v11Promise = v11Gate.run
+          ? observeV11Target(supabase, target, {
+              requestedRunMode: signed ? V11_RUN_MODES.LIVE : V11_RUN_MODES.RECOVERY,
+              live: signed
+                ? { signed: true, source: "t45-boundary-run", receivedAtMs: started }
+                : undefined,
+            }).catch((e: unknown) => ({
+              error: e instanceof Error ? e.message : String(e),
+            }))
+          : Promise.resolve({ skipped: v11Gate.reason });
 
         let priceFlow: unknown = null;
         try {
