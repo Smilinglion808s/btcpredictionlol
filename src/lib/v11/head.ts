@@ -8,6 +8,8 @@
 import { fitCertifiedLogistic } from "@/lib/b4x4es1/certifiedFit";
 import {
   V11_AVAILABILITY_MIN,
+  V11_CONFIG_FINGERPRINT,
+  V11_FEATURE_ORDER_HASH,
   V11_AVAILABILITY_NUMERATOR,
   V11_AVAILABILITY_WINDOW,
   V11_FEATURE_ORDER,
@@ -45,6 +47,16 @@ export interface V11TrainingRow {
 export interface V11Head {
   fitDate: string;
   expiresAt: string;
+  /** Midnight-UTC instant this head was cut at. */
+  cutoffTs: string | null;
+  /** Binds the head to the exact 80-input order it was fitted on. */
+  featureOrderHash: string | null;
+  /** Binds the head to the frozen scaler/fit/rank configuration. */
+  configFingerprint: string | null;
+  /** Latest native Kalshi settlement used; must be strictly before the cutoff. */
+  maxTrainingSettlementTs: string | null;
+  quarantined?: boolean;
+  quarantineReason?: string | null;
   scaler: V11Scaler;
   coefficients: number[];
   intercept: number;
@@ -123,8 +135,12 @@ export function v11FitCutoff(fitDate: string): string {
 export function fitV11Head(
   fitDate: string,
   history: readonly V11TrainingRow[],
+  now: Date = new Date(),
 ): V11Head | null {
   const cutoff = Date.parse(v11FitCutoff(fitDate));
+  // A head for a cutoff that has not arrived yet cannot be honest: it would be
+  // trained without data that exists by the day it claims to serve.
+  if (!Number.isFinite(cutoff) || cutoff > now.getTime()) return null;
   const lo = cutoff - V11_TRAIN_DAYS * 86_400_000;
   const train = history
     .filter((r) => {
@@ -136,8 +152,7 @@ export function fitV11Head(
         t >= lo &&
         t < cutoff &&
         s < cutoff &&
-        r.label !== 0 &&
-        Number.isFinite(r.label) &&
+        (r.label === 1 || r.label === -1) &&
         r.vector.length === V11_FEATURE_ORDER.length &&
         r.vector.every((v) => Number.isFinite(v))
       );
@@ -159,9 +174,29 @@ export function fitV11Head(
   });
 
   const expires = new Date(cutoff + 86_400_000).toISOString();
+  const maxSettlement = train.reduce(
+    (a, r) => Math.max(a, Date.parse(r.settlementTs)),
+    -Infinity,
+  );
+  if (!Number.isFinite(maxSettlement) || maxSettlement >= cutoff) return null;
+  if (
+    scaler.center.length !== V11_FEATURE_ORDER.length ||
+    scaler.scale.length !== V11_FEATURE_ORDER.length ||
+    fit.coefficients.length !== V11_FEATURE_ORDER.length ||
+    !fit.coefficients.every((c) => Number.isFinite(c)) ||
+    !Number.isFinite(fit.intercept)
+  ) {
+    return null;
+  }
   return {
     fitDate,
     expiresAt: expires,
+    cutoffTs: new Date(cutoff).toISOString(),
+    featureOrderHash: V11_FEATURE_ORDER_HASH,
+    configFingerprint: V11_CONFIG_FINGERPRINT,
+    maxTrainingSettlementTs: new Date(maxSettlement).toISOString(),
+    quarantined: false,
+    quarantineReason: null,
     scaler,
     coefficients: fit.coefficients,
     intercept: fit.intercept,
@@ -175,7 +210,27 @@ export function fitV11Head(
   };
 }
 
-export function v11HeadCertified(head: V11Head): boolean {
+/**
+ * A head may only score when it is converged, finite, correctly shaped, bound
+ * to THIS feature order and configuration, not quarantined, and cut at a
+ * midnight that has already passed with all training settlements before it.
+ */
+export function v11HeadCertified(head: V11Head, now: Date = new Date()): boolean {
+  if (head.quarantined === true) return false;
+  if (head.featureOrderHash && head.featureOrderHash !== V11_FEATURE_ORDER_HASH) return false;
+  if (head.configFingerprint && head.configFingerprint !== V11_CONFIG_FINGERPRINT) return false;
+  if (head.cutoffTs) {
+    const cut = Date.parse(head.cutoffTs);
+    if (!Number.isFinite(cut) || cut > now.getTime()) return false;
+    if (
+      head.maxTrainingSettlementTs &&
+      !(Date.parse(head.maxTrainingSettlementTs) < cut)
+    ) {
+      return false;
+    }
+  }
+  if (head.scaler.center.length !== V11_FEATURE_ORDER.length) return false;
+  if (head.scaler.scale.length !== V11_FEATURE_ORDER.length) return false;
   return (
     head.converged &&
     Number.isFinite(head.gradientNorm) &&
@@ -193,6 +248,8 @@ export function v11HeadFresh(head: { expiresAt: string }, targetTs: string): boo
 }
 
 export function v11Probability(head: V11Head, vector: readonly number[]): number {
+  if (vector.length !== head.coefficients.length) return NaN;
+  if (!vector.every((v) => Number.isFinite(v))) return NaN;
   const z = applyV11Scaler(head.scaler, vector).reduce(
     (a, v, j) => a + v * head.coefficients[j],
     head.intercept,
@@ -209,9 +266,11 @@ export function v11ConfidenceRank(
   confidence: number,
   priorConfidences: readonly (number | null)[],
 ): { rank: number | null; historyCount: number } {
+  // Filter FIRST, then take the newest 768: the rank clock counts finite
+  // confidences, not calendar opportunities.
   const history = priorConfidences
-    .slice(-V11_RANK_WINDOW)
-    .filter((v): v is number => v !== null && Number.isFinite(v));
+    .filter((v): v is number => v !== null && Number.isFinite(v))
+    .slice(-V11_RANK_WINDOW);
   if (history.length < V11_RANK_MIN_HISTORY) {
     return { rank: null, historyCount: history.length };
   }
