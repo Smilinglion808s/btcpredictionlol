@@ -228,8 +228,10 @@ export async function runV11Maintenance(
 ): Promise<V11MaintenanceReport> {
   const now = opts.now ?? new Date();
   // Only fully-closed candles are official opportunities.
+  // Exclusive upper bound: the candle currently in progress is not yet an
+  // official opportunity for maintenance.
   const before = new Date(
-    Math.floor(now.getTime() / CANDLE_MS) * CANDLE_MS - CANDLE_MS + CANDLE_MS,
+    Math.floor(now.getTime() / CANDLE_MS) * CANDLE_MS,
   ).toISOString();
 
   const report: V11MaintenanceReport = {
