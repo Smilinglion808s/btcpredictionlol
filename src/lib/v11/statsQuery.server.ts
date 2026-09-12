@@ -224,6 +224,26 @@ export async function buildV11Stats(): Promise<V11Stats> {
   const todayBoise = boiseDate(new Date());
   const history: V11Stats["history"] = [];
 
+  // Successful transmissions, matched to intervals by the shared dedupe key.
+  // A row is "sent" ONLY on a real HTTP 2xx response recorded in the delivery
+  // ledger — never inferred from flags, claims, or configuration.
+  const sentKeys = new Set<string>();
+  {
+    const { data: deliveries, error: dErr } = await sb
+      .from("webhook_deliveries")
+      .select("payload, status_code")
+      .eq("event", "prediction.created")
+      .gte("status_code", 200)
+      .lt("status_code", 300)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (dErr) throw dErr;
+    for (const row of (deliveries ?? []) as Record<string, unknown>[]) {
+      const key = (row.payload as Record<string, unknown> | null)?.["dedupe_key"];
+      if (typeof key === "string" && key) sentKeys.add(key);
+    }
+  }
+
   for (const d of decisions) {
     const ts = new Date(d.target_ts as string).toISOString();
     const runMode = (d.run_mode as string) ?? V11_RUN_MODES.RESEARCH;
@@ -247,11 +267,16 @@ export async function buildV11Stats(): Promise<V11Stats> {
     }
 
     if (history.length < 40) {
+      const ticker = String(d.ticker ?? "");
       history.push({
         targetTs: ts,
         runMode,
         leg,
         side,
+        sent:
+          (side === 1 || side === -1) &&
+          ticker !== "" &&
+          sentKeys.has(liteaDedupeKey(ticker, ts)),
         reason: (d.reason as string) ?? "",
         rank: d.rank === null || d.rank === undefined ? null : Number(d.rank),
         label,
