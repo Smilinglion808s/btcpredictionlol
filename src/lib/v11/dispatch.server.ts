@@ -23,6 +23,7 @@
 
 import {
   C85_OUTBOX_TABLE,
+  C85_TARGETS_TABLE,
   LITE_A_MODEL_VERSION,
 } from "@/lib/c85/config";
 import {
