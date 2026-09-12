@@ -195,7 +195,6 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
     expect(posts).toHaveLength(1);
 
     const durable = claims[0].value.p_payload;
-    console.log("DBGKEYS", JSON.stringify(posts[0].body));
     const wire = posts[0].body;
     for (const payload of [durable, wire]) {
       // Combined identity — the durable row says exactly what went on the wire.
@@ -209,7 +208,11 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
       expect(payload.market_ticker).toBe(TICKER);
       expect(payload.direction).toBe("GREEN");
       expect(payload.prediction).toBe("YES");
-      expect(payload.probability).toBeCloseTo(0.6412, 6);
+      expect(payload.probability_yes).toBeCloseTo(0.6412, 6);
+      expect(payload.admission_rank).toBeCloseTo(0.981, 6);
+      expect(payload.decision_status).toBe("ORDINARY_CALL");
+      expect(payload.strike_source).toBe("official");
+      expect(payload.strike_estimated).toBe(false);
       expect(payload.strike).toBe(77250);
       // Stake metadata; the external bot still owns sizing and execution.
       expect(payload.stake_fraction_of_boise_day_opening_principal).toBe(
