@@ -20,9 +20,9 @@ export const Route = createFileRoute("/api/public/predictions/latest")({
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
         const { data, error } = await sb
-          .from("predictions")
+          .from("public_predictions")
           .select(
-            "model_version, api_model_id, candle_ts, prediction, confidence, btc_price_at_prediction, setup_type, market_condition, reasoning_summary, status, actual_next_candle_close, created_at, resolved_at",
+            "model_version, api_model_id, candle_ts, prediction, confidence, btc_price_at_prediction, setup_type, market_condition, status, actual_next_candle_close, created_at, resolved_at",
           )
           .order("candle_ts", { ascending: false })
           .limit(1)

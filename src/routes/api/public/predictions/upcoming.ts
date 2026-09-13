@@ -22,9 +22,9 @@ export const Route = createFileRoute("/api/public/predictions/upcoming")({
         const TF_MS = 15 * 60 * 1000;
         const nextTs = new Date(Math.ceil(Date.now() / TF_MS) * TF_MS).toISOString();
         const { data, error } = await sb
-          .from("predictions")
+          .from("public_predictions")
           .select(
-            "model_version, api_model_id, candle_ts, prediction, confidence, btc_price_at_prediction, setup_type, market_condition, reasoning_summary, status, actual_next_candle_close, created_at, resolved_at",
+            "model_version, api_model_id, candle_ts, prediction, confidence, btc_price_at_prediction, setup_type, market_condition, status, actual_next_candle_close, created_at, resolved_at",
           )
           .eq("candle_ts", nextTs)
           .order("created_at", { ascending: false })
