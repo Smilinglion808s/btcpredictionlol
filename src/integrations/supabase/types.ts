@@ -12421,6 +12421,51 @@ export type Database = {
           },
         ]
       }
+      public_predictions: {
+        Row: {
+          actual_next_candle_close: number | null
+          api_model_id: string | null
+          btc_price_at_prediction: number | null
+          candle_ts: string | null
+          confidence: number | null
+          created_at: string | null
+          market_condition: string | null
+          model_version: string | null
+          prediction: string | null
+          resolved_at: string | null
+          setup_type: string | null
+          status: string | null
+        }
+        Insert: {
+          actual_next_candle_close?: number | null
+          api_model_id?: string | null
+          btc_price_at_prediction?: number | null
+          candle_ts?: string | null
+          confidence?: number | null
+          created_at?: string | null
+          market_condition?: string | null
+          model_version?: string | null
+          prediction?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string | null
+        }
+        Update: {
+          actual_next_candle_close?: number | null
+          api_model_id?: string | null
+          btc_price_at_prediction?: number | null
+          candle_ts?: string | null
+          confidence?: number | null
+          created_at?: string | null
+          market_condition?: string | null
+          model_version?: string | null
+          prediction?: string | null
+          resolved_at?: string | null
+          setup_type?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       activate_model8_v3_fit: {
