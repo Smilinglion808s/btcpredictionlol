@@ -706,21 +706,38 @@ export function supabaseV11DispatchDeps(
       // a source abstention that was revoked or replaced after the claim.
       if (!claimedSourceId) return false;
       if (dedupeKey !== v11EventDedupeKey(source.ticker, source.targetOpenIso)) return false;
-      let current: string | null = null;
-      try {
-        current = await resolveV1SourceTargetId(supabase, source);
-      } catch {
-        return false;
-      }
-      if (current !== claimedSourceId) return false;
-      const { data, error } = await supabase
-        .from(C85_OUTBOX_TABLE)
-        .select("state,claim_owner,claim_expires_at")
-        .eq("dedupe_key", dedupeKey)
-        .maybeSingle();
+
+      // The two safety reads are independent of each other, so they are issued
+      // together and BOTH are then checked — this removes one round trip from
+      // the last moment before transport without weakening anything: the source
+      // is still revalidated live at this seam (never from prefetched or cached
+      // evidence), ownership is still proved against the durable claim row, and
+      // either read failing, rejecting, losing ownership or showing a revoked /
+      // replaced source still returns false and sends nothing.
+      const [sourceRead, claimRead] = await Promise.all([
+        resolveV1SourceTargetId(supabase, source).then(
+          (id) => ({ ok: true as const, id }),
+          () => ({ ok: false as const, id: null }),
+        ),
+        supabase
+          .from(C85_OUTBOX_TABLE)
+          .select("state,claim_owner,claim_expires_at")
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle()
+          .then(
+            (r: { data: any; error: any }) => r,
+            () => ({ data: null, error: true }),
+          ),
+      ]);
+
+      if (!sourceRead.ok) return false;
+      if (sourceRead.id !== claimedSourceId) return false;
+      const { data, error } = claimRead as { data: any; error: any };
       if (error || !data) return false;
       const row = data as { state?: string; claim_owner?: string; claim_expires_at?: string };
       if (row.state !== "PENDING" || row.claim_owner !== owner) return false;
+      // Expiry is judged on the clock AFTER both reads resolved, so a claim that
+      // lapsed while they were in flight is caught here, not assumed valid.
       const until = new Date(String(row.claim_expires_at)).getTime();
       return Number.isFinite(until) && until > Date.now();
     },

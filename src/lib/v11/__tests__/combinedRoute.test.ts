@@ -313,4 +313,27 @@ describe("combined Version 1.1 route through the real decision.commit handler", 
     expect(out.result.dispatch_route).not.toBe("V11_COMBINED_V1_LEG");
     expect(posts.length).toBeLessThanOrEqual(1);
   });
+
+  it("sends a LATE-committed V1 decision as soon as it arrives, not at a later fixed offset", async () => {
+    process.env['V11_SERVER_EXECUTION_ENABLED'] = "true";
+    const { runC85Op } = await load();
+    const attempts: { offset: number }[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: any) => {
+      const body = JSON.parse(String(init.body));
+      attempts.push({ offset: Date.now() - Date.parse(String(body.candle_starts_at)) });
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    });
+    // The worker took 7 seconds this interval — past the 8s goal's neighbourhood
+    // but still well inside the open candle.
+    const openUtc = new Date(Date.now() - 7_000).toISOString();
+    const db = fakeDb(admittedTarget(openUtc));
+
+    const out = await runC85Op(db.client, "c85-worker-1", commit(openUtc), LITE_A_MODEL_VERSION);
+
+    expect(out.result.dispatch).toBe("SENT");
+    expect(attempts).toHaveLength(1);
+    // Transmitted on arrival: no waiting for T+20 or the T+45 fallback slot.
+    expect(attempts[0].offset).toBeGreaterThanOrEqual(7_000);
+    expect(attempts[0].offset).toBeLessThan(9_000);
+  });
 });
