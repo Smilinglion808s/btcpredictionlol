@@ -293,6 +293,8 @@ async function guardResult(
       expiresAt: new Date(OPEN_MS + 900_000).toISOString(),
     });
   }
+  // Only the guard's own reads are measured below.
+  db.marks.length = 0;
   return deps.ownsClaim(dedupeKey, db.owner);
 }
 
@@ -304,7 +306,7 @@ describe("claim ownership guard: two safety reads in parallel, both still enforc
     expect(owns).toBe(true);
     // The claim itself performs one source read; the guard then performs its
     // two reads TOGETHER, so the guard pair costs ~60ms, not ~120ms.
-    const guardMarks = marks.slice(1); // drop the claim-time source read
+    const guardMarks = marks;
     const guardStarts = guardMarks.filter((x) => x.name.endsWith(":start"));
     const firstEnd = Math.min(
       ...guardMarks.filter((x) => x.name.endsWith(":end")).map((x) => x.at),
