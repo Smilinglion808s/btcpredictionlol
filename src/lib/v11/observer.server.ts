@@ -539,8 +539,12 @@ async function observeV11TargetOnce(
   // Two DIFFERENT clocks, computed BEFORE this score is appended:
   //  - rank        → last 768 FINITE confidences
   //  - availability→ last 768 OFFICIAL OPPORTUNITIES, invalid ones included
-  const priorConfidences = await readPriorConfidences(sb, targetTs);
-  const priorOpportunities = await readPriorOpportunities(sb, targetTs);
+  // Both are causal, both end strictly before this target, and neither depends
+  // on the other: one round trip instead of two, same windows, same values.
+  const [priorConfidences, priorOpportunities] = await Promise.all([
+    readPriorConfidences(sb, targetTs),
+    readPriorOpportunities(sb, targetTs),
+  ]);
   const { rank, historyCount } = v11ConfidenceRank(confidence, priorConfidences);
   const { availability } = v11Availability(priorOpportunities);
   const gate =
