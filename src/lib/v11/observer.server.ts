@@ -168,14 +168,46 @@ async function observeV11TargetOnce(
     };
   }
 
-  // The exact prior state this observation is computed against. The commit
-  // refuses to apply if it changed in the meantime.
-  const expectedState = await readState(sb);
-  const missingPredecessors = await readMissingPredecessors(sb, targetTs);
+  // Five INDEPENDENT read-only inputs, issued together instead of one after
+  // another. None consumes another's result and none of them writes, so the
+  // values, the order in which they are checked below and every failure rule
+  // are unchanged — only four serial round-trips leave the T+45 path.
+  //
+  //   * `expectedState`         — the exact prior state this observation is
+  //                               computed against; the commit still refuses to
+  //                               apply if it moved (CAS + bounded stale retry).
+  //   * `missingPredecessors`   — still started BEFORE `upsertContextRow`, so
+  //                               the scan cannot see this observation's own
+  //                               context row.
+  //   * `live`                  — committed V1 row as context; a DB failure
+  //                               still raises rather than reading as "no row".
+  //   * `samples`               — the collector's own finalized one-second bars.
+  //                               The legacy derived `t45_features` row is
+  //                               RESEARCH/RECOVERY material only: its
+  //                               `created_at` proves when a derived row was
+  //                               written, never when the raw packet arrived,
+  //                               so it can never support a LIVE_SHADOW claim.
+  //   * `readV1Snapshot`        — settled SEPARATELY below, because it is the
+  //                               only one of the five whose error is benign.
+  //                               A rejection from any other read propagates
+  //                               exactly as before.
+  //
+  // `live` and the V1 snapshot read the same already-committed, immutable V1
+  // row; running them concurrently narrows, never widens, the window in which
+  // they could observe different states of it. `upsertContextRow` is a mutation
+  // that depends on `live`, so it stays where it is, after the batch and before
+  // every dependent history/vector read.
+  const v1Settled = readV1Snapshot(sb, targetTs).then(
+    (snapshot) => ({ ok: true as const, snapshot }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  const [expectedState, missingPredecessors, live, samples] = await Promise.all([
+    readState(sb),
+    readMissingPredecessors(sb, targetTs),
+    readLiveContext(sb, targetTs),
+    readT45InputsFromSamples(sb, targetTs),
+  ]);
 
-  // Context: the live committed V1 row is preferred; a DB failure raises rather
-  // than being mistaken for "no model row".
-  const live = await readLiveContext(sb, targetTs);
   let ctx = live as Awaited<ReturnType<typeof readContextRow>>;
   if (live) {
     await upsertContextRow(sb, live, "c85_targets");
@@ -183,11 +215,6 @@ async function observeV11TargetOnce(
     ctx = await readContextRow(sb, targetTs);
   }
 
-  // Primary input path: the collector's own finalized one-second bars. The
-  // legacy derived `t45_features` row is RESEARCH/RECOVERY material only — its
-  // `created_at` proves when a derived row was written, never when the raw
-  // packet arrived, so it can never support a LIVE_SHADOW claim.
-  const samples = await readT45InputsFromSamples(sb, targetTs);
   let t45: Record<string, number> | null = samples?.feats ?? null;
   let inputSource: "t45_second_samples" | "t45_features" | null = samples
     ? "t45_second_samples"
