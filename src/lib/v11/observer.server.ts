@@ -235,11 +235,15 @@ async function observeV11TargetOnce(
   const inputsPersistedOffsetMs = offsetOf(lastInputPersistedAt);
   const ticker = ctx?.ticker ?? "";
 
+  // Benign-error handling is preserved exactly, and applies ONLY here: the read
+  // was started with the batch above but its rejection is converted to the
+  // ambiguous snapshot at the same point in the flow as before.
+  const v1Read = await v1Settled;
   let v1: V1LegSnapshot;
   let v1ReadFailed = false;
-  try {
-    v1 = await readV1Snapshot(sb, targetTs);
-  } catch {
+  if (v1Read.ok) {
+    v1 = v1Read.snapshot;
+  } else {
     v1ReadFailed = true;
     v1 = {
       committed: false,
