@@ -277,12 +277,9 @@ async function guardResult(
   db: ReturnType<typeof guardDb>,
   claimFirst = true,
 ): Promise<boolean> {
-  const { supabaseV11DispatchDeps } = await import("../dispatch.server");
+  const { supabaseV11DispatchDeps, v11EventDedupeKey } = await import("../dispatch.server");
   const deps = supabaseV11DispatchDeps(db.client, async () => ({ delivered: 0 }), SOURCE);
-  const dedupeKey = (await import("../config")).v11EventDedupeKey(
-    SOURCE.ticker,
-    SOURCE.targetOpenIso,
-  );
+  const dedupeKey = v11EventDedupeKey(SOURCE.ticker, SOURCE.targetOpenIso);
   if (claimFirst) {
     await deps.claim({
       dedupeKey,
@@ -331,7 +328,7 @@ describe("claim ownership guard: two safety reads in parallel, both still enforc
   });
 
   it("refuses when the source abstention is revoked after the claim", async () => {
-    const { supabaseV11DispatchDeps } = await import("../dispatch.server");
+    const { supabaseV11DispatchDeps, v11EventDedupeKey } = await import("../dispatch.server");
     let source: Record<string, unknown> | null = V1_SOURCE_TARGET;
     const outbox = {
       state: "PENDING",
@@ -352,7 +349,7 @@ describe("claim ownership guard: two safety reads in parallel, both still enforc
     };
     const deps = supabaseV11DispatchDeps(client, async () => ({ delivered: 0 }), SOURCE);
     const cfg = await import("../config");
-    const dedupeKey = cfg.v11EventDedupeKey(SOURCE.ticker, SOURCE.targetOpenIso);
+    const dedupeKey = v11EventDedupeKey(SOURCE.ticker, SOURCE.targetOpenIso);
     await deps.claim({
       dedupeKey,
       owner: "owner-1",
