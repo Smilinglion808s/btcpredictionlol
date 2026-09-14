@@ -300,9 +300,7 @@ describe("claim ownership guard: two safety reads in parallel, both still enforc
   it("overlaps the source revalidation and the claim read", async () => {
     const marks: { name: string; at: number }[] = [];
     const db = guardDb({ sourceDelayMs: 60, claimDelayMs: 60, marks });
-    const started = Date.now();
     const owns = await guardResult(db);
-    const elapsed = Date.now() - started;
     expect(owns).toBe(true);
     // The claim itself performs one source read; the guard then performs its
     // two reads TOGETHER, so the guard pair costs ~60ms, not ~120ms.
@@ -313,7 +311,10 @@ describe("claim ownership guard: two safety reads in parallel, both still enforc
     );
     expect(guardStarts).toHaveLength(2);
     for (const s of guardStarts) expect(s.at).toBeLessThanOrEqual(firstEnd);
-    expect(elapsed).toBeLessThan(60 * 4);
+    // The guard pair itself costs about one read, not two.
+    const guardSpan =
+      Math.max(...guardMarks.map((x) => x.at)) - Math.min(...guardMarks.map((x) => x.at));
+    expect(guardSpan).toBeLessThan(60 * 2);
   });
 
   it("refuses when the source revalidation rejects", async () => {
