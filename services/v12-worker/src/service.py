@@ -164,7 +164,8 @@ class Service:
             except Exception as e:
                 # Do not log credentials, request bodies or remote error pages.
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
-            time.sleep(.5)
+                wait=adapter_backoff(e)
+            time.sleep(wait or .5)
     def record(self,cap,checkpoint,status,details):
         cap.db.execute('insert or replace into attempts values(?,?,?,?)',(self.ticker,checkpoint,status,json.dumps(details,allow_nan=False)))
         cap.db.commit();self.status['last_attempt']={'ticker':self.ticker,'checkpoint':checkpoint,'status':status}
