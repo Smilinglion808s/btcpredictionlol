@@ -11,7 +11,7 @@ export async function readV12Context(sb: SupabaseClient, open: string) {
       .eq('model_version','lite-a-floor4-top10-r1').eq('target_open_utc',open).maybeSingle(),
     sb.from('v11_decisions').select('ticker,target_ts,leg,side,reason,probability,decision_offset_ms,run_mode,evidence,within_publication_ceiling,created_at')
       .eq('target_ts',open).maybeSingle(),
-    sb.from('t45_features').select('feature_complete,t45_quote_flow_45s,t45_quote_flow_15s,t45_close_vwap_gap_bps,t45_path_efficiency_45s,t45_last15_ret_bps,t45_trade_count_last15_share')
+    sb.from('t45_features').select('spot_complete,t45_quote_flow_45s,t45_quote_flow_15s,t45_close_vwap_gap_bps,t45_path_efficiency_45s,t45_last15_ret_bps,t45_trade_count_last15_share')
       .eq('feature_version','t45-features-r1').eq('target_ts',open).maybeSingle(),
     sb.from('c85_targets').select('target_open_utc,features').eq('model_version','lite-a-floor4-top10-r1')
       .lte('target_open_utc',open).order('target_open_utc',{ascending:false}).limit(96),
@@ -29,7 +29,10 @@ export async function readV12Context(sb: SupabaseClient, open: string) {
   const last=rows.at(-1);
   const vol=last && Date.parse(last.target_open_utc)===Date.parse(open) ? computeV11Vol(raw.slice(0,-1),raw.at(-1)) : {vol:null};
   const e=early.data; let features:Record<string,number>|null=null;
-  if(e?.feature_complete===true && vol.vol!==null){
+  // U consumes only the six completed spot-bar fields below. The legacy
+  // feature_complete flag also requires an unrelated frozen R2 prior; that
+  // prior is not an input to either original U head. Keep all six finite checks.
+  if(e?.spot_complete===true && vol.vol!==null){
     const fields=['quote_flow_45s','quote_flow_15s','close_vwap_gap_bps','path_efficiency_45s','trade_count_last15_share'];
     const values=fields.map(k=>(e as any)['t45_'+k]);
     if(values.every(v=>typeof v==='number' && Number.isFinite(v)) && typeof e.t45_last15_ret_bps==='number' && Number.isFinite(e.t45_last15_ret_bps)){
