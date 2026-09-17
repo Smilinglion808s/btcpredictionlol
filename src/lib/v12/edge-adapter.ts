@@ -4,9 +4,10 @@ import { readV12Context } from './context.server';
 import { publishV12Shadow } from './shadow.server';
 import { ROUTES, validateSignal, type Route } from './contract';
 import { V12_RECEIVER_BASE, isAuthorizedBettingEndpoint } from './receiver-destination';
+import { recordRuntime } from './runtime.server';
 
 export { readV12Context };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r1';
+export const ADAPTER_REVISION = 'v12-edge-adapter-r2';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 
@@ -64,7 +65,7 @@ export function createAdapterHandler(deps: Dependencies) {
     try { p=JSON.parse(raw); } catch { return reply(400,{ok:false,error:'INVALID_JSON'}); }
     if (!p || typeof p!=='object' || Array.isArray(p)) return reply(400,{ok:false,error:'INVALID_ENVELOPE'});
     const now=clock(),open=Date.parse(p.open);
-    if (!['context','publish','probe'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
+    if (!['context','publish','probe','heartbeat'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
         !Number.isFinite(open) || open%900000!==0 || now<open || now>=open+900000)
       return reply(400,{ok:false,error:'INVALID_CURRENT_INTERVAL'});
     try {
@@ -75,6 +76,7 @@ export function createAdapterHandler(deps: Dependencies) {
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
       }
       if (p.op==='probe') return reply(200,{ok:true,...await probeReceivers(sb,deps.transport ?? fetch)});
+      if (p.op==='heartbeat') return reply(200,{ok:true,...await recordRuntime(sb,p.status)});
       const context=await (deps.readContext ?? readV12Context)(sb,new Date(open).toISOString());
       if (p.op==='context') return reply(200,{ok:true,context,observed_at:new Date(clock()).toISOString()});
       const signal=p.signal;

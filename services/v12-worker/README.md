@@ -34,7 +34,27 @@ are read from the predictor. Missing inputs cause a skipped checkpoint.
 Historical quote snapshots are never fabricated on restart.
 
 The frozen Sep14 L/R artifacts expire October 5, 2026 UTC. Model hash and
-expiration are checked. Automated 21-day refitting is not installed.
+expiration are checked. `refit.py` and the background refresh loop preserve
+the original 21-day schedule, 84-day lookback, one-day embargo, checkpoint
+sets and estimators. The Oct5 fit can be prepared after Oct4 00:10 UTC and
+becomes valid only on Oct5. A failed fit never extends the previous expiry.
+
+The hash-pinned training seed contains the already audited input history
+through Sep16, with arrival prices and policy-selection fields removed.
+Training capture records ALL input-ready opportunities, independent of U's
+eligibility, using only quotes before each boundary and bars received within
+its five-second window. Official finalized outcomes are collected separately;
+their observed timestamps must precede the next training cutoff. Missing
+inputs remain missing. Recent coverage and estimator integrity checks can
+hold a refresh, and are reported in status. Both artifacts are written before
+an atomic manifest makes a new fit available. Training runs in a separate
+process. Raw capture retains three days; training frames retain 100 days.
+
+The signed heartbeat records sanitized status in the predictor database.
+Every publish first acquires a unique predictor delivery-journal record;
+the exact leg determines its endpoint, model ID and HTTP identity headers.
+A successful receiver response records its receipt ID. An ambiguous response
+is marked UNKNOWN and never triggers an automatic duplicate delivery.
 
 ## Verification
 
@@ -43,6 +63,7 @@ From repository root:
 ```
 node --experimental-strip-types --test src/lib/v12/*.test.ts supabase/functions/v12-shared/receiver.test.ts
 OPENBLAS_NUM_THREADS=2 python3 services/v12-worker/tests/runtime.py
+OPENBLAS_NUM_THREADS=2 python3 services/v12-worker/tests/refit.py
 OPENBLAS_NUM_THREADS=2 python3 services/v12-worker/tests/parity.py <recovered-evidence-root>
 OPENBLAS_NUM_THREADS=2 python3 services/v12-worker/tests/input_parity.py <recovered-evidence-root>
 ```
@@ -57,8 +78,9 @@ New Supabase receivers `/v12-v1`, `/v12-t45r2`, `/v12-u` record only. Their SQL
 tables cannot enable execution. Do not repoint them to `place-trade`.
 The existing V1.1 executor and its settings remain separate.
 
-Before a financial cutover, implementation still needs the shared live
-interval claim, authoritative day-opening writer, order reconciliation and
-maker cancellation/partial-fill integration, fit refresh, and observed live
-feed-to-receiver validation. Existing backtest odds are fill assumptions,
-not newly chosen execution limits. No live activation is performed here.
+The user owns betting in a separate system. This predictor does not need an
+account balance or daily opening to publish a valid signal. Sizing/policy
+fields are handoff metadata. A recording receiver's DAY_OPENING_UNAVAILABLE
+status still acknowledges and stores the prediction. Exchange execution,
+fill handling and bankroll accounting belong to the downstream system.
+See `docs/v12-webhook-handoff.md` for the three exact destinations and contract.

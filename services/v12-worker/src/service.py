@@ -3,7 +3,7 @@
 One process per SQLite volume. Restart may recover completed bars, but never
 recreates missing historical quote snapshots or sends expired checkpoints.
 """
-import hashlib,hmac,json,os,threading,time,uuid,urllib.request,urllib.error
+import hashlib,hmac,json,os,threading,time,uuid,urllib.request,urllib.error,subprocess,sys
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 import numpy as np
@@ -12,6 +12,8 @@ from capture import Capture,get
 from features import build_state
 from policy import CHECKPOINTS,arrival_admissible
 from scorer import Scorer
+from refit import period_start,PERIOD
+import training_capture
 
 VERSION='v12-original-u-4-5-10-r1'
 ROUTES={'V1':('v12-v1-r1',.04,'maker_only'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_only')}
@@ -63,16 +65,15 @@ def payload(route,context,decision_ms,**extra):
       'market':context['ticker'],'candle_starts_at':iso(open_ms),'decision_at':iso(decision_ms),'sent_at':iso(millis()),
       'interval_key':f"v12:{context['ticker']}:{iso(open_ms)}",**extra}
 
-def score_checkpoint(capture,scorer,context,market,second,now_ms):
+def checkpoint_frame(capture,context,market,second,received_by_ms):
     open_ms=int(pd.Timestamp(context['open']).timestamp()*1000);boundary=open_ms+second*1000
-    if not boundary<=now_ms<=boundary+5000:raise ValueError('CHECKPOINT_EXPIRED')
-    if not context.get('u_eligible') or not context.get('early'):raise ValueError('U_CONTEXT_NOT_READY')
+    if received_by_ms<boundary or not context.get('early'):raise ValueError('U_INPUTS_NOT_READY')
     if market.get('ticker')!=context['ticker'] or int(pd.Timestamp(market['close_time']).timestamp()*1000)!=open_ms+900000:
         raise ValueError('MARKET_INTERVAL_MISMATCH')
     strike=market.get('floor_strike')
     if not isinstance(strike,(int,float)) or not np.isfinite(strike) or strike<=0:raise ValueError('OFFICIAL_STRIKE_UNAVAILABLE')
     # One extra preceding minute supplies the first return of the 1440m window.
-    frames=[capture.frame(k,open_ms-1441*60000,boundary,now_ms) for k in ('index','spot','perp')]
+    frames=[capture.frame(k,open_ms-1441*60000,boundary,received_by_ms) for k in ('index','spot','perp')]
     expected=pd.date_range(pd.Timestamp(open_ms-1441*60000,unit='ms',tz='UTC'),pd.Timestamp(boundary,unit='ms',tz='UTC'),freq='min',inclusive='left')
     if any(not f.index.equals(expected) for f in frames):raise ValueError('COMPLETED_MINUTES_NOT_READY')
     ref=pd.DataFrame([{'ts':pd.Timestamp(open_ms,unit='ms',tz='UTC'),'ticker':context['ticker'],'floor_strike':strike}])
@@ -83,16 +84,36 @@ def score_checkpoint(capture,scorer,context,market,second,now_ms):
       'previous_ask':previous_ask,'market_p':(bid+ask)/2,'spread':ask-bid,'quote_valid':True,'decision_ts':pd.Timestamp(boundary,unit='ms',tz='UTC')}
     for k,v in additions.items():f[k]=v
     f['feature_valid']=f.valid & np.isfinite(f[['z','spot_flow1','perp_flow1','vwap_gap','sigma_min_bps']]).all(axis=1)
+    return f
+
+def score_checkpoint(capture,scorer,context,market,second,now_ms):
+    boundary=int(pd.Timestamp(context['open']).timestamp()*1000)+second*1000
+    if not boundary<=now_ms<=boundary+5000:raise ValueError('CHECKPOINT_EXPIRED')
+    if not context.get('u_eligible') or not context.get('early'):raise ValueError('U_CONTEXT_NOT_READY')
+    f=checkpoint_frame(capture,context,market,second,now_ms)
     chosen,rows=scorer.score(f,pd.Timestamp(now_ms,unit='ms',tz='UTC'))
     return chosen,rows
+
+def u_block_reason(context):
+    e=context.get('eligibility') or {};v=e.get('v1') or {};t=e.get('t45') or {}
+    if context.get('u_eligible'):return 'ELIGIBLE'
+    if v.get('inputValid') is not True:return 'INVALID_V1_INPUTS'
+    if v.get('ordinaryFloorAllows') is not True:return 'DAILY_FLOOR_CLOSED'
+    if v.get('finalSide') in (-1,1):return 'V1_SELECTED'
+    if v.get('reason')!='CONFIDENCE_ABSTAIN':return 'V1_NOT_CONFIDENCE_ABSTENTION'
+    if t.get('finalized') is not True:return 'AWAITING_T45_DECISION'
+    if t.get('finalSide')!=0:return 'T45_SELECTED'
+    if e.get('anyPriorClaim') is not False:return 'PRIOR_CLAIM'
+    return 'INELIGIBLE'
 
 class Service:
     def __init__(self):
         if os.environ.get('V12_MODE','shadow')!='shadow':raise ValueError('SHADOW_ONLY_BINARY')
         self.path=os.environ.get('V12_CAPTURE_DB','/data/v12/capture.sqlite')
         Path(self.path).parent.mkdir(parents=True,exist_ok=True)
-        self.adapter=Adapter();self.scorer=Scorer();self.ticker=None
-        self.status={'mode':'shadow','execution_enabled':False,'stage':'STARTING','fit_expires_at':self.scorer.manifest['expires_at']}
+        self.adapter=Adapter();self.scorer=Scorer();self.ticker=None;self.context=None
+        self.status={'mode':'shadow','execution_enabled':False,'stage':'STARTING','fit_expires_at':self.scorer.manifest['expires_at'],
+          'fit_version':self.scorer.manifest['version'],'refresh_status':'STARTING'}
     def bars_loop(self,stream):
         cap=Capture(self.path);cursor=millis()//900000*900000-1441*60000
         while True:
@@ -104,6 +125,7 @@ class Service:
                 if count!=(end-cursor)//60000:raise ValueError('MISSING_MINUTE_HISTORY')
                 cursor=max(cursor,end-2*60000)
                 self.status[stream+'_complete_through']=iso(end)
+                self.status.pop(stream+'_error',None)
             except Exception as e:
                 self.status[stream+'_error']=error_label(e);backoff=blocked_backoff(e)
             time.sleep(backoff or (.5 if millis()%60000<5000 else 3))
@@ -114,6 +136,7 @@ class Service:
             try:
                 if self.ticker:
                     q=cap.sample_quote(self.ticker);self.status['quote_received_at']=iso(q['received_ms'])
+                    self.status.pop('quote_error',None)
             except Exception as e:
                 self.status['quote_error']=error_label(e);backoff=blocked_backoff(e)
             time.sleep(backoff or .45)
@@ -123,6 +146,68 @@ class Service:
             try:print(json.dumps({**dict(self.status),'type':'v12_health','observed_at':iso(millis())},default=str),flush=True)
             except Exception:pass
             time.sleep(HEARTBEAT_SECONDS)
+    def status_loop(self):
+        while True:
+            try:
+                self.adapter.call('heartbeat',millis()//900000*900000,status=dict(self.status))
+                self.status.pop('status_error',None)
+            except Exception as e:self.status['status_error']=error_label(e)
+            time.sleep(30)
+    def training_loop(self):
+        cap=Capture(self.path);training_capture.initialize(cap.db)
+        market=None;last_outcomes=0;last_prune=0
+        while True:
+            now=millis();context=self.context
+            try:
+                if context and context.get('ready') and context.get('early') and int(pd.Timestamp(context['open']).timestamp()*1000)==now//900000*900000:
+                    if not market or market.get('ticker')!=context['ticker']:
+                        market=get('https://api.elections.kalshi.com/trade-api/v2/markets/'+context['ticker'])['market']
+                    opening=int(pd.Timestamp(context['open']).timestamp()*1000)
+                    for sec in CHECKPOINTS:
+                        if now<opening+sec*1000+10000:continue
+                        if cap.db.execute('select 1 from training_attempts where ticker=? and second=?',(context['ticker'],sec)).fetchone():continue
+                        try:
+                            # All model opportunities, regardless of betting eligibility.
+                            # Only inputs actually received within the 5s scoring window.
+                            frame=checkpoint_frame(cap,context,market,sec,opening+sec*1000+5000)
+                            training_capture.save_frame(cap.db,frame);status='CAPTURED'
+                        except ValueError as e:status=str(e)
+                        cap.db.execute('insert or ignore into training_attempts values(?,?,?)',(context['ticker'],sec,status));cap.db.commit()
+                if now-last_outcomes>60000:
+                    training_capture.collect_outcomes(cap.db,pd.Timestamp(now,unit='ms',tz='UTC'));last_outcomes=now
+                if now-last_prune>3600000:
+                    training_capture.prune_capture(cap.db,now);last_prune=now
+                count,latest=cap.db.execute('select count(*),max(open_ms) from training_samples').fetchone()
+                self.status.update(training_rows=count,training_latest_at=iso(latest) if latest else None)
+            except Exception as e:self.status['training_error']=error_label(e)
+            time.sleep(3)
+    def refresh_loop(self):
+        cache=Path(self.path).parent/'fits';seed=Path(__file__).resolve().parents[1]/'artifacts';last_failure=0
+        while True:
+            now=pd.Timestamp.now(tz='UTC');current=period_start(now)
+            try:
+                active=cache/current.strftime('%Y%m%d')
+                if (active/'manifest.json').exists() and pd.Timestamp(self.scorer.manifest['valid_from'])!=current:
+                    candidate=Scorer(active)
+                    if pd.Timestamp(candidate.manifest['valid_from'])!=current or pd.Timestamp(candidate.manifest['expires_at'])!=current+PERIOD:
+                        raise ValueError('REFIT_MANIFEST_SCHEDULE_MISMATCH')
+                    self.scorer=candidate
+                    self.status.update(fit_version=candidate.manifest['version'],fit_expires_at=candidate.manifest['expires_at'])
+                needed=current if pd.Timestamp(self.scorer.manifest['expires_at'])<=now else current+PERIOD
+                destination=cache/needed.strftime('%Y%m%d');due=needed-pd.Timedelta(days=1)+pd.Timedelta(minutes=10)
+                if not (destination/'manifest.json').exists() and now>=due and millis()-last_failure>3600000:
+                    self.status['refresh_status']='FITTING_'+needed.strftime('%Y%m%d')
+                    result=subprocess.run([sys.executable,str(Path(__file__).with_name('refit.py')),'--seed',str(seed),'--db',self.path,
+                      '--fit',needed.isoformat(),'--output',str(destination)],capture_output=True,text=True,timeout=900,
+                      env={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1'})
+                    if result.returncode:raise ValueError('REFIT_FAILED')
+                    Scorer(destination)  # Verify file hashes before declaring prepared.
+                self.status['refresh_status']=('PREPARED_' if (destination/'manifest.json').exists() else 'SCHEDULED_')+needed.strftime('%Y%m%d')
+                self.status.pop('refresh_error',None)
+            except Exception as e:
+                last_failure=millis();self.status['refresh_error']=error_label(e)
+                self.status['refresh_status']='RETRY_PENDING'
+            time.sleep(30)
     def probe_once(self):
         # This sends authenticated, deliberately invalid signals to the three
         # recording receivers. It creates no signal rows and never places orders.
@@ -135,7 +220,10 @@ class Service:
         for stream in ('index','spot','perp'):threading.Thread(target=self.bars_loop,args=(stream,),daemon=True).start()
         threading.Thread(target=self.quotes_loop,daemon=True).start()
         threading.Thread(target=self.heartbeat_loop,daemon=True).start()
+        threading.Thread(target=self.training_loop,daemon=True).start()
+        threading.Thread(target=self.refresh_loop,daemon=True).start()
         if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.probe_once,daemon=True).start()
+        if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.status_loop,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
             now=millis();open_ms=now//900000*900000;wait=0
@@ -144,9 +232,11 @@ class Service:
                     self.ticker=None;market=None;last_open=open_ms
                 context=self.adapter.call('context',open_ms)['context']
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
+                self.context=context
                 self.ticker=context['ticker'];age=now-open_ms
                 self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
-                  u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None)
+                  u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None,
+                  u_block_reason=u_block_reason(context))
                 # Poll committed early decisions outside their critical dispatch path.
                 for route,key,side_key,offset_key,slot in [('V1','v1','final_side','publication_offset_ms',-1),('T45R2','t45','side','decision_offset_ms',-45)]:
                     r=context.get(key) or {};side=r.get(side_key);offset=r.get(offset_key)
