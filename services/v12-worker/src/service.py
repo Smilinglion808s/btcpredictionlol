@@ -94,19 +94,29 @@ class Service:
                 if count!=(end-cursor)//60000:raise ValueError('MISSING_MINUTE_HISTORY')
                 cursor=max(cursor,end-2*60000)
                 self.status[stream+'_complete_through']=iso(end)
-            except Exception as e:self.status[stream+'_error']=type(e).__name__
-            time.sleep(.5 if millis()%60000<5000 else 3)
+            except Exception as e:
+                self.status[stream+'_error']=error_label(e);backoff=blocked_backoff(e)
+            time.sleep(backoff or (.5 if millis()%60000<5000 else 3))
     def quotes_loop(self):
         cap=Capture(self.path)
         while True:
+            backoff=0
             try:
                 if self.ticker:
                     q=cap.sample_quote(self.ticker);self.status['quote_received_at']=iso(q['received_ms'])
-            except Exception as e:self.status['quote_error']=type(e).__name__
-            time.sleep(.45)
+            except Exception as e:
+                self.status['quote_error']=error_label(e);backoff=blocked_backoff(e)
+            time.sleep(backoff or .45)
+    def heartbeat_loop(self):
+        # Safe status snapshot only: no secrets, headers, payloads or response bodies.
+        while True:
+            try:print(json.dumps({**dict(self.status),'type':'v12_health','observed_at':iso(millis())},default=str),flush=True)
+            except Exception:pass
+            time.sleep(HEARTBEAT_SECONDS)
     def run(self):
         for stream in ('index','spot','perp'):threading.Thread(target=self.bars_loop,args=(stream,),daemon=True).start()
         threading.Thread(target=self.quotes_loop,daemon=True).start()
+        threading.Thread(target=self.heartbeat_loop,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
             now=millis();open_ms=now//900000*900000
