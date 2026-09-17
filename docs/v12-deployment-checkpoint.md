@@ -1,5 +1,42 @@
 # V1.2 deployment checkpoint — 2026-09-17
 
+## Update: supported backend connection is operational
+
+The support-ticket dependency was removed by deploying an independent signed
+backend function on the predictor's existing Supabase instance. It reads that
+instance's database directly and forwards only to the three recording receivers.
+It never requests or proxies the blocked website endpoint. Website security
+settings were not changed, and no database key was given to Railway.
+
+- Adapter: `https://alevdzyisibxcvwoyrqb.supabase.co/functions/v1/v12-shadow-adapter`.
+- Backend source: `c2a2dc448cc399a9b6a07fd55ace096c81c6f6de`.
+- Railway deployment: `b44df759-2c2c-4456-a553-6622a8c27bd1`, worker source
+  `868d63e517b885affcd18122f73e28bd2fb6f54b`, status SUCCESS.
+- Verified from Railway at 20:56:44 UTC: stage RECORDING, fresh context and
+  quotes, `last_error=null`, all three receiver authentication checks passed,
+  and `early_features_ready=true`.
+- Unsigned backend requests return 401. Signed context requests return 200.
+  Receiver checks deliberately send invalid signed probes and expect 400
+  `ROUTE_POLICY_MISMATCH`. They write no signals and are not evidence of fills
+  or a naturally selected model signal.
+- The current interval already has an original V1 call, so U correctly remains
+  ineligible. Eligibility, daily-floor and claim restrictions were not loosened.
+
+Two implementation defects were corrected during verification: secret lookup
+now recognizes the existing receiver's exact `forceFunctionRegion=us-west-1`
+hint while rejecting unrelated destinations and query parameters; U input
+readiness now requires complete spot bars and all six used fields, without
+requiring the unrelated legacy T45 model's prior prediction. Frozen U math and
+artifacts are unchanged. Six adapter tests, 19 context parity/negative cases,
+five Python runtime tests, and the locked project typecheck pass.
+
+**Recording only: `execution_enabled=false`.** The shared midnight equity
+writer, prepared financial executor integration and scheduled U fit refresh
+listed below still need completion before a financial cutover. This connection
+fix does not activate the 4% / 5% / 10% trading configuration.
+
+## Earlier checkpoint, before the backend migration
+
 Status: the application and recording infrastructure are deployed. V1.2 is
 **not delivering signals end to end and is not executing financial orders**.
 The existing V1.1 execution service remains at its prior deployment.
