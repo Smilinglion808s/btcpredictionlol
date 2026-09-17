@@ -17,6 +17,17 @@ VERSION='v12-original-u-4-5-10-r1'
 ROUTES={'V1':('v12-v1-r1',.04,'maker_only'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_only')}
 def iso(ms):return pd.Timestamp(ms,unit='ms',tz='UTC').isoformat(timespec='milliseconds').replace('+00:00','Z')
 def millis():return int(time.time()*1000)
+HEARTBEAT_SECONDS=15
+BLOCKED_STATUSES={403,418,429,451}
+BLOCKED_BACKOFF_SECONDS=30
+def http_status(error):return error.code if isinstance(error,urllib.error.HTTPError) else None
+def error_label(error):
+    # Type name plus numeric status only; never the remote response body.
+    code=http_status(error)
+    return type(error).__name__+(':'+str(code) if code is not None else '')
+def blocked_backoff(error):
+    code=http_status(error)
+    return BLOCKED_BACKOFF_SECONDS if code in BLOCKED_STATUSES else 0
 
 class Adapter:
     def __init__(self):
