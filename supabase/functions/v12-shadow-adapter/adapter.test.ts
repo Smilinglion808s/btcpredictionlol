@@ -4,6 +4,7 @@ import {createHmac} from 'node:crypto';
 import {createAdapterHandler,verifyWorkerSignature} from './core.js';
 import {createReceiver} from '../v12-shared/receiver.ts';
 import {ROUTES,intervalKey,V12_VERSION} from '../../../src/lib/v12/contract.ts';
+import {isAuthorizedBettingEndpoint} from '../../../src/lib/v12/receiver-destination.ts';
 
 const open=Date.parse('2026-09-17T20:00:00Z'),ticker='KXBTC15M-26SEP171415-15';
 const secret='test-worker-only',receiverSecret='test-receiver-only';
@@ -26,7 +27,7 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
   const sb={from:(table:string)=>({
     insert:async(row:any)=>{assert.equal(table,'c85_request_nonces');nonceWrites++;
       if(nonces.has(row.nonce))return {error:{code:'23505'}};nonces.add(row.nonce);return {error:null};},
-    select:()=>({eq:async()=>{assert.equal(table,'webhook_endpoints');return {data:[{url:receiverRoot+'place-trade',secret:receiverSecret,is_active:true}],error:null};}})
+    select:()=>({eq:async()=>{assert.equal(table,'webhook_endpoints');return {data:[{url:receiverRoot+'place-trade?forceFunctionRegion=us-west-1',secret:receiverSecret,is_active:true}],error:null};}})
   })};
   const transport=async(url:any,init:any)=>{
     const target=String(url);destinations.push(target);
@@ -47,6 +48,14 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
   return {handler,now,context,signal,envelope,transport,destinations,counts:()=>({nonceWrites,reads,writes})};
 }
 
+test('secret lookup accepts the existing region hint but never a different destination or query',()=>{
+  assert.equal(isAuthorizedBettingEndpoint(receiverRoot+'place-trade'),true);
+  assert.equal(isAuthorizedBettingEndpoint(receiverRoot+'place-trade?forceFunctionRegion=us-west-1'),true);
+  for(const url of ['https://example.invalid/functions/v1/place-trade',receiverRoot+'v12-u',receiverRoot+'place-trade?redirect=evil',
+    receiverRoot+'place-trade?forceFunctionRegion=other',receiverRoot+'place-trade?forceFunctionRegion=us-west-1&forceFunctionRegion=us-west-1',
+    receiverRoot+'place-trade#fragment','https://user@ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/place-trade'])
+    assert.equal(isAuthorizedBettingEndpoint(url),false,url);
+});
 test('unsigned, stale, tampered and unconfigured requests reach no database',async()=>{
   const t=setup(),p=t.envelope('context');
   assert.equal((await t.handler(request(p,t.now,{'x-c85-signature':''}))).status,401);

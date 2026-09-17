@@ -3,10 +3,11 @@ import { createHmac } from 'node:crypto';
 import { readV12Context } from './context.server';
 import { publishV12Shadow } from './shadow.server';
 import { ROUTES, validateSignal, type Route } from './contract';
+import { V12_RECEIVER_BASE, isAuthorizedBettingEndpoint } from './receiver-destination';
 
 export { readV12Context };
 export const ADAPTER_REVISION = 'v12-edge-adapter-r1';
-const RECEIVERS = 'https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/';
+const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 
 export async function verifyWorkerSignature(raw: string, timestamp: string | null, signature: string | null,
@@ -21,7 +22,7 @@ export async function verifyWorkerSignature(raw: string, timestamp: string | nul
 async function probeReceivers(sb: any, transport: typeof fetch) {
   const {data,error} = await sb.from('webhook_endpoints').select('secret,url,is_active').eq('is_active',true);
   if (error) throw error;
-  const endpoints = (data ?? []).filter((e:any) => e.url === RECEIVERS+'place-trade');
+  const endpoints = (data ?? []).filter((e:any) => isAuthorizedBettingEndpoint(e.url));
   if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error('SINGLE_BETTING_SECRET_UNAVAILABLE');
   const results = await Promise.all((Object.keys(ROUTES) as Route[]).map(async leg => {
     // Deliberately invalid signal. A signed 400 with this precise error proves
