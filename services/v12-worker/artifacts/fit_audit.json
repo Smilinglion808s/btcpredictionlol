@@ -1,0 +1,142 @@
+[
+  {
+    "fold": 9,
+    "fit": "2026-08-24 00:00:00+00:00",
+    "end": "2026-08-31 00:00:00+00:00",
+    "cutoff": "2026-08-23 00:00:00+00:00",
+    "train_rows": 23423,
+    "train_markets": 7831,
+    "train_first": "2026-06-01 00:00:00+00:00",
+    "train_last": "2026-08-22 23:30:00+00:00",
+    "max_training_settlement": "2026-08-22 23:45:07.118884+00:00",
+    "test_markets": 664,
+    "valid_test_rows": 3982,
+    "model_sha256": "3b72fd63edff8f82dc20e35f03365d6068522637fe980f0824aa8b2629b00af4",
+    "source": "L",
+    "reused_frozen_fit": true,
+    "later_test_start": "2026-08-31 00:00:00+00:00",
+    "later_test_end_exclusive": "2026-09-14 00:00:00+00:00",
+    "test_rows": 3984
+  },
+  {
+    "source": "L",
+    "fold": 10,
+    "fit": "2026-09-14 00:00:00+00:00",
+    "cutoff": "2026-09-13 00:00:00+00:00",
+    "train_rows": 23492,
+    "train_markets": 7849,
+    "train_first": "2026-06-22 00:00:00+00:00",
+    "train_last": "2026-09-12 23:30:00+00:00",
+    "max_training_settlement": "2026-09-12 23:45:08.475041+00:00",
+    "later_test_start": "2026-09-14 00:00:00+00:00",
+    "later_test_end_exclusive": "2026-09-17 00:00:00+00:00",
+    "inner": [],
+    "model_sha256": "3299f3d99659d9d0e8f9b23029b123fbfec0a4524f69b4144afa46cd18edfe9e",
+    "reused_frozen_fit": false,
+    "test_rows": 864,
+    "valid_test_rows": 864
+  },
+  {
+    "fold": 9,
+    "fit": "2026-08-24 00:00:00+00:00",
+    "cutoff": "2026-08-23 00:00:00+00:00",
+    "test_end_exclusive": "2026-08-31 00:00:00+00:00",
+    "training_markets": 7833,
+    "train_rows": 46915,
+    "max_training_settlement": "2026-08-22 23:45:07.118884+00:00",
+    "test_rows": 7968,
+    "valid_test_rows": 7966,
+    "inner": [
+      {
+        "cutoff": "2026-06-14 00:00:00+00:00",
+        "max_training_settlement": "2026-06-13 23:45:03.398344+00:00",
+        "validation_first": "2026-06-15 00:00:00+00:00",
+        "validation_last": "2026-07-07 23:45:00+00:00",
+        "training_markets": 1220,
+        "validation_markets": 2175
+      },
+      {
+        "cutoff": "2026-07-06 23:50:00.000000333+00:00",
+        "max_training_settlement": "2026-07-06 23:45:04.468555+00:00",
+        "validation_first": "2026-07-08 00:00:00+00:00",
+        "validation_last": "2026-07-30 23:30:00+00:00",
+        "training_markets": 3395,
+        "validation_markets": 2163
+      },
+      {
+        "cutoff": "2026-07-29 23:40:00.000000666+00:00",
+        "max_training_settlement": "2026-07-29 23:30:05.984521+00:00",
+        "validation_first": "2026-07-30 23:45:00+00:00",
+        "validation_last": "2026-08-22 23:30:00+00:00",
+        "training_markets": 5573,
+        "validation_markets": 2178
+      }
+    ],
+    "distribution_coefficients": [
+      -0.2571531022239962,
+      -0.06488530478561286,
+      -0.03071178302934986,
+      0.0494923126571903,
+      0.05519034097099582,
+      -0.05764814513134787,
+      0.11222491737506644
+    ],
+    "quote_coefficients": [
+      0.027161919925134906,
+      0.08717348009242214,
+      0.03575955522360225,
+      0.013100927775049847,
+      -0.02625592164860819,
+      -0.01802932317390892,
+      0.026034117820498852
+    ],
+    "model_sha256": "06021023556f608dec933db3b7df405a2e51ad05bbe498b6069159fb03b61f4c",
+    "source": "R",
+    "reused_frozen_fit": true,
+    "later_test_start": "2026-08-31 00:00:00+00:00",
+    "later_test_end_exclusive": "2026-09-14 00:00:00+00:00"
+  },
+  {
+    "source": "R",
+    "fold": 10,
+    "fit": "2026-09-14 00:00:00+00:00",
+    "cutoff": "2026-09-13 00:00:00+00:00",
+    "train_rows": 47039,
+    "train_markets": 7849,
+    "train_first": "2026-06-22 00:00:00+00:00",
+    "train_last": "2026-09-12 23:30:00+00:00",
+    "max_training_settlement": "2026-09-12 23:45:08.475041+00:00",
+    "later_test_start": "2026-09-14 00:00:00+00:00",
+    "later_test_end_exclusive": "2026-09-17 00:00:00+00:00",
+    "inner": [
+      {
+        "cutoff": "2026-07-05 00:00:00+00:00",
+        "max_training_settlement": "2026-07-04 23:45:04.520211+00:00",
+        "validation_first": "2026-07-06 00:00:00+00:00",
+        "validation_last": "2026-07-28 23:45:00+00:00",
+        "training_markets": 1227,
+        "validation_markets": 2179
+      },
+      {
+        "cutoff": "2026-07-27 23:50:00.000000333+00:00",
+        "max_training_settlement": "2026-07-27 23:45:16.040471+00:00",
+        "validation_first": "2026-07-29 00:00:00+00:00",
+        "validation_last": "2026-08-20 23:30:00+00:00",
+        "training_markets": 3406,
+        "validation_markets": 2162
+      },
+      {
+        "cutoff": "2026-08-19 23:40:00.000000666+00:00",
+        "max_training_settlement": "2026-08-19 23:30:03.978949+00:00",
+        "validation_first": "2026-08-20 23:45:00+00:00",
+        "validation_last": "2026-09-12 23:30:00+00:00",
+        "training_markets": 5577,
+        "validation_markets": 2184
+      }
+    ],
+    "model_sha256": "454d4ed9ac81ec4f0a102bb141b76ef935d62a97da522264761b31964b474d04",
+    "reused_frozen_fit": false,
+    "test_rows": 1728,
+    "valid_test_rows": 1728
+  }
+]

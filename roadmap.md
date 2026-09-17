@@ -157,3 +157,10 @@ ACCESS GAP
 ## Version 1.1 (shadow only)
 
 Tracked separately in `docs/v11-roadmap.md`.
+
+
+## V1.2 implementation (2026-09-17)
+
+Original U and separate recording-only receivers are being integrated.
+See `services/v12-worker/README.md`. Existing V1.1 execution remains active;
+V1.2 financial execution is not enabled.
