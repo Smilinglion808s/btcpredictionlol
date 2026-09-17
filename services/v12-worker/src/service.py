@@ -20,6 +20,8 @@ def millis():return int(time.time()*1000)
 HEARTBEAT_SECONDS=15
 BLOCKED_STATUSES={403,418,429,451}
 BLOCKED_BACKOFF_SECONDS=30
+BACKEND_ADAPTER='https://alevdzyisibxcvwoyrqb.supabase.co/functions/v1/v12-shadow-adapter'
+WEBSITE_ADAPTER='https://btcpredictionlol.lovable.app/api/public/hooks/v12-shadow'
 def http_status(error):return error.code if isinstance(error,urllib.error.HTTPError) else None
 def error_label(error):
     # Type name plus numeric status only; never the remote response body.
@@ -40,7 +42,7 @@ class Adapter:
     def __init__(self):
         self.url=os.environ.get('V12_SHADOW_ADAPTER_URL','')
         self.secret=os.environ.get('C85_GATEWAY_SECRET','')
-        if self.url and (not self.url.startswith('https://') or not self.url.endswith('/api/public/hooks/v12-shadow')):
+        if self.url and self.url not in (BACKEND_ADAPTER,WEBSITE_ADAPTER):
             raise ValueError('INVALID_RECORDING_ADAPTER_URL')
     def call(self,op,open_ms,**data):
         if not self.url or not self.secret:raise ValueError('SHADOW_ADAPTER_NOT_CONFIGURED')
@@ -121,10 +123,19 @@ class Service:
             try:print(json.dumps({**dict(self.status),'type':'v12_health','observed_at':iso(millis())},default=str),flush=True)
             except Exception:pass
             time.sleep(HEARTBEAT_SECONDS)
+    def probe_once(self):
+        # This sends authenticated, deliberately invalid signals to the three
+        # recording receivers. It creates no signal rows and never places orders.
+        try:
+            result=self.adapter.call('probe',millis()//900000*900000)
+            self.status['receiver_probe']={k:result[k] for k in ('all_authenticated','receivers','records_created')}
+        except Exception as e:
+            self.status['receiver_probe']={'all_authenticated':False,'error':str(e) if isinstance(e,ValueError) else type(e).__name__}
     def run(self):
         for stream in ('index','spot','perp'):threading.Thread(target=self.bars_loop,args=(stream,),daemon=True).start()
         threading.Thread(target=self.quotes_loop,daemon=True).start()
         threading.Thread(target=self.heartbeat_loop,daemon=True).start()
+        if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.probe_once,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
             now=millis();open_ms=now//900000*900000;wait=0
@@ -134,7 +145,8 @@ class Service:
                 context=self.adapter.call('context',open_ms)['context']
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
                 self.ticker=context['ticker'];age=now-open_ms
-                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()))
+                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
+                  u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None)
                 # Poll committed early decisions outside their critical dispatch path.
                 for route,key,side_key,offset_key,slot in [('V1','v1','final_side','publication_offset_ms',-1),('T45R2','t45','side','decision_offset_ms',-45)]:
                     r=context.get(key) or {};side=r.get(side_key);offset=r.get(offset_key)

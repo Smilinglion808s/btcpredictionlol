@@ -2,7 +2,7 @@
 
 This binary cannot submit exchange orders. It observes committed V1 and T45R2
 decisions, reconstructs original U, and sends separate authenticated shadow
-events through the predictor's `/api/public/hooks/v12-shadow` adapter.
+events through the predictor's authenticated standalone recording backend.
 
 Locked sizing: V1 4% maker-only, T45R2 5% taker-only, U 10% maker-only, all from
 one America/Boise day-opening shared cost-basis equity snapshot. T45 fees are
@@ -14,12 +14,18 @@ it is not attached to the existing order executor.
 - Railway source root `services/v12-worker`, Dockerfile `Dockerfile`, start
   `python src/service.py`, health `/healthz`, one replica.
 - `V12_MODE=shadow` (any other value refuses startup).
-- `V12_SHADOW_ADAPTER_URL=https://<published-predictor>/api/public/hooks/v12-shadow`.
+- `V12_SHADOW_ADAPTER_URL=https://alevdzyisibxcvwoyrqb.supabase.co/functions/v1/v12-shadow-adapter`.
+  The published website is no longer a required hop. The legacy exact website
+  URL remains recognized in code for compatibility, with no automatic fallback.
 - `C85_GATEWAY_SECRET`: reference the existing worker secret within Railway.
   The worker needs no betting credentials or database service role.
 - `V12_CAPTURE_DB=/data/v12/capture.sqlite`; persist `/data/v12` on a volume.
 - `PORT` supplied by Railway. `/healthz` reports process and capture status;
   HTTP 200 means process availability, not strategy readiness or profitability.
+- On backend startup, a signed connection probe checks authentication to all
+  three recording receivers without creating signal rows. Its health result
+  is distinct from actual deliveries. Successful context reads clear stale
+  adapter errors and report current eligibility and early-feature availability.
 
 Public inputs: complete COIN-M BTCUSD index minutes, BTCUSDT spot/perpetual
 minutes with native taker-buy quote volume, and Kalshi point-in-time books.
