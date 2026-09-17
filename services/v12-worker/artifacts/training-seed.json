@@ -1,0 +1,10 @@
+{
+  "file": "training-seed.parquet",
+  "sha256": "e7d043e1708a31504a075af3028bfa3173743e001b317b6ea86a45091e93d412",
+  "rows": 57729,
+  "first": "2026-06-22 00:00:00+00:00",
+  "last": "2026-09-16 23:45:00+00:00",
+  "provenance": "V12_U_Continuation_Evidence; archived training/later inputs, existing parity-checked features; no arrival prices or policy-selection fields",
+  "training_source_sha256": "25cf10ef9ec9064d9173f553072418fd80ccc1f77291102ad6547a75885e772e",
+  "later_source_sha256": "342603e2a1543132eecb974a2a22ac26d44f7db1f88690869371c688a35210e5"
+}

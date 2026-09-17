@@ -1,4 +1,4 @@
-// Version 1.1 tile — combined V1 + improved T45 R2 fallback.
+// V1.2 prediction delivery and original V1.1 baseline history.
 //
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
 // (orange body, steel accent) and more vibrant.
@@ -140,6 +140,11 @@ export function V11Card({ stats, loading, error }: V11Props) {
   }
 
   const phase = PHASES[stats?.phase as string] ?? PHASES.PREPARING;
+  const predictor=stats?.v12;
+  const predictorLabel=predictor?.state==='CONNECTED'?'Prediction feed connected':predictor?.state==='WAITING'?'Waiting for inputs':'No recent worker status';
+  const uReasons:Record<string,string>={ELIGIBLE:'Eligible for checkpoint scoring',DAILY_FLOOR_CLOSED:'Daily floor closed',
+    V1_SELECTED:'V1 already selected',T45_SELECTED:'T45 R2 already selected',AWAITING_T45_DECISION:'Waiting for T45 decision',
+    PRIOR_CLAIM:'Interval already claimed',INVALID_V1_INPUTS:'V1 inputs unavailable',V1_NOT_CONFIDENCE_ABSTENTION:'V1 abstention not eligible'};
   const live = stats?.live ?? {};
   const combined = live?.combined ?? {};
   const today = live?.today ?? {};
@@ -161,20 +166,20 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <header className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-steel-vivid/85">
-            Shadow model · combined stream
+            Predictions · three separate webhooks
           </div>
           <h3 className="v11-title text-4xl font-heading font-bold tracking-tight leading-none">
             Version 1.2
           </h3>
           <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-signal-orange-vivid/40 bg-signal-orange-vivid/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-signal-orange-vivid">
             <span className="size-1.5 rounded-full bg-signal-orange-vivid" />
-            Preparing · live execution remains V1.1
+            {predictorLabel}
           </div>
           <div className="mt-1 text-[10px] font-mono text-muted-foreground">
-            V1 + improved T45 R2 fallback · daily fit
+            V1 + T45 R2 fallback + original U
           </div>
           <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-mono text-muted-foreground/80 sm:max-w-none">
-            {stats?.modelVersion ?? "v11-original-confidence-rank80-4"}
+            Betting and bankroll handled by your external system
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -182,7 +187,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
             className={`inline-flex max-w-[138px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-right text-[10px] font-bold uppercase leading-tight tracking-[0.12em] ${phase.chip}`}
           >
             <span className={`size-1.5 shrink-0 rounded-full ${phase.dot}`} />
-            {phase.label}
+            V1.1 history
           </span>
           <span
             className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
@@ -191,10 +196,34 @@ export function V11Card({ stats, loading, error }: V11Props) {
                 : "border-signal-orange-vivid/25 bg-signal-orange-vivid/5 text-signal-orange-vivid/80"
             }`}
           >
-            Coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
+            V1.1 coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
           </span>
         </div>
       </header>
+
+      <section className="v11-chip relative p-4 space-y-3">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">V1.2 webhook delivery</div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(predictor?.legs??[{leg:'V1',endpoint:'v12-v1'},{leg:'T45R2',endpoint:'v12-t45r2'},{leg:'U',endpoint:'v12-u'}]).map((r:any)=>(
+            <div key={r.leg} className="rounded-lg border border-border/60 px-2.5 py-2">
+              <div className="text-[10px] font-semibold uppercase">{r.leg==='T45R2'?'T45 R2 fallback':r.leg==='U'?'Original U':'V1'}</div>
+              <div className="mt-1 text-xs tabular-nums">{r.acknowledged??'—'} acknowledged · {r.calls??'—'} signals</div>
+              <div className="mt-1 text-[9px] text-muted-foreground">{r.authenticated?'Authentication verified':'Awaiting authentication check'}</div>
+              <div className="mt-1 font-mono text-[9px] text-muted-foreground">/{r.endpoint}</div>
+              {r.calls>0?<div className="mt-1 text-[9px] text-muted-foreground">{r.wins}W / {r.losses}L · {r.pending} pending · {pct(r.winRate)}</div>:null}
+              {r.unconfirmed>0?<div className="mt-1 text-[9px] text-signal-orange-vivid">{r.unconfirmed} acknowledgements unconfirmed</div>:null}
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          U: {predictor?.fitValid===false?'Fit expired — U paused':uReasons[predictor?.uBlockReason]??'Waiting for current status'}.
+          {' '}Refresh: {predictor?.refreshStatus?.replaceAll('_',' ')??'not reported'}.
+        </div>
+        <div className="text-[9px] text-muted-foreground/80">
+          Receipt counts confirm webhook delivery. Results use official settlement; orders and fills are tracked externally.
+          {predictor?.truncated?' Showing the latest 1,000 signals.':''}
+        </div>
+      </section>
 
       <section className="relative flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -215,7 +244,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
             {netWins}
           </div>
           <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
-            wins minus losses · break-even {(BREAK_EVEN * 100).toFixed(0)}%
+            wins minus losses · zero net wins at {(BREAK_EVEN * 100).toFixed(0)}%
             {winRate != null ? (
               <span className={`ml-1.5 font-semibold ${aboveBreakeven ? "text-bull" : "text-bear"}`}>
                 {aboveBreakeven ? "▲ above" : "▼ below"}
@@ -299,8 +328,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
         </div>
         <div className="mt-2 text-[9px] text-muted-foreground/80">
-          Figures and history above are Version 1.1 results. They will be replaced by genuine
-          Version 1.2 records once those exist.
+          Figures above are the Version 1.1 baseline history. Version 1.2 signals are counted separately in webhook delivery.
         </div>
       </section>
 
@@ -329,7 +357,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
           Sizing is a percent of each Boise day's opening shared bankroll · fees within the stake.
         </div>
         <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          U status: Integration in progress — no live U signals yet
+          Three model IDs · three webhook destinations
         </div>
       </section>
 

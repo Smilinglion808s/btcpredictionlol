@@ -10474,6 +10474,81 @@ export type Database = {
         }
         Relationships: []
       }
+      v12_prediction_events: {
+        Row: {
+          acknowledged_at: string | null
+          candle_starts_at: string
+          checkpoint_seconds: number | null
+          created_at: string
+          decision_at: string
+          delivery_status: string
+          error_code: string | null
+          event_key: string
+          market: string
+          model_version: string
+          prediction: string
+          receiver_receipt_id: string | null
+          receiver_status: string | null
+          request_hash: string
+          route: string
+          u_source: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          candle_starts_at: string
+          checkpoint_seconds?: number | null
+          created_at?: string
+          decision_at: string
+          delivery_status?: string
+          error_code?: string | null
+          event_key: string
+          market: string
+          model_version: string
+          prediction: string
+          receiver_receipt_id?: string | null
+          receiver_status?: string | null
+          request_hash: string
+          route: string
+          u_source?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          candle_starts_at?: string
+          checkpoint_seconds?: number | null
+          created_at?: string
+          decision_at?: string
+          delivery_status?: string
+          error_code?: string | null
+          event_key?: string
+          market?: string
+          model_version?: string
+          prediction?: string
+          receiver_receipt_id?: string | null
+          receiver_status?: string | null
+          request_hash?: string
+          route?: string
+          u_source?: string | null
+        }
+        Relationships: []
+      }
+      v12_predictor_runtime: {
+        Row: {
+          received_at: string
+          status: Json
+          worker_id: string
+        }
+        Insert: {
+          received_at?: string
+          status: Json
+          worker_id: string
+        }
+        Update: {
+          received_at?: string
+          status?: Json
+          worker_id?: string
+        }
+        Relationships: []
+      }
       v6_broad_red_state: {
         Row: {
           broad_red_history_count: number
