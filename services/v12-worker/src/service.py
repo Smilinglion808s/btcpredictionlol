@@ -3,7 +3,7 @@
 One process per SQLite volume. Restart may recover completed bars, but never
 recreates missing historical quote snapshots or sends expired checkpoints.
 """
-import hashlib,hmac,json,os,threading,time,uuid,urllib.request
+import hashlib,hmac,json,os,threading,time,uuid,urllib.request,urllib.error
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 import numpy as np
