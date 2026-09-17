@@ -115,7 +115,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <section className="v11-shell self-start rounded-2xl p-6">
         <span className="v11-orbit-ring" aria-hidden />
         <h3 className="v11-title relative text-4xl font-heading font-bold tracking-tight">
-          Version 1.1
+          Version 1.2
         </h3>
         <p className="mt-2 text-sm text-muted-foreground">
           Couldn't load this model's status just now. It will retry on its own.
@@ -164,8 +164,12 @@ export function V11Card({ stats, loading, error }: V11Props) {
             Shadow model · combined stream
           </div>
           <h3 className="v11-title text-4xl font-heading font-bold tracking-tight leading-none">
-            Version 1.1
+            Version 1.2
           </h3>
+          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-signal-orange-vivid/40 bg-signal-orange-vivid/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-signal-orange-vivid">
+            <span className="size-1.5 rounded-full bg-signal-orange-vivid" />
+            Preparing · live execution remains V1.1
+          </div>
           <div className="mt-1 text-[10px] font-mono text-muted-foreground">
             V1 + improved T45 R2 fallback · daily fit
           </div>
