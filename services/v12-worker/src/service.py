@@ -28,6 +28,13 @@ def error_label(error):
 def blocked_backoff(error):
     code=http_status(error)
     return BLOCKED_BACKOFF_SECONDS if code in BLOCKED_STATUSES else 0
+def adapter_backoff(error):
+    # Signed adapter rejections surface as ADAPTER_HTTP_<code>; throttle blocked statuses.
+    text=str(error)
+    if isinstance(error,ValueError) and text.startswith('ADAPTER_HTTP_'):
+        suffix=text[len('ADAPTER_HTTP_'):]
+        if suffix.isdigit() and int(suffix) in BLOCKED_STATUSES:return BLOCKED_BACKOFF_SECONDS
+    return blocked_backoff(error)
 
 class Adapter:
     def __init__(self):
@@ -120,7 +127,7 @@ class Service:
         threading.Thread(target=self.heartbeat_loop,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
-            now=millis();open_ms=now//900000*900000
+            now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
                     self.ticker=None;market=None;last_open=open_ms
@@ -164,7 +171,8 @@ class Service:
             except Exception as e:
                 # Do not log credentials, request bodies or remote error pages.
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
-            time.sleep(.5)
+                wait=adapter_backoff(e)
+            time.sleep(wait or .5)
     def record(self,cap,checkpoint,status,details):
         cap.db.execute('insert or replace into attempts values(?,?,?,?)',(self.ticker,checkpoint,status,json.dumps(details,allow_nan=False)))
         cap.db.commit();self.status['last_attempt']={'ticker':self.ticker,'checkpoint':checkpoint,'status':status}
