@@ -1,6 +1,7 @@
 import sys,tempfile,unittest,json
 from pathlib import Path
 import pandas as pd
+import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from refit import period_start,training_slice,load_history,fit_models
 from training_capture import initialize,save_frame,record_outcome
@@ -45,5 +46,14 @@ class RefitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertRaisesRegex(ValueError,'RECENT_TRAINING_COVERAGE',fit_models,self.data,'2026-10-05T00:00:00Z',d)
             self.assertFalse((Path(d)/'manifest.json').exists())
+    def test_persisted_features_preserve_tree_and_linear_predictions(self):
+        with tempfile.TemporaryDirectory() as d:
+            cap=Capture(str(Path(d)/'capture.sqlite'));initialize(cap.db)
+            frame=self.data[self.data.feature_valid&self.data.quote_valid].tail(64).copy()
+            for i in range(len(frame)):save_frame(cap.db,frame.iloc[i:i+1])
+            recovered=pd.DataFrame([json.loads(r[0]) for r in cap.db.execute('select frame from training_samples order by open_ms,second')])
+            for model in Scorer().models.values():
+                actual=model.predict(frame);restored=model.predict(recovered)
+                for key in actual:np.testing.assert_allclose(actual[key],restored[key],atol=1e-12,rtol=1e-12,equal_nan=True)
 
 if __name__=='__main__':unittest.main()

@@ -1,10 +1,35 @@
 {
-  "file": "training-seed.parquet",
-  "sha256": "e7d043e1708a31504a075af3028bfa3173743e001b317b6ea86a45091e93d412",
   "rows": 57729,
   "first": "2026-06-22 00:00:00+00:00",
   "last": "2026-09-16 23:45:00+00:00",
   "provenance": "V12_U_Continuation_Evidence; archived training/later inputs, existing parity-checked features; no arrival prices or policy-selection fields",
   "training_source_sha256": "25cf10ef9ec9064d9173f553072418fd80ccc1f77291102ad6547a75885e772e",
-  "later_source_sha256": "342603e2a1543132eecb974a2a22ac26d44f7db1f88690869371c688a35210e5"
+  "later_source_sha256": "342603e2a1543132eecb974a2a22ac26d44f7db1f88690869371c688a35210e5",
+  "original_dataset_sha256": "e7d043e1708a31504a075af3028bfa3173743e001b317b6ea86a45091e93d412",
+  "parts": [
+    {
+      "file": "training-seed-2026-06.parquet",
+      "sha256": "2f44c971ca3e537b8aa8aee16fd5ad9e43618b76b20a5a71ec65b962d33ac3fe",
+      "rows": 5985,
+      "bytes": 1405851
+    },
+    {
+      "file": "training-seed-2026-07.parquet",
+      "sha256": "0146c60a1ed3fc7d9e6a46c7b2c2deb10abe78dc729832a2bf8bb629fbf333f1",
+      "rows": 20517,
+      "bytes": 4809013
+    },
+    {
+      "file": "training-seed-2026-08.parquet",
+      "sha256": "da24b6809e789979a05126923a3b7ae0eebc445b9b2ec636e38fc7445e489cda",
+      "rows": 20587,
+      "bytes": 4787843
+    },
+    {
+      "file": "training-seed-2026-09.parquet",
+      "sha256": "de42f3f81927d86673544e748503e261fcc73e2baa04d589fb6542e534971ca9",
+      "rows": 10640,
+      "bytes": 2483389
+    }
+  ]
 }
