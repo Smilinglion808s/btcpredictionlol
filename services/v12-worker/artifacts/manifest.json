@@ -1,0 +1,16 @@
+{
+  "version": "original-u-sep14-frozen",
+  "valid_from": "2026-09-14T00:00:00Z",
+  "expires_at": "2026-10-05T00:00:00Z",
+  "training_cutoff": "2026-09-13T00:00:00Z",
+  "models": {
+    "L": {
+      "file": "L_sep14.pkl",
+      "sha256": "3299f3d99659d9d0e8f9b23029b123fbfec0a4524f69b4144afa46cd18edfe9e"
+    },
+    "R": {
+      "file": "R_sep14.pkl",
+      "sha256": "454d4ed9ac81ec4f0a102bb141b76ef935d62a97da522264761b31964b474d04"
+    }
+  }
+}
