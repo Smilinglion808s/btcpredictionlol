@@ -26,6 +26,9 @@ export interface Policy {
   admissionFeeReserve?: number;
   valueLimit?: number;
   knownAsk?: number;
+  // Settle-bets selects its safe cancellation/reconciliation branch on version==='entry-controls-r1';
+  // the V1.2 route overlay is carried separately here.
+  strategyVersion?: string;
 }
 export function policyFromEnv(get: (name: string) => string | undefined): Policy {
   const num = (key: string, fallback: number) => {
