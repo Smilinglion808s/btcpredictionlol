@@ -87,6 +87,7 @@ class Service:
     def bars_loop(self,stream):
         cap=Capture(self.path);cursor=millis()//900000*900000-1441*60000
         while True:
+            backoff=0
             try:
                 end=millis()//60000*60000
                 cap.fetch_bars(stream,cursor,end)
