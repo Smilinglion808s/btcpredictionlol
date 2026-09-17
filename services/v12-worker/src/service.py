@@ -29,7 +29,10 @@ class Adapter:
         body=json.dumps({'op':op,'open':iso(open_ms),'nonce':uuid.uuid4().hex,**data},separators=(',',':'),allow_nan=False).encode()
         ts=str(millis());sig=hmac.new(self.secret.encode(),ts.encode()+b'.'+body,hashlib.sha256).hexdigest()
         req=urllib.request.Request(self.url,data=body,headers={'content-type':'application/json','x-c85-timestamp':ts,'x-c85-signature':sig},method='POST')
-        with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
+        try:
+            with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
+        # Status code only; the remote body is never read, logged or re-raised.
+        except urllib.error.HTTPError as error:raise ValueError('ADAPTER_HTTP_'+str(error.code))
         if result.get('ok') is not True:raise ValueError('ADAPTER_REJECTED')
         return result
 
