@@ -368,7 +368,7 @@ async function readV12Context(sb, open) {
 		readV1Snapshot(sb, open),
 		sb.from("c85_targets").select("ticker,target_open_utc,run_mode,final_side,probability_yes,publication_offset_ms,features").eq("model_version", "lite-a-floor4-top10-r1").eq("target_open_utc", open).maybeSingle(),
 		sb.from("v11_decisions").select("ticker,target_ts,leg,side,reason,probability,decision_offset_ms,run_mode,evidence,within_publication_ceiling,created_at").eq("target_ts", open).maybeSingle(),
-		sb.from("t45_features").select("feature_complete,t45_quote_flow_45s,t45_quote_flow_15s,t45_close_vwap_gap_bps,t45_path_efficiency_45s,t45_last15_ret_bps,t45_trade_count_last15_share").eq("feature_version", "t45-features-r1").eq("target_ts", open).maybeSingle(),
+		sb.from("t45_features").select("spot_complete,t45_quote_flow_45s,t45_quote_flow_15s,t45_close_vwap_gap_bps,t45_path_efficiency_45s,t45_last15_ret_bps,t45_trade_count_last15_share").eq("feature_version", "t45-features-r1").eq("target_ts", open).maybeSingle(),
 		sb.from("c85_targets").select("target_open_utc,features").eq("model_version", "lite-a-floor4-top10-r1").lte("target_open_utc", open).order("target_open_utc", { ascending: false }).limit(96)
 	]);
 	for (const result of [
@@ -401,7 +401,7 @@ async function readV12Context(sb, open) {
 	const vol = last && Date.parse(last.target_open_utc) === Date.parse(open) ? computeV11Vol(raw.slice(0, -1), raw.at(-1)) : { vol: null };
 	const e = early.data;
 	let features = null;
-	if (e?.feature_complete === true && vol.vol !== null) {
+	if (e?.spot_complete === true && vol.vol !== null) {
 		const fields = [
 			"quote_flow_45s",
 			"quote_flow_15s",
