@@ -28,6 +28,13 @@ def error_label(error):
 def blocked_backoff(error):
     code=http_status(error)
     return BLOCKED_BACKOFF_SECONDS if code in BLOCKED_STATUSES else 0
+def adapter_backoff(error):
+    # Signed adapter rejections surface as ADAPTER_HTTP_<code>; throttle blocked statuses.
+    text=str(error)
+    if isinstance(error,ValueError) and text.startswith('ADAPTER_HTTP_'):
+        suffix=text[len('ADAPTER_HTTP_'):]
+        if suffix.isdigit() and int(suffix) in BLOCKED_STATUSES:return BLOCKED_BACKOFF_SECONDS
+    return blocked_backoff(error)
 
 class Adapter:
     def __init__(self):
