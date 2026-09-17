@@ -120,7 +120,7 @@ class Service:
         threading.Thread(target=self.heartbeat_loop,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
-            now=millis();open_ms=now//900000*900000
+            now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
                     self.ticker=None;market=None;last_open=open_ms
