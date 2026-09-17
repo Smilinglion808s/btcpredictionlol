@@ -427,15 +427,29 @@ async function readV12Context(sb, open) {
 	};
 }
 //#endregion
+//#region src/lib/v12/receiver-destination.ts
+var V12_RECEIVER_BASE = "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/";
+function isAuthorizedBettingEndpoint(value) {
+	if (typeof value !== "string") return false;
+	try {
+		const url = new URL(value), expected = new URL("https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/place-trade");
+		if (url.origin !== expected.origin || url.pathname !== expected.pathname || url.username || url.password || url.hash) return false;
+		const params = [...url.searchParams];
+		return params.length === 0 || params.length === 1 && params[0][0] === "forceFunctionRegion" && params[0][1] === "us-west-1";
+	} catch {
+		return false;
+	}
+}
+//#endregion
 //#region src/lib/v12/shadow.server.ts
 async function publishV12Shadow(sb, payload, now = Date.now()) {
 	const route = payload.leg;
 	if (!Object.hasOwn(ROUTES, route)) throw new Error("UNKNOWN_ROUTE");
 	validateSignal(payload, route, now);
-	const destination = "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/";
+	const destination = V12_RECEIVER_BASE;
 	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").eq("is_active", true);
 	if (error) throw error;
-	const endpoints = (data ?? []).filter((e) => e.url === destination + "place-trade");
+	const endpoints = (data ?? []).filter((e) => isAuthorizedBettingEndpoint(e.url));
 	if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error("SINGLE_BETTING_SECRET_UNAVAILABLE");
 	const raw = JSON.stringify(payload), signature = createHmac("sha256", endpoints[0].secret).update(raw).digest("hex");
 	const response = await fetch(destination + ROUTES[route].endpoint, {
@@ -456,7 +470,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 //#endregion
 //#region src/lib/v12/edge-adapter.ts
 var ADAPTER_REVISION = "v12-edge-adapter-r1";
-var RECEIVERS = "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/";
+var RECEIVERS = V12_RECEIVER_BASE;
 var encoder = new TextEncoder();
 async function verifyWorkerSignature(raw, timestamp, signature, secret, now) {
 	if (!secret || !timestamp || !/^\d{13}$/.test(timestamp) || !signature || !/^[0-9a-f]{64}$/.test(signature) || Math.abs(now - Number(timestamp)) > 1e4) return false;
@@ -470,7 +484,7 @@ async function verifyWorkerSignature(raw, timestamp, signature, secret, now) {
 async function probeReceivers(sb, transport) {
 	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").eq("is_active", true);
 	if (error) throw error;
-	const endpoints = (data ?? []).filter((e) => e.url === RECEIVERS + "place-trade");
+	const endpoints = (data ?? []).filter((e) => isAuthorizedBettingEndpoint(e.url));
 	if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error("SINGLE_BETTING_SECRET_UNAVAILABLE");
 	const results = await Promise.all(Object.keys(ROUTES).map(async (leg) => {
 		const raw = JSON.stringify({
