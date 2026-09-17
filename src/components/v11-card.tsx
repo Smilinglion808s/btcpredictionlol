@@ -203,8 +203,8 @@ export function V11Card({ stats, loading, error }: V11Props) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
-            Net wins · live shadow
+        <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Net wins · V1.1 live shadow history
           </div>
           <div
             className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${
@@ -289,7 +289,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <section>
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Live shadow by leg · official settlement only
+            V1.1 live shadow by leg · official settlement only
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
         </div>
@@ -297,6 +297,39 @@ export function V11Card({ stats, loading, error }: V11Props) {
           <LegRecord title="Combined" r={live?.combined} />
           <LegRecord title="V1 leg" r={live?.v1Leg} />
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
+        </div>
+        <div className="mt-2 text-[9px] text-muted-foreground/80">
+          Figures and history above are Version 1.1 results. They will be replaced by genuine
+          Version 1.2 records once those exist.
+        </div>
+      </section>
+
+      <section className="v11-chip relative p-4">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            Version 1.2 routes · locked settings
+          </span>
+          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange-vivid/40 via-steel-vivid/25 to-transparent" />
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide">V1</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">4% · maker-only</div>
+          </div>
+          <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide">T45 R2 fallback</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">5% · taker-only</div>
+          </div>
+          <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide">Original U</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">10% · maker-only</div>
+          </div>
+        </div>
+        <div className="mt-2 text-[9px] text-muted-foreground/80">
+          Sizing is a percent of each Boise day's opening shared bankroll · fees within the stake.
+        </div>
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          U status: Integration in progress — no live U signals yet
         </div>
       </section>
 
