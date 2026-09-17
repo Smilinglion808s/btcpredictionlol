@@ -14,7 +14,7 @@ export function routePolicy(base:Policy,signal:Record<string,any>,nowMs:number):
       !Number.isFinite(signal.limit_all_in) || signal.limit_all_in<=0 || signal.limit_all_in>=1 ||
       !Number.isFinite(signal.known_ask) || signal.known_ask<=0 || signal.known_ask>=1)throw new Error('INVALID_U_CHECKPOINT');
   }else if(decision-open>60000 || (route==='T45R2' && decision-open<45000))throw new Error('INVALID_EARLY_WINDOW');
-  return {...base,version:'v12-original-u-4-5-10-r1',executionRoute:locked.execution,makerEnabled:maker,
+  return {...base,version:'entry-controls-r1',strategyVersion:'v12-original-u-4-5-10-r1',executionRoute:locked.execution,makerEnabled:maker,
     // Maker fees are zero by the requested scenario; taker keeps the existing conservative reserve.
     feeReserve:maker?0:base.feeReserve,admissionFeeReserve:route==='U'?0:base.feeReserve,
     minOdds:route==='U'?1/signal.limit_all_in:route==='T45R2'?1.4:1.5,
