@@ -39,7 +39,7 @@ the original 21-day schedule, 84-day lookback, one-day embargo, checkpoint
 sets and estimators. The Oct5 fit can be prepared after Oct4 00:10 UTC and
 becomes valid only on Oct5. A failed fit never extends the previous expiry.
 
-The hash-pinned training seed contains the already audited input history
+The hash-pinned monthly training-seed files contain the already audited input history
 through Sep16, with arrival prices and policy-selection fields removed.
 Training capture records ALL input-ready opportunities, independent of U's
 eligibility, using only quotes before each boundary and bars received within

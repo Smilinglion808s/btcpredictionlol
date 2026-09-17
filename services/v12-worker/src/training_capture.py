@@ -1,5 +1,6 @@
 """Local training history from recorded inputs and official outcomes; no signals."""
 import json
+import numpy as np
 import pandas as pd
 from capture import get
 from refit import RAW_FIELDS
@@ -12,13 +13,19 @@ def initialize(db):
 
 def save_frame(db,frame):
     row=frame.iloc[0];fields=['ts','ticker','feature_valid','quote_valid',*RAW_FIELDS]
-    # Pandas encodes missing predictor values as null; the frozen estimators
-    # retain their existing imputation. Invalid core frames are never saved.
+    # Python JSON preserves binary64 floats on round trip. pandas.to_json rounds
+    # them even at its 15-digit maximum, which can cross a histogram-tree split.
+    # Missing predictors remain null for the frozen estimator's imputation.
     if not row.feature_valid or not row.quote_valid:raise ValueError('INVALID_TRAINING_FRAME')
-    raw=frame[fields].to_json(orient='records',date_format='iso',date_unit='ns',double_precision=15)
-    data=json.loads(raw)[0]
+    data={}
+    for field in fields:
+        value=row[field]
+        if pd.isna(value):value=None
+        elif isinstance(value,pd.Timestamp):value=value.isoformat()
+        elif isinstance(value,np.generic):value=value.item()
+        data[field]=value
     db.execute('insert or ignore into training_samples values(?,?,?,?)',
-      (row.ticker,int(row.second),int(pd.Timestamp(row.ts).timestamp()*1000),json.dumps(data,separators=(',',':'))))
+      (row.ticker,int(row.second),int(pd.Timestamp(row.ts).timestamp()*1000),json.dumps(data,separators=(',',':'),allow_nan=False)))
     db.commit()
 
 def record_outcome(db,market,now):

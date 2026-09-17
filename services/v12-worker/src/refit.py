@@ -47,9 +47,12 @@ def atomic_bytes(path,raw):
 
 def load_history(seed_root,db_path=None):
     root=Path(seed_root);spec=json.loads((root/'training-seed.json').read_text())
-    raw=(root/spec['file']).read_bytes()
-    if hashlib.sha256(raw).hexdigest()!=spec['sha256']:raise ValueError('TRAINING_SEED_HASH_MISMATCH')
-    data=pd.read_parquet(root/spec['file'])
+    frames=[]
+    for part in spec.get('parts',[spec]):
+        raw=(root/part['file']).read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=part['sha256']:raise ValueError('TRAINING_SEED_HASH_MISMATCH')
+        frames.append(pd.read_parquet(root/part['file']))
+    data=pd.concat(frames,ignore_index=True)
     if db_path:
         with sqlite3.connect(db_path) as db:
             rows=db.execute('select s.frame,m.label,m.settlement_ts,m.observed_at from training_samples s join training_outcomes m on s.ticker=m.ticker').fetchall()
