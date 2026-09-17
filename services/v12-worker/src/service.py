@@ -3,7 +3,7 @@
 One process per SQLite volume. Restart may recover completed bars, but never
 recreates missing historical quote snapshots or sends expired checkpoints.
 """
-import hashlib,hmac,json,os,threading,time,uuid,urllib.request
+import hashlib,hmac,json,os,threading,time,uuid,urllib.request,urllib.error
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 import numpy as np
@@ -17,6 +17,17 @@ VERSION='v12-original-u-4-5-10-r1'
 ROUTES={'V1':('v12-v1-r1',.04,'maker_only'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_only')}
 def iso(ms):return pd.Timestamp(ms,unit='ms',tz='UTC').isoformat(timespec='milliseconds').replace('+00:00','Z')
 def millis():return int(time.time()*1000)
+HEARTBEAT_SECONDS=15
+BLOCKED_STATUSES={403,418,429,451}
+BLOCKED_BACKOFF_SECONDS=30
+def http_status(error):return error.code if isinstance(error,urllib.error.HTTPError) else None
+def error_label(error):
+    # Type name plus numeric status only; never the remote response body.
+    code=http_status(error)
+    return type(error).__name__+(':'+str(code) if code is not None else '')
+def blocked_backoff(error):
+    code=http_status(error)
+    return BLOCKED_BACKOFF_SECONDS if code in BLOCKED_STATUSES else 0
 
 class Adapter:
     def __init__(self):
@@ -29,7 +40,10 @@ class Adapter:
         body=json.dumps({'op':op,'open':iso(open_ms),'nonce':uuid.uuid4().hex,**data},separators=(',',':'),allow_nan=False).encode()
         ts=str(millis());sig=hmac.new(self.secret.encode(),ts.encode()+b'.'+body,hashlib.sha256).hexdigest()
         req=urllib.request.Request(self.url,data=body,headers={'content-type':'application/json','x-c85-timestamp':ts,'x-c85-signature':sig},method='POST')
-        with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
+        try:
+            with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
+        # Status code only; the remote body is never read, logged or re-raised.
+        except urllib.error.HTTPError as error:raise ValueError('ADAPTER_HTTP_'+str(error.code))
         if result.get('ok') is not True:raise ValueError('ADAPTER_REJECTED')
         return result
 
@@ -73,6 +87,7 @@ class Service:
     def bars_loop(self,stream):
         cap=Capture(self.path);cursor=millis()//900000*900000-1441*60000
         while True:
+            backoff=0
             try:
                 end=millis()//60000*60000
                 cap.fetch_bars(stream,cursor,end)
@@ -80,19 +95,29 @@ class Service:
                 if count!=(end-cursor)//60000:raise ValueError('MISSING_MINUTE_HISTORY')
                 cursor=max(cursor,end-2*60000)
                 self.status[stream+'_complete_through']=iso(end)
-            except Exception as e:self.status[stream+'_error']=type(e).__name__
-            time.sleep(.5 if millis()%60000<5000 else 3)
+            except Exception as e:
+                self.status[stream+'_error']=error_label(e);backoff=blocked_backoff(e)
+            time.sleep(backoff or (.5 if millis()%60000<5000 else 3))
     def quotes_loop(self):
         cap=Capture(self.path)
         while True:
+            backoff=0
             try:
                 if self.ticker:
                     q=cap.sample_quote(self.ticker);self.status['quote_received_at']=iso(q['received_ms'])
-            except Exception as e:self.status['quote_error']=type(e).__name__
-            time.sleep(.45)
+            except Exception as e:
+                self.status['quote_error']=error_label(e);backoff=blocked_backoff(e)
+            time.sleep(backoff or .45)
+    def heartbeat_loop(self):
+        # Safe status snapshot only: no secrets, headers, payloads or response bodies.
+        while True:
+            try:print(json.dumps({**dict(self.status),'type':'v12_health','observed_at':iso(millis())},default=str),flush=True)
+            except Exception:pass
+            time.sleep(HEARTBEAT_SECONDS)
     def run(self):
         for stream in ('index','spot','perp'):threading.Thread(target=self.bars_loop,args=(stream,),daemon=True).start()
         threading.Thread(target=self.quotes_loop,daemon=True).start()
+        threading.Thread(target=self.heartbeat_loop,daemon=True).start()
         cap=Capture(self.path);last_open=None;market=None
         while True:
             now=millis();open_ms=now//900000*900000
