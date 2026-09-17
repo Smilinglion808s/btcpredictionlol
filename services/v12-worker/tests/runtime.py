@@ -4,9 +4,14 @@ from unittest.mock import patch
 import pandas as pd
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from capture import Capture
-from service import payload,score_checkpoint,Service
+from service import payload,score_checkpoint,Service,Adapter,BACKEND_ADAPTER,WEBSITE_ADAPTER
 
 class RuntimeTests(unittest.TestCase):
+    def test_adapter_destinations_are_exact_and_owner_controlled(self):
+        for url in (BACKEND_ADAPTER,WEBSITE_ADAPTER):
+            with patch.dict('os.environ',{'V12_SHADOW_ADAPTER_URL':url}):self.assertEqual(Adapter().url,url)
+        for url in ('https://other.invalid/api/public/hooks/v12-shadow',BACKEND_ADAPTER+'?redirect=other',BACKEND_ADAPTER+'/'):
+            with patch.dict('os.environ',{'V12_SHADOW_ADAPTER_URL':url}):self.assertRaisesRegex(ValueError,'INVALID_RECORDING_ADAPTER_URL',Adapter)
     def test_quotes_cannot_backfill_or_cross_the_boundary(self):
         with tempfile.TemporaryDirectory() as d:
             c=Capture(str(Path(d)/'capture.sqlite'))
