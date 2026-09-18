@@ -18,7 +18,7 @@ from refit import period_start,PERIOD
 import training_capture
 
 VERSION='v12-original-u-4-5-10-r1'
-ROUTES={'V1':('v12-v1-r1',.04,'maker_only'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_only')}
+ROUTES={'V1':('v12-v1-r1',.04,'maker_then_taker'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_then_taker')}
 def iso(ms):return pd.Timestamp(ms,unit='ms',tz='UTC').isoformat(timespec='milliseconds').replace('+00:00','Z')
 def millis():return int(time.time()*1000)
 HEARTBEAT_SECONDS=15
