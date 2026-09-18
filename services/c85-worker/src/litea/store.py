@@ -150,6 +150,21 @@ class LiteAStore:
     def pending_settlements(self) -> list[dict[str, Any]]:
         return self.backend.call("settlements.pending").get("settlements") or []
 
+    def consume_settlements(
+        self, settlement_ids: list[str], checkpoint: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Acknowledge only outcomes included in the same durable checkpoint."""
+        if not settlement_ids:
+            return {"ok": True, "consumed_count": 0}
+        result = self.backend.call(
+            "settlements.consume",
+            settlement_ids=settlement_ids,
+            checkpoint=checkpoint,
+        )
+        if result.get("ok") is not True:
+            raise RuntimeError("LITEA_SETTLEMENT_ACK_FAILED")
+        return result
+
     def recorded_targets(
         self, from_utc: datetime, to_utc: datetime, limit: int = 700
     ) -> list[dict[str, Any]]:

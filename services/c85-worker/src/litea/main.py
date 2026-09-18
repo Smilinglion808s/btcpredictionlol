@@ -331,9 +331,24 @@ class LiteAService:
             self.outcomes.poll()
         except Exception as exc:  # noqa: BLE001 — retried on the next pass
             print(f"[{MODEL_ID}] outcome poll failed: {exc}", flush=True)
-        applied = self.worker.apply_settlements(self.store.pending_settlements())
-        if applied:
-            self._save_state()
+        rows = self.store.pending_settlements()
+        applied = self.worker.apply_settlements(rows)
+        if rows:
+            # The server pages only UNACKNOWLEDGED rows. Local idempotency
+            # alone cannot advance its first page. Acknowledge replayed rows
+            # too, but only when this exact durable checkpoint includes them.
+            checkpoint = self._settlement_checkpoint()
+            consumed = set(checkpoint.get("consumed_settlements") or [])
+            settlement_ids = [
+                row["id"]
+                for row in rows
+                if row.get("id")
+                and f"{row.get('ticker')}@{row.get('target_open_utc')}" in consumed
+            ]
+            if settlement_ids:
+                # Server transaction: checkpoint and receipt flags succeed
+                # together. A failure leaves the rows pending for replay.
+                self.store.consume_settlements(settlement_ids, checkpoint)
         return applied
 
     async def settlement_loop(self) -> None:
@@ -341,15 +356,8 @@ class LiteAService:
             try:
                 applied = await asyncio.to_thread(self.drain_settlements)
                 if applied:
-                    # Local paired state first, then the durable checkpoint, so
-                    # a crash in between replays settlements that the consumed
-                    # cursor has already recorded — never double-counts them.
-                    # Both the snapshot and the blocking append run off the
-                    # collector event loop.
-                    checkpoint = await asyncio.to_thread(self._settlement_checkpoint)
-                    await asyncio.to_thread(
-                        lambda: self.backend.call("checkpoint.append", checkpoint=checkpoint)
-                    )
+                    # drain_settlements already persisted the checkpoint
+                    # atomically with the settlement acknowledgements.
                     # Newly known labels can make a due daily fit eligible.
                     await asyncio.to_thread(self._catch_up_fits)
             except Exception:  # noqa: BLE001
