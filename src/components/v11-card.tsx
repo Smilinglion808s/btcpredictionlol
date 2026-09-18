@@ -170,7 +170,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
   // Worker state comes from the fast live read when present so the pill keeps
   // up with the feed instead of the 10-second history refresh.
   const workerState=now12?.worker?.state ?? predictor?.state;
-  const predictorLabel=workerState==='CONNECTED'?'Prediction feed connected':workerState==='WAITING'?'Waiting for inputs':'No recent worker status';
   const uReasons:Record<string,string>={ELIGIBLE:'Eligible for checkpoint scoring',DAILY_FLOOR_CLOSED:'Daily floor closed',
     V1_SELECTED:'V1 already selected',T45_SELECTED:'T45 R2 already selected',AWAITING_T45_DECISION:'Waiting for T45 decision',
     PRIOR_CLAIM:'Interval already claimed',INVALID_V1_INPUTS:'V1 inputs unavailable',V1_NOT_CONFIDENCE_ABSTENTION:'V1 abstention not eligible'};
