@@ -429,6 +429,7 @@ async function readV12Context(sb, open) {
 //#endregion
 //#region src/lib/v12/receiver-destination.ts
 var V12_RECEIVER_BASE = "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/";
+var V12_SECRET_ENDPOINTS = ["https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/place-trade", "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/place-trade?forceFunctionRegion=us-west-1"];
 function isAuthorizedBettingEndpoint(value) {
 	if (typeof value !== "string") return false;
 	try {
@@ -447,7 +448,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 	if (!Object.hasOwn(ROUTES, route)) throw new Error("UNKNOWN_ROUTE");
 	validateSignal(payload, route, now);
 	const destination = V12_RECEIVER_BASE;
-	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").eq("is_active", true);
+	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").in("url", V12_SECRET_ENDPOINTS);
 	if (error) throw error;
 	const endpoints = (data ?? []).filter((e) => isAuthorizedBettingEndpoint(e.url));
 	if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error("SINGLE_BETTING_SECRET_UNAVAILABLE");
@@ -482,7 +483,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 		});
 		if (!response.ok) throw new Error("SHADOW_RECEIVER_HTTP_" + response.status);
 		const result = await response.json();
-		if (result.execution_enabled !== false) throw new Error("SHADOW_RECEIVER_CONTRACT_MISMATCH");
+		if (typeof result.execution_enabled !== "boolean" || !["shadow", "live"].includes(result.mode)) throw new Error("SHADOW_RECEIVER_CONTRACT_MISMATCH");
 		const { error } = await sb.from("v12_prediction_events").update({
 			delivery_status: "ACKNOWLEDGED",
 			acknowledged_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -522,7 +523,10 @@ var FIELDS = [
 	"refresh_status",
 	"refresh_error",
 	"training_rows",
-	"training_latest_at"
+	"training_latest_at",
+	"last_attempt_at",
+	"last_attempt_status",
+	"last_attempt_checkpoint"
 ];
 async function recordRuntime(sb, input) {
 	if (!input || typeof input !== "object" || Array.isArray(input) || input.mode !== "shadow" || input.execution_enabled !== false) throw new Error("INVALID_PREDICTOR_STATUS");
@@ -550,7 +554,7 @@ async function recordRuntime(sb, input) {
 }
 //#endregion
 //#region src/lib/v12/edge-adapter.ts
-var ADAPTER_REVISION = "v12-edge-adapter-r2";
+var ADAPTER_REVISION = "v12-edge-adapter-r3";
 var RECEIVERS = V12_RECEIVER_BASE;
 var encoder = new TextEncoder();
 async function verifyWorkerSignature(raw, timestamp, signature, secret, now) {
@@ -562,16 +566,17 @@ async function verifyWorkerSignature(raw, timestamp, signature, secret, now) {
 	const bytes = Uint8Array.from(signature.match(/../g), (h) => parseInt(h, 16));
 	return crypto.subtle.verify("HMAC", key, bytes, encoder.encode(`${timestamp}.${raw}`));
 }
-async function probeReceivers(sb, transport) {
-	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").eq("is_active", true);
+async function probeReceivers(sb, transport, now) {
+	const { data, error } = await sb.from("webhook_endpoints").select("secret,url,is_active").in("url", V12_SECRET_ENDPOINTS);
 	if (error) throw error;
 	const endpoints = (data ?? []).filter((e) => isAuthorizedBettingEndpoint(e.url));
 	if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error("SINGLE_BETTING_SECRET_UNAVAILABLE");
 	const results = await Promise.all(Object.keys(ROUTES).map(async (leg) => {
 		const raw = JSON.stringify({
 			mode: "shadow",
-			kind: "V12_AUTHENTICATION_PROBE",
-			leg
+			kind: "V12_READINESS_PROBE",
+			leg,
+			sent_at: new Date(now).toISOString()
 		});
 		const signature = createHmac("sha256", endpoints[0].secret).update(raw).digest("hex");
 		try {
@@ -588,8 +593,11 @@ async function probeReceivers(sb, transport) {
 			const result = await response.json();
 			return {
 				leg,
-				authenticated: response.status === 400 && result.error === "ROUTE_POLICY_MISMATCH",
-				status: response.status
+				authenticated: response.status === 200 && result.kind === "V12_READINESS_PROBE",
+				status: response.status,
+				ready_for_activation: result.ready_for_activation === true,
+				release_mode: result.mode ?? null,
+				checks: result.checks ?? null
 			};
 		} catch {
 			return {
@@ -673,7 +681,7 @@ function createAdapterHandler(deps) {
 			}
 			if (p.op === "probe") return reply(200, {
 				ok: true,
-				...await probeReceivers(sb, deps.transport ?? fetch)
+				...await probeReceivers(sb, deps.transport ?? fetch, clock())
 			});
 			if (p.op === "heartbeat") return reply(200, {
 				ok: true,
@@ -701,10 +709,11 @@ function createAdapterHandler(deps) {
 			}
 			validateSignal(signal, signal.leg, clock());
 			const result = await (deps.publish ?? publishV12Shadow)(sb, signal, clock());
-			if (result.execution_enabled !== false) throw new Error("SHADOW_RECEIVER_CONTRACT_MISMATCH");
 			return reply(200, {
 				ok: true,
-				...result
+				...result,
+				receiver_mode: result.mode,
+				receiver_execution_enabled: result.execution_enabled
 			});
 		} catch (e) {
 			return reply(400, {
