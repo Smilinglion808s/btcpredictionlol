@@ -214,22 +214,19 @@ export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live>
   const shownFallback =
     (fallback.data ?? []).find((r: any) => Date.parse(r.target_ts) === shownOpen) ?? null;
 
-  const side = shownTarget?.final_side ?? shownFallback?.side ?? null;
-  const decision = shownTarget || shownFallback
-    ? {
-        side: side === 1 ? ('UP' as const) : side === -1 ? ('DOWN' as const) : null,
-        leg: shownTarget ? 'V1' : (shownFallback?.leg ?? null),
-        reason: shownFallback?.reason ?? null,
-        runMode: shownTarget?.run_mode ?? shownFallback?.run_mode ?? null,
-        committed: shownTarget?.run_mode === 'LIVE',
-      }
-    : null;
+  const decision = selectDecision({
+    events: rows,
+    target: shownTarget as any,
+    fallback: shownFallback as any,
+  });
 
   const r = runtime.data as { received_at: string; status: Record<string, any> } | null;
   const status = r?.status ?? {};
   const recent = !!r && nowMs - Date.parse(r.received_at) < 120_000;
+  // Connected means the worker is actually recording context, not merely that
+  // it reported some stage.
   const connected =
-    recent && status.stage !== undefined && nowMs - Date.parse(status.last_context_at ?? '') < 90_000;
+    recent && status.stage === 'RECORDING' && nowMs - Date.parse(status.last_context_at ?? '') < 90_000;
 
   const legs = legsFromEvents(rows);
 
