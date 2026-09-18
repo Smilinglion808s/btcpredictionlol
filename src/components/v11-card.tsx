@@ -72,11 +72,20 @@ function Gauge({
   );
 }
 
-function LegRecord({ title, r }: { title: string; r: any }) {
+function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: string; dot?: boolean | null }) {
   const rec = r ?? { calls: 0, wins: 0, losses: 0, pending: 0, winRate: null, netWins: 0 };
   return (
     <div className="v11-chip px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        {dot != null ? (
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${dot ? "bg-bull" : "bg-muted-foreground/50"}`}
+            title={dot ? "Authentication verified" : "Awaiting authentication check"}
+          />
+        ) : null}
+        <span className="truncate">{title}</span>
+        {hint ? <span className="normal-case tracking-normal text-muted-foreground/60">{hint}</span> : null}
+      </div>
       <div
         className={`mt-1 text-lg font-semibold tabular-nums ${
           rec.netWins > 0 ? "text-bull" : rec.netWins < 0 ? "text-bear" : ""
@@ -140,6 +149,19 @@ export function V11Card({ stats, loading, error }: V11Props) {
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const sideLabel = latest?.side === 1 ? "UP" : latest?.side === -1 ? "DOWN" : null;
+  const legs: any[] = predictor?.legs ?? [];
+  const uLeg = legs.find((l) => l.leg === "U") ?? null;
+  const uRecord = uLeg
+    ? { calls: uLeg.calls ?? 0, wins: uLeg.wins ?? 0, losses: uLeg.losses ?? 0,
+        pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
+        netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
+    : null;
+  const latestEvent = predictor?.latest ?? null;
+  const latestDelivery = latest && latestEvent?.candle_starts_at && latest?.targetTs &&
+      new Date(latestEvent.candle_starts_at).toISOString() === new Date(latest.targetTs).toISOString()
+    ? latestEvent
+    : null;
+  const deliveryLeg = latestDelivery ? legs.find((l) => l.leg === latestDelivery.route) ?? null : null;
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -168,35 +190,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
           V1.1 coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
         </span>
       </header>
-
-      <section className="v11-chip relative p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Webhook delivery</span>
-          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange-vivid/40 via-steel-vivid/25 to-transparent" />
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {(predictor?.legs??[{leg:'V1',endpoint:'v12-v1'},{leg:'T45R2',endpoint:'v12-t45r2'},{leg:'U',endpoint:'v12-u'}]).map((r:any)=>(
-            <div key={r.leg} className="rounded-lg border border-border/60 px-2.5 py-2">
-              <div className="flex items-center justify-between gap-1.5">
-                <span className="text-[10px] font-semibold uppercase">{r.leg==='T45R2'?'T45 R2 fallback':r.leg==='U'?'Original U':'V1'}</span>
-                <span className={`size-1.5 shrink-0 rounded-full ${r.authenticated?'bg-bull':'bg-muted-foreground/50'}`} title={r.authenticated?'Authentication verified':'Awaiting authentication check'} />
-              </div>
-              <div className="mt-1 text-xs tabular-nums">{r.acknowledged??'—'} acknowledged · {r.calls??'—'} signals</div>
-              <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">/{r.endpoint}</div>
-              {r.calls>0?<div className="mt-1 text-[9px] text-muted-foreground tabular-nums">{r.wins}W / {r.losses}L · {r.pending} pending · {pct(r.winRate)}</div>:null}
-              {r.unconfirmed>0?<div className="mt-1 text-[9px] text-signal-orange-vivid">{r.unconfirmed} acknowledgements unconfirmed</div>:null}
-            </div>
-          ))}
-        </div>
-        <div className="text-[10px] text-muted-foreground">
-          U: {predictor?.fitValid===false?'Fit expired — U paused':uReasons[predictor?.uBlockReason]??'Waiting for current status'}
-          {' · '}Refresh: {predictor?.refreshStatus?.replaceAll('_',' ')??'not reported'}
-        </div>
-        <div className="text-[9px] text-muted-foreground/80">
-          Receipts confirm delivery; results use official settlement; orders and fills are tracked externally.
-          {predictor?.truncated?' Showing the latest 1,000 signals.':''}
-        </div>
-      </section>
 
       <section className="relative flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -267,6 +260,23 @@ export function V11Card({ stats, loading, error }: V11Props) {
               <span className="opacity-40">·</span>
               <span>{latest.reason ?? "—"}</span>
             </div>
+            {sideLabel ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
+                <span
+                  className={`size-1.5 shrink-0 rounded-full ${deliveryLeg?.authenticated ? "bg-bull" : "bg-muted-foreground/50"}`}
+                  title={deliveryLeg?.authenticated ? "Authentication verified" : "Awaiting authentication check"}
+                />
+                {latestDelivery ? (
+                  <span>
+                    Webhook <span className="font-mono">/{deliveryLeg?.endpoint ?? latestDelivery.route}</span>
+                    {" · "}{(latestDelivery.delivery_status ?? "—").toLowerCase().replaceAll("_", " ")}
+                    {latestDelivery.receiver_status ? ` · receiver ${latestDelivery.receiver_status}` : ""}
+                  </span>
+                ) : (
+                  <span>No V1.2 webhook recorded for this interval yet</span>
+                )}
+              </div>
+            ) : null}
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
@@ -291,29 +301,21 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <section>
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            V1.1 live shadow by leg · official settlement only
+            Live shadow by leg · official settlement only
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
         </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <LegRecord title="Combined" r={live?.combined} />
           <LegRecord title="V1 leg" r={live?.v1Leg} />
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
+          <LegRecord title="U leg" hint="V1.2" r={uRecord} dot={uLeg ? uLeg.authenticated === true : null} />
         </div>
         <div className="mt-2 text-[9px] text-muted-foreground/80">
-          Version 1.1 baseline history — V1.2 signals are counted separately in webhook delivery above.
-        </div>
-      </section>
-
-      <section className="v11-chip relative px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tabular-nums">
-          <span className="uppercase tracking-[0.14em] text-muted-foreground">Locked settings</span>
-          <span><span className="font-semibold">V1</span> <span className="text-muted-foreground">4% · maker-only</span></span>
-          <span><span className="font-semibold">T45 R2</span> <span className="text-muted-foreground">5% · taker-only</span></span>
-          <span><span className="font-semibold">Original U</span> <span className="text-muted-foreground">10% · maker-only</span></span>
-        </div>
-        <div className="mt-1.5 text-[9px] text-muted-foreground/80">
-          Percent of each Boise day's opening shared bankroll · fees within the stake.
+          V1 and T45 R2 are the V1.1 baseline; the U leg counts V1.2 signals only.
+          {" "}U status: {predictor?.fitValid===false?'fit expired — U paused':uReasons[predictor?.uBlockReason]?.toLowerCase()??'waiting for current status'}
+          {" · "}refresh: {predictor?.refreshStatus?.replaceAll('_',' ').toLowerCase()??'not reported'}
+          {predictor?.truncated?' · showing the latest 1,000 signals':''}
         </div>
       </section>
 
