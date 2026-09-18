@@ -97,7 +97,7 @@ export function createAdapterHandler(deps: Dependencies) {
     try { p=JSON.parse(raw); } catch { return reply(400,{ok:false,error:'INVALID_JSON'}); }
     if (!p || typeof p!=='object' || Array.isArray(p)) return reply(400,{ok:false,error:'INVALID_ENVELOPE'});
     const now=clock(),open=Date.parse(p.open);
-    if (!['context','publish','probe','heartbeat'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
+    if (!['context','early_dispatch','publish','probe','heartbeat'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
         !Number.isFinite(open) || open%900000!==0 || now<open || now>=open+900000)
       return reply(400,{ok:false,error:'INVALID_CURRENT_INTERVAL'});
     try {
