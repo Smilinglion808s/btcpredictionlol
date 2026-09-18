@@ -301,36 +301,19 @@ export function V11Card({ stats, loading, error }: V11Props) {
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
         </div>
         <div className="mt-2 text-[9px] text-muted-foreground/80">
-          Figures above are the Version 1.1 baseline history. Version 1.2 signals are counted separately in webhook delivery.
+          Version 1.1 baseline history — V1.2 signals are counted separately in webhook delivery above.
         </div>
       </section>
 
-      <section className="v11-chip relative p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Version 1.2 routes · locked settings
-          </span>
-          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange-vivid/40 via-steel-vivid/25 to-transparent" />
+      <section className="v11-chip relative px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tabular-nums">
+          <span className="uppercase tracking-[0.14em] text-muted-foreground">Locked settings</span>
+          <span><span className="font-semibold">V1</span> <span className="text-muted-foreground">4% · maker-only</span></span>
+          <span><span className="font-semibold">T45 R2</span> <span className="text-muted-foreground">5% · taker-only</span></span>
+          <span><span className="font-semibold">Original U</span> <span className="text-muted-foreground">10% · maker-only</span></span>
         </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-lg border border-border/60 px-2.5 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide">V1</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">4% · maker-only</div>
-          </div>
-          <div className="rounded-lg border border-border/60 px-2.5 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide">T45 R2 fallback</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">5% · taker-only</div>
-          </div>
-          <div className="rounded-lg border border-border/60 px-2.5 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide">Original U</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">10% · maker-only</div>
-          </div>
-        </div>
-        <div className="mt-2 text-[9px] text-muted-foreground/80">
-          Sizing is a percent of each Boise day's opening shared bankroll · fees within the stake.
-        </div>
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          Three model IDs · three webhook destinations
+        <div className="mt-1.5 text-[9px] text-muted-foreground/80">
+          Percent of each Boise day's opening shared bankroll · fees within the stake.
         </div>
       </section>
 
