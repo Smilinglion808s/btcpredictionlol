@@ -345,6 +345,7 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                 <div
                   key={l.leg}
                   className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground tabular-nums"
+                  title={l.receiverStatus ? `Receiver reported ${l.receiverStatus}` : undefined}
                 >
                   <span
                     className={`size-1.5 shrink-0 rounded-full ${authFor(l.leg) ? "bg-bull" : "bg-muted-foreground/50"}`}
@@ -353,8 +354,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                   <span className="w-12 shrink-0 font-semibold uppercase tracking-wide text-foreground/80">
                     {LEG_LABEL[l.leg] ?? l.leg}
                   </span>
-                  <span className="font-mono">/{l.endpoint}</span>
-                  <span className="opacity-40">·</span>
                   <span className={l.status === "ACKNOWLEDGED" ? "text-bull" : undefined}>
                     {DELIVERY_LABEL[l.status] ?? l.status.toLowerCase()}
                   </span>
@@ -362,12 +361,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                     <>
                       <span className="opacity-40">·</span>
                       <span>{l.prediction === "YES" ? "UP" : "DOWN"}</span>
-                    </>
-                  ) : null}
-                  {l.receiverStatus ? (
-                    <>
-                      <span className="opacity-40">·</span>
-                      <span>receiver {l.receiverStatus}</span>
                     </>
                   ) : null}
                 </div>
@@ -381,7 +374,12 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
           </>
         ) : latest ? (
           <div className="mt-1.5 text-sm text-muted-foreground">
-            {sideLabel ? `Called ${sideLabel}` : "No prediction"} · {latest.reason ?? "—"}
+            Last recorded: {sideLabel ? `called ${sideLabel}` : "no prediction"} ·{" "}
+            {latest.reason ?? "—"}
+            <div className="mt-1 text-[10px] text-amber-300">
+              Live status unavailable — this is the last recorded prediction, not the
+              current interval.
+            </div>
           </div>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
