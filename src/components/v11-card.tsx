@@ -7,9 +7,25 @@ type Stats = Record<string, any>;
 
 interface V11Props {
   stats: Stats;
+  /**
+   * Current 15-minute interval state from the V1.2 event journal. It is the
+   * authority for what is happening right now on all three legs; the `stats`
+   * payload stays the authority for settled history.
+   */
+  live?: Stats | null;
   loading?: boolean;
   error?: boolean;
 }
+
+const LEG_LABEL: Record<string, string> = { V1: "V1", T45R2: "T45 R2", U: "U" };
+
+/** Delivery state only. A receiver acknowledgement is not a filled bet. */
+const DELIVERY_LABEL: Record<string, string> = {
+  WAITING: "no call yet",
+  DISPATCHED: "sent · awaiting receipt",
+  ACKNOWLEDGED: "received by betting account",
+  UNCONFIRMED: "receipt unconfirmed",
+};
 
 const pct = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : `${(v * 100).toFixed(1)}%`;
