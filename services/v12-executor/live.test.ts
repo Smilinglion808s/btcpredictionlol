@@ -102,7 +102,10 @@ test('lost exchange acknowledgement keeps durable intent and never retries',asyn
 test('all six U checkpoints reach the late-window executor without the old 60-second cutoff',async()=>{
   for(const checkpoint of [120,180,300,480,600,720]){
     const h=harness('U',checkpoint),r=await executeV12(h.signal,h.receipt,k=>env[k],h.transport,h.clock);
-    assert.equal(r.status,'FILLED');assert.equal(h.posts.length,1);assert.equal(h.posts[0].post_only,true);
+    assert.equal(r.status,'FILLED');
+    // Maker first, then the capped IOC remainder for the partially filled plan.
+    assert.equal(h.posts.length,2);assert.equal(h.posts[0].post_only,true);assert.equal(h.posts[1].post_only,false);
+
   }
 });
 test('readiness proves account authentication using GET only and creates no records',async()=>{
