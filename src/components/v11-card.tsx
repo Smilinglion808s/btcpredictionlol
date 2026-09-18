@@ -336,7 +336,7 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
           <>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <span className={`text-lg font-semibold ${nowSide ? "text-emerald-300" : "text-muted-foreground"}`}>
-                {nowSide ? "Called" : nowCalled.length > 0 ? "Sent" : "No call yet"}
+                {nowSide ? "Called" : "No call yet"}
               </span>
               {nowSide ? (
                 <span className="rounded-md border border-border/70 px-1.5 py-0.5 text-xs font-semibold tracking-wide">
