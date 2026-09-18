@@ -310,7 +310,11 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
       <section className="v11-chip relative p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
+            {!now12
+              ? "Last recorded prediction"
+              : intervalStale || rolledOver
+                ? "Last completed 15-minute interval"
+                : "Current 15-minute interval"}
           </div>
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
             <span>{fmtTs(intervalTs)} UTC</span>
