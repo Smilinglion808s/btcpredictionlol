@@ -47,5 +47,9 @@ export function planEntry(i:PlanInput){
   return {status:'PLANNED',route:i.route,modelVersion:r.model,execution:r.execution,
     targetBudgetCents:target,budgetCents:budget,priceCents:price,quantity,feesCents:fee(quantity),
     totalCostCents:quantity*price+fee(quantity),postOnly:!taker,
-    timeInForce:taker?'immediate_or_cancel':'good_till_canceled',allowTakerFallback:false} as const;
+    timeInForce:taker?'immediate_or_cancel':'good_till_canceled',
+    // A maker-first route may fall back to a capped IOC taker, but only after
+    // the engine proves the maker order was rejected or terminally unfilled.
+    allowTakerFallback:r.execution==='maker_then_taker'} as const;
 }
+
