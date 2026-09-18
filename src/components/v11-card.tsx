@@ -301,29 +301,21 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <section>
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            V1.1 live shadow by leg · official settlement only
+            Live shadow by leg · official settlement only
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
         </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <LegRecord title="Combined" r={live?.combined} />
           <LegRecord title="V1 leg" r={live?.v1Leg} />
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
+          <LegRecord title="U leg" hint="V1.2" r={uRecord} dot={uLeg ? uLeg.authenticated === true : null} />
         </div>
         <div className="mt-2 text-[9px] text-muted-foreground/80">
-          Version 1.1 baseline history — V1.2 signals are counted separately in webhook delivery above.
-        </div>
-      </section>
-
-      <section className="v11-chip relative px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tabular-nums">
-          <span className="uppercase tracking-[0.14em] text-muted-foreground">Locked settings</span>
-          <span><span className="font-semibold">V1</span> <span className="text-muted-foreground">4% · maker-only</span></span>
-          <span><span className="font-semibold">T45 R2</span> <span className="text-muted-foreground">5% · taker-only</span></span>
-          <span><span className="font-semibold">Original U</span> <span className="text-muted-foreground">10% · maker-only</span></span>
-        </div>
-        <div className="mt-1.5 text-[9px] text-muted-foreground/80">
-          Percent of each Boise day's opening shared bankroll · fees within the stake.
+          V1 and T45 R2 are the V1.1 baseline; the U leg counts V1.2 signals only.
+          {" "}U status: {predictor?.fitValid===false?'fit expired — U paused':uReasons[predictor?.uBlockReason]?.toLowerCase()??'waiting for current status'}
+          {" · "}refresh: {predictor?.refreshStatus?.replaceAll('_',' ').toLowerCase()??'not reported'}
+          {predictor?.truncated?' · showing the latest 1,000 signals':''}
         </div>
       </section>
 
