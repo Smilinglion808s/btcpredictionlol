@@ -4,6 +4,7 @@
 // (orange body, steel accent) and more vibrant.
 
 import { useEffect, useState } from "react";
+import { freshness } from "@/lib/v12/freshness";
 
 type Stats = Record<string, any>;
 
@@ -33,11 +34,14 @@ interface V11Props {
 
 const LEG_LABEL: Record<string, string> = { V1: "V1", T45R2: "T45 R2", U: "U" };
 
-/** Delivery state only. A receiver acknowledgement is not a filled bet. */
+/**
+ * Delivery state only. A pending journal row means the send is in flight — it
+ * is not proof the webhook arrived — and an acknowledgement is not a bet fill.
+ */
 const DELIVERY_LABEL: Record<string, string> = {
   WAITING: "no call yet",
-  DISPATCHED: "sent · awaiting receipt",
-  ACKNOWLEDGED: "received by betting account",
+  DISPATCHED: "sending · awaiting receipt",
+  ACKNOWLEDGED: "acknowledged by betting account",
   UNCONFIRMED: "receipt unconfirmed",
 };
 
@@ -193,44 +197,27 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
         pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
         netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
     : null;
-  // Current-interval authority: the V1.2 event journal, not the V1.1 baseline.
-  // When it is unavailable we fall back to the slow baseline snapshot rather
-  // than showing nothing.
+  // Current-interval authority: the V1.2 event journal only. The slow baseline
+  // snapshot is history and is never shown as the current interval.
   const nowLegs: any[] = now12?.legs ?? [];
-  const nowCalled = nowLegs.filter((l) => l.status !== "WAITING");
-  const nowSide =
-    now12?.decision?.side ??
-    (nowCalled[0]?.prediction === "YES" ? "UP" : nowCalled[0]?.prediction === "NO" ? "DOWN" : null);
-  const intervalTs = now12?.intervalOpen ?? latest?.targetTs ?? null;
-  const intervalStale = !!now12 && now12.isCurrentInterval === false;
+  const nowSide = now12?.decision?.side ?? null;
   const fmtTs = (iso: string | null | undefined) =>
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
-  // Freshness. Measured against the timestamp the SERVER put in the payload,
-  // so a cached-on-failure response (the read cache can serve an old value for
-  // up to ten minutes) ages visibly instead of posing as current. The clock
-  // boundary counts too: once a new 15-minute candle opens, a payload from the
-  // previous one is stale even if it arrived a second ago.
-  const serverNow = now12?.now ? Date.parse(now12.now) : null;
-  const clientAt = liveMeta?.updatedAt ?? null;
-  const ageMs =
-    serverNow != null ? Math.max(0, tick - serverNow) : clientAt != null ? Math.max(0, tick - clientAt) : null;
-  const ageSec = ageMs == null ? null : Math.round(ageMs / 1000);
-  const rolledOver =
-    serverNow != null && Math.floor(tick / 900_000) !== Math.floor(serverNow / 900_000);
-  const liveStale = liveMeta?.error === true || rolledOver || (ageSec != null && ageSec > 10);
-  const freshLabel = liveMeta?.error
-    ? "connection issue"
-    : ageSec == null
-      ? "connecting"
-      : rolledOver
-        ? "new candle — updating"
-        : ageSec <= 2
-          ? "live"
-          : ageSec > 10
-            ? `stale · ${ageSec}s old`
-            : `${ageSec}s ago`;
+  // Freshness is measured against the timestamp the SERVER put in the payload,
+  // not when the fetch landed, so a cached-after-failure response ages visibly
+  // instead of posing as current; the same timestamp gives a clock offset so
+  // the 15-minute boundary is judged on the server's clock. See freshness.ts.
+  const fresh = freshness({
+    serverNow: now12?.now ? Date.parse(now12.now) : null,
+    intervalOpen: now12?.intervalOpen ? Date.parse(now12.intervalOpen) : null,
+    clientAt: liveMeta?.updatedAt ?? null,
+    tick,
+    error: liveMeta?.error === true,
+  });
+  const { stale: liveStale, usable: liveUsable, connecting, label: freshLabel } = fresh;
+  const intervalTs = new Date(fresh.shownOpen).toISOString();
   // A stale payload must not keep claiming the worker is connected right now.
   const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
   const predictorLabel =
@@ -310,24 +297,25 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
       <section className="v11-chip relative p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            {!now12
-              ? "Last recorded prediction"
-              : intervalStale || rolledOver
-                ? "Last completed 15-minute interval"
-                : "Current 15-minute interval"}
+            Current 15-minute interval
           </div>
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
             <span>{fmtTs(intervalTs)} UTC</span>
-            <span aria-hidden className={`h-1 w-1 rounded-full ${liveStale ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span
+              aria-hidden
+              className={`h-1 w-1 rounded-full ${
+                connecting ? "bg-muted-foreground/60" : liveStale ? "bg-amber-400" : "bg-emerald-400"
+              }`}
+            />
             <span className={liveStale ? "text-amber-300" : undefined}>{freshLabel}</span>
           </span>
         </div>
 
-        {now12 ? (
+        {liveUsable ? (
           <>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <span className={`text-lg font-semibold ${nowSide ? "text-emerald-300" : "text-muted-foreground"}`}>
-                {nowSide ? "Called" : nowCalled.length > 0 ? "Sent" : "No call yet"}
+                {nowSide ? "Called" : "No call yet"}
               </span>
               {nowSide ? (
                 <span className="rounded-md border border-border/70 px-1.5 py-0.5 text-xs font-semibold tracking-wide">
@@ -376,19 +364,12 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
               received webhook is not a confirmed fill.
             </div>
           </>
-        ) : latest ? (
-          <div className="mt-1.5 text-sm text-muted-foreground">
-            Last recorded: {sideLabel ? `called ${sideLabel}` : "no prediction"} ·{" "}
-            {latest.reason ?? "—"}
-            <div className="mt-1 text-[10px] text-amber-300">
-              Live status unavailable — this is the last recorded prediction, not the
-              current interval.
-            </div>
-          </div>
         ) : (
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Nothing recorded yet — the first prediction will appear here.
-          </p>
+          // No usable current-interval read: show nothing about direction or
+          // leg. An old call must never sit under "current".
+          <div className="mt-1.5 text-sm text-muted-foreground">
+            {liveMeta?.error ? "Connection issue — status unavailable" : "Waiting for current interval"}
+          </div>
         )}
       </section>
 

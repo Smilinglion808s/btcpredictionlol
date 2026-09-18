@@ -57,7 +57,7 @@ test('V1 abstention does not become a V1 call; T45 R2 is selected instead', () =
   const d = selectDecision({
     events: [],
     target: { run_mode: 'LIVE', final_side: 0, features: { input_valid: true } },
-    fallback: { leg: 'T45R2', side: -1, reason: 'v1 abstained', run_mode: 'LIVE_SHADOW' },
+    fallback: { leg: 'T45R2', side: -1, reason: 'v1 abstained', run_mode: 'LIVE_SHADOW', evidence: { trigger_signed: true }, within_publication_ceiling: true },
   });
   assert.equal(d?.leg, 'T45R2');
   assert.equal(d?.side, 'DOWN');
@@ -105,8 +105,35 @@ test('non-LIVE or invalid-input V1 is excluded and yields no decision', () => {
     selectDecision({
       events: [],
       target: null,
-      fallback: { leg: 'T45R2', side: 1, reason: null, run_mode: 'RESEARCH' },
+      fallback: { leg: 'T45R2', side: 1, reason: null, run_mode: 'RESEARCH', evidence: { trigger_signed: true }, within_publication_ceiling: true },
     }),
     null,
   );
+});
+
+const t45ok = (side: number, run_mode = 'LIVE_SHADOW') => ({
+  leg: 'T45R2', side, reason: null, run_mode,
+  evidence: { trigger_signed: true }, within_publication_ceiling: true,
+});
+
+test('unsigned or out-of-ceiling T45 is not admitted as a call', () => {
+  assert.equal(
+    selectDecision({ events: [], target: null, fallback: { ...t45ok(1), evidence: {} } }),
+    null,
+  );
+  assert.equal(
+    selectDecision({ events: [], target: null, fallback: { ...t45ok(1), within_publication_ceiling: false } }),
+    null,
+  );
+  assert.equal(selectDecision({ events: [], target: null, fallback: t45ok(0) }), null);
+});
+
+test('a U event overrides the V1 baseline for both leg and side', () => {
+  const d = selectDecision({
+    events: [ev('U', 'NO', '2026-09-18T02:15:09.000Z')],
+    target: { run_mode: 'LIVE', final_side: 1, features: { input_valid: true } },
+    fallback: t45ok(1),
+  });
+  assert.equal(d?.leg, 'U');
+  assert.equal(d?.side, 'DOWN');
 });

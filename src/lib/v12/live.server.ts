@@ -108,7 +108,14 @@ export type DecisionSource = {
   /** c85_targets row for that interval, if any. */
   target: { run_mode?: string | null; final_side?: number | null; features?: any } | null;
   /** v11_decisions row for that interval, if any. */
-  fallback: { leg?: string | null; side?: number | null; reason?: string | null; run_mode?: string | null } | null;
+  fallback: {
+    leg?: string | null;
+    side?: number | null;
+    reason?: string | null;
+    run_mode?: string | null;
+    evidence?: any;
+    within_publication_ceiling?: boolean | null;
+  } | null;
 };
 
 /**
@@ -146,9 +153,18 @@ export function selectDecision(src: DecisionSource): V12Live['decision'] {
     return { side: tSide, leg: 'V1', reason: src.fallback?.reason ?? null, runMode: 'LIVE', committed: true };
   }
 
+  // Same admission the dispatch path uses (context.server readV12Context):
+  // LIVE_SHADOW, signed trigger, inside the publication ceiling.
   const f = src.fallback;
   const fSide = dir(f?.side);
-  if (f && f.run_mode === 'LIVE_SHADOW' && f.leg === 'T45R2' && fSide) {
+  if (
+    f &&
+    f.run_mode === 'LIVE_SHADOW' &&
+    f.leg === 'T45R2' &&
+    f.evidence?.trigger_signed === true &&
+    f.within_publication_ceiling === true &&
+    fSide
+  ) {
     return { side: fSide, leg: 'T45R2', reason: f.reason ?? null, runMode: f.run_mode, committed: true };
   }
 
@@ -157,9 +173,11 @@ export function selectDecision(src: DecisionSource): V12Live['decision'] {
 
 export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live> {
   const sb = client();
+  // CURRENT INTERVAL ONLY. The previous interval is never substituted in: an
+  // interval with no rows yet reports WAITING legs and a null decision, which
+  // is the truth, instead of an older call that would read as the live one.
   const open = intervalOpen(nowMs);
   const openIso = new Date(open).toISOString();
-  const prevIso = new Date(open - INTERVAL_MS).toISOString();
 
   const [events, runtime, target, fallback] = await Promise.all([
     sb
@@ -167,7 +185,7 @@ export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live>
       .select(
         'route,candle_starts_at,decision_at,prediction,delivery_status,acknowledged_at,receiver_status,created_at',
       )
-      .in('candle_starts_at', [openIso, prevIso])
+      .eq('candle_starts_at', openIso)
       .order('created_at', { ascending: false })
       .limit(20),
     sb
@@ -179,45 +197,25 @@ export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live>
       .from('c85_targets')
       .select('target_open_utc,run_mode,final_side,features')
       .eq('model_version', 'lite-a-floor4-top10-r1')
-      .in('target_open_utc', [openIso, prevIso])
-      .order('target_open_utc', { ascending: false })
-      .limit(2),
+      .eq('target_open_utc', openIso)
+      .maybeSingle(),
     sb
       .from('v11_decisions')
-      .select('target_ts,leg,side,reason,run_mode')
-      .in('target_ts', [openIso, prevIso])
-      .order('target_ts', { ascending: false })
-      .limit(2),
+      .select('target_ts,leg,side,reason,run_mode,evidence,within_publication_ceiling')
+      .eq('target_ts', openIso)
+      .maybeSingle(),
   ]);
 
   for (const r of [events, runtime, target, fallback]) if (r.error) throw new Error('V12_LIVE_UNAVAILABLE');
 
-  const all = (events.data ?? []) as EventRow[];
-  const currentEvents = all.filter(
-    (r) => Date.parse(r.candle_starts_at) === open,
-  );
-  // Show the previous interval ONLY when the current one has produced nothing
-  // yet, and say so explicitly via isCurrentInterval.
-  const targetRow =
-    (target.data ?? []).find((r: any) => Date.parse(r.target_open_utc) === open) ?? null;
-  const fallbackRow =
-    (fallback.data ?? []).find((r: any) => Date.parse(r.target_ts) === open) ?? null;
-  const hasCurrent = currentEvents.length > 0 || !!targetRow || !!fallbackRow;
-
-  const shownOpen = hasCurrent ? open : open - INTERVAL_MS;
-  const shownIso = new Date(shownOpen).toISOString();
-  const rows = hasCurrent
-    ? currentEvents
-    : all.filter((r) => Date.parse(r.candle_starts_at) === shownOpen);
-  const shownTarget =
-    (target.data ?? []).find((r: any) => Date.parse(r.target_open_utc) === shownOpen) ?? null;
-  const shownFallback =
-    (fallback.data ?? []).find((r: any) => Date.parse(r.target_ts) === shownOpen) ?? null;
+  const rows = (events.data ?? []) as EventRow[];
+  const shownIso = openIso;
+  const shownOpen = open;
 
   const decision = selectDecision({
     events: rows,
-    target: shownTarget as any,
-    fallback: shownFallback as any,
+    target: target.data as any,
+    fallback: fallback.data as any,
   });
 
   const r = runtime.data as { received_at: string; status: Record<string, any> } | null;
