@@ -261,33 +261,31 @@ class Service:
         threading.Thread(target=self.refresh_loop,daemon=True).start()
         if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.probe_once,daemon=True).start()
         if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.status_loop,daemon=True).start()
-        cap=Capture(self.path);last_open=None;market=None
+        cap=Capture(self.path);last_open=None;market=None;early={};last_context=0
         while True:
             now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
-                    self.ticker=None;market=None;last_open=open_ms
+                    self.ticker=None;market=None;last_open=open_ms;early={};last_context=0
+                age=now-open_ms
+                # Critical path. One signed round trip performs the minimal
+                # authoritative read, the durable sender claim and the dispatch,
+                # so V1 leaves as soon as its decision is committed.
+                pending=[r for r in ('V1','T45R2') if r not in early]
+                if pending and age<60000:
+                    self.early_dispatch(cap,open_ms,pending,early)
+                    if [r for r in ('V1','T45R2') if r not in early] and millis()-last_context<2000:
+                        time.sleep(.25);continue
+                last_context=millis()
                 context=self.adapter.call('context',open_ms)['context']
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
                 self.context=context
-                self.ticker=context['ticker'];age=now-open_ms
+                self.ticker=context['ticker'];age=millis()-open_ms
                 self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
                   u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None,
                   u_block_reason=u_block_reason(context))
-                # Poll committed early decisions outside their critical dispatch path.
-                for route,key,side_key,offset_key,slot in [('V1','v1','final_side','publication_offset_ms',-1),('T45R2','t45','side','decision_offset_ms',-45)]:
-                    r=context.get(key) or {};side=r.get(side_key);offset=r.get(offset_key)
-                    if side not in (1,-1) or not isinstance(offset,(int,float)) or age>60000:continue
-                    if route=='T45R2' and (r.get('leg')!='T45R2' or r.get('run_mode')!='LIVE_SHADOW'):continue
-                    decision=open_ms+int(offset)
-                    if millis()-decision>8000:continue
-                    if cap.db.execute('select 1 from attempts where ticker=? and checkpoint=?',(self.ticker,slot)).fetchone():continue
-                    p=payload(route,context,decision,prediction='YES' if side==1 else 'NO')
-                    # Persist before network. Ambiguous requests are not retried after restart.
-                    self.record(cap,slot,'SUBMITTING',{})
-                    result=self.adapter.call('publish',open_ms,signal=p)
-                    self.record(cap,slot,'RECORDED',result)
                 if not context.get('u_eligible'):time.sleep(.7);continue
+
                 if market is None:market=get('https://api.elections.kalshi.com/trade-api/v2/markets/'+self.ticker)['market']
                 for sec in CHECKPOINTS:
                     age=millis()-open_ms
