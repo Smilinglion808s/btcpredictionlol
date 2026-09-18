@@ -172,3 +172,22 @@ two authorized fixed URL forms while the legacy endpoint stays inactive; probes
 became V1.2 readiness checks (T45R2/U/V1 all authenticated, ready, mode=shadow);
 receiver executor bundle `executor.js` generated; operator activation documented
 in `docs/v12-activation.md` (release gate stays shadow; real money off).
+
+## V1.2 r4 — maker-then-taker fallback + early dispatch (source only)
+- V1 and U execution policy is now maker_then_taker; T45R2 stays taker_only.
+  Legacy `maker_only` is accepted as a V1/U wire alias only and normalized
+  forward before anything is recorded. Receiver update: docs/v12_receiver_maker_then_taker.sql
+  (NOT applied here — receiver DB is ruxndqfjfdbtdbkheuge).
+- Engine submits a capped IOC taker only after a proven post-only cross
+  rejection or a confirmed terminal canceled/expired state. No fallback on
+  ambiguous POST/cancel state, pause/stop, stale quote, deadline or U admission
+  failure. Partial fills deduct actual cost and quantity; the fallback is capped
+  by a refreshed preflight budget and missing venue costs are never free.
+- Cancel endpoint unchanged; 404 is never treated as canceled on its own and is
+  classified as a resolved expiry race only after an authoritative terminal GET.
+- New signed `early_dispatch` adapter op: minimal authoritative early read plus
+  durable sender claim and dispatch in one round trip, triggered by the worker
+  inside the first 60s. Worker uses per-thread keep-alive HTTPS clients; no
+  automatic retry of a publish. U keeps the full context path unchanged.
+- Adapter revision v12-edge-adapter-r4, executor revision v12-executor-r2.
+- Real money stays OFF; release mode stays shadow; nothing deployed.
