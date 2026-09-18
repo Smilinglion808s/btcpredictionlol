@@ -5,9 +5,14 @@ import {routePolicy} from './route-policy.ts';
 import {marketSource} from './market-source.ts';
 import {boiseDay, V12_VERSION, ROUTES, type Route} from '../../src/lib/v12/contract.ts';
 
-export const EXECUTOR_REVISION='v12-executor-r2';
+export const EXECUTOR_REVISION='v12-executor-r3';
 type Get=(key:string)=>string|undefined;
 type Receipt={id:string;status:string;mode:string;execution_enabled:boolean;budget_cents:number;boise_day:string;opening_balance:number};
+export function confidencePercent(value:unknown):number {
+  if(value===undefined || value===null)return 0;
+  if(typeof value!=='number' || !Number.isFinite(value) || value<0 || value>1)throw Error('INVALID_PROBABILITY');
+  return Math.round(value*100);
+}
 const enc=new TextEncoder();
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 export function dayStart(day:string):number {
@@ -108,7 +113,7 @@ export async function executeV12(signal:Record<string,any>,receipt:Receipt,get:G
     claim:async()=>{
       // An independent existing bot claim is the final shared guard against legacy overlap.
       const rows=await c.db('bet_history','POST',{placed_at:new Date(clock()).toISOString(),candle_starts_at:signal.candle_starts_at,
-        market:ticker,side,prediction:signal.prediction,confidence:signal.probability||0,contracts:0,fill_price:0,odds:0,fee:0,
+        market:ticker,side,prediction:signal.prediction,confidence:confidencePercent(signal.probability),contracts:0,fill_price:0,odds:0,fee:0,
         total_cost:0,bet_size:0,result:'pending',order_id:null,maker_order_id:null,fill_type:null,model_version:signal.model_version,
         sent_at:signal.sent_at,webhook_received_at:new Date(received).toISOString(),seconds_after_open:Math.round((clock()-target)/1000),
         execution_trace:{policy,policy_version:'entry-controls-r1',execution_revision:EXECUTOR_REVISION,receipt_id:receipt.id,sizing,status:'CLAIMED'},order_attempts:[]});
@@ -126,7 +131,8 @@ export async function executeV12(signal:Record<string,any>,receipt:Receipt,get:G
     },
     beforeSubmit:async()=>{
       if(await activation())throw Error('BOT_PAUSED');
-      if(clock()>target+policy.maxEntryAgeMs||!quote||clock()-quote.requestStartedAt>policy.quoteMaxAgeMs)throw Error('PRE_SUBMIT_EXPIRED');
+      if(clock()>target+policy.maxEntryAgeMs)throw Error('ENTRY_DEADLINE');
+      // The engine validates/refetches the quote AFTER this network-bound gate check.
     },
     submit:async body=>{
       const shard=(get('EXCHANGE_INDEX')||'-1').trim().toLowerCase();

@@ -16,6 +16,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     status: 'STARTING', events: []};
   const attempts: any[] = []; let row: string | null = null; let submitted = false;
   let writeReserveMs = 100;
+  let totalFill = 0, spent = 0, fees = 0, actualKnown = true;
   const event = (type: string, data: any = {}) => trace.events.push({type, at: d.now(), ...data});
   const save = async (patch: any = {}) => {
     if (row) {
@@ -61,8 +62,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     // actually left over, with the taker reserve applied.
     const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
     trace.initial_ceiling = ceiling; trace.budget = checks.budget; trace.desired_count = desired;
-    let remaining = desired; let budget = checks.budget; let totalFill = 0; let spent = 0;
-    let actualKnown = true; let fees = 0;
+    let remaining = desired; let budget = checks.budget;
     if (p.mode === 'shadow') {
       trace.status = 'SHADOW_PLAN'; trace.plans = kinds.map(k => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
       d.log(trace); return trace; // No claims, ledger updates, order POSTs or cancels.
@@ -120,6 +120,21 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       }
       if (d.beforeSubmit) await d.beforeSubmit();
       allowed();
+      // Storage/gate round trips can age a quote. One bounded refresh here,
+      // after the authorization read, retains the original price/cash caps.
+      if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) {
+        event('refresh_after_gate');
+        q = await d.quote(); allowed();
+        const fresh = planOrder(q, p, kind, budget, ceiling, Math.min(remaining, plan.count), d.now());
+        if (!fresh) {
+          a.state = 'NOT_SUBMITTED_PRICE_OR_SIZE';
+          event('post_gate_price_or_size_abstention', {kind, quote:q}); await save(); break;
+        }
+        const changed = fresh.limit !== plan.limit || fresh.count !== plan.count;
+        plan = fresh;
+        // An unchanged durable limit/quantity needs no new blocking write.
+        if (changed) { a.plan=plan; a.replanned_at=d.now(); await save(); allowed(); }
+      }
       if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) throw new Error('PRE_SUBMIT_EXPIRED');
       a.submit_started_at = d.now(); const previouslySubmitted: boolean = submitted; submitted = true;
       let raw: any;
@@ -146,7 +161,18 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         placed_at: new Date(a.response_received_at).toISOString(),
         seconds_after_open: Math.round((a.response_received_at - input.target) / 1000)});
       if (kind === 'maker') await d.sleep(Math.max(0, a.submit_started_at + p.makerWaitMs - d.now()));
-      let state = orderState(await d.read(a.order_id), plan.count);
+      let rawState: any;
+      // Venue reads can briefly return 404 after a successful POST. Retry GET
+      // only, bounded to three reads. Never interpret 404 as no fill.
+      for (let check=0; check<3; check++) {
+        try { rawState=await d.read(a.order_id); break; }
+        catch (e) {
+          if ((e as any)?.status!==404 || check===2) throw e;
+          event('order_read_visibility_retry', {order_id:a.order_id,check:check+1});
+          await d.sleep(150*(check+1));
+        }
+      }
+      let state = orderState(rawState, plan.count);
       if (!state.terminal) {
         a.observation = state;
         const cancelStarted = d.now();
@@ -221,6 +247,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       const cost = state.actualCost ?? reservedCost;
       actualKnown = actualKnown && state.actualCost !== null;
       spent += cost; fees += state.fees ?? 0; budget = Math.max(0, checks.budget - spent);
+      a.accounted = true;
 
       event('order_terminal', {kind, ...state, remaining, remaining_budget: budget});
       await save({contracts: totalFill,
@@ -238,9 +265,14 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     trace.cost_or_reserved_cost = spent;
     await save({result: totalFill > 0 ? 'pending' : 'cancelled'});
   } catch (e) {
-    trace.status = submitted ? 'RECONCILIATION_REQUIRED' : 'NOT_SUBMITTED';
+    // A previously submitted maker that is now terminal does not make an
+    // unsubmitted fallback ambiguous. Preserve genuine lost POST responses.
+    for (const a of attempts) if (a.state==='INTENT' && !a.submit_started_at && !a.order_id) a.state='NOT_SUBMITTED_ERROR';
+    const unresolved = attempts.some(a => a.submit_started_at && !(a.state==='REJECTED' || (a.state==='TERMINAL' && a.accounted===true)));
+    trace.status = unresolved ? 'RECONCILIATION_REQUIRED' : totalFill>0 ? 'FILLED' : attempts.some(a=>a.order_id) ? 'NO_FILL' : 'NOT_SUBMITTED';
+    trace.filled_count=totalFill; trace.cost_is_actual=actualKnown; trace.cost_or_reserved_cost=spent;
     event('error', {message: String(e)});
-    try { await save(submitted ? {} : {result: 'cancelled'}); } catch (saveError) {event('save_error', {message: String(saveError)});}
+    try { await save(unresolved ? {} : {result: totalFill>0 ? 'pending' : 'cancelled'}); } catch (saveError) {event('save_error', {message: String(saveError)});}
   }
   d.log(trace); return trace;
 }
