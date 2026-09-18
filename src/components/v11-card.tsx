@@ -14,23 +14,6 @@ interface V11Props {
 const pct = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : `${(v * 100).toFixed(1)}%`;
 
-const PHASES: Record<string, { label: string; dot: string; chip: string }> = {
-  LIVE_SHADOW: {
-    label: "Live shadow",
-    dot: "bg-steel-vivid v11-live-dot",
-    chip: "border-steel-vivid/50 text-steel-vivid bg-steel-vivid/10",
-  },
-  RECORDING_ONLY: {
-    label: "Warming up",
-    dot: "bg-signal-orange-vivid",
-    chip: "border-signal-orange-vivid/40 text-signal-orange-vivid bg-signal-orange-vivid/10",
-  },
-  PREPARING: {
-    label: "Preparing",
-    dot: "bg-muted-foreground",
-    chip: "border-border text-muted-foreground bg-muted/30",
-  },
-};
 
 function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -139,7 +122,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
     );
   }
 
-  const phase = PHASES[stats?.phase as string] ?? PHASES.PREPARING;
   const predictor=stats?.v12;
   const predictorLabel=predictor?.state==='CONNECTED'?'Prediction feed connected':predictor?.state==='WAITING'?'Waiting for inputs':'No recent worker status';
   const uReasons:Record<string,string>={ELIGIBLE:'Eligible for checkpoint scoring',DAILY_FLOOR_CLOSED:'Daily floor closed',
