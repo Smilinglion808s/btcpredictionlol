@@ -132,6 +132,9 @@ function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: stri
 }
 
 export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Props) {
+  // Ticks once a second so age and interval-boundary staleness are computed
+  // against the wall clock, not only when a refetch happens to land.
+  const tick = useTick();
   // History can fail on its own without hiding the live call state, and vice
   // versa: the title and the current interval must stay on screen.
   if (error && !now12) {
