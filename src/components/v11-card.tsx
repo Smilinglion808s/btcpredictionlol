@@ -208,17 +208,32 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
-  // Freshness of the live read itself. Shown compactly so a paused or failing
-  // poll is visible instead of silently presenting an old interval as current.
-  const ageSec = liveMeta?.updatedAt ? Math.max(0, Math.round((Date.now() - liveMeta.updatedAt) / 1000)) : null;
-  const liveStale = liveMeta?.error === true || (ageSec != null && ageSec > 30);
+  // Freshness. Measured against the timestamp the SERVER put in the payload,
+  // so a cached-on-failure response (the read cache can serve an old value for
+  // up to ten minutes) ages visibly instead of posing as current. The clock
+  // boundary counts too: once a new 15-minute candle opens, a payload from the
+  // previous one is stale even if it arrived a second ago.
+  const serverNow = now12?.now ? Date.parse(now12.now) : null;
+  const clientAt = liveMeta?.updatedAt ?? null;
+  const ageMs =
+    serverNow != null ? Math.max(0, tick - serverNow) : clientAt != null ? Math.max(0, tick - clientAt) : null;
+  const ageSec = ageMs == null ? null : Math.round(ageMs / 1000);
+  const rolledOver =
+    serverNow != null && Math.floor(tick / 900_000) !== Math.floor(serverNow / 900_000);
+  const liveStale = liveMeta?.error === true || rolledOver || (ageSec != null && ageSec > 10);
   const freshLabel = liveMeta?.error
     ? "connection issue"
     : ageSec == null
       ? "connecting"
-      : ageSec < 2
-        ? "live"
-        : `${ageSec}s ago`;
+      : rolledOver
+        ? "new candle — updating"
+        : ageSec <= 2
+          ? "live"
+          : ageSec > 10
+            ? `stale · ${ageSec}s old`
+            : `${ageSec}s ago`;
+  // A stale payload must not keep claiming the worker is connected right now.
+  const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
