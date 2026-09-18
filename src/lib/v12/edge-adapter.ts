@@ -1,15 +1,44 @@
 // Standalone recording backend. Bundle the canonical readers; do not proxy the website.
 import { createHmac } from 'node:crypto';
-import { readV12Context } from './context.server';
+import { readV12Context, readV12EarlyContext } from './context.server';
 import { publishV12Shadow } from './shadow.server';
-import { ROUTES, validateSignal, type Route } from './contract';
+import { ROUTES, V12_VERSION, intervalKey, validateSignal, type Route } from './contract';
 import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } from './receiver-destination';
 import { recordRuntime } from './runtime.server';
 
-export { readV12Context };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r3';
+export { readV12Context, readV12EarlyContext };
+export const ADAPTER_REVISION = 'v12-edge-adapter-r4';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
+const EARLY_LEGS = ['V1', 'T45R2'] as const;
+type EarlyLeg = (typeof EARLY_LEGS)[number];
+
+/**
+ * Build a V1/T45R2 signal straight from the committed decision the adapter just
+ * read. Direction, decision time and market all come from the authoritative row
+ * — the worker cannot assert any of them — so a historical or non-current
+ * decision can never be dispatched.
+ */
+function buildEarlySignal(leg: EarlyLeg, context: any, open: number, now: number) {
+  const v1 = context.v1, t45 = context.t45;
+  if (!v1 || v1.features?.input_valid !== true) return {leg, status: 'V1_INPUT_INVALID'} as const;
+  if (leg === 'T45R2' && (!t45 || t45.leg !== 'T45R2' || t45.run_mode !== 'LIVE_SHADOW' ||
+      t45.evidence?.trigger_signed !== true)) return {leg, status: 'NOT_COMMITTED'} as const;
+  const side = leg === 'V1' ? v1.final_side : t45?.side;
+  const offset = leg === 'V1' ? v1.publication_offset_ms : t45?.decision_offset_ms;
+  if (![1, -1].includes(side) || typeof offset !== 'number') return {leg, status: 'NOT_COMMITTED'} as const;
+  const decision = open + offset;
+  if (now < decision) return {leg, status: 'NOT_COMMITTED'} as const;
+  if (now - decision > 8000) return {leg, status: 'DECISION_EXPIRED'} as const;
+  const r = ROUTES[leg];
+  return {leg, status: 'READY', decision, signal: {mode: 'shadow', model_version: r.model,
+    combined_model_version: V12_VERSION, leg, execution_policy: r.execution,
+    stake_fraction_of_boise_day_opening_principal: r.fraction, market: context.ticker,
+    candle_starts_at: new Date(open).toISOString(), decision_at: new Date(decision).toISOString(),
+    sent_at: new Date(now).toISOString(), interval_key: intervalKey(context.ticker, new Date(open).toISOString()),
+    prediction: side === 1 ? 'YES' : 'NO'} as Record<string, any>} as const;
+}
+
 
 export async function verifyWorkerSignature(raw: string, timestamp: string | null, signature: string | null,
   secret: string, now: number): Promise<boolean> {
