@@ -167,6 +167,7 @@ async function executeEntry(d, p, input) {
 	let row = null;
 	let submitted = false;
 	let writeReserveMs = 100;
+	let totalFill = 0, spent = 0, fees = 0, actualKnown = true;
 	const event = (type, data = {}) => trace.events.push({
 		type,
 		at: d.now(),
@@ -245,10 +246,6 @@ async function executeEntry(d, p, input) {
 		trace.desired_count = desired;
 		let remaining = desired;
 		let budget = checks.budget;
-		let totalFill = 0;
-		let spent = 0;
-		let actualKnown = true;
-		let fees = 0;
 		if (p.mode === "shadow") {
 			trace.status = "SHADOW_PLAN";
 			trace.plans = kinds.map((k) => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
@@ -353,6 +350,29 @@ async function executeEntry(d, p, input) {
 			}
 			if (d.beforeSubmit) await d.beforeSubmit();
 			allowed();
+			if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) {
+				event("refresh_after_gate");
+				q = await d.quote();
+				allowed();
+				const fresh = planOrder(q, p, kind, budget, ceiling, Math.min(remaining, plan.count), d.now());
+				if (!fresh) {
+					a.state = "NOT_SUBMITTED_PRICE_OR_SIZE";
+					event("post_gate_price_or_size_abstention", {
+						kind,
+						quote: q
+					});
+					await save();
+					break;
+				}
+				const changed = fresh.limit !== plan.limit || fresh.count !== plan.count;
+				plan = fresh;
+				if (changed) {
+					a.plan = plan;
+					a.replanned_at = d.now();
+					await save();
+					allowed();
+				}
+			}
 			if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) throw new Error("PRE_SUBMIT_EXPIRED");
 			a.submit_started_at = d.now();
 			const previouslySubmitted = submitted;
@@ -395,7 +415,19 @@ async function executeEntry(d, p, input) {
 				seconds_after_open: Math.round((a.response_received_at - input.target) / 1e3)
 			});
 			if (kind === "maker") await d.sleep(Math.max(0, a.submit_started_at + p.makerWaitMs - d.now()));
-			let state = orderState(await d.read(a.order_id), plan.count);
+			let rawState;
+			for (let check = 0; check < 3; check++) try {
+				rawState = await d.read(a.order_id);
+				break;
+			} catch (e) {
+				if (e?.status !== 404 || check === 2) throw e;
+				event("order_read_visibility_retry", {
+					order_id: a.order_id,
+					check: check + 1
+				});
+				await d.sleep(150 * (check + 1));
+			}
+			let state = orderState(rawState, plan.count);
 			if (!state.terminal) {
 				a.observation = state;
 				const cancelStarted = d.now();
@@ -499,6 +531,7 @@ async function executeEntry(d, p, input) {
 			spent += cost;
 			fees += state.fees ?? 0;
 			budget = Math.max(0, checks.budget - spent);
+			a.accounted = true;
 			event("order_terminal", {
 				kind,
 				...state,
@@ -530,10 +563,15 @@ async function executeEntry(d, p, input) {
 		trace.cost_or_reserved_cost = spent;
 		await save({ result: totalFill > 0 ? "pending" : "cancelled" });
 	} catch (e) {
-		trace.status = submitted ? "RECONCILIATION_REQUIRED" : "NOT_SUBMITTED";
+		for (const a of attempts) if (a.state === "INTENT" && !a.submit_started_at && !a.order_id) a.state = "NOT_SUBMITTED_ERROR";
+		const unresolved = attempts.some((a) => a.submit_started_at && !(a.state === "REJECTED" || a.state === "TERMINAL" && a.accounted === true));
+		trace.status = unresolved ? "RECONCILIATION_REQUIRED" : totalFill > 0 ? "FILLED" : attempts.some((a) => a.order_id) ? "NO_FILL" : "NOT_SUBMITTED";
+		trace.filled_count = totalFill;
+		trace.cost_is_actual = actualKnown;
+		trace.cost_or_reserved_cost = spent;
 		event("error", { message: String(e) });
 		try {
-			await save(submitted ? {} : { result: "cancelled" });
+			await save(unresolved ? {} : { result: totalFill > 0 ? "pending" : "cancelled" });
 		} catch (saveError) {
 			event("save_error", { message: String(saveError) });
 		}
@@ -675,7 +713,12 @@ function marketSource(get, now, sleep, ticker, target, side, p, log) {
 }
 //#endregion
 //#region services/v12-executor/live.ts
-var EXECUTOR_REVISION = "v12-executor-r2";
+var EXECUTOR_REVISION = "v12-executor-r3";
+function confidencePercent(value) {
+	if (value === void 0 || value === null) return 0;
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) throw Error("INVALID_PROBABILITY");
+	return Math.round(value * 100);
+}
 var enc = new TextEncoder();
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function dayStart(day) {
@@ -846,7 +889,6 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 		data
 	}));
 	const source = marketSource(publicGet, clock, sleep, ticker, target, side, policy, log);
-	let quote;
 	const sizing = {
 		policy_version: V12_VERSION,
 		model_version: signal.model_version,
@@ -859,8 +901,8 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 		now: clock,
 		sleep,
 		id: () => crypto.randomUUID(),
-		ready: async () => quote = await source.ready(),
-		quote: async () => quote = await source.quote(),
+		ready: async () => await source.ready(),
+		quote: async () => await source.quote(),
 		claim: async () => {
 			return (await c.db("bet_history", "POST", {
 				placed_at: new Date(clock()).toISOString(),
@@ -868,7 +910,7 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 				market: ticker,
 				side,
 				prediction: signal.prediction,
-				confidence: signal.probability || 0,
+				confidence: confidencePercent(signal.probability),
 				contracts: 0,
 				fill_price: 0,
 				odds: 0,
@@ -886,7 +928,7 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 				execution_trace: {
 					policy,
 					policy_version: "entry-controls-r1",
-					execution_revision: "v12-executor-r2",
+					execution_revision: "v12-executor-r3",
 					receipt_id: receipt.id,
 					sizing,
 					status: "CLAIMED"
@@ -922,7 +964,7 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 		},
 		beforeSubmit: async () => {
 			if (await activation()) throw Error("BOT_PAUSED");
-			if (clock() > target + policy.maxEntryAgeMs || !quote || clock() - quote.requestStartedAt > policy.quoteMaxAgeMs) throw Error("PRE_SUBMIT_EXPIRED");
+			if (clock() > target + policy.maxEntryAgeMs) throw Error("ENTRY_DEADLINE");
 		},
 		submit: async (body) => {
 			const shard = (get("EXCHANGE_INDEX") || "-1").trim().toLowerCase();
@@ -951,4 +993,4 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 	return trace;
 }
 //#endregion
-export { EXECUTOR_REVISION, dayStart, executeV12, executionReadiness };
+export { EXECUTOR_REVISION, confidencePercent, dayStart, executeV12, executionReadiness };
