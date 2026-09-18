@@ -1,8 +1,8 @@
-// Dedicated recording-only transport. Never uses place-trade or configurable arbitrary URLs.
+// Dedicated V1.2 signal transport. Receiver-side release state owns execution.
 import {createHmac,createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {ROUTES,validateSignal,type Route} from './contract';
-import {V12_RECEIVER_BASE,isAuthorizedBettingEndpoint} from './receiver-destination';
+import {V12_RECEIVER_BASE,V12_SECRET_ENDPOINTS,isAuthorizedBettingEndpoint} from './receiver-destination';
 
 export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,any>,now=Date.now()){
   const route=payload.leg as Route;
@@ -10,7 +10,9 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
   validateSignal(payload,route,now);
   // Reuse only the secret of the single existing authorised betting receiver.
   const destination=V12_RECEIVER_BASE;
-  const {data,error}=await sb.from('webhook_endpoints').select('secret,url,is_active').eq('is_active',true);
+  // The legacy endpoint's active flag controls legacy sending, not this fixed
+  // V1.2 destination. Reading its shared signing secret must not reactivate it.
+  const {data,error}=await sb.from('webhook_endpoints').select('secret,url,is_active').in('url',V12_SECRET_ENDPOINTS);
   if(error)throw error;
   const endpoints=(data??[]).filter(e=>isAuthorizedBettingEndpoint(e.url));
   if(endpoints.length!==1 || !endpoints[0].secret)throw new Error('SINGLE_BETTING_SECRET_UNAVAILABLE');
@@ -27,7 +29,8 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
         'x-v12-event-id':eventKey,'x-v12-model':ROUTES[route].model,'x-v12-leg':route}});
     if(!response.ok)throw new Error('SHADOW_RECEIVER_HTTP_'+response.status);
     const result=await response.json();
-    if(result.execution_enabled!==false)throw new Error('SHADOW_RECEIVER_CONTRACT_MISMATCH');
+    if(typeof result.execution_enabled!=='boolean' || !['shadow','live'].includes(result.mode))
+      throw new Error('SHADOW_RECEIVER_CONTRACT_MISMATCH');
     const {error}=await sb.from('v12_prediction_events').update({delivery_status:'ACKNOWLEDGED',
       acknowledged_at:new Date().toISOString(),receiver_status:typeof result.status==='string'?result.status:null,
       receiver_receipt_id:typeof result.id==='string'?result.id:null}).eq('event_key',eventKey);

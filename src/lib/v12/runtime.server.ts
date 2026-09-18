@@ -1,7 +1,8 @@
 // Store only bounded operational fields from the authenticated prediction worker.
 const FIELDS=['stage','fit_expires_at','fit_version','last_context_at','last_error','u_eligible','u_block_reason',
   'early_features_ready','quote_received_at','quote_error','index_complete_through','spot_complete_through',
-  'perp_complete_through','refresh_status','refresh_error','training_rows','training_latest_at'];
+  'perp_complete_through','refresh_status','refresh_error','training_rows','training_latest_at',
+  'last_attempt_at','last_attempt_status','last_attempt_checkpoint'];
 export async function recordRuntime(sb:any,input:Record<string,unknown>){
   if(!input || typeof input!=='object' || Array.isArray(input) || input.mode!=='shadow' || input.execution_enabled!==false)
     throw new Error('INVALID_PREDICTOR_STATUS');

@@ -1,6 +1,7 @@
 // Secret lookup accepts the existing receiver's documented region hint only.
 // Actual recording destinations remain fixed and never use this saved URL.
 export const V12_RECEIVER_BASE='https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/';
+export const V12_SECRET_ENDPOINTS=[V12_RECEIVER_BASE+'place-trade',V12_RECEIVER_BASE+'place-trade?forceFunctionRegion=us-west-1'];
 export function isAuthorizedBettingEndpoint(value:unknown):boolean {
   if(typeof value!=='string')return false;
   try {
