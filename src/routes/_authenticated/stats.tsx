@@ -23,6 +23,7 @@ import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 
 import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
+import { getV12Live } from "@/lib/v12Live.functions";
 
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
