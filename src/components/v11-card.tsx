@@ -7,9 +7,25 @@ type Stats = Record<string, any>;
 
 interface V11Props {
   stats: Stats;
+  /**
+   * Current 15-minute interval state from the V1.2 event journal. It is the
+   * authority for what is happening right now on all three legs; the `stats`
+   * payload stays the authority for settled history.
+   */
+  live?: Stats | null;
   loading?: boolean;
   error?: boolean;
 }
+
+const LEG_LABEL: Record<string, string> = { V1: "V1", T45R2: "T45 R2", U: "U" };
+
+/** Delivery state only. A receiver acknowledgement is not a filled bet. */
+const DELIVERY_LABEL: Record<string, string> = {
+  WAITING: "no call yet",
+  DISPATCHED: "sent · awaiting receipt",
+  ACKNOWLEDGED: "received by betting account",
+  UNCONFIRMED: "receipt unconfirmed",
+};
 
 const pct = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : `${(v * 100).toFixed(1)}%`;
@@ -101,8 +117,10 @@ function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: stri
   );
 }
 
-export function V11Card({ stats, loading, error }: V11Props) {
-  if (error) {
+export function V11Card({ stats, live: now12, loading, error }: V11Props) {
+  // History can fail on its own without hiding the live call state, and vice
+  // versa: the title and the current interval must stay on screen.
+  if (error && !now12) {
     return (
       <section className="v11-shell self-start rounded-2xl p-6">
         <span className="v11-orbit-ring" aria-hidden />
@@ -116,7 +134,7 @@ export function V11Card({ stats, loading, error }: V11Props) {
     );
   }
 
-  if (loading && !stats?.phase) {
+  if (loading && !stats?.phase && !now12) {
     return (
       <section className="v11-shell self-start rounded-2xl p-6 space-y-4">
         <span className="v11-orbit-ring" aria-hidden />
@@ -132,7 +150,10 @@ export function V11Card({ stats, loading, error }: V11Props) {
   }
 
   const predictor=stats?.v12;
-  const predictorLabel=predictor?.state==='CONNECTED'?'Prediction feed connected':predictor?.state==='WAITING'?'Waiting for inputs':'No recent worker status';
+  // Worker state comes from the fast live read when present so the pill keeps
+  // up with the feed instead of the 10-second history refresh.
+  const workerState=now12?.worker?.state ?? predictor?.state;
+  const predictorLabel=workerState==='CONNECTED'?'Prediction feed connected':workerState==='WAITING'?'Waiting for inputs':'No recent worker status';
   const uReasons:Record<string,string>={ELIGIBLE:'Eligible for checkpoint scoring',DAILY_FLOOR_CLOSED:'Daily floor closed',
     V1_SELECTED:'V1 already selected',T45_SELECTED:'T45 R2 already selected',AWAITING_T45_DECISION:'Waiting for T45 decision',
     PRIOR_CLAIM:'Interval already claimed',INVALID_V1_INPUTS:'V1 inputs unavailable',V1_NOT_CONFIDENCE_ABSTENTION:'V1 abstention not eligible'};
@@ -156,12 +177,19 @@ export function V11Card({ stats, loading, error }: V11Props) {
         pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
         netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
     : null;
-  const latestEvent = predictor?.latest ?? null;
-  const latestDelivery = latest && latestEvent?.candle_starts_at && latest?.targetTs &&
-      new Date(latestEvent.candle_starts_at).toISOString() === new Date(latest.targetTs).toISOString()
-    ? latestEvent
-    : null;
-  const deliveryLeg = latestDelivery ? legs.find((l) => l.leg === latestDelivery.route) ?? null : null;
+  // Current-interval authority: the V1.2 event journal, not the V1.1 baseline.
+  // When it is unavailable we fall back to the slow baseline snapshot rather
+  // than showing nothing.
+  const nowLegs: any[] = now12?.legs ?? [];
+  const nowCalled = nowLegs.filter((l) => l.status !== "WAITING");
+  const nowSide =
+    now12?.decision?.side ??
+    (nowCalled[0]?.prediction === "YES" ? "UP" : nowCalled[0]?.prediction === "NO" ? "DOWN" : null);
+  const intervalTs = now12?.intervalOpen ?? latest?.targetTs ?? null;
+  const intervalStale = !!now12 && now12.isCurrentInterval === false;
+  const fmtTs = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
+  const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -230,54 +258,79 @@ export function V11Card({ stats, loading, error }: V11Props) {
       </div>
 
       <section className="v11-chip relative p-4">
-        <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          Latest 15-minute interval
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
+          </div>
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {fmtTs(intervalTs)} UTC
+          </span>
         </div>
-        {latest ? (
+
+        {now12 ? (
           <>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <span className={`text-lg font-semibold ${sideLabel ? "text-emerald-300" : "text-muted-foreground"}`}>
-                {sideLabel ? "Called" : "No prediction"}
+              <span className={`text-lg font-semibold ${nowSide ? "text-emerald-300" : "text-muted-foreground"}`}>
+                {nowSide ? "Called" : nowCalled.length > 0 ? "Sent" : "No call yet"}
               </span>
-              {sideLabel ? (
+              {nowSide ? (
                 <span className="rounded-md border border-border/70 px-1.5 py-0.5 text-xs font-semibold tracking-wide">
-                  {sideLabel}
+                  {nowSide}
                 </span>
               ) : null}
-              {latest.leg ? (
+              {now12?.decision?.leg ? (
                 <span className="rounded-md border border-steel-vivid/40 bg-steel-vivid/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-steel-vivid">
-                  {latest.leg === "T45R2" ? "T45 R2 leg" : `${latest.leg} leg`}
+                  {LEG_LABEL[now12.decision.leg] ?? now12.decision.leg} leg
                 </span>
               ) : null}
+              {now12?.decision?.reason ? (
+                <span className="text-[11px] text-muted-foreground">{now12.decision.reason}</span>
+              ) : null}
             </div>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground tabular-nums">
-              <span>
-                {latest.targetTs
-                  ? new Date(latest.targetTs).toISOString().slice(5, 16).replace("T", " ")
-                  : "—"}{" "}
-                UTC
-              </span>
-              <span className="opacity-40">·</span>
-              <span>{latest.reason ?? "—"}</span>
-            </div>
-            {sideLabel ? (
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
-                <span
-                  className={`size-1.5 shrink-0 rounded-full ${deliveryLeg?.authenticated ? "bg-bull" : "bg-muted-foreground/50"}`}
-                  title={deliveryLeg?.authenticated ? "Authentication verified" : "Awaiting authentication check"}
-                />
-                {latestDelivery ? (
-                  <span>
-                    Webhook <span className="font-mono">/{deliveryLeg?.endpoint ?? latestDelivery.route}</span>
-                    {" · "}{(latestDelivery.delivery_status ?? "—").toLowerCase().replaceAll("_", " ")}
-                    {latestDelivery.receiver_status ? ` · receiver ${latestDelivery.receiver_status}` : ""}
+
+            <div className="mt-2.5 space-y-1">
+              {nowLegs.map((l) => (
+                <div
+                  key={l.leg}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground tabular-nums"
+                >
+                  <span
+                    className={`size-1.5 shrink-0 rounded-full ${authFor(l.leg) ? "bg-bull" : "bg-muted-foreground/50"}`}
+                    title={authFor(l.leg) ? "Authentication verified" : "Awaiting authentication check"}
+                  />
+                  <span className="w-12 shrink-0 font-semibold uppercase tracking-wide text-foreground/80">
+                    {LEG_LABEL[l.leg] ?? l.leg}
                   </span>
-                ) : (
-                  <span>No V1.2 webhook recorded for this interval yet</span>
-                )}
-              </div>
-            ) : null}
+                  <span className="font-mono">/{l.endpoint}</span>
+                  <span className="opacity-40">·</span>
+                  <span className={l.status === "ACKNOWLEDGED" ? "text-bull" : undefined}>
+                    {DELIVERY_LABEL[l.status] ?? l.status.toLowerCase()}
+                  </span>
+                  {l.prediction ? (
+                    <>
+                      <span className="opacity-40">·</span>
+                      <span>{l.prediction === "YES" ? "UP" : "DOWN"}</span>
+                    </>
+                  ) : null}
+                  {l.receiverStatus ? (
+                    <>
+                      <span className="opacity-40">·</span>
+                      <span>receiver {l.receiverStatus}</span>
+                    </>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 text-[9px] text-muted-foreground/80">
+              Delivery only — the bet is placed on the external betting account, so a
+              received webhook is not a confirmed fill.
+            </div>
           </>
+        ) : latest ? (
+          <div className="mt-1.5 text-sm text-muted-foreground">
+            {sideLabel ? `Called ${sideLabel}` : "No prediction"} · {latest.reason ?? "—"}
+          </div>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
             Nothing recorded yet — the first prediction will appear here.

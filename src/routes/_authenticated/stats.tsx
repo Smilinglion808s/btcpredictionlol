@@ -23,6 +23,7 @@ import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 
 import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
+import { getV12Live } from "@/lib/v12Live.functions";
 
 import { BinanceObCard } from "@/components/binance-ob-card";
 import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
@@ -85,7 +86,9 @@ function StatsPage() {
   const liteAFn = useServerFn(getLiteAStats);
   const liteAQ = useQuery({ queryKey: ["litea-stats"], queryFn: () => liteAFn(), refetchInterval: 15_000, staleTime: 5_000 });
 
-  // Version 1.1 — combined stream stats. This query is read-only.
+  // Version 1.1 — combined historical stream stats. Read-only and expensive,
+  // so it stays on the slow cadence; the live V1.2 state below is what has to
+  // be current to the second.
   const v11Fn = useServerFn(getV11Stats);
   const v11Q = useQuery({
     queryKey: ["v11-stats"],
@@ -97,6 +100,61 @@ function StatsPage() {
     refetchOnReconnect: true,
     staleTime: 5_000,
   });
+
+  // Version 1.2 — current 15-minute interval only. Four small rows, so it can
+  // poll about once a second while a call is live without loading the
+  // database. Realtime is unavailable for these tables (they are not in the
+  // publication and carry no reader grant), so polling is the transport.
+  const v12LiveFn = useServerFn(getV12Live);
+  const v12LiveQ = useQuery({
+    queryKey: ["v12-live"],
+    queryFn: () => v12LiveFn(),
+    // 1s while the current interval is still resolving, 5s once every leg has
+    // settled its delivery, 15s when the tab is hidden.
+    refetchInterval: (q) => {
+      if (typeof document !== "undefined" && document.hidden) return 15_000;
+      const d = q.state.data as any;
+      if (!d) return 2_000;
+      const settled =
+        d.isCurrentInterval &&
+        !d.pending &&
+        Array.isArray(d.legs) &&
+        d.legs.every((l: any) => l.status !== "WAITING");
+      return settled ? 5_000 : 1_000;
+    },
+    refetchIntervalInBackground: true,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 0,
+    // Keep the last good snapshot on screen while refetching — the tile must
+    // never fall back to a skeleton once it has data.
+    placeholderData: (prev: any) => prev,
+    retry: 1,
+  });
+
+  // Interval rollover: pull immediately when a new 15-minute candle opens.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const wait = 900_000 - (Date.now() % 900_000) + 250;
+      timer = setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["v12-live"] });
+        schedule();
+      }, wait);
+    };
+    schedule();
+    const onVisible = () => {
+      if (!document.hidden) qc.invalidateQueries({ queryKey: ["v12-live"] });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [qc]);
 
   const [exportingPf, setExportingPf] = useState(false);
 
@@ -229,6 +287,7 @@ function StatsPage() {
 
         <V11Card
           stats={(v11Q.data as any) ?? {}}
+          live={(v12LiveQ.data as any) ?? null}
           loading={v11Q.isLoading}
           error={v11Q.isError}
         />
