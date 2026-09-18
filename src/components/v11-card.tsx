@@ -72,11 +72,20 @@ function Gauge({
   );
 }
 
-function LegRecord({ title, r }: { title: string; r: any }) {
+function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: string; dot?: boolean | null }) {
   const rec = r ?? { calls: 0, wins: 0, losses: 0, pending: 0, winRate: null, netWins: 0 };
   return (
     <div className="v11-chip px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        {dot != null ? (
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${dot ? "bg-bull" : "bg-muted-foreground/50"}`}
+            title={dot ? "Authentication verified" : "Awaiting authentication check"}
+          />
+        ) : null}
+        <span className="truncate">{title}</span>
+        {hint ? <span className="normal-case tracking-normal text-muted-foreground/60">{hint}</span> : null}
+      </div>
       <div
         className={`mt-1 text-lg font-semibold tabular-nums ${
           rec.netWins > 0 ? "text-bull" : rec.netWins < 0 ? "text-bear" : ""
