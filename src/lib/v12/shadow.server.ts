@@ -5,6 +5,7 @@ import {ROUTES,validateSignal,type Route} from './contract';
 import {V12_RECEIVER_BASE,V12_SECRET_ENDPOINTS,isAuthorizedBettingEndpoint} from './receiver-destination';
 
 export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,any>,now=Date.now()){
+  const started=Date.now();
   const route=payload.leg as Route;
   if(!Object.hasOwn(ROUTES,route)) throw new Error('UNKNOWN_ROUTE');
   validateSignal(payload,route,now);
@@ -34,7 +35,8 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
     if(typeof result.execution_enabled!=='boolean' || !['shadow','live'].includes(result.mode))
       throw new Error('SHADOW_RECEIVER_CONTRACT_MISMATCH');
     // Bounded durations only: no credentials, payloads or receiver bodies.
-    const timings={secret_and_journal_ms:journalMs,http_ms:Date.now()-httpStarted};
+    const timings={secret_read_ms:secretRead-started,journal_ms:journalMs,http_ms:Date.now()-httpStarted,
+      dispatch_at_ms:httpStarted};
     const {error}=await sb.from('v12_prediction_events').update({delivery_status:'ACKNOWLEDGED',
       acknowledged_at:new Date().toISOString(),receiver_status:typeof result.status==='string'?result.status:null,
       receiver_receipt_id:typeof result.id==='string'?result.id:null}).eq('event_key',eventKey);

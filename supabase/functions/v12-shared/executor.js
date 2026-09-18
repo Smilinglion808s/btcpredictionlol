@@ -18,6 +18,9 @@ function isPostOnlyCrossRejection(error) {
 function kindFeeReserve(p, kind) {
 	return kind === "maker" ? p.makerFeeReserve ?? p.feeReserve : p.feeReserve;
 }
+function reservedOrderCost(count, limit, reserve) {
+	return count * limit + Math.ceil(count * reserve * 100 - 1e-9) / 100;
+}
 function policyFromEnv(get) {
 	const num = (key, fallback) => {
 		const text = get(key);
@@ -91,15 +94,20 @@ function planOrder(q, p, kind, budget, ceiling, remaining, now) {
 	const reserve = kindFeeReserve(p, kind);
 	const limit = downCent(Math.min(ceiling, kind === "maker" ? q.ask - p.makerImprovement : q.ask + p.slippage));
 	if (limit < .01 || kind === "taker" && q.ask > limit + 1e-9) return null;
-	const affordable = Math.floor((budget + 1e-9) / (limit + reserve) * 100) / 100;
-	const count = Math.floor(Math.min(remaining, affordable, kind === "taker" ? q.askSize : Infinity) * 100 + 1e-8) / 100;
-	if (count < .01 || limit + reserve > 1 / p.minOdds + 1e-9) return null;
+	let low = 0, high = Math.floor(Math.min(remaining, budget / limit, kind === "taker" ? q.askSize : Infinity) * 100 + 1e-8);
+	while (low < high) {
+		const mid = Math.ceil((low + high) / 2);
+		if (reservedOrderCost(mid / 100, limit, reserve) <= budget + 1e-9) low = mid;
+		else high = mid - 1;
+	}
+	const count = low / 100, maxCost = reservedOrderCost(count, limit, reserve);
+	if (count < .01 || maxCost / count > 1 / p.minOdds + 1e-9) return null;
 	return {
 		kind,
 		limit,
 		count,
-		maxCost: count * (limit + reserve),
-		minimumOdds: 1 / (limit + reserve),
+		maxCost,
+		minimumOdds: count / maxCost,
 		feeReserve: reserve,
 		quote: q
 	};
@@ -484,7 +492,7 @@ async function executeEntry(d, p, input) {
 			a.reconciled_at = d.now();
 			totalFill += state.fill;
 			remaining = Math.max(0, desired - totalFill);
-			const reservedCost = state.fill * (plan.limit + (plan.feeReserve ?? kindFeeReserve(p, kind)));
+			const reservedCost = reservedOrderCost(state.fill, plan.limit, plan.feeReserve ?? kindFeeReserve(p, kind));
 			if (state.actualCost !== null && state.actualCost > reservedCost + 1e-4) throw new Error("FEE_OR_PRICE_RESERVE_EXCEEDED");
 			const cost = state.actualCost ?? reservedCost;
 			actualKnown = actualKnown && state.actualCost !== null;

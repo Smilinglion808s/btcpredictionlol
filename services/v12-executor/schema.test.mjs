@@ -62,3 +62,20 @@ test('anonymous roles have no execution RPC access',async()=>{
   assert.deepEqual(rights,{a:false,u:false,s:true});
 });
 test.after(()=>db.close());
+
+test('fallback migration preserves activation and normalizes both wire policies',async()=>{
+  await db.exec("update v12_release_config set mode='live'");
+  const before=(await db.query('select live_enabled_at from v12_release_config')).rows[0].live_enabled_at;
+  await db.exec(await readFile(new URL('../../docs/v12_receiver_maker_then_taker.sql',import.meta.url),'utf8'));
+  const after=(await db.query('select mode,live_enabled_at from v12_release_config')).rows[0];
+  assert.equal(after.mode,'live');assert.equal(after.live_enabled_at.getTime(),before.getTime());
+  for(const route of ['V1','U'])for(const policy of ['maker_only','maker_then_taker']){
+    const p=await payload(route);p.execution_policy=policy;const r=await record(p);
+    assert.equal(r.status,'LIVE_ACCEPTED');assert.equal(r.execution_policy,'maker_then_taker');
+    const saved=(await db.query('select payload from v12_shadow_signals where id=$1',[r.id])).rows[0].payload;
+    assert.equal(saved.execution_policy,'maker_then_taker');assert.ok(r.received_at);
+  }
+  const invalid=await payload('T45R2');invalid.execution_policy='maker_then_taker';
+  await assert.rejects(()=>record(invalid),/INVALID_V12_POLICY/);
+  await db.exec("update v12_release_config set mode='shadow'");
+});

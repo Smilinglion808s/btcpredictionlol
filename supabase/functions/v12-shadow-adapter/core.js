@@ -494,6 +494,7 @@ function isAuthorizedBettingEndpoint(value) {
 //#endregion
 //#region src/lib/v12/shadow.server.ts
 async function publishV12Shadow(sb, payload, now = Date.now()) {
+	const started = Date.now();
 	const route = payload.leg;
 	if (!Object.hasOwn(ROUTES, route)) throw new Error("UNKNOWN_ROUTE");
 	validateSignal(payload, route, now);
@@ -537,8 +538,10 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 		const result = await response.json();
 		if (typeof result.execution_enabled !== "boolean" || !["shadow", "live"].includes(result.mode)) throw new Error("SHADOW_RECEIVER_CONTRACT_MISMATCH");
 		const timings = {
-			secret_and_journal_ms: journalMs,
-			http_ms: Date.now() - httpStarted
+			secret_read_ms: secretRead - started,
+			journal_ms: journalMs,
+			http_ms: Date.now() - httpStarted,
+			dispatch_at_ms: httpStarted
 		};
 		const { error } = await sb.from("v12_prediction_events").update({
 			delivery_status: "ACKNOWLEDGED",
@@ -824,8 +827,7 @@ function createAdapterHandler(deps) {
 				});
 				const dispatched = [];
 				for (const leg of legs) {
-					const started = clock();
-					const built = buildEarlySignal(leg, early, open, started);
+					const built = buildEarlySignal(leg, early, open, clock());
 					if (built.status !== "READY") {
 						dispatched.push({
 							leg,
@@ -843,8 +845,8 @@ function createAdapterHandler(deps) {
 							receiver_mode: published.mode ?? null,
 							decision_at: built.signal.decision_at,
 							sent_at: built.signal.sent_at,
-							decision_to_dispatch_ms: started - built.decision,
-							decision_to_receipt_ms: clock() - built.decision,
+							decision_to_dispatch_ms: published.timings?.dispatch_at_ms == null ? null : published.timings.dispatch_at_ms - built.decision,
+							decision_to_receipt_ms: published.received_at ? Date.parse(published.received_at) - built.decision : null,
 							timings: published.timings ?? null
 						});
 					} catch (e) {

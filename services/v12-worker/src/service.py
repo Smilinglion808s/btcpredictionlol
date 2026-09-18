@@ -274,7 +274,10 @@ class Service:
                 pending=[r for r in ('V1','T45R2') if r not in early]
                 if pending and age<60000:
                     self.early_dispatch(cap,open_ms,pending,early)
-                    if [r for r in ('V1','T45R2') if r not in early] and millis()-last_context<2000:
+                    if [r for r in ('V1','T45R2') if r not in early]:
+                        # U's first checkpoint is at 120s. Do not put its full
+                        # context/history round trip back on the early path.
+                        self.status.update(stage='EARLY_DISPATCH',last_error=None)
                         time.sleep(.25);continue
                 last_context=millis()
                 context=self.adapter.call('context',open_ms)['context']

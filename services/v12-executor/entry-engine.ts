@@ -1,4 +1,4 @@
-import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection, kindFeeReserve} from './entry-policy.ts';
+import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection, kindFeeReserve, reservedOrderCost} from './entry-policy.ts';
 import type {Policy, Quote, Side} from './entry-policy.ts';
 
 export interface Deps {
@@ -215,7 +215,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       totalFill += state.fill; remaining = Math.max(0, desired - totalFill);
       // Missing venue cost figures are charged at this leg's own reserved price,
       // never treated as free, so the fallback can only spend what is left.
-      const reservedCost = state.fill * (plan.limit + (plan.feeReserve ?? kindFeeReserve(p, kind)));
+      const reservedCost = reservedOrderCost(state.fill,plan.limit,plan.feeReserve ?? kindFeeReserve(p, kind));
       if (state.actualCost !== null && state.actualCost > reservedCost + .0001)
         throw new Error('FEE_OR_PRICE_RESERVE_EXCEEDED');
       const cost = state.actualCost ?? reservedCost;
