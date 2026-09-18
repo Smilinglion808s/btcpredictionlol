@@ -22,8 +22,8 @@ for(const second of U_CHECKPOINTS){
         checkpoint_seconds:second,v11_eligibility:eligibility,limit_all_in:.65,u_source:second<480?'R':'L'};
       const receiver=createReceiver('U',k=>({BTC15M_WEBHOOK_SECRET:secret,SUPABASE_URL:'https://mock.invalid',
         SUPABASE_SERVICE_ROLE_KEY:'test'}[k]),async(url)=>{
-          assert.equal(url,'https://mock.invalid/rest/v1/rpc/record_v12_shadow_signal');writes++;
-          return Response.json({id:'00000000-0000-0000-0000-000000000001',status:'DAY_OPENING_UNAVAILABLE'});
+          assert.equal(url,'https://mock.invalid/rest/v1/rpc/record_v12_signal');writes++;
+          return Response.json({id:'00000000-0000-0000-0000-000000000001',status:'DAY_OPENING_UNAVAILABLE',mode:'shadow',execution_enabled:false});
         },()=>now);
       const raw=JSON.stringify(payload);
       const response=await receiver(new Request('https://mock.invalid/v12-u',{method:'POST',body:raw,

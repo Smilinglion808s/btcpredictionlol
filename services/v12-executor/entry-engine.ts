@@ -5,6 +5,7 @@ export interface Deps {
   claim(): Promise<string | null>; preflight(): Promise<{paused: boolean; stopped: boolean; budget: number}>;
   ready(): Promise<Quote>; quote(): Promise<Quote>;
   save(id: string, patch: any): Promise<void>;
+  beforeSubmit?(): Promise<void>;
   submit(body: any): Promise<any>; read(id: string, signal?: AbortSignal): Promise<any>;
   cancel(id: string, signal?: AbortSignal): Promise<any>;
   log(value: any): void;
@@ -36,6 +37,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     if (p.mode === 'live') {
       const started = d.now();
       row = await d.claim();
+      trace.bet_id = row;
       const elapsed = d.now()-started;
       // This request's observed database round trip is a planning estimate,
       // never permission to use an old quote. The post-save hard check remains.
@@ -103,6 +105,9 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
           a.state = 'NOT_SUBMITTED_STALE'; event('refresh_stale_after_save'); await save(); break;
         }
       }
+      if (d.beforeSubmit) await d.beforeSubmit();
+      allowed();
+      if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) throw new Error('PRE_SUBMIT_EXPIRED');
       a.submit_started_at = d.now(); const previouslySubmitted: boolean = submitted; submitted = true;
       let raw: any;
       try {

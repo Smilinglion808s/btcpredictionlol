@@ -164,3 +164,11 @@ Tracked separately in `docs/v11-roadmap.md`.
 Original U and separate recording-only receivers are being integrated.
 See `services/v12-worker/README.md`. Existing V1.1 execution remains active;
 V1.2 financial execution is not enabled.
+
+## V1.2 r3 release preparation (2026-09-18)
+
+Adapter r3 deployed (predictor backend only): signing-secret lookup accepts the
+two authorized fixed URL forms while the legacy endpoint stays inactive; probes
+became V1.2 readiness checks (T45R2/U/V1 all authenticated, ready, mode=shadow);
+receiver executor bundle `executor.js` generated; operator activation documented
+in `docs/v12-activation.md` (release gate stays shadow; real money off).

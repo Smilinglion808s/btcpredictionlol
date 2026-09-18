@@ -35,14 +35,14 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
       if(nonces.has(row.nonce))return {error:{code:'23505'}};nonces.add(row.nonce);return {error:null};},
     update:(row:any)=>({eq:async(key:string,value:string)=>{assert.equal(table,'v12_prediction_events');assert.equal(key,'event_key');journal.set(value,{...journal.get(value),...row});return {error:null};}}),
     upsert:async(row:any)=>{assert.equal(table,'v12_predictor_runtime');assert.equal(row.worker_id,'v12-shadow-worker');return {error:null};},
-    select:()=>({eq:async()=>{assert.equal(table,'webhook_endpoints');return {data:[{url:receiverRoot+'place-trade?forceFunctionRegion=us-west-1',secret:receiverSecret,is_active:true}],error:null};}})
+    select:()=>({in:async(key:string,values:string[])=>{assert.equal(key,'url');assert.equal(values.length,2);assert.equal(table,'webhook_endpoints');return {data:[{url:receiverRoot+'place-trade?forceFunctionRegion=us-west-1',secret:receiverSecret,is_active:false}],error:null};}})
   })};
   const transport=async(url:any,init:any)=>{
     const target=String(url);destinations.push(target);
     const route=Object.keys(ROUTES).find(k=>target===receiverRoot+ROUTES[k as keyof typeof ROUTES].endpoint) as keyof typeof ROUTES;
     assert.ok(route,'outbound destination must be one of three fixed shadow receivers');
     const receiver=createReceiver(route,k=>({BTC15M_WEBHOOK_SECRET:receiverSecret,SUPABASE_URL:'https://database.invalid',SUPABASE_SERVICE_ROLE_KEY:'test-key'}[k]),
-      async(u:any)=>{assert.equal(String(u),'https://database.invalid/rest/v1/rpc/record_v12_shadow_signal');writes++;return Response.json({status:'SHADOW_RECORDED',execution_enabled:false});},()=>now);
+      async(u:any)=>{assert.equal(String(u),'https://database.invalid/rest/v1/rpc/record_v12_signal');writes++;return Response.json({status:'SHADOW_RECORDED',mode:'shadow',execution_enabled:false});},()=>now,{readiness:async()=>({mode:'shadow',ready_for_activation:true,checks:{},records_created:0,orders_submitted:0,execution_enabled:false})});
     return receiver(new Request(target,init));
   };
   const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,

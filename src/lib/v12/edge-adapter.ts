@@ -3,11 +3,11 @@ import { createHmac } from 'node:crypto';
 import { readV12Context } from './context.server';
 import { publishV12Shadow } from './shadow.server';
 import { ROUTES, validateSignal, type Route } from './contract';
-import { V12_RECEIVER_BASE, isAuthorizedBettingEndpoint } from './receiver-destination';
+import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } from './receiver-destination';
 import { recordRuntime } from './runtime.server';
 
 export { readV12Context };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r2';
+export const ADAPTER_REVISION = 'v12-edge-adapter-r3';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 
@@ -20,21 +20,22 @@ export async function verifyWorkerSignature(raw: string, timestamp: string | nul
   return crypto.subtle.verify('HMAC', key, bytes, encoder.encode(`${timestamp}.${raw}`));
 }
 
-async function probeReceivers(sb: any, transport: typeof fetch) {
-  const {data,error} = await sb.from('webhook_endpoints').select('secret,url,is_active').eq('is_active',true);
+async function probeReceivers(sb: any, transport: typeof fetch, now: number) {
+  const {data,error} = await sb.from('webhook_endpoints').select('secret,url,is_active').in('url',V12_SECRET_ENDPOINTS);
   if (error) throw error;
   const endpoints = (data ?? []).filter((e:any) => isAuthorizedBettingEndpoint(e.url));
   if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error('SINGLE_BETTING_SECRET_UNAVAILABLE');
   const results = await Promise.all((Object.keys(ROUTES) as Route[]).map(async leg => {
     // Deliberately invalid signal. A signed 400 with this precise error proves
     // authentication and route reachability without recording a fabricated bet.
-    const raw = JSON.stringify({mode:'shadow',kind:'V12_AUTHENTICATION_PROBE',leg});
+    const raw = JSON.stringify({mode:'shadow',kind:'V12_READINESS_PROBE',leg,sent_at:new Date(now).toISOString()});
     const signature = createHmac('sha256',endpoints[0].secret).update(raw).digest('hex');
     try {
       const response = await transport(RECEIVERS+ROUTES[leg].endpoint, {method:'POST',body:raw,redirect:'error',
         signal:AbortSignal.timeout(2500),headers:{'content-type':'application/json','x-btc15m-signature':'sha256='+signature}});
       const result = await response.json();
-      return {leg,authenticated:response.status===400 && result.error==='ROUTE_POLICY_MISMATCH',status:response.status};
+      return {leg,authenticated:response.status===200 && result.kind==='V12_READINESS_PROBE',status:response.status,
+        ready_for_activation:result.ready_for_activation===true,release_mode:result.mode??null,checks:result.checks??null};
     } catch { return {leg,authenticated:false,status:null}; }
   }));
   return {all_authenticated:results.every(r=>r.authenticated),receivers:results,records_created:0};
@@ -75,7 +76,7 @@ export function createAdapterHandler(deps: Dependencies) {
         if (error?.code==='23505') return reply(409,{ok:false,error:'REPLAYED'});
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
       }
-      if (p.op==='probe') return reply(200,{ok:true,...await probeReceivers(sb,deps.transport ?? fetch)});
+      if (p.op==='probe') return reply(200,{ok:true,...await probeReceivers(sb,deps.transport ?? fetch,clock())});
       if (p.op==='heartbeat') return reply(200,{ok:true,...await recordRuntime(sb,p.status)});
       const context=await (deps.readContext ?? readV12Context)(sb,new Date(open).toISOString());
       if (p.op==='context') return reply(200,{ok:true,context,observed_at:new Date(clock()).toISOString()});
@@ -97,8 +98,8 @@ export function createAdapterHandler(deps: Dependencies) {
       }
       validateSignal(signal,signal.leg,clock());
       const result=await (deps.publish ?? publishV12Shadow)(sb,signal,clock());
-      if (result.execution_enabled!==false) throw new Error('SHADOW_RECEIVER_CONTRACT_MISMATCH');
-      return reply(200,{ok:true,...result});
+      return reply(200,{ok:true,...result,receiver_mode:result.mode,
+        receiver_execution_enabled:result.execution_enabled});
     } catch(e) { return reply(400,{ok:false,error:e instanceof Error?e.message:'ADAPTER_ERROR'}); }
   };
 }

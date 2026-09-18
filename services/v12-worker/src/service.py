@@ -278,6 +278,7 @@ class Service:
     def record(self,cap,checkpoint,status,details):
         cap.db.execute('insert or replace into attempts values(?,?,?,?)',(self.ticker,checkpoint,status,json.dumps(details,allow_nan=False)))
         cap.db.commit();self.status['last_attempt']={'ticker':self.ticker,'checkpoint':checkpoint,'status':status}
+        self.status.update(last_attempt_at=iso(millis()),last_attempt_status=status,last_attempt_checkpoint=checkpoint)
 
 def main():
     service=Service()
