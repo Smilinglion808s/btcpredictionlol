@@ -13,6 +13,8 @@ interface V11Props {
    * payload stays the authority for settled history.
    */
   live?: Stats | null;
+  /** Freshness of the live read, so the tile can show its own age honestly. */
+  liveMeta?: { updatedAt?: number; error?: boolean; fetching?: boolean } | null;
   loading?: boolean;
   error?: boolean;
 }
