@@ -151,7 +151,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         a.observation = state;
         const cancelStarted = d.now();
         const confirmationDeadline = Math.min(cancelStarted + 2000, input.target + p.maxEntryAgeMs);
-        let confirmationBlocked = false;
+        let confirmationBlocked = false; let cancelNotFound = false;
         event('cancel_requested', {order_id: a.order_id, status:state.status, fill:state.fill,
           remaining:state.remaining, confirmation_deadline:confirmationDeadline});
         try {
@@ -166,9 +166,14 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         } catch (e) {
           const httpStatus = (e as any)?.status;
           confirmationBlocked = httpStatus === 418 || httpStatus === 429;
+          // 404 on the documented cancel path is NOT proof of cancellation: the
+          // order may simply have auto-expired first. It only becomes a resolved
+          // expiry race once an authoritative GET reports a terminal state.
+          cancelNotFound = httpStatus === 404;
           event('cancel_error', {order_id:a.order_id, elapsed_ms:d.now()-cancelStarted,
             http_status:httpStatus ?? null, error:String(e)});
         }
+
         // A cancel ACK is not a terminal state. Allow propagation before the
         // existing capped fallback; never POST a replacement on uncertain state.
         // Budget includes cancel HTTP time; at most 8 GETs, spaced 250ms apart.
