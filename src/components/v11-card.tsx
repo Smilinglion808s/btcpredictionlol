@@ -166,61 +166,52 @@ export function V11Card({ stats, loading, error }: V11Props) {
       <header className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-steel-vivid/85">
-            Predictions · three separate webhooks
+            Predictions · three webhooks · external betting
           </div>
           <h3 className="v11-title text-4xl font-heading font-bold tracking-tight leading-none">
             Version 1.2
           </h3>
-          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-signal-orange-vivid/40 bg-signal-orange-vivid/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-signal-orange-vivid">
+          <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-signal-orange-vivid/40 bg-signal-orange-vivid/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-signal-orange-vivid">
             <span className="size-1.5 rounded-full bg-signal-orange-vivid" />
             {predictorLabel}
           </div>
-          <div className="mt-1 text-[10px] font-mono text-muted-foreground">
-            V1 + T45 R2 fallback + original U
-          </div>
-          <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-mono text-muted-foreground/80 sm:max-w-none">
-            Betting and bankroll handled by your external system
-          </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <span
-            className={`inline-flex max-w-[138px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-right text-[10px] font-bold uppercase leading-tight tracking-[0.12em] ${phase.chip}`}
-          >
-            <span className={`size-1.5 shrink-0 rounded-full ${phase.dot}`} />
-            V1.1 history
-          </span>
-          <span
-            className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-              coverage != null && coverage > 0
-                ? "border-steel-vivid/35 bg-steel-vivid/10 text-steel-vivid/90"
-                : "border-signal-orange-vivid/25 bg-signal-orange-vivid/5 text-signal-orange-vivid/80"
-            }`}
-          >
-            V1.1 coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
-          </span>
-        </div>
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+            coverage != null && coverage > 0
+              ? "border-steel-vivid/35 bg-steel-vivid/10 text-steel-vivid/90"
+              : "border-signal-orange-vivid/25 bg-signal-orange-vivid/5 text-signal-orange-vivid/80"
+          }`}
+        >
+          V1.1 coverage {coverage == null ? "—" : `${(coverage * 100).toFixed(0)}%`}
+        </span>
       </header>
 
       <section className="v11-chip relative p-4 space-y-3">
-        <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">V1.2 webhook delivery</div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Webhook delivery</span>
+          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange-vivid/40 via-steel-vivid/25 to-transparent" />
+        </div>
         <div className="grid gap-2 sm:grid-cols-3">
           {(predictor?.legs??[{leg:'V1',endpoint:'v12-v1'},{leg:'T45R2',endpoint:'v12-t45r2'},{leg:'U',endpoint:'v12-u'}]).map((r:any)=>(
             <div key={r.leg} className="rounded-lg border border-border/60 px-2.5 py-2">
-              <div className="text-[10px] font-semibold uppercase">{r.leg==='T45R2'?'T45 R2 fallback':r.leg==='U'?'Original U':'V1'}</div>
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-[10px] font-semibold uppercase">{r.leg==='T45R2'?'T45 R2 fallback':r.leg==='U'?'Original U':'V1'}</span>
+                <span className={`size-1.5 shrink-0 rounded-full ${r.authenticated?'bg-bull':'bg-muted-foreground/50'}`} title={r.authenticated?'Authentication verified':'Awaiting authentication check'} />
+              </div>
               <div className="mt-1 text-xs tabular-nums">{r.acknowledged??'—'} acknowledged · {r.calls??'—'} signals</div>
-              <div className="mt-1 text-[9px] text-muted-foreground">{r.authenticated?'Authentication verified':'Awaiting authentication check'}</div>
-              <div className="mt-1 font-mono text-[9px] text-muted-foreground">/{r.endpoint}</div>
-              {r.calls>0?<div className="mt-1 text-[9px] text-muted-foreground">{r.wins}W / {r.losses}L · {r.pending} pending · {pct(r.winRate)}</div>:null}
+              <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">/{r.endpoint}</div>
+              {r.calls>0?<div className="mt-1 text-[9px] text-muted-foreground tabular-nums">{r.wins}W / {r.losses}L · {r.pending} pending · {pct(r.winRate)}</div>:null}
               {r.unconfirmed>0?<div className="mt-1 text-[9px] text-signal-orange-vivid">{r.unconfirmed} acknowledgements unconfirmed</div>:null}
             </div>
           ))}
         </div>
         <div className="text-[10px] text-muted-foreground">
-          U: {predictor?.fitValid===false?'Fit expired — U paused':uReasons[predictor?.uBlockReason]??'Waiting for current status'}.
-          {' '}Refresh: {predictor?.refreshStatus?.replaceAll('_',' ')??'not reported'}.
+          U: {predictor?.fitValid===false?'Fit expired — U paused':uReasons[predictor?.uBlockReason]??'Waiting for current status'}
+          {' · '}Refresh: {predictor?.refreshStatus?.replaceAll('_',' ')??'not reported'}
         </div>
         <div className="text-[9px] text-muted-foreground/80">
-          Receipt counts confirm webhook delivery. Results use official settlement; orders and fills are tracked externally.
+          Receipts confirm delivery; results use official settlement; orders and fills are tracked externally.
           {predictor?.truncated?' Showing the latest 1,000 signals.':''}
         </div>
       </section>
