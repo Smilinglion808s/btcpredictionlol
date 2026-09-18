@@ -3,7 +3,19 @@
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
 // (orange body, steel accent) and more vibrant.
 
+import { useEffect, useState } from "react";
+
 type Stats = Record<string, any>;
+
+/** One-second clock so the tile can age its own data between refetches. */
+function useTick(ms = 1000) {
+  const [t, setT] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setT(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return t;
+}
 
 interface V11Props {
   stats: Stats;
