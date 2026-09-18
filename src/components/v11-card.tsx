@@ -204,41 +204,19 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
-  // Freshness, measured against the timestamp the SERVER put in the payload —
-  // not when the fetch happened — so a response served from cache after a
-  // failure ages visibly instead of posing as current. The server timestamp
-  // also gives a clock offset, so the 15-minute boundary is judged on the
-  // server's clock: once a new candle opens, a payload from the previous one
-  // is no longer current even if it arrived a second ago.
-  const serverNow = now12?.now ? Date.parse(now12.now) : null;
-  const clientAt = liveMeta?.updatedAt ?? null;
-  const offset = serverNow != null && clientAt != null ? serverNow - clientAt : 0;
-  const serverTick = tick + offset;
-  const ageMs = serverNow != null ? Math.max(0, serverTick - serverNow) : null;
-  const ageSec = ageMs == null ? null : Math.round(ageMs / 1000);
-  const shownOpenMs = now12?.intervalOpen ? Date.parse(now12.intervalOpen) : null;
-  const rolledOver =
-    shownOpenMs != null && Math.floor(serverTick / 900_000) * 900_000 !== shownOpenMs;
-  const connecting = !now12 && liveMeta?.error !== true;
-  // Usable = this payload really describes the interval that is open now.
-  const liveStale = liveMeta?.error === true || rolledOver || (ageSec != null && ageSec > 10);
-  const liveUsable = !!now12 && !liveStale;
-  const intervalTs = liveUsable
-    ? now12.intervalOpen
-    : new Date(Math.floor(serverTick / 900_000) * 900_000).toISOString();
-  const freshLabel = liveMeta?.error
-    ? "connection issue"
-    : connecting
-      ? "connecting"
-      : rolledOver
-        ? "new interval — updating"
-        : ageSec == null
-          ? "connecting"
-          : ageSec <= 2
-            ? "live"
-            : ageSec > 10
-              ? `stale · ${ageSec}s old`
-              : `${ageSec}s ago`;
+  // Freshness is measured against the timestamp the SERVER put in the payload,
+  // not when the fetch landed, so a cached-after-failure response ages visibly
+  // instead of posing as current; the same timestamp gives a clock offset so
+  // the 15-minute boundary is judged on the server's clock. See freshness.ts.
+  const fresh = freshness({
+    serverNow: now12?.now ? Date.parse(now12.now) : null,
+    intervalOpen: now12?.intervalOpen ? Date.parse(now12.intervalOpen) : null,
+    clientAt: liveMeta?.updatedAt ?? null,
+    tick,
+    error: liveMeta?.error === true,
+  });
+  const { stale: liveStale, usable: liveUsable, connecting, label: freshLabel } = fresh;
+  const intervalTs = new Date(fresh.shownOpen).toISOString();
   // A stale payload must not keep claiming the worker is connected right now.
   const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
   const predictorLabel =
