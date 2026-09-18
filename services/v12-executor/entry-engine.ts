@@ -198,9 +198,18 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
           const left = confirmationDeadline - d.now();
           if (check < 8 && left > 0) await d.sleep(Math.min(250, left));
         }
+        if (cancelNotFound) {
+          a.cancel_classification = state.terminal
+            ? (['canceled','cancelled','expired'].includes(String(state.status)) ? 'CANCEL_404_EXPIRY_RACE_RESOLVED'
+              : 'CANCEL_404_RESOLVED_' + String(state.status).toUpperCase())
+            : 'CANCEL_404_UNRESOLVED';
+          event('cancel_404_classified', {order_id:a.order_id, classification:a.cancel_classification,
+            status:state.status ?? null, terminal:state.terminal});
+        }
         if (!state.terminal) event('cancel_confirmation_unresolved', {order_id:a.order_id,
           elapsed_ms:d.now()-cancelStarted, deadline_reached:d.now() >= confirmationDeadline});
       }
+
       if (!state.terminal) { a.state = 'UNRESOLVED'; a.observation = state; throw new Error('ORDER_NOT_TERMINAL'); }
       a.state = 'TERMINAL'; a.observation = state; a.reconciled_at = d.now();
       totalFill += state.fill; remaining = Math.max(0, desired - totalFill);
