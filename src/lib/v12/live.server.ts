@@ -177,7 +177,7 @@ export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live>
       .maybeSingle(),
     sb
       .from('c85_targets')
-      .select('target_open_utc,run_mode,final_side')
+      .select('target_open_utc,run_mode,final_side,features')
       .eq('model_version', 'lite-a-floor4-top10-r1')
       .in('target_open_utc', [openIso, prevIso])
       .order('target_open_utc', { ascending: false })
