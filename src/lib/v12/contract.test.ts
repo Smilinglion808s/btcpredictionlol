@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {budgetCents, boiseDay, intervalKey, uEligible, validateSignal, V12_VERSION, ROUTES} from './contract.ts';
+import {budgetCents, boiseDay, intervalKey, uEligible, validateSignal, normalizeExecutionPolicy, V12_VERSION, ROUTES} from './contract.ts';
+test('maker-first routes fall back to a taker; T45R2 stays taker only',()=>{
+  assert.equal(ROUTES.V1.execution,'maker_then_taker');assert.equal(ROUTES.U.execution,'maker_then_taker');
+  assert.equal(ROUTES.T45R2.execution,'taker_only');
+});
+test('legacy maker_only is a V1/U wire alias only and always normalizes forward',()=>{
+  for(const route of ['V1','U'] as const){
+    assert.equal(normalizeExecutionPolicy(route,'maker_only'),'maker_then_taker');
+    assert.equal(normalizeExecutionPolicy(route,'maker_then_taker'),'maker_then_taker');
+    // No arbitrary substitution, in either direction.
+    for(const bad of ['taker_only','maker',null,undefined,'',{}])assert.equal(normalizeExecutionPolicy(route,bad),null);
+  }
+  assert.equal(normalizeExecutionPolicy('T45R2','taker_only'),'taker_only');
+  for(const bad of ['maker_only','maker_then_taker'])assert.equal(normalizeExecutionPolicy('T45R2',bad),null);
+});
+
 test('route sizing uses one day opening and floors cents',()=>{
   assert.equal(budgetCents(100000,'V1'),4000);assert.equal(budgetCents(100000,'T45R2'),5000);assert.equal(budgetCents(100000,'U'),10000);
   assert.equal(budgetCents(100019,'U'),10001);assert.throws(()=>budgetCents(NaN,'U'));
