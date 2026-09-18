@@ -174,12 +174,19 @@ export function V11Card({ stats, live: now12, loading, error }: V11Props) {
         pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
         netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
     : null;
-  const latestEvent = predictor?.latest ?? null;
-  const latestDelivery = latest && latestEvent?.candle_starts_at && latest?.targetTs &&
-      new Date(latestEvent.candle_starts_at).toISOString() === new Date(latest.targetTs).toISOString()
-    ? latestEvent
-    : null;
-  const deliveryLeg = latestDelivery ? legs.find((l) => l.leg === latestDelivery.route) ?? null : null;
+  // Current-interval authority: the V1.2 event journal, not the V1.1 baseline.
+  // When it is unavailable we fall back to the slow baseline snapshot rather
+  // than showing nothing.
+  const nowLegs: any[] = now12?.legs ?? [];
+  const nowCalled = nowLegs.filter((l) => l.status !== "WAITING");
+  const nowSide =
+    now12?.decision?.side ??
+    (nowCalled[0]?.prediction === "YES" ? "UP" : nowCalled[0]?.prediction === "NO" ? "DOWN" : null);
+  const intervalTs = now12?.intervalOpen ?? latest?.targetTs ?? null;
+  const intervalStale = !!now12 && now12.isCurrentInterval === false;
+  const fmtTs = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
+  const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
