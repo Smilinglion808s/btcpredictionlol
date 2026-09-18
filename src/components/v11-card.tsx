@@ -255,54 +255,79 @@ export function V11Card({ stats, live: now12, loading, error }: V11Props) {
       </div>
 
       <section className="v11-chip relative p-4">
-        <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          Latest 15-minute interval
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
+          </div>
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {fmtTs(intervalTs)} UTC
+          </span>
         </div>
-        {latest ? (
+
+        {now12 ? (
           <>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <span className={`text-lg font-semibold ${sideLabel ? "text-emerald-300" : "text-muted-foreground"}`}>
-                {sideLabel ? "Called" : "No prediction"}
+              <span className={`text-lg font-semibold ${nowSide ? "text-emerald-300" : "text-muted-foreground"}`}>
+                {nowSide ? "Called" : nowCalled.length > 0 ? "Sent" : "No call yet"}
               </span>
-              {sideLabel ? (
+              {nowSide ? (
                 <span className="rounded-md border border-border/70 px-1.5 py-0.5 text-xs font-semibold tracking-wide">
-                  {sideLabel}
+                  {nowSide}
                 </span>
               ) : null}
-              {latest.leg ? (
+              {now12?.decision?.leg ? (
                 <span className="rounded-md border border-steel-vivid/40 bg-steel-vivid/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-steel-vivid">
-                  {latest.leg === "T45R2" ? "T45 R2 leg" : `${latest.leg} leg`}
+                  {LEG_LABEL[now12.decision.leg] ?? now12.decision.leg} leg
                 </span>
               ) : null}
+              {now12?.decision?.reason ? (
+                <span className="text-[11px] text-muted-foreground">{now12.decision.reason}</span>
+              ) : null}
             </div>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground tabular-nums">
-              <span>
-                {latest.targetTs
-                  ? new Date(latest.targetTs).toISOString().slice(5, 16).replace("T", " ")
-                  : "—"}{" "}
-                UTC
-              </span>
-              <span className="opacity-40">·</span>
-              <span>{latest.reason ?? "—"}</span>
-            </div>
-            {sideLabel ? (
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
-                <span
-                  className={`size-1.5 shrink-0 rounded-full ${deliveryLeg?.authenticated ? "bg-bull" : "bg-muted-foreground/50"}`}
-                  title={deliveryLeg?.authenticated ? "Authentication verified" : "Awaiting authentication check"}
-                />
-                {latestDelivery ? (
-                  <span>
-                    Webhook <span className="font-mono">/{deliveryLeg?.endpoint ?? latestDelivery.route}</span>
-                    {" · "}{(latestDelivery.delivery_status ?? "—").toLowerCase().replaceAll("_", " ")}
-                    {latestDelivery.receiver_status ? ` · receiver ${latestDelivery.receiver_status}` : ""}
+
+            <div className="mt-2.5 space-y-1">
+              {nowLegs.map((l) => (
+                <div
+                  key={l.leg}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground tabular-nums"
+                >
+                  <span
+                    className={`size-1.5 shrink-0 rounded-full ${authFor(l.leg) ? "bg-bull" : "bg-muted-foreground/50"}`}
+                    title={authFor(l.leg) ? "Authentication verified" : "Awaiting authentication check"}
+                  />
+                  <span className="w-12 shrink-0 font-semibold uppercase tracking-wide text-foreground/80">
+                    {LEG_LABEL[l.leg] ?? l.leg}
                   </span>
-                ) : (
-                  <span>No V1.2 webhook recorded for this interval yet</span>
-                )}
-              </div>
-            ) : null}
+                  <span className="font-mono">/{l.endpoint}</span>
+                  <span className="opacity-40">·</span>
+                  <span className={l.status === "ACKNOWLEDGED" ? "text-bull" : undefined}>
+                    {DELIVERY_LABEL[l.status] ?? l.status.toLowerCase()}
+                  </span>
+                  {l.prediction ? (
+                    <>
+                      <span className="opacity-40">·</span>
+                      <span>{l.prediction === "YES" ? "UP" : "DOWN"}</span>
+                    </>
+                  ) : null}
+                  {l.receiverStatus ? (
+                    <>
+                      <span className="opacity-40">·</span>
+                      <span>receiver {l.receiverStatus}</span>
+                    </>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 text-[9px] text-muted-foreground/80">
+              Delivery only — the bet is placed on the external betting account, so a
+              received webhook is not a confirmed fill.
+            </div>
           </>
+        ) : latest ? (
+          <div className="mt-1.5 text-sm text-muted-foreground">
+            {sideLabel ? `Called ${sideLabel}` : "No prediction"} · {latest.reason ?? "—"}
+          </div>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
             Nothing recorded yet — the first prediction will appear here.
