@@ -276,8 +276,10 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
           </div>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            {fmtTs(intervalTs)} UTC
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
+            <span>{fmtTs(intervalTs)} UTC</span>
+            <span aria-hidden className={`h-1 w-1 rounded-full ${liveStale ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span className={liveStale ? "text-amber-300" : undefined}>{freshLabel}</span>
           </span>
         </div>
 
