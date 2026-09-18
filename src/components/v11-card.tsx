@@ -315,20 +315,21 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
       <section className="v11-chip relative p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            {!now12
-              ? "Last recorded prediction"
-              : intervalStale || rolledOver
-                ? "Last completed 15-minute interval"
-                : "Current 15-minute interval"}
+            Current 15-minute interval
           </div>
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
             <span>{fmtTs(intervalTs)} UTC</span>
-            <span aria-hidden className={`h-1 w-1 rounded-full ${liveStale ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span
+              aria-hidden
+              className={`h-1 w-1 rounded-full ${
+                connecting ? "bg-muted-foreground/60" : liveStale ? "bg-amber-400" : "bg-emerald-400"
+              }`}
+            />
             <span className={liveStale ? "text-amber-300" : undefined}>{freshLabel}</span>
           </span>
         </div>
 
-        {now12 ? (
+        {liveUsable ? (
           <>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <span className={`text-lg font-semibold ${nowSide ? "text-emerald-300" : "text-muted-foreground"}`}>
