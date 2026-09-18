@@ -382,19 +382,12 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
               received webhook is not a confirmed fill.
             </div>
           </>
-        ) : latest ? (
-          <div className="mt-1.5 text-sm text-muted-foreground">
-            Last recorded: {sideLabel ? `called ${sideLabel}` : "no prediction"} ·{" "}
-            {latest.reason ?? "—"}
-            <div className="mt-1 text-[10px] text-amber-300">
-              Live status unavailable — this is the last recorded prediction, not the
-              current interval.
-            </div>
-          </div>
         ) : (
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Nothing recorded yet — the first prediction will appear here.
-          </p>
+          // No usable current-interval read: show nothing about direction or
+          // leg. An old call must never sit under "current".
+          <div className="mt-1.5 text-sm text-muted-foreground">
+            {liveMeta?.error ? "Connection issue — status unavailable" : "Waiting for current interval"}
+          </div>
         )}
       </section>
 
