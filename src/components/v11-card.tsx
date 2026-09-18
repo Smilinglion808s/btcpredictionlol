@@ -33,11 +33,14 @@ interface V11Props {
 
 const LEG_LABEL: Record<string, string> = { V1: "V1", T45R2: "T45 R2", U: "U" };
 
-/** Delivery state only. A receiver acknowledgement is not a filled bet. */
+/**
+ * Delivery state only. A pending journal row means the send is in flight — it
+ * is not proof the webhook arrived — and an acknowledgement is not a bet fill.
+ */
 const DELIVERY_LABEL: Record<string, string> = {
   WAITING: "no call yet",
-  DISPATCHED: "sent · awaiting receipt",
-  ACKNOWLEDGED: "received by betting account",
+  DISPATCHED: "sending · awaiting receipt",
+  ACKNOWLEDGED: "acknowledged by betting account",
   UNCONFIRMED: "receipt unconfirmed",
 };
 
