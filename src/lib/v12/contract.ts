@@ -67,5 +67,9 @@ export function validateSignal(p: Record<string, any>, route: Route, nowMs: numb
   }
   const key = intervalKey(p.market, p.candle_starts_at);
   if (p.interval_key !== key) throw new Error('INTERVAL_KEY_MISMATCH');
-  return { key, route, policy: r, day: boiseDay(new Date(nowMs)) };
+  // `execution` is the effective, normalized policy. Callers must use it and
+  // never the wire value, so a legacy alias can never widen what is executed.
+  return { key, route, policy: r, execution, legacyExecutionAlias: p.execution_policy !== execution,
+    day: boiseDay(new Date(nowMs)) };
+
 }
