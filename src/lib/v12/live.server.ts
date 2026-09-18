@@ -215,7 +215,7 @@ export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live>
   const decision = selectDecision({
     events: rows,
     target: target.data as any,
-    fallback: shownFallback as any,
+    fallback: fallback.data as any,
   });
 
   const r = runtime.data as { received_at: string; status: Record<string, any> } | null;
