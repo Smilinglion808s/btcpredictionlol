@@ -46,9 +46,11 @@ export function uEligible(v1: { inputValid: boolean; reason: string; ordinaryFlo
 }
 export function validateSignal(p: Record<string, any>, route: Route, nowMs: number) {
   const r = ROUTES[route];
+  const execution = normalizeExecutionPolicy(route, p.execution_policy);
   if (p.model_version !== r.model || p.combined_model_version !== V12_VERSION || p.leg !== route ||
-      p.execution_policy !== r.execution || p.stake_fraction_of_boise_day_opening_principal !== r.fraction)
+      execution === null || p.stake_fraction_of_boise_day_opening_principal !== r.fraction)
     throw new Error('ROUTE_POLICY_MISMATCH');
+
   if (p.mode !== 'shadow' || !['YES', 'NO'].includes(p.prediction)) throw new Error('INVALID_SHADOW_SIGNAL');
   const open = Date.parse(p.candle_starts_at), decision = Date.parse(p.decision_at), sent = Date.parse(p.sent_at);
   if (![open, decision, sent, nowMs].every(Number.isFinite) || decision < open || sent < decision || sent > nowMs + 1000 ||
