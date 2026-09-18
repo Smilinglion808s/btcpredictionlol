@@ -12,7 +12,7 @@ export interface Deps {
   log(value: any): void;
 }
 export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; side: Side; target: number; received: number}) {
-  const trace: any = {policy: p, revision: 'cancel-confirmation-r1', target: input.target, received_at: input.received,
+  const trace: any = {policy: p, revision: 'maker-then-taker-r1', target: input.target, received_at: input.received,
     status: 'STARTING', events: []};
   const attempts: any[] = []; let row: string | null = null; let submitted = false;
   let writeReserveMs = 100;
