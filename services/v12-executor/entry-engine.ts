@@ -1,5 +1,6 @@
-import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection} from './entry-policy.ts';
+import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection, kindFeeReserve} from './entry-policy.ts';
 import type {Policy, Quote, Side} from './entry-policy.ts';
+
 export interface Deps {
   now(): number; sleep(ms: number): Promise<void>; id(): string;
   claim(): Promise<string | null>; preflight(): Promise<{paused: boolean; stopped: boolean; budget: number}>;
