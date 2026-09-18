@@ -54,7 +54,11 @@ test('late U timing and Boise-day budget are route-bound',()=>{
   // route must be the normalized maker_then_taker policy.
   const p=routePolicy(base,signal,decision+1000);assert.equal(p.version,'entry-controls-r1');assert.equal(p.strategyVersion,'v12-original-u-4-5-10-r1');assert.equal(p.maxEntryAgeMs,485000);assert.equal(p.executionRoute,'maker_then_taker');assert.equal(p.feeReserve,0);
 
+  // feeReserve is the taker reserve used by the IOC fallback; the maker leg and
+  // the U admission check keep their own zero-fee reserves.
+  assert.equal(p.feeReserve,base.feeReserve);
   const snap={boiseDay:'2026-09-17',openingEquityCents:100000};
+
   assert.equal(p.makerFeeReserve,0);assert.equal(p.admissionFeeReserve,0);
   assert.equal(routeBudget('V1',snap,decision,100000),40);assert.equal(routeBudget('T45R2',snap,decision,100000),50);assert.equal(routeBudget('U',snap,decision,100000),100);
 
