@@ -287,6 +287,7 @@ function StatsPage() {
 
         <V11Card
           stats={(v11Q.data as any) ?? {}}
+          live={(v12LiveQ.data as any) ?? null}
           loading={v11Q.isLoading}
           error={v11Q.isError}
         />
