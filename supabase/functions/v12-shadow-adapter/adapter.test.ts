@@ -46,7 +46,7 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
     return receiver(new Request(target,init));
   };
   const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,
-    readContext:async()=>{reads++;return context;}});
+    readContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
   const signal:any={mode:'shadow',model_version:ROUTES[leg].model,combined_model_version:V12_VERSION,leg,
     execution_policy:ROUTES[leg].execution,stake_fraction_of_boise_day_opening_principal:ROUTES[leg].fraction,
     market:ticker,candle_starts_at:new Date(open).toISOString(),decision_at:new Date(open+offset).toISOString(),sent_at:new Date(now).toISOString(),
@@ -125,4 +125,28 @@ test('forged direction, claimed U, stale signal, route substitution and live mod
     const response=await t.handler(request(t.envelope('publish'),t.now));
     assert.equal(response.status,400);assert.equal(t.counts().writes,0);assert.equal(t.destinations.length,0);
   }
+});
+test('early dispatch uses authoritative direction in one call and never sends twice',async()=>{
+  const original=globalThis.fetch;
+  try{for(const leg of ['V1','T45R2'] as const){
+    const t=setup(leg);globalThis.fetch=t.transport as typeof fetch;
+    const envelope={...t.envelope('early_dispatch'),legs:[leg],signal:{prediction:'NO'}};
+    const r=await (await t.handler(request(envelope,t.now))).json();
+    assert.equal(r.dispatched[0].status,'DISPATCHED');assert.equal(t.counts().reads,0);assert.equal(t.counts().writes,1);
+    assert.equal([...t.journal.values()][0].prediction,'YES');
+    const again=await (await t.handler(request({...envelope,nonce:'another-fresh-nonce'},t.now))).json();
+    assert.equal(again.dispatched[0].status,'FAILED');assert.equal(t.counts().writes,1);
+  }}finally{globalThis.fetch=original;}
+});
+test('early dispatch cannot send invalid, abstained, unsigned-T45 or expired decisions',async()=>{
+  const original=globalThis.fetch;
+  try{for(const change of ['invalid','abstain','unsigned','expired']){
+    const t=setup(change==='unsigned'?'T45R2':'V1');globalThis.fetch=t.transport as typeof fetch;
+    if(change==='invalid')t.context.v1.features.input_valid=false;
+    if(change==='abstain')t.context.v1.final_side=0;
+    if(change==='unsigned')t.context.t45.evidence.trigger_signed=false;
+    if(change==='expired')t.context.v1.publication_offset_ms=-10000;
+    await t.handler(request({...t.envelope('early_dispatch'),legs:[change==='unsigned'?'T45R2':'V1']},t.now));
+    assert.equal(t.destinations.length,0,change);
+  }}finally{globalThis.fetch=original;}
 });

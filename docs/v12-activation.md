@@ -8,9 +8,9 @@ not the betting switch. The legacy V1/V1.1 webhook remains disabled.
 
 | Route | Model | Budget | Execution |
 | --- | --- | --- | --- |
-| V1 | v12-v1-r1 | 4% | Maker only |
+| V1 | v12-v1-r1 | 4% | Maker, then capped taker fallback |
 | T45R2 | v12-t45r2-r1 | 5% | Taker only |
-| U | v12-original-u-r1 | 10% | Maker only |
+| U | v12-original-u-r1 | 10% | Maker, then capped taker fallback |
 
 Budgets share the existing daily_balance opening snapshot, use the Boise date,
 round down to cents, and are capped by available cash and any existing dollar
@@ -82,7 +82,7 @@ create neither bet_history claims nor exchange order requests.
 
 ## Validation
 
-The release has 41 Node tests (signed routing and simulated receiver-to-executor
+The initial release had 41 Node tests (signed routing and simulated receiver-to-executor
 integration), six isolated PostgreSQL tests, five worker runtime tests and
 seven settlement regressions. Live order creation is not part of preparation.
 Build the edge bundles with `node scripts/build-v12-edge.mjs` and
@@ -91,3 +91,11 @@ Build the edge bundles with `node scripts/build-v12-edge.mjs` and
 The isolated SQL tests need `@electric-sql/pglite@0.3.14`; set
 V12_PGLITE_MODULE to its module path when running schema.test.mjs. Never use a
 production connection for those tests, which exercise activation in isolation.
+
+## Execution and dispatch update
+
+V1 and U now try maker first, then a capped IOC taker after a confirmed terminal maker or explicit post-only crossing rejection. T45R2 remains taker only. Fallback rechecks cash, pause, deadline, quotes and U admission; partial fills reduce the remaining quantity and budget. Rounded taker fees stay inside the budget. Unknown order or cancellation state never authorizes fallback.
+
+Apply `docs/v12_receiver_maker_then_taker.sql` to the receiver database, then deploy the three r2 receivers, r4 predictor adapter and matching worker. The existing release mode and activation timestamp are preserved. Old maker-only wire labels are accepted solely as V1/U rollout aliases.
+
+Early dispatch now reads committed V1/T45 decisions and sends in one backend round trip. The worker reuses per-thread HTTPS connections and keeps U's full context read out of the early polling path. Runtime records measured dispatch/receipt timings; reduction is not a promised number before production observation.

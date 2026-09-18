@@ -74,7 +74,7 @@ begin
   end if;
   return jsonb_build_object('id',row_id,'status',result_status,'route',chosen_route,'budget_cents',budget,
     'opening_balance',opening,'boise_day',day_key,'mode',release_mode,'execution_enabled',executable,
-    'execution_policy',expected_execution);
+    'execution_policy',expected_execution,'received_at',receipt);
 end; $$;
 revoke all on function public.record_v12_signal(jsonb,text) from public,anon,authenticated;
 grant execute on function public.record_v12_signal(jsonb,text) to service_role;

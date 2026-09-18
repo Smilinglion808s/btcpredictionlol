@@ -1,6 +1,6 @@
 import sys,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch,MagicMock
 import pandas as pd
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from capture import Capture
@@ -38,5 +38,31 @@ class RuntimeTests(unittest.TestCase):
         with patch.dict('os.environ',{'V12_MODE':'live'}):self.assertRaises(ValueError,Service)
         self.assertRaisesRegex(ValueError,'CHECKPOINT_EXPIRED',score_checkpoint,None,None,
           {'open':'2026-09-17T19:00:00Z'}, {},120,int(pd.Timestamp('2026-09-17T19:02:06Z').timestamp()*1000))
+
+    def test_adapter_reuses_connection_and_never_retries_ambiguous_post(self):
+        with patch.dict('os.environ',{'V12_SHADOW_ADAPTER_URL':BACKEND_ADAPTER,'C85_GATEWAY_SECRET':'test-only'}):
+            with patch('service.http.client.HTTPSConnection') as make:
+                conn=make.return_value
+                conn.getresponse.return_value.status=200
+                conn.getresponse.return_value.read.return_value=b'{"ok":true}'
+                adapter=Adapter()
+                adapter.call('context',1789671600000)
+                adapter.call('context',1789671600000)
+                self.assertEqual(make.call_count,1)
+                self.assertEqual(conn.request.call_count,2)
+                conn.getresponse.side_effect=OSError('ambiguous transport')
+                self.assertRaises(OSError,adapter.call,'early_dispatch',1789671600000)
+                self.assertEqual(conn.request.call_count,3)
+                conn.close.assert_called_once()
+
+    def test_early_dispatch_persists_completed_attempt_and_does_not_resend(self):
+        with tempfile.TemporaryDirectory() as d:
+            cap=Capture(str(Path(d)/'capture.sqlite'))
+            svc=Service.__new__(Service);svc.ticker='KXBTC15M-TEST';svc.status={};svc.adapter=MagicMock()
+            svc.adapter.call.return_value={'context_ready':True,'ticker':svc.ticker,'dispatched':[{'leg':'V1','status':'DISPATCHED'}]}
+            early={};svc.early_dispatch(cap,1789671600000,['V1'],early)
+            self.assertEqual(early['V1'],'DISPATCHED')
+            svc.early_dispatch(cap,1789671600000,['V1'],early)
+            self.assertEqual(svc.adapter.call.call_count,1)
 
 if __name__=='__main__':unittest.main()

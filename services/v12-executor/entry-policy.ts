@@ -36,6 +36,9 @@ export interface Policy {
 export function kindFeeReserve(p: Policy, kind: 'maker' | 'taker') {
   return kind === 'maker' ? (p.makerFeeReserve ?? p.feeReserve) : p.feeReserve;
 }
+export function reservedOrderCost(count: number, limit: number, reserve: number) {
+  return count * limit + Math.ceil(count * reserve * 100 - 1e-9) / 100;
+}
 
 export function policyFromEnv(get: (name: string) => string | undefined): Policy {
   const num = (key: string, fallback: number) => {
@@ -117,12 +120,16 @@ export function planOrder(q: Quote, p: Policy, kind: 'maker' | 'taker', budget: 
   const limit = downCent(Math.min(ceiling, kind === 'maker' ? q.ask - p.makerImprovement : q.ask + p.slippage));
   if (limit < .01 || (kind === 'taker' && q.ask > limit + 1e-9)) return null;
   // Count at worst authorized price plus this kind's fees; never round up beyond budget.
-  const affordable = Math.floor((budget + 1e-9) / (limit + reserve) * 100) / 100;
-  const count = Math.floor(Math.min(remaining, affordable,
-    kind === 'taker' ? q.askSize : Infinity) * 100 + 1e-8) / 100;
-  if (count < .01 || limit + reserve > 1 / p.minOdds + 1e-9) return null;
-  return { kind, limit, count, maxCost: count * (limit + reserve),
-    minimumOdds: 1 / (limit + reserve), feeReserve: reserve, quote: q };
+  let low=0, high=Math.floor(Math.min(remaining, budget/limit,
+    kind === 'taker' ? q.askSize : Infinity) * 100 + 1e-8);
+  while(low<high){
+    const mid=Math.ceil((low+high)/2);
+    if(reservedOrderCost(mid/100,limit,reserve)<=budget+1e-9)low=mid;else high=mid-1;
+  }
+  const count=low/100, maxCost=reservedOrderCost(count,limit,reserve);
+  if (count < .01 || maxCost/count > 1 / p.minOdds + 1e-9) return null;
+  return { kind, limit, count, maxCost,
+    minimumOdds: count/maxCost, feeReserve: reserve, quote: q };
 }
 
 export function orderBody(ticker: string, side: Side, plan: NonNullable<ReturnType<typeof planOrder>>,

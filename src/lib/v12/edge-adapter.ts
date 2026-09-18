@@ -131,7 +131,8 @@ export function createAdapterHandler(deps: Dependencies) {
             const published=await (deps.publish ?? publishV12Shadow)(sb,built.signal,clock());
             dispatched.push({leg,status:'DISPATCHED',receiver_status:published.status??null,
               receiver_mode:published.mode??null,decision_at:built.signal.decision_at,sent_at:built.signal.sent_at,
-              decision_to_dispatch_ms:started-built.decision,decision_to_receipt_ms:clock()-built.decision,
+              decision_to_dispatch_ms:published.timings?.dispatch_at_ms == null ? null : published.timings.dispatch_at_ms-built.decision,
+              decision_to_receipt_ms:published.received_at ? Date.parse(published.received_at)-built.decision : null,
               timings:published.timings??null});
           } catch(e) {
             dispatched.push({leg,status:'FAILED',error:e instanceof Error?e.message:'DISPATCH_ERROR'});
