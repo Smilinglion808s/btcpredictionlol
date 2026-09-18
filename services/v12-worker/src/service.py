@@ -42,23 +42,58 @@ def adapter_backoff(error):
         if suffix.isdigit() and int(suffix) in BLOCKED_STATUSES:return BLOCKED_BACKOFF_SECONDS
     return blocked_backoff(error)
 
+KEEPALIVE_IDLE_SECONDS=25
+
+class _Clients(threading.local):
+    """One persistent TLS client per calling thread. Threads never share one."""
+    def __init__(self):self.conn=None;self.used=0.0
+
 class Adapter:
     def __init__(self):
         self.url=os.environ.get('V12_SHADOW_ADAPTER_URL','')
         self.secret=os.environ.get('C85_GATEWAY_SECRET','')
         if self.url and self.url not in (BACKEND_ADAPTER,WEBSITE_ADAPTER):
             raise ValueError('INVALID_RECORDING_ADAPTER_URL')
+        parts=urlsplit(self.url) if self.url else None
+        self.host=parts.hostname if parts else None
+        self.port=parts.port if parts else None
+        self.path=((parts.path or '/')+(('?'+parts.query) if parts and parts.query else '')) if parts else '/'
+        self._clients=_Clients()
+    def _client(self):
+        # Reuse the warm TLS session; drop it well before a server idle close so
+        # a reused socket does not fail after a non-idempotent request was sent.
+        store=self._clients
+        if store.conn is not None and time.time()-store.used>KEEPALIVE_IDLE_SECONDS:self._drop()
+        if store.conn is None:store.conn=http.client.HTTPSConnection(self.host,self.port,timeout=4)
+        return store.conn
+    def _drop(self):
+        store=self._clients
+        if store.conn is not None:
+            try:store.conn.close()
+            except Exception:pass
+        store.conn=None
     def call(self,op,open_ms,**data):
         if not self.url or not self.secret:raise ValueError('SHADOW_ADAPTER_NOT_CONFIGURED')
         body=json.dumps({'op':op,'open':iso(open_ms),'nonce':uuid.uuid4().hex,**data},separators=(',',':'),allow_nan=False).encode()
         ts=str(millis());sig=hmac.new(self.secret.encode(),ts.encode()+b'.'+body,hashlib.sha256).hexdigest()
-        req=urllib.request.Request(self.url,data=body,headers={'content-type':'application/json','x-c85-timestamp':ts,'x-c85-signature':sig},method='POST')
+        conn=self._client()
         try:
-            with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
-        # Status code only; the remote body is never read, logged or re-raised.
-        except urllib.error.HTTPError as error:raise ValueError('ADAPTER_HTTP_'+str(error.code))
+            conn.request('POST',self.path,body=body,headers={'content-type':'application/json','connection':'keep-alive',
+              'content-length':str(len(body)),'x-c85-timestamp':ts,'x-c85-signature':sig})
+            response=conn.getresponse();raw=response.read();status=response.status
+        except Exception:
+            # A publish or early dispatch is never retried automatically: the
+            # request may already have reached the adapter.
+            self._drop();raise
+        self._clients.used=time.time()
+        # Status code only; the remote body is never logged or re-raised.
+        if status!=200:
+            if status>=500 or status==429:self._drop()
+            raise ValueError('ADAPTER_HTTP_'+str(status))
+        result=json.loads(raw)
         if result.get('ok') is not True:raise ValueError('ADAPTER_REJECTED')
         return result
+
 
 def payload(route,context,decision_ms,**extra):
     model,fraction,execution=ROUTES[route];open_ms=int(pd.Timestamp(context['open']).timestamp()*1000)
