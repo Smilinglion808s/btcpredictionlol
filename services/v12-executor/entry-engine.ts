@@ -213,12 +213,15 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       if (!state.terminal) { a.state = 'UNRESOLVED'; a.observation = state; throw new Error('ORDER_NOT_TERMINAL'); }
       a.state = 'TERMINAL'; a.observation = state; a.reconciled_at = d.now();
       totalFill += state.fill; remaining = Math.max(0, desired - totalFill);
-      const reservedCost = state.fill * (plan.limit + p.feeReserve);
+      // Missing venue cost figures are charged at this leg's own reserved price,
+      // never treated as free, so the fallback can only spend what is left.
+      const reservedCost = state.fill * (plan.limit + (plan.feeReserve ?? kindFeeReserve(p, kind)));
       if (state.actualCost !== null && state.actualCost > reservedCost + .0001)
         throw new Error('FEE_OR_PRICE_RESERVE_EXCEEDED');
       const cost = state.actualCost ?? reservedCost;
       actualKnown = actualKnown && state.actualCost !== null;
       spent += cost; fees += state.fees ?? 0; budget = Math.max(0, checks.budget - spent);
+
       event('order_terminal', {kind, ...state, remaining, remaining_budget: budget});
       await save({contracts: totalFill,
         ...(actualKnown ? {total_cost: Number(spent.toFixed(2)), fee: Number(fees.toFixed(4)),
