@@ -13,6 +13,8 @@ interface V11Props {
    * payload stays the authority for settled history.
    */
   live?: Stats | null;
+  /** Freshness of the live read, so the tile can show its own age honestly. */
+  liveMeta?: { updatedAt?: number; error?: boolean; fetching?: boolean } | null;
   loading?: boolean;
   error?: boolean;
 }
@@ -117,7 +119,7 @@ function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: stri
   );
 }
 
-export function V11Card({ stats, live: now12, loading, error }: V11Props) {
+export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Props) {
   // History can fail on its own without hiding the live call state, and vice
   // versa: the title and the current interval must stay on screen.
   if (error && !now12) {
@@ -191,6 +193,18 @@ export function V11Card({ stats, live: now12, loading, error }: V11Props) {
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
+  // Freshness of the live read itself. Shown compactly so a paused or failing
+  // poll is visible instead of silently presenting an old interval as current.
+  const ageSec = liveMeta?.updatedAt ? Math.max(0, Math.round((Date.now() - liveMeta.updatedAt) / 1000)) : null;
+  const liveStale = liveMeta?.error === true || (ageSec != null && ageSec > 30);
+  const freshLabel = liveMeta?.error
+    ? "connection issue"
+    : ageSec == null
+      ? "connecting"
+      : ageSec < 2
+        ? "live"
+        : `${ageSec}s ago`;
+
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
       <span className="v11-orbit-ring" aria-hidden />
@@ -262,8 +276,10 @@ export function V11Card({ stats, live: now12, loading, error }: V11Props) {
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
           </div>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            {fmtTs(intervalTs)} UTC
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
+            <span>{fmtTs(intervalTs)} UTC</span>
+            <span aria-hidden className={`h-1 w-1 rounded-full ${liveStale ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span className={liveStale ? "text-amber-300" : undefined}>{freshLabel}</span>
           </span>
         </div>
 

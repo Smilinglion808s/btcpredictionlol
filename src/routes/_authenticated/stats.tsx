@@ -288,6 +288,11 @@ function StatsPage() {
         <V11Card
           stats={(v11Q.data as any) ?? {}}
           live={(v12LiveQ.data as any) ?? null}
+          liveMeta={{
+            updatedAt: v12LiveQ.dataUpdatedAt || undefined,
+            error: v12LiveQ.isError,
+            fetching: v12LiveQ.isFetching,
+          }}
           loading={v11Q.isLoading}
           error={v11Q.isError}
         />

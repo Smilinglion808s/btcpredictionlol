@@ -7,6 +7,15 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     include: ["src/**/*.{test,spec}.{ts,tsx}", "services/**/*.test.js"],
-    exclude: ["node_modules/**", "archive/**", "dist/**", ".output/**"],
+    // node:test suites (run with `tsx --test`), not vitest suites.
+    exclude: [
+      "node_modules/**",
+      "archive/**",
+      "dist/**",
+      ".output/**",
+      "src/lib/v12/contract.test.ts",
+      "src/lib/v12/execution.test.ts",
+      "src/lib/v12/live.test.ts",
+    ],
   },
 });
