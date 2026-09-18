@@ -153,9 +153,18 @@ export function selectDecision(src: DecisionSource): V12Live['decision'] {
     return { side: tSide, leg: 'V1', reason: src.fallback?.reason ?? null, runMode: 'LIVE', committed: true };
   }
 
+  // Same admission the dispatch path uses (context.server readV12Context):
+  // LIVE_SHADOW, signed trigger, inside the publication ceiling.
   const f = src.fallback;
   const fSide = dir(f?.side);
-  if (f && f.run_mode === 'LIVE_SHADOW' && f.leg === 'T45R2' && fSide) {
+  if (
+    f &&
+    f.run_mode === 'LIVE_SHADOW' &&
+    f.leg === 'T45R2' &&
+    f.evidence?.trigger_signed === true &&
+    f.within_publication_ceiling === true &&
+    fSide
+  ) {
     return { side: fSide, leg: 'T45R2', reason: f.reason ?? null, runMode: f.run_mode, committed: true };
   }
 
