@@ -109,18 +109,17 @@ function StatsPage() {
   const v12LiveQ = useQuery({
     queryKey: ["v12-live"],
     queryFn: () => v12LiveFn(),
-    // 1s while the current interval is still resolving, 5s once every leg has
-    // settled its delivery, 15s when the tab is hidden.
+    // 1s while the interval is unresolved, 5s once a delivery has actually been
+    // accepted and nothing is still in flight, 15s when the tab is hidden.
+    // Routing is mutually exclusive — only one leg is ever called per interval —
+    // so "every leg reported" is never true and must not be the settled test.
     refetchInterval: (q) => {
       if (typeof document !== "undefined" && document.hidden) return 15_000;
       const d = q.state.data as any;
       if (!d) return 2_000;
-      const settled =
-        d.isCurrentInterval &&
-        !d.pending &&
-        Array.isArray(d.legs) &&
-        d.legs.every((l: any) => l.status !== "WAITING");
-      return settled ? 5_000 : 1_000;
+      const accepted =
+        Array.isArray(d.legs) && d.legs.some((l: any) => l.status === "ACKNOWLEDGED");
+      return d.isCurrentInterval && accepted && !d.pending ? 5_000 : 1_000;
     },
     refetchIntervalInBackground: true,
     refetchOnMount: "always",

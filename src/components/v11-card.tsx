@@ -3,7 +3,19 @@
 // Same stats presentation as the Version 1 tile, on V1's palette reversed
 // (orange body, steel accent) and more vibrant.
 
+import { useEffect, useState } from "react";
+
 type Stats = Record<string, any>;
+
+/** One-second clock so the tile can age its own data between refetches. */
+function useTick(ms = 1000) {
+  const [t, setT] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setT(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return t;
+}
 
 interface V11Props {
   stats: Stats;
@@ -120,6 +132,9 @@ function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: stri
 }
 
 export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Props) {
+  // Ticks once a second so age and interval-boundary staleness are computed
+  // against the wall clock, not only when a refetch happens to land.
+  const tick = useTick();
   // History can fail on its own without hiding the live call state, and vice
   // versa: the title and the current interval must stay on screen.
   if (error && !now12) {
@@ -155,7 +170,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
   // Worker state comes from the fast live read when present so the pill keeps
   // up with the feed instead of the 10-second history refresh.
   const workerState=now12?.worker?.state ?? predictor?.state;
-  const predictorLabel=workerState==='CONNECTED'?'Prediction feed connected':workerState==='WAITING'?'Waiting for inputs':'No recent worker status';
   const uReasons:Record<string,string>={ELIGIBLE:'Eligible for checkpoint scoring',DAILY_FLOOR_CLOSED:'Daily floor closed',
     V1_SELECTED:'V1 already selected',T45_SELECTED:'T45 R2 already selected',AWAITING_T45_DECISION:'Waiting for T45 decision',
     PRIOR_CLAIM:'Interval already claimed',INVALID_V1_INPUTS:'V1 inputs unavailable',V1_NOT_CONFIDENCE_ABSTENTION:'V1 abstention not eligible'};
@@ -193,17 +207,39 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
-  // Freshness of the live read itself. Shown compactly so a paused or failing
-  // poll is visible instead of silently presenting an old interval as current.
-  const ageSec = liveMeta?.updatedAt ? Math.max(0, Math.round((Date.now() - liveMeta.updatedAt) / 1000)) : null;
-  const liveStale = liveMeta?.error === true || (ageSec != null && ageSec > 30);
+  // Freshness. Measured against the timestamp the SERVER put in the payload,
+  // so a cached-on-failure response (the read cache can serve an old value for
+  // up to ten minutes) ages visibly instead of posing as current. The clock
+  // boundary counts too: once a new 15-minute candle opens, a payload from the
+  // previous one is stale even if it arrived a second ago.
+  const serverNow = now12?.now ? Date.parse(now12.now) : null;
+  const clientAt = liveMeta?.updatedAt ?? null;
+  const ageMs =
+    serverNow != null ? Math.max(0, tick - serverNow) : clientAt != null ? Math.max(0, tick - clientAt) : null;
+  const ageSec = ageMs == null ? null : Math.round(ageMs / 1000);
+  const rolledOver =
+    serverNow != null && Math.floor(tick / 900_000) !== Math.floor(serverNow / 900_000);
+  const liveStale = liveMeta?.error === true || rolledOver || (ageSec != null && ageSec > 10);
   const freshLabel = liveMeta?.error
     ? "connection issue"
     : ageSec == null
       ? "connecting"
-      : ageSec < 2
-        ? "live"
-        : `${ageSec}s ago`;
+      : rolledOver
+        ? "new candle — updating"
+        : ageSec <= 2
+          ? "live"
+          : ageSec > 10
+            ? `stale · ${ageSec}s old`
+            : `${ageSec}s ago`;
+  // A stale payload must not keep claiming the worker is connected right now.
+  const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
+  const predictorLabel =
+    shownWorkerState === "CONNECTED"
+      ? "Prediction feed connected"
+      : shownWorkerState === "WAITING"
+        ? "Waiting for inputs"
+        : "No recent worker status";
+
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
@@ -274,7 +310,11 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
       <section className="v11-chip relative p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            {intervalStale ? "Last completed 15-minute interval" : "Current 15-minute interval"}
+            {!now12
+              ? "Last recorded prediction"
+              : intervalStale || rolledOver
+                ? "Last completed 15-minute interval"
+                : "Current 15-minute interval"}
           </div>
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
             <span>{fmtTs(intervalTs)} UTC</span>
@@ -309,6 +349,7 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                 <div
                   key={l.leg}
                   className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground tabular-nums"
+                  title={l.receiverStatus ? `Receiver reported ${l.receiverStatus}` : undefined}
                 >
                   <span
                     className={`size-1.5 shrink-0 rounded-full ${authFor(l.leg) ? "bg-bull" : "bg-muted-foreground/50"}`}
@@ -317,8 +358,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                   <span className="w-12 shrink-0 font-semibold uppercase tracking-wide text-foreground/80">
                     {LEG_LABEL[l.leg] ?? l.leg}
                   </span>
-                  <span className="font-mono">/{l.endpoint}</span>
-                  <span className="opacity-40">·</span>
                   <span className={l.status === "ACKNOWLEDGED" ? "text-bull" : undefined}>
                     {DELIVERY_LABEL[l.status] ?? l.status.toLowerCase()}
                   </span>
@@ -326,12 +365,6 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
                     <>
                       <span className="opacity-40">·</span>
                       <span>{l.prediction === "YES" ? "UP" : "DOWN"}</span>
-                    </>
-                  ) : null}
-                  {l.receiverStatus ? (
-                    <>
-                      <span className="opacity-40">·</span>
-                      <span>receiver {l.receiverStatus}</span>
                     </>
                   ) : null}
                 </div>
@@ -345,7 +378,12 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
           </>
         ) : latest ? (
           <div className="mt-1.5 text-sm text-muted-foreground">
-            {sideLabel ? `Called ${sideLabel}` : "No prediction"} · {latest.reason ?? "—"}
+            Last recorded: {sideLabel ? `called ${sideLabel}` : "no prediction"} ·{" "}
+            {latest.reason ?? "—"}
+            <div className="mt-1 text-[10px] text-amber-300">
+              Live status unavailable — this is the last recorded prediction, not the
+              current interval.
+            </div>
           </div>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
