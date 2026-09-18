@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {executeV12,executionReadiness,dayStart} from './live.ts';
+import {executeV12,executionReadiness,dayStart,confidencePercent} from './live.ts';
 import {ROUTES,V12_VERSION,intervalKey,type Route} from '../../src/lib/v12/contract.ts';
 import {createReceiver} from '../../supabase/functions/v12-shared/receiver.ts';
 import {createHmac} from 'node:crypto';
@@ -16,7 +16,7 @@ function harness(route:Route,checkpoint=120){
     execution_policy:ROUTES[route].execution,stake_fraction_of_boise_day_opening_principal:ROUTES[route].fraction,prediction:'YES',
     market,candle_starts_at:new Date(open).toISOString(),decision_at:new Date(open+offset).toISOString(),sent_at:new Date(now).toISOString(),
     interval_key:intervalKey(market,new Date(open).toISOString()),
-    ...(route==='U'?{checkpoint_seconds:checkpoint,known_ask:.55,arrival_ask:.55,limit_all_in:.8,u_source:'L',
+    ...(route==='U'?{probability:.8798966037814971,checkpoint_seconds:checkpoint,known_ask:.55,arrival_ask:.55,limit_all_in:.8,u_source:'L',
       v11_eligibility:{v1:{inputValid:true,reason:'CONFIDENCE_ABSTAIN',ordinaryFloorAllows:true,finalSide:0},t45:{finalized:true,finalSide:0},anyPriorClaim:false}}:{})};
   const receipt:any={id:'00000000-0000-0000-0000-000000000001',mode:'live',execution_enabled:true,status:'LIVE_ACCEPTED',
     budget_cents:ROUTES[route].percent*1000,boise_day:'2026-09-17',opening_balance:1000};
@@ -33,7 +33,7 @@ function harness(route:Route,checkpoint=120){
     if(path.endsWith('/portfolio/balance'))return Response.json({balance:state.cash});
     if(path.endsWith('/rpc/record_v12_signal'))return Response.json(receipt);
     if(path.endsWith('/bet_history')){
-      if(init?.method==='POST'){claims.push(JSON.parse(String(init.body)));return state.claim?Response.json([{id:'bet-fixture'}]):new Response('',{status:409});}
+      if(init?.method==='POST'){claims.push(JSON.parse(String(init.body)));assert.ok(Number.isInteger(claims.at(-1).confidence));return state.claim?Response.json([{id:'bet-fixture'}]):new Response('',{status:409});}
       if(init?.method==='PATCH'){patches.push(JSON.parse(String(init.body)));return Response.json([{id:'bet-fixture'}]);}
       return Response.json([]);
     }
@@ -84,7 +84,7 @@ test('shadow and duplicate receipts never start an executor or account request',
   }
 });
 test('release off, stale activation, pause, missing cash and lost claim all block order POST',async()=>{
-  for(const variant of ['off','stale','pause','cash','claim','pauseDuring','quoteExpires']){
+  for(const variant of ['off','stale','pause','cash','claim','pauseDuring']){
     const h=harness('V1');
     if(variant==='off')h.state.mode='shadow';if(variant==='stale')h.state.activated=new Date(h.clock()+1).toISOString();
     if(variant==='pause')h.state.paused=true;if(variant==='cash')h.state.cash=NaN;if(variant==='claim')h.state.claim=false;
@@ -117,4 +117,14 @@ test('Boise midnight uses the correct side of both DST transitions',()=>{
   assert.equal(new Date(dayStart('2026-03-08')).toISOString(),'2026-03-08T07:00:00.000Z');
   assert.equal(new Date(dayStart('2026-11-01')).toISOString(),'2026-11-01T06:00:00.000Z');
   assert.equal(new Date(dayStart('2026-11-02')).toISOString(),'2026-11-02T07:00:00.000Z');
+});
+
+test('U probability is stored as integer percentage without changing the signal probability',()=>{
+ assert.equal(confidencePercent(.8798966037814971),88); assert.equal(confidencePercent(undefined),0);
+ for(const v of [-1,1.2,NaN,'0.88'])assert.throws(()=>confidencePercent(v));
+});
+test('a quote aged by gate reads refreshes before a bounded POST',async()=>{
+ const h=harness('V1'); h.state.expiredBeforePost=true;
+ const r=await executeV12(h.signal,h.receipt,k=>env[k],h.transport,h.clock);
+ assert.ok(h.posts.length>0); assert.ok(r.events.some((e:any)=>e.type==='refresh_after_gate'));
 });
