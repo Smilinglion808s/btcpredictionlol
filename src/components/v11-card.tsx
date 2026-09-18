@@ -134,7 +134,7 @@ export function V11Card({ stats, live: now12, loading, error }: V11Props) {
     );
   }
 
-  if (loading && !stats?.phase) {
+  if (loading && !stats?.phase && !now12) {
     return (
       <section className="v11-shell self-start rounded-2xl p-6 space-y-4">
         <span className="v11-orbit-ring" aria-hidden />
