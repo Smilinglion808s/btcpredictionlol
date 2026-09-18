@@ -1,11 +1,27 @@
 /** Frozen V1.2 request. This module cannot place or dispatch an order. */
 export const V12_VERSION = 'v12-original-u-4-5-10-r1';
 export const ROUTES = {
-  V1: { model: 'v12-v1-r1', fraction: 0.04, percent: 4, execution: 'maker_only', endpoint: 'v12-v1' },
+  V1: { model: 'v12-v1-r1', fraction: 0.04, percent: 4, execution: 'maker_then_taker', endpoint: 'v12-v1' },
   T45R2: { model: 'v12-t45r2-r1', fraction: 0.05, percent: 5, execution: 'taker_only', endpoint: 'v12-t45r2' },
-  U: { model: 'v12-original-u-r1', fraction: 0.10, percent: 10, execution: 'maker_only', endpoint: 'v12-u' },
+  U: { model: 'v12-original-u-r1', fraction: 0.10, percent: 10, execution: 'maker_then_taker', endpoint: 'v12-u' },
 } as const;
 export type Route = keyof typeof ROUTES;
+/**
+ * Rolling compatibility only. A V1/U sender still on the wire value
+ * `maker_only` is accepted and normalized to the current policy; every other
+ * substitution — including a taker policy on a maker-first route, or any alias
+ * at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+ */
+export const LEGACY_EXECUTION_ALIASES: Record<Route, readonly string[]> = {
+  V1: ['maker_only'], T45R2: [], U: ['maker_only'],
+};
+export function normalizeExecutionPolicy(route: Route, value: unknown): string | null {
+  const locked = ROUTES[route]?.execution;
+  if (!locked) return null;
+  if (value === locked) return locked;
+  return typeof value === 'string' && LEGACY_EXECUTION_ALIASES[route].includes(value) ? locked : null;
+}
+
 export const U_CHECKPOINTS = [120, 180, 300, 480, 600, 720] as const;
 export function boiseDay(now: Date): string {
   if (!Number.isFinite(now.getTime())) throw new Error('INVALID_TIME');
@@ -30,9 +46,11 @@ export function uEligible(v1: { inputValid: boolean; reason: string; ordinaryFlo
 }
 export function validateSignal(p: Record<string, any>, route: Route, nowMs: number) {
   const r = ROUTES[route];
+  const execution = normalizeExecutionPolicy(route, p.execution_policy);
   if (p.model_version !== r.model || p.combined_model_version !== V12_VERSION || p.leg !== route ||
-      p.execution_policy !== r.execution || p.stake_fraction_of_boise_day_opening_principal !== r.fraction)
+      execution === null || p.stake_fraction_of_boise_day_opening_principal !== r.fraction)
     throw new Error('ROUTE_POLICY_MISMATCH');
+
   if (p.mode !== 'shadow' || !['YES', 'NO'].includes(p.prediction)) throw new Error('INVALID_SHADOW_SIGNAL');
   const open = Date.parse(p.candle_starts_at), decision = Date.parse(p.decision_at), sent = Date.parse(p.sent_at);
   if (![open, decision, sent, nowMs].every(Number.isFinite) || decision < open || sent < decision || sent > nowMs + 1000 ||
@@ -49,5 +67,9 @@ export function validateSignal(p: Record<string, any>, route: Route, nowMs: numb
   }
   const key = intervalKey(p.market, p.candle_starts_at);
   if (p.interval_key !== key) throw new Error('INTERVAL_KEY_MISMATCH');
-  return { key, route, policy: r, day: boiseDay(new Date(nowMs)) };
+  // `execution` is the effective, normalized policy. Callers must use it and
+  // never the wire value, so a legacy alias can never widen what is executed.
+  return { key, route, policy: r, execution, legacyExecutionAlias: p.execution_policy !== execution,
+    day: boiseDay(new Date(nowMs)) };
+
 }

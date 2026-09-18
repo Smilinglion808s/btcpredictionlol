@@ -1,5 +1,6 @@
-import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection} from './entry-policy.ts';
+import {firstCeiling, planOrder, orderBody, orderState, isPostOnlyCrossRejection, kindFeeReserve} from './entry-policy.ts';
 import type {Policy, Quote, Side} from './entry-policy.ts';
+
 export interface Deps {
   now(): number; sleep(ms: number): Promise<void>; id(): string;
   claim(): Promise<string | null>; preflight(): Promise<{paused: boolean; stopped: boolean; budget: number}>;
@@ -11,7 +12,7 @@ export interface Deps {
   log(value: any): void;
 }
 export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; side: Side; target: number; received: number}) {
-  const trace: any = {policy: p, revision: 'cancel-confirmation-r1', target: input.target, received_at: input.received,
+  const trace: any = {policy: p, revision: 'maker-then-taker-r1', target: input.target, received_at: input.received,
     status: 'STARTING', events: []};
   const attempts: any[] = []; let row: string | null = null; let submitted = false;
   let writeReserveMs = 100;
@@ -30,7 +31,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
   };
   const readyTask = async () => { const q = await d.ready(); event('market_ready', {quote: q}); return q; };
   if (p.mode === 'disabled') { trace.status = 'DISABLED'; d.log(trace); return trace; }
-  if (!['maker_only','taker_only'].includes(p.executionRoute ?? '')) throw new Error('V12_EXECUTION_ROUTE_REQUIRED');
+  if (!['maker_only','taker_only','maker_then_taker'].includes(p.executionRoute ?? '')) throw new Error('V12_EXECUTION_ROUTE_REQUIRED');
   const ready = readyTask(); ready.catch(() => {});
   try {
     const preflight = d.preflight(); preflight.catch(() => {});
@@ -53,11 +54,15 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     let q = await ready; allowed();
     if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) q = await d.quote();
     const ceiling = firstCeiling(q, p);
-    const desired = Math.floor(checks.budget / (ceiling + p.feeReserve));
+    const kinds: ('maker' | 'taker')[] = p.executionRoute === 'taker_only' ? ['taker'] :
+      p.executionRoute === 'maker_then_taker' ? ['maker', 'taker'] : ['maker'];
+    // Sizing uses the FIRST leg's own reserve so maker quantities are unchanged
+    // by the existence of a fallback; the IOC leg re-plans against the budget
+    // actually left over, with the taker reserve applied.
+    const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
     trace.initial_ceiling = ceiling; trace.budget = checks.budget; trace.desired_count = desired;
     let remaining = desired; let budget = checks.budget; let totalFill = 0; let spent = 0;
     let actualKnown = true; let fees = 0;
-    const kinds: ('maker' | 'taker')[] = p.executionRoute === 'maker_only' ? ['maker'] : ['taker'];
     if (p.mode === 'shadow') {
       trace.status = 'SHADOW_PLAN'; trace.plans = kinds.map(k => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
       d.log(trace); return trace; // No claims, ledger updates, order POSTs or cancels.
@@ -67,10 +72,18 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       if (attempts.length) {
         const again = await d.preflight();
         if (again.paused || again.stopped) {event('fallback_preflight_blocked'); break;}
+        // The fallback can never exceed what a fresh preflight still allows.
+        const capped = Math.max(0, Math.min(budget, again.budget));
+        event('fallback_budget_refreshed', {previous_budget: budget, preflight_budget: again.budget, budget: capped});
+        budget = capped;
+        if (!Number.isFinite(budget) || budget <= 0) {event('fallback_budget_exhausted'); break;}
         q = await d.quote();
       }
       let plan = planOrder(q, p, kind, budget, ceiling, remaining, d.now());
-      if (!plan) { event('price_or_size_abstention', {kind, quote: q}); continue; }
+      // Never submitted means never rejected: a price or size abstention on the
+      // maker leg ends the attempt instead of promoting it to a taker.
+      if (!plan) { event('price_or_size_abstention', {kind, quote: q}); break; }
+
       // A quote collected in parallel with the claim can already be old enough
       // that saving an intent will expire it. Refresh BEFORE that first save,
       // retaining the original ceiling and never increasing the planned count.
@@ -138,7 +151,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         a.observation = state;
         const cancelStarted = d.now();
         const confirmationDeadline = Math.min(cancelStarted + 2000, input.target + p.maxEntryAgeMs);
-        let confirmationBlocked = false;
+        let confirmationBlocked = false; let cancelNotFound = false;
         event('cancel_requested', {order_id: a.order_id, status:state.status, fill:state.fill,
           remaining:state.remaining, confirmation_deadline:confirmationDeadline});
         try {
@@ -153,9 +166,14 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         } catch (e) {
           const httpStatus = (e as any)?.status;
           confirmationBlocked = httpStatus === 418 || httpStatus === 429;
+          // 404 on the documented cancel path is NOT proof of cancellation: the
+          // order may simply have auto-expired first. It only becomes a resolved
+          // expiry race once an authoritative GET reports a terminal state.
+          cancelNotFound = httpStatus === 404;
           event('cancel_error', {order_id:a.order_id, elapsed_ms:d.now()-cancelStarted,
             http_status:httpStatus ?? null, error:String(e)});
         }
+
         // A cancel ACK is not a terminal state. Allow propagation before the
         // existing capped fallback; never POST a replacement on uncertain state.
         // Budget includes cancel HTTP time; at most 8 GETs, spaced 250ms apart.
@@ -180,18 +198,30 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
           const left = confirmationDeadline - d.now();
           if (check < 8 && left > 0) await d.sleep(Math.min(250, left));
         }
+        if (cancelNotFound) {
+          a.cancel_classification = state.terminal
+            ? (['canceled','cancelled','expired'].includes(String(state.status)) ? 'CANCEL_404_EXPIRY_RACE_RESOLVED'
+              : 'CANCEL_404_RESOLVED_' + String(state.status).toUpperCase())
+            : 'CANCEL_404_UNRESOLVED';
+          event('cancel_404_classified', {order_id:a.order_id, classification:a.cancel_classification,
+            status:state.status ?? null, terminal:state.terminal});
+        }
         if (!state.terminal) event('cancel_confirmation_unresolved', {order_id:a.order_id,
           elapsed_ms:d.now()-cancelStarted, deadline_reached:d.now() >= confirmationDeadline});
       }
+
       if (!state.terminal) { a.state = 'UNRESOLVED'; a.observation = state; throw new Error('ORDER_NOT_TERMINAL'); }
       a.state = 'TERMINAL'; a.observation = state; a.reconciled_at = d.now();
       totalFill += state.fill; remaining = Math.max(0, desired - totalFill);
-      const reservedCost = state.fill * (plan.limit + p.feeReserve);
+      // Missing venue cost figures are charged at this leg's own reserved price,
+      // never treated as free, so the fallback can only spend what is left.
+      const reservedCost = state.fill * (plan.limit + (plan.feeReserve ?? kindFeeReserve(p, kind)));
       if (state.actualCost !== null && state.actualCost > reservedCost + .0001)
         throw new Error('FEE_OR_PRICE_RESERVE_EXCEEDED');
       const cost = state.actualCost ?? reservedCost;
       actualKnown = actualKnown && state.actualCost !== null;
       spent += cost; fees += state.fees ?? 0; budget = Math.max(0, checks.budget - spent);
+
       event('order_terminal', {kind, ...state, remaining, remaining_budget: budget});
       await save({contracts: totalFill,
         ...(actualKnown ? {total_cost: Number(spent.toFixed(2)), fee: Number(fees.toFixed(4)),

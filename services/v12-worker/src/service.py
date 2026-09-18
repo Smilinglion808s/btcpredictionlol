@@ -3,7 +3,9 @@
 One process per SQLite volume. Restart may recover completed bars, but never
 recreates missing historical quote snapshots or sends expired checkpoints.
 """
-import hashlib,hmac,json,os,threading,time,uuid,urllib.request,urllib.error,subprocess,sys
+import hashlib,hmac,http.client,json,os,threading,time,uuid,urllib.request,urllib.error,subprocess,sys
+from urllib.parse import urlsplit
+
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 import numpy as np
@@ -16,7 +18,7 @@ from refit import period_start,PERIOD
 import training_capture
 
 VERSION='v12-original-u-4-5-10-r1'
-ROUTES={'V1':('v12-v1-r1',.04,'maker_only'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_only')}
+ROUTES={'V1':('v12-v1-r1',.04,'maker_then_taker'),'T45R2':('v12-t45r2-r1',.05,'taker_only'),'U':('v12-original-u-r1',.10,'maker_then_taker')}
 def iso(ms):return pd.Timestamp(ms,unit='ms',tz='UTC').isoformat(timespec='milliseconds').replace('+00:00','Z')
 def millis():return int(time.time()*1000)
 HEARTBEAT_SECONDS=15
@@ -40,23 +42,58 @@ def adapter_backoff(error):
         if suffix.isdigit() and int(suffix) in BLOCKED_STATUSES:return BLOCKED_BACKOFF_SECONDS
     return blocked_backoff(error)
 
+KEEPALIVE_IDLE_SECONDS=25
+
+class _Clients(threading.local):
+    """One persistent TLS client per calling thread. Threads never share one."""
+    def __init__(self):self.conn=None;self.used=0.0
+
 class Adapter:
     def __init__(self):
         self.url=os.environ.get('V12_SHADOW_ADAPTER_URL','')
         self.secret=os.environ.get('C85_GATEWAY_SECRET','')
         if self.url and self.url not in (BACKEND_ADAPTER,WEBSITE_ADAPTER):
             raise ValueError('INVALID_RECORDING_ADAPTER_URL')
+        parts=urlsplit(self.url) if self.url else None
+        self.host=parts.hostname if parts else None
+        self.port=parts.port if parts else None
+        self.path=((parts.path or '/')+(('?'+parts.query) if parts and parts.query else '')) if parts else '/'
+        self._clients=_Clients()
+    def _client(self):
+        # Reuse the warm TLS session; drop it well before a server idle close so
+        # a reused socket does not fail after a non-idempotent request was sent.
+        store=self._clients
+        if store.conn is not None and time.time()-store.used>KEEPALIVE_IDLE_SECONDS:self._drop()
+        if store.conn is None:store.conn=http.client.HTTPSConnection(self.host,self.port,timeout=4)
+        return store.conn
+    def _drop(self):
+        store=self._clients
+        if store.conn is not None:
+            try:store.conn.close()
+            except Exception:pass
+        store.conn=None
     def call(self,op,open_ms,**data):
         if not self.url or not self.secret:raise ValueError('SHADOW_ADAPTER_NOT_CONFIGURED')
         body=json.dumps({'op':op,'open':iso(open_ms),'nonce':uuid.uuid4().hex,**data},separators=(',',':'),allow_nan=False).encode()
         ts=str(millis());sig=hmac.new(self.secret.encode(),ts.encode()+b'.'+body,hashlib.sha256).hexdigest()
-        req=urllib.request.Request(self.url,data=body,headers={'content-type':'application/json','x-c85-timestamp':ts,'x-c85-signature':sig},method='POST')
+        conn=self._client()
         try:
-            with urllib.request.urlopen(req,timeout=4) as r:result=json.load(r)
-        # Status code only; the remote body is never read, logged or re-raised.
-        except urllib.error.HTTPError as error:raise ValueError('ADAPTER_HTTP_'+str(error.code))
+            conn.request('POST',self.path,body=body,headers={'content-type':'application/json','connection':'keep-alive',
+              'content-length':str(len(body)),'x-c85-timestamp':ts,'x-c85-signature':sig})
+            response=conn.getresponse();raw=response.read();status=response.status
+        except Exception:
+            # A publish or early dispatch is never retried automatically: the
+            # request may already have reached the adapter.
+            self._drop();raise
+        self._clients.used=time.time()
+        # Status code only; the remote body is never logged or re-raised.
+        if status!=200:
+            if status>=500 or status==429:self._drop()
+            raise ValueError('ADAPTER_HTTP_'+str(status))
+        result=json.loads(raw)
         if result.get('ok') is not True:raise ValueError('ADAPTER_REJECTED')
         return result
+
 
 def payload(route,context,decision_ms,**extra):
     model,fraction,execution=ROUTES[route];open_ms=int(pd.Timestamp(context['open']).timestamp()*1000)
@@ -224,33 +261,31 @@ class Service:
         threading.Thread(target=self.refresh_loop,daemon=True).start()
         if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.probe_once,daemon=True).start()
         if self.adapter.url==BACKEND_ADAPTER:threading.Thread(target=self.status_loop,daemon=True).start()
-        cap=Capture(self.path);last_open=None;market=None
+        cap=Capture(self.path);last_open=None;market=None;early={};last_context=0
         while True:
             now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
-                    self.ticker=None;market=None;last_open=open_ms
+                    self.ticker=None;market=None;last_open=open_ms;early={};last_context=0
+                age=now-open_ms
+                # Critical path. One signed round trip performs the minimal
+                # authoritative read, the durable sender claim and the dispatch,
+                # so V1 leaves as soon as its decision is committed.
+                pending=[r for r in ('V1','T45R2') if r not in early]
+                if pending and age<60000:
+                    self.early_dispatch(cap,open_ms,pending,early)
+                    if [r for r in ('V1','T45R2') if r not in early] and millis()-last_context<2000:
+                        time.sleep(.25);continue
+                last_context=millis()
                 context=self.adapter.call('context',open_ms)['context']
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
                 self.context=context
-                self.ticker=context['ticker'];age=now-open_ms
+                self.ticker=context['ticker'];age=millis()-open_ms
                 self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
                   u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None,
                   u_block_reason=u_block_reason(context))
-                # Poll committed early decisions outside their critical dispatch path.
-                for route,key,side_key,offset_key,slot in [('V1','v1','final_side','publication_offset_ms',-1),('T45R2','t45','side','decision_offset_ms',-45)]:
-                    r=context.get(key) or {};side=r.get(side_key);offset=r.get(offset_key)
-                    if side not in (1,-1) or not isinstance(offset,(int,float)) or age>60000:continue
-                    if route=='T45R2' and (r.get('leg')!='T45R2' or r.get('run_mode')!='LIVE_SHADOW'):continue
-                    decision=open_ms+int(offset)
-                    if millis()-decision>8000:continue
-                    if cap.db.execute('select 1 from attempts where ticker=? and checkpoint=?',(self.ticker,slot)).fetchone():continue
-                    p=payload(route,context,decision,prediction='YES' if side==1 else 'NO')
-                    # Persist before network. Ambiguous requests are not retried after restart.
-                    self.record(cap,slot,'SUBMITTING',{})
-                    result=self.adapter.call('publish',open_ms,signal=p)
-                    self.record(cap,slot,'RECORDED',result)
                 if not context.get('u_eligible'):time.sleep(.7);continue
+
                 if market is None:market=get('https://api.elections.kalshi.com/trade-api/v2/markets/'+self.ticker)['market']
                 for sec in CHECKPOINTS:
                     age=millis()-open_ms
@@ -275,7 +310,45 @@ class Service:
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
                 wait=adapter_backoff(e)
             time.sleep(wait or .5)
+    SLOTS={'V1':-1,'T45R2':-45}
+    def early_dispatch(self,cap,open_ms,pending,early):
+        """Signed minimal read + durable claim + dispatch in one round trip.
+
+        The adapter's interval/leg journal is the authoritative exactly-once
+        guard, so a restart mid-interval cannot resend. Any outcome other than
+        NOT_COMMITTED retires the leg for this interval: nothing is retried.
+        """
+        legs=list(pending)
+        if self.ticker:
+            legs=[r for r in legs if not cap.db.execute('select 1 from attempts where ticker=? and checkpoint=?',
+              (self.ticker,self.SLOTS[r])).fetchone()]
+            for r in pending:
+                if r not in legs:early[r]=early.get(r,'ALREADY_RECORDED')
+        if not legs:return
+        started=millis()
+        try:
+            result=self.adapter.call('early_dispatch',open_ms,legs=legs)
+            self.status.pop('early_dispatch_error',None)
+        except Exception as e:
+            self.status['early_dispatch_error']=error_label(e);raise
+        self.status.update(early_dispatch_at=iso(millis()),early_dispatch_ms=millis()-started)
+        if not result.get('context_ready'):return
+        ticker=result.get('ticker')
+        if ticker:self.ticker=ticker
+        for item in result.get('dispatched') or []:
+            leg=item.get('leg');status=item.get('status')
+            if leg not in self.SLOTS or status=='NOT_COMMITTED':continue
+            early[leg]=status
+            if self.ticker:
+                self.record(cap,self.SLOTS[leg],'EARLY_'+str(status),{k:item.get(k) for k in
+                  ('receiver_status','receiver_mode','decision_at','sent_at','error',
+                   'decision_to_dispatch_ms','decision_to_receipt_ms','timings')})
+            if status=='DISPATCHED':
+                self.status.update(last_dispatch_leg=leg,last_dispatch_at=item.get('sent_at'),
+                  last_dispatch_decision_to_dispatch_ms=item.get('decision_to_dispatch_ms'),
+                  last_dispatch_decision_to_receipt_ms=item.get('decision_to_receipt_ms'))
     def record(self,cap,checkpoint,status,details):
+
         cap.db.execute('insert or replace into attempts values(?,?,?,?)',(self.ticker,checkpoint,status,json.dumps(details,allow_nan=False)))
         cap.db.commit();self.status['last_attempt']={'ticker':self.ticker,'checkpoint':checkpoint,'status':status}
         self.status.update(last_attempt_at=iso(millis()),last_attempt_status=status,last_attempt_checkpoint=checkpoint)

@@ -22,7 +22,10 @@ export interface Policy {
   makerEnabled: boolean; maxEntryAgeMs: number; quoteMaxAgeMs: number;
   pollMs: number;
   // V1.2 requires an explicit route; these copies are not wired to a receiver.
-  executionRoute?: 'maker_only' | 'taker_only';
+  executionRoute?: 'maker_only' | 'taker_only' | 'maker_then_taker';
+  // Distinct from feeReserve: the maker leg's assumed zero fee must never be
+  // applied to an IOC taker order, which always reserves the taker allowance.
+  makerFeeReserve?: number;
   admissionFeeReserve?: number;
   valueLimit?: number;
   knownAsk?: number;
@@ -30,6 +33,10 @@ export interface Policy {
   // the V1.2 route overlay is carried separately here.
   strategyVersion?: string;
 }
+export function kindFeeReserve(p: Policy, kind: 'maker' | 'taker') {
+  return kind === 'maker' ? (p.makerFeeReserve ?? p.feeReserve) : p.feeReserve;
+}
+
 export function policyFromEnv(get: (name: string) => string | undefined): Policy {
   const num = (key: string, fallback: number) => {
     const text = get(key); const value = text === undefined ? fallback : Number(text);
@@ -106,16 +113,18 @@ export function planOrder(q: Quote, p: Policy, kind: 'maker' | 'taker', budget: 
     const conservative = Math.max(p.knownAsk!, q.ask) + .01;
     if (conservative >= 1 || conservative + .07 * conservative * (1-conservative) > p.valueLimit + 1e-12) return null;
   }
+  const reserve = kindFeeReserve(p, kind);
   const limit = downCent(Math.min(ceiling, kind === 'maker' ? q.ask - p.makerImprovement : q.ask + p.slippage));
   if (limit < .01 || (kind === 'taker' && q.ask > limit + 1e-9)) return null;
-  // Count at worst authorized price plus fees; never round up beyond budget.
-  const affordable = Math.floor((budget + 1e-9) / (limit + p.feeReserve) * 100) / 100;
+  // Count at worst authorized price plus this kind's fees; never round up beyond budget.
+  const affordable = Math.floor((budget + 1e-9) / (limit + reserve) * 100) / 100;
   const count = Math.floor(Math.min(remaining, affordable,
     kind === 'taker' ? q.askSize : Infinity) * 100 + 1e-8) / 100;
-  if (count < .01 || limit + p.feeReserve > 1 / p.minOdds + 1e-9) return null;
-  return { kind, limit, count, maxCost: count * (limit + p.feeReserve),
-    minimumOdds: 1 / (limit + p.feeReserve), quote: q };
+  if (count < .01 || limit + reserve > 1 / p.minOdds + 1e-9) return null;
+  return { kind, limit, count, maxCost: count * (limit + reserve),
+    minimumOdds: 1 / (limit + reserve), feeReserve: reserve, quote: q };
 }
+
 export function orderBody(ticker: string, side: Side, plan: NonNullable<ReturnType<typeof planOrder>>,
                           clientId: string, now: number, p: Policy, entryDeadline = Infinity) {
   return { ticker, client_order_id: clientId, side: side === 'yes' ? 'bid' : 'ask',

@@ -59,7 +59,14 @@ for(const route of ['V1','T45R2','U'] as const){
     const raw=JSON.stringify(h.signal),sig='sha256='+createHmac('sha256',env.BTC15M_WEBHOOK_SECRET).update(raw).digest('hex');
     const response=await r(new Request('https://receiver.test',{method:'POST',body:raw,headers:{'x-btc15m-signature':sig}}));
     assert.equal(response.status,200);assert.equal((await response.json()).execution_enabled,true);await pending;
-    assert.equal(h.posts.length,1);assert.equal(h.posts[0].post_only,route!=='T45R2');assert.equal(h.claims.length,1);
+    // The fixture fills 2 of the planned count, so a maker-first route submits a
+    // capped IOC taker for the remainder; T45R2 stays a single taker order.
+    const fallback=ROUTES[route].execution==='maker_then_taker';
+    assert.equal(h.posts.length,fallback?2:1);
+    assert.equal(h.posts[0].post_only,fallback);
+    if(fallback)assert.equal(h.posts[1].post_only,false);
+    assert.equal(h.claims.length,1);
+
     assert.equal(h.claims[0].model_version,ROUTES[route].model);
     assert.equal(h.patches.at(-1).execution_status,'FILLED');
     const intent=h.patches.find(x=>x.order_attempts?.[0]?.state==='INTENT');assert.ok(intent);
@@ -95,7 +102,10 @@ test('lost exchange acknowledgement keeps durable intent and never retries',asyn
 test('all six U checkpoints reach the late-window executor without the old 60-second cutoff',async()=>{
   for(const checkpoint of [120,180,300,480,600,720]){
     const h=harness('U',checkpoint),r=await executeV12(h.signal,h.receipt,k=>env[k],h.transport,h.clock);
-    assert.equal(r.status,'FILLED');assert.equal(h.posts.length,1);assert.equal(h.posts[0].post_only,true);
+    assert.equal(r.status,'FILLED');
+    // Maker first, then the capped IOC remainder for the partially filled plan.
+    assert.equal(h.posts.length,2);assert.equal(h.posts[0].post_only,true);assert.equal(h.posts[1].post_only,false);
+
   }
 });
 test('readiness proves account authentication using GET only and creates no records',async()=>{

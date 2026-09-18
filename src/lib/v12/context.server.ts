@@ -4,7 +4,32 @@ import { readV1Snapshot } from '@/lib/v11/store.server';
 import { computeV11Vol } from '@/lib/v11/features';
 import { uEligible } from './contract';
 
+/**
+ * Minimal early-route reader for the latency-critical V1/T45R2 dispatch.
+ *
+ * It resolves exactly the same identity, committed state, input validity, run
+ * mode and signed T45 provenance that `readV12Context` applies to those two
+ * legs, using two parallel reads. It deliberately omits the U feature row, the
+ * 96-row volatility history and the U-only prior-claim read: none of those are
+ * inputs to a V1 or T45R2 decision. U always goes through `readV12Context`, and
+ * the full reader remains the authoritative revalidation path.
+ */
+export async function readV12EarlyContext(sb: SupabaseClient, open: string) {
+  const [target, fallback] = await Promise.all([
+    sb.from('c85_targets').select('ticker,target_open_utc,run_mode,final_side,probability_yes,publication_offset_ms,features')
+      .eq('model_version','lite-a-floor4-top10-r1').eq('target_open_utc',open).maybeSingle(),
+    sb.from('v11_decisions').select('ticker,target_ts,leg,side,reason,probability,decision_offset_ms,run_mode,evidence,within_publication_ceiling,created_at')
+      .eq('target_ts',open).maybeSingle(),
+  ]);
+  for (const result of [target,fallback]) if(result.error) throw result.error;
+  const v1=target.data, t45=fallback.data;
+  if(!v1 || v1.run_mode!=='LIVE') return {ready:false,reason:'V1_NOT_COMMITTED_LIVE'} as const;
+  return {ready:true,ticker:v1.ticker,open:new Date(open).toISOString(),v1,
+    t45:t45 && t45.ticker===v1.ticker && t45.within_publication_ceiling===true ? t45 : null} as const;
+}
+
 export async function readV12Context(sb: SupabaseClient, open: string) {
+
   const [snapshot, target, fallback, early, history] = await Promise.all([
     readV1Snapshot(sb, open),
     sb.from('c85_targets').select('ticker,target_open_utc,run_mode,final_side,probability_yes,publication_offset_ms,features')

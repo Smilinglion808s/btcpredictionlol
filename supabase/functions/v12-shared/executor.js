@@ -15,6 +15,9 @@ function isPostOnlyCrossRejection(error) {
 	const e = error.body?.error;
 	return !error.body?.order_id && !error.body?.order?.order_id && e?.code === "invalid_order" && typeof e.details === "string" && e.details.trim().toLowerCase() === "post only cross";
 }
+function kindFeeReserve(p, kind) {
+	return kind === "maker" ? p.makerFeeReserve ?? p.feeReserve : p.feeReserve;
+}
 function policyFromEnv(get) {
 	const num = (key, fallback) => {
 		const text = get(key);
@@ -85,17 +88,19 @@ function planOrder(q, p, kind, budget, ceiling, remaining, now) {
 		const conservative = Math.max(p.knownAsk, q.ask) + .01;
 		if (conservative >= 1 || conservative + .07 * conservative * (1 - conservative) > p.valueLimit + 1e-12) return null;
 	}
+	const reserve = kindFeeReserve(p, kind);
 	const limit = downCent(Math.min(ceiling, kind === "maker" ? q.ask - p.makerImprovement : q.ask + p.slippage));
 	if (limit < .01 || kind === "taker" && q.ask > limit + 1e-9) return null;
-	const affordable = Math.floor((budget + 1e-9) / (limit + p.feeReserve) * 100) / 100;
+	const affordable = Math.floor((budget + 1e-9) / (limit + reserve) * 100) / 100;
 	const count = Math.floor(Math.min(remaining, affordable, kind === "taker" ? q.askSize : Infinity) * 100 + 1e-8) / 100;
-	if (count < .01 || limit + p.feeReserve > 1 / p.minOdds + 1e-9) return null;
+	if (count < .01 || limit + reserve > 1 / p.minOdds + 1e-9) return null;
 	return {
 		kind,
 		limit,
 		count,
-		maxCost: count * (limit + p.feeReserve),
-		minimumOdds: 1 / (limit + p.feeReserve),
+		maxCost: count * (limit + reserve),
+		minimumOdds: 1 / (limit + reserve),
+		feeReserve: reserve,
 		quote: q
 	};
 }
@@ -144,7 +149,7 @@ function orderState(raw, requested) {
 async function executeEntry(d, p, input) {
 	const trace = {
 		policy: p,
-		revision: "cancel-confirmation-r1",
+		revision: "maker-then-taker-r1",
 		target: input.target,
 		received_at: input.received,
 		status: "STARTING",
@@ -186,7 +191,11 @@ async function executeEntry(d, p, input) {
 		d.log(trace);
 		return trace;
 	}
-	if (!["maker_only", "taker_only"].includes(p.executionRoute ?? "")) throw new Error("V12_EXECUTION_ROUTE_REQUIRED");
+	if (![
+		"maker_only",
+		"taker_only",
+		"maker_then_taker"
+	].includes(p.executionRoute ?? "")) throw new Error("V12_EXECUTION_ROUTE_REQUIRED");
 	const ready = readyTask();
 	ready.catch(() => {});
 	try {
@@ -221,7 +230,8 @@ async function executeEntry(d, p, input) {
 		allowed();
 		if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) q = await d.quote();
 		const ceiling = firstCeiling(q, p);
-		const desired = Math.floor(checks.budget / (ceiling + p.feeReserve));
+		const kinds = p.executionRoute === "taker_only" ? ["taker"] : p.executionRoute === "maker_then_taker" ? ["maker", "taker"] : ["maker"];
+		const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
 		trace.initial_ceiling = ceiling;
 		trace.budget = checks.budget;
 		trace.desired_count = desired;
@@ -231,7 +241,6 @@ async function executeEntry(d, p, input) {
 		let spent = 0;
 		let actualKnown = true;
 		let fees = 0;
-		const kinds = p.executionRoute === "maker_only" ? ["maker"] : ["taker"];
 		if (p.mode === "shadow") {
 			trace.status = "SHADOW_PLAN";
 			trace.plans = kinds.map((k) => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
@@ -246,6 +255,17 @@ async function executeEntry(d, p, input) {
 					event("fallback_preflight_blocked");
 					break;
 				}
+				const capped = Math.max(0, Math.min(budget, again.budget));
+				event("fallback_budget_refreshed", {
+					previous_budget: budget,
+					preflight_budget: again.budget,
+					budget: capped
+				});
+				budget = capped;
+				if (!Number.isFinite(budget) || budget <= 0) {
+					event("fallback_budget_exhausted");
+					break;
+				}
 				q = await d.quote();
 			}
 			let plan = planOrder(q, p, kind, budget, ceiling, remaining, d.now());
@@ -254,7 +274,7 @@ async function executeEntry(d, p, input) {
 					kind,
 					quote: q
 				});
-				continue;
+				break;
 			}
 			if (!attempts.length && d.now() - q.requestStartedAt + writeReserveMs > p.quoteMaxAgeMs) {
 				event("refresh_before_intent", {
@@ -373,6 +393,7 @@ async function executeEntry(d, p, input) {
 				const cancelStarted = d.now();
 				const confirmationDeadline = Math.min(cancelStarted + 2e3, input.target + p.maxEntryAgeMs);
 				let confirmationBlocked = false;
+				let cancelNotFound = false;
 				event("cancel_requested", {
 					order_id: a.order_id,
 					status: state.status,
@@ -394,6 +415,7 @@ async function executeEntry(d, p, input) {
 				} catch (e) {
 					const httpStatus = e?.status;
 					confirmationBlocked = httpStatus === 418 || httpStatus === 429;
+					cancelNotFound = httpStatus === 404;
 					event("cancel_error", {
 						order_id: a.order_id,
 						elapsed_ms: d.now() - cancelStarted,
@@ -433,6 +455,19 @@ async function executeEntry(d, p, input) {
 					const left = confirmationDeadline - d.now();
 					if (check < 8 && left > 0) await d.sleep(Math.min(250, left));
 				}
+				if (cancelNotFound) {
+					a.cancel_classification = state.terminal ? [
+						"canceled",
+						"cancelled",
+						"expired"
+					].includes(String(state.status)) ? "CANCEL_404_EXPIRY_RACE_RESOLVED" : "CANCEL_404_RESOLVED_" + String(state.status).toUpperCase() : "CANCEL_404_UNRESOLVED";
+					event("cancel_404_classified", {
+						order_id: a.order_id,
+						classification: a.cancel_classification,
+						status: state.status ?? null,
+						terminal: state.terminal
+					});
+				}
 				if (!state.terminal) event("cancel_confirmation_unresolved", {
 					order_id: a.order_id,
 					elapsed_ms: d.now() - cancelStarted,
@@ -449,7 +484,7 @@ async function executeEntry(d, p, input) {
 			a.reconciled_at = d.now();
 			totalFill += state.fill;
 			remaining = Math.max(0, desired - totalFill);
-			const reservedCost = state.fill * (plan.limit + p.feeReserve);
+			const reservedCost = state.fill * (plan.limit + (plan.feeReserve ?? kindFeeReserve(p, kind)));
 			if (state.actualCost !== null && state.actualCost > reservedCost + 1e-4) throw new Error("FEE_OR_PRICE_RESERVE_EXCEEDED");
 			const cost = state.actualCost ?? reservedCost;
 			actualKnown = actualKnown && state.actualCost !== null;
@@ -507,7 +542,7 @@ var ROUTES = {
 		model: "v12-v1-r1",
 		fraction: .04,
 		percent: 4,
-		execution: "maker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-v1"
 	},
 	T45R2: {
@@ -521,10 +556,27 @@ var ROUTES = {
 		model: "v12-original-u-r1",
 		fraction: .1,
 		percent: 10,
-		execution: "maker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-u"
 	}
 };
+/**
+* Rolling compatibility only. A V1/U sender still on the wire value
+* `maker_only` is accepted and normalized to the current policy; every other
+* substitution — including a taker policy on a maker-first route, or any alias
+* at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+*/
+var LEGACY_EXECUTION_ALIASES = {
+	V1: ["maker_only"],
+	T45R2: [],
+	U: ["maker_only"]
+};
+function normalizeExecutionPolicy(route, value) {
+	const locked = ROUTES[route]?.execution;
+	if (!locked) return null;
+	if (value === locked) return locked;
+	return typeof value === "string" && LEGACY_EXECUTION_ALIASES[route].includes(value) ? locked : null;
+}
 function boiseDay(now) {
 	if (!Number.isFinite(now.getTime())) throw new Error("INVALID_TIME");
 	const parts = new Intl.DateTimeFormat("en-US", {
@@ -540,8 +592,9 @@ function boiseDay(now) {
 //#region services/v12-executor/route-policy.ts
 function routePolicy(base, signal, nowMs) {
 	const route = signal.leg, locked = ROUTES[route], open = Date.parse(signal.candle_starts_at), decision = Date.parse(signal.decision_at);
-	if (!locked || signal.model_version !== locked.model || signal.execution_policy !== locked.execution || !Number.isFinite(open) || !Number.isFinite(decision) || decision < open || nowMs < decision || nowMs - decision > 1e4) throw new Error("INVALID_V12_EXECUTION_IDENTITY");
-	const maker = locked.execution === "maker_only";
+	const execution = locked ? normalizeExecutionPolicy(route, signal.execution_policy) : null;
+	if (!locked || signal.model_version !== locked.model || execution === null || !Number.isFinite(open) || !Number.isFinite(decision) || decision < open || nowMs < decision || nowMs - decision > 1e4) throw new Error("INVALID_V12_EXECUTION_IDENTITY");
+	const maker = execution !== "taker_only";
 	if (route === "U") {
 		if (![
 			120,
@@ -556,9 +609,10 @@ function routePolicy(base, signal, nowMs) {
 		...base,
 		version: "entry-controls-r1",
 		strategyVersion: "v12-original-u-4-5-10-r1",
-		executionRoute: locked.execution,
+		executionRoute: execution,
 		makerEnabled: maker,
-		feeReserve: maker ? 0 : base.feeReserve,
+		feeReserve: base.feeReserve,
+		makerFeeReserve: 0,
 		admissionFeeReserve: route === "U" ? 0 : base.feeReserve,
 		minOdds: route === "U" ? 1 / signal.limit_all_in : route === "T45R2" ? 1.4 : 1.5,
 		maxEntryAgeMs: route === "U" ? signal.checkpoint_seconds * 1e3 + 5e3 : 6e4,
@@ -613,7 +667,7 @@ function marketSource(get, now, sleep, ticker, target, side, p, log) {
 }
 //#endregion
 //#region services/v12-executor/live.ts
-var EXECUTOR_REVISION = "v12-executor-r1";
+var EXECUTOR_REVISION = "v12-executor-r2";
 var enc = new TextEncoder();
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function dayStart(day) {
@@ -824,7 +878,7 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 				execution_trace: {
 					policy,
 					policy_version: "entry-controls-r1",
-					execution_revision: "v12-executor-r1",
+					execution_revision: "v12-executor-r2",
 					receipt_id: receipt.id,
 					sizing,
 					status: "CLAIMED"

@@ -1,15 +1,44 @@
 // Standalone recording backend. Bundle the canonical readers; do not proxy the website.
 import { createHmac } from 'node:crypto';
-import { readV12Context } from './context.server';
+import { readV12Context, readV12EarlyContext } from './context.server';
 import { publishV12Shadow } from './shadow.server';
-import { ROUTES, validateSignal, type Route } from './contract';
+import { ROUTES, V12_VERSION, intervalKey, validateSignal, type Route } from './contract';
 import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } from './receiver-destination';
 import { recordRuntime } from './runtime.server';
 
-export { readV12Context };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r3';
+export { readV12Context, readV12EarlyContext };
+export const ADAPTER_REVISION = 'v12-edge-adapter-r4';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
+const EARLY_LEGS = ['V1', 'T45R2'] as const;
+type EarlyLeg = (typeof EARLY_LEGS)[number];
+
+/**
+ * Build a V1/T45R2 signal straight from the committed decision the adapter just
+ * read. Direction, decision time and market all come from the authoritative row
+ * — the worker cannot assert any of them — so a historical or non-current
+ * decision can never be dispatched.
+ */
+function buildEarlySignal(leg: EarlyLeg, context: any, open: number, now: number) {
+  const v1 = context.v1, t45 = context.t45;
+  if (!v1 || v1.features?.input_valid !== true) return {leg, status: 'V1_INPUT_INVALID'} as const;
+  if (leg === 'T45R2' && (!t45 || t45.leg !== 'T45R2' || t45.run_mode !== 'LIVE_SHADOW' ||
+      t45.evidence?.trigger_signed !== true)) return {leg, status: 'NOT_COMMITTED'} as const;
+  const side = leg === 'V1' ? v1.final_side : t45?.side;
+  const offset = leg === 'V1' ? v1.publication_offset_ms : t45?.decision_offset_ms;
+  if (![1, -1].includes(side) || typeof offset !== 'number') return {leg, status: 'NOT_COMMITTED'} as const;
+  const decision = open + offset;
+  if (now < decision) return {leg, status: 'NOT_COMMITTED'} as const;
+  if (now - decision > 8000) return {leg, status: 'DECISION_EXPIRED'} as const;
+  const r = ROUTES[leg];
+  return {leg, status: 'READY', decision, signal: {mode: 'shadow', model_version: r.model,
+    combined_model_version: V12_VERSION, leg, execution_policy: r.execution,
+    stake_fraction_of_boise_day_opening_principal: r.fraction, market: context.ticker,
+    candle_starts_at: new Date(open).toISOString(), decision_at: new Date(decision).toISOString(),
+    sent_at: new Date(now).toISOString(), interval_key: intervalKey(context.ticker, new Date(open).toISOString()),
+    prediction: side === 1 ? 'YES' : 'NO'} as Record<string, any>} as const;
+}
+
 
 export async function verifyWorkerSignature(raw: string, timestamp: string | null, signature: string | null,
   secret: string, now: number): Promise<boolean> {
@@ -47,8 +76,10 @@ type Dependencies = {
   clock?: () => number;
   transport?: typeof fetch;
   readContext?: typeof readV12Context;
+  readEarlyContext?: typeof readV12EarlyContext;
   publish?: typeof publishV12Shadow;
 };
+
 
 export function createAdapterHandler(deps: Dependencies) {
   const clock=deps.clock ?? Date.now;
@@ -66,18 +97,50 @@ export function createAdapterHandler(deps: Dependencies) {
     try { p=JSON.parse(raw); } catch { return reply(400,{ok:false,error:'INVALID_JSON'}); }
     if (!p || typeof p!=='object' || Array.isArray(p)) return reply(400,{ok:false,error:'INVALID_ENVELOPE'});
     const now=clock(),open=Date.parse(p.open);
-    if (!['context','publish','probe','heartbeat'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
+    if (!['context','early_dispatch','publish','probe','heartbeat'].includes(p.op) || typeof p.nonce!=='string' || p.nonce.length<8 || p.nonce.length>120 ||
         !Number.isFinite(open) || open%900000!==0 || now<open || now>=open+900000)
       return reply(400,{ok:false,error:'INVALID_CURRENT_INTERVAL'});
     try {
       const sb=deps.client();
-      if (p.op!=='context') {
+      // `early_dispatch` is polled on the critical path, so it skips the nonce
+      // write: its exactly-once guarantee is the durable interval/leg journal
+      // claim in publishV12Shadow, which no replay can bypass.
+      if (p.op!=='context' && p.op!=='early_dispatch') {
         const {error}=await sb.from('c85_request_nonces').insert({nonce:p.nonce,op:'v12-shadow.'+p.op,worker_id:'v12-shadow-worker'});
         if (error?.code==='23505') return reply(409,{ok:false,error:'REPLAYED'});
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
       }
       if (p.op==='probe') return reply(200,{ok:true,...await probeReceivers(sb,deps.transport ?? fetch,clock())});
       if (p.op==='heartbeat') return reply(200,{ok:true,...await recordRuntime(sb,p.status)});
+      if (p.op==='early_dispatch') {
+        const requested=Array.isArray(p.legs)?p.legs:EARLY_LEGS;
+        const legs=EARLY_LEGS.filter(l=>requested.includes(l));
+        if (!legs.length) return reply(400,{ok:false,error:'NO_EARLY_LEGS'});
+        const readStarted=clock();
+        const early=await (deps.readEarlyContext ?? readV12EarlyContext)(sb,new Date(open).toISOString());
+        const contextReadMs=clock()-readStarted;
+        if (!early.ready) return reply(200,{ok:true,context_ready:false,reason:(early as any).reason,
+          dispatched:[],timings:{context_read_ms:contextReadMs}});
+        const dispatched:any[]=[];
+        for (const leg of legs) {
+          const started=clock();
+          const built=buildEarlySignal(leg,early,open,started);
+          if (built.status!=='READY') { dispatched.push({leg,status:built.status}); continue; }
+          try {
+            validateSignal(built.signal,leg,clock());
+            const published=await (deps.publish ?? publishV12Shadow)(sb,built.signal,clock());
+            dispatched.push({leg,status:'DISPATCHED',receiver_status:published.status??null,
+              receiver_mode:published.mode??null,decision_at:built.signal.decision_at,sent_at:built.signal.sent_at,
+              decision_to_dispatch_ms:started-built.decision,decision_to_receipt_ms:clock()-built.decision,
+              timings:published.timings??null});
+          } catch(e) {
+            dispatched.push({leg,status:'FAILED',error:e instanceof Error?e.message:'DISPATCH_ERROR'});
+          }
+        }
+        return reply(200,{ok:true,context_ready:true,ticker:early.ticker,dispatched,
+          timings:{context_read_ms:contextReadMs,total_ms:clock()-readStarted}});
+      }
+
       const context=await (deps.readContext ?? readV12Context)(sb,new Date(open).toISOString());
       if (p.op==='context') return reply(200,{ok:true,context,observed_at:new Date(clock()).toISOString()});
       const signal=p.signal;
