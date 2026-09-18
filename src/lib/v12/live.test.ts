@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { intervalOpen, legsFromEvents, INTERVAL_MS } from './live.server.ts';
+import { intervalOpen, legsFromEvents, selectDecision, INTERVAL_MS } from './live.server.ts';
 
 test('interval open floors to the 15-minute boundary', () => {
   const open = Date.parse('2026-09-18T02:15:00.000Z');
@@ -40,4 +40,73 @@ test('delivery status maps to dispatch state and never to a fill', () => {
   assert.equal(byLeg.T45R2.status, 'WAITING');
   // Acknowledgement is delivery only — no field here claims an executed bet.
   assert(!Object.keys(byLeg.V1).some((k) => /fill|filled/i.test(k)));
+});
+
+const ev = (route: string, prediction: string, created: string) => ({
+  route,
+  candle_starts_at: '2026-09-18T02:15:00.000Z',
+  decision_at: '2026-09-18T02:15:05.095Z',
+  prediction,
+  delivery_status: 'ACKNOWLEDGED',
+  acknowledged_at: '2026-09-18T02:15:11.215Z',
+  receiver_status: 'LIVE_ACCEPTED',
+  created_at: created,
+});
+
+test('V1 abstention does not become a V1 call; T45 R2 is selected instead', () => {
+  const d = selectDecision({
+    events: [],
+    target: { run_mode: 'LIVE', final_side: 0, features: { input_valid: true } },
+    fallback: { leg: 'T45R2', side: -1, reason: 'v1 abstained', run_mode: 'LIVE_SHADOW' },
+  });
+  assert.equal(d?.leg, 'T45R2');
+  assert.equal(d?.side, 'DOWN');
+});
+
+test('the sender journal overrides the baseline for leg and direction (U)', () => {
+  const d = selectDecision({
+    events: [ev('U', 'YES', '2026-09-18T02:15:10.000Z')],
+    target: { run_mode: 'LIVE', final_side: -1, features: { input_valid: true } },
+    fallback: { leg: 'V1', side: -1, reason: null, run_mode: 'LIVE_SHADOW' },
+  });
+  assert.equal(d?.leg, 'U');
+  assert.equal(d?.side, 'UP');
+});
+
+test('newest journal row wins when several legs exist', () => {
+  const d = selectDecision({
+    events: [ev('V1', 'YES', '2026-09-18T02:15:10.000Z'), ev('U', 'NO', '2026-09-18T02:15:12.000Z')],
+    target: null,
+    fallback: null,
+  });
+  assert.equal(d?.leg, 'U');
+  assert.equal(d?.side, 'DOWN');
+});
+
+test('non-LIVE or invalid-input V1 is excluded and yields no decision', () => {
+  assert.equal(
+    selectDecision({
+      events: [],
+      target: { run_mode: 'RESEARCH', final_side: 1, features: { input_valid: true } },
+      fallback: null,
+    }),
+    null,
+  );
+  assert.equal(
+    selectDecision({
+      events: [],
+      target: { run_mode: 'LIVE', final_side: 1, features: { input_valid: false } },
+      fallback: null,
+    }),
+    null,
+  );
+  // A research-mode T45 row is not the live fallback either.
+  assert.equal(
+    selectDecision({
+      events: [],
+      target: null,
+      fallback: { leg: 'T45R2', side: 1, reason: null, run_mode: 'RESEARCH' },
+    }),
+    null,
+  );
 });
