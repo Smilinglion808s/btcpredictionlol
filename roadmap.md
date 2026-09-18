@@ -191,3 +191,14 @@ in `docs/v12-activation.md` (release gate stays shadow; real money off).
   automatic retry of a publish. U keeps the full context path unchanged.
 - Adapter revision v12-edge-adapter-r4, executor revision v12-executor-r2.
 - Real money stays OFF; release mode stays shadow; nothing deployed.
+
+2026-09-18 — Dashboard responsiveness for Version 1.2 (UI only). Added
+src/lib/v12/live.server.ts (current-interval-only read: v12_prediction_events,
+v12_predictor_runtime, c85_targets, v11_decisions) and
+src/lib/v12Live.functions.ts (getV12Live, POST, 800 ms server cache). stats.tsx
+polls it at 1s while the interval is unresolved, 5s once settled, 15s hidden,
+plus rollover/focus/reconnect invalidation; the heavy v11-stats aggregate stays
+at 10s. v11-card now takes the live payload as the authority for the current
+interval and all three legs including U, labels delivery state only (never a
+fill), and keeps the title on screen during refresh and partial failure. No
+model, executor, stake, gate, receiver or Railway change.
