@@ -31,7 +31,7 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
   };
   const readyTask = async () => { const q = await d.ready(); event('market_ready', {quote: q}); return q; };
   if (p.mode === 'disabled') { trace.status = 'DISABLED'; d.log(trace); return trace; }
-  if (!['maker_only','taker_only'].includes(p.executionRoute ?? '')) throw new Error('V12_EXECUTION_ROUTE_REQUIRED');
+  if (!['maker_only','taker_only','maker_then_taker'].includes(p.executionRoute ?? '')) throw new Error('V12_EXECUTION_ROUTE_REQUIRED');
   const ready = readyTask(); ready.catch(() => {});
   try {
     const preflight = d.preflight(); preflight.catch(() => {});
