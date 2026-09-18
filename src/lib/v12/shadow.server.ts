@@ -18,11 +18,13 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
   if(endpoints.length!==1 || !endpoints[0].secret)throw new Error('SINGLE_BETTING_SECRET_UNAVAILABLE');
   const raw=JSON.stringify(payload),signature=createHmac('sha256',endpoints[0].secret).update(raw).digest('hex');
   const eventKey=payload.interval_key+':'+route;
+  const secretRead=Date.now();
   const {error:claimError}=await sb.from('v12_prediction_events').insert({event_key:eventKey,
     request_hash:createHash('sha256').update(raw).digest('hex'),route,model_version:payload.model_version,
     market:payload.market,candle_starts_at:payload.candle_starts_at,decision_at:payload.decision_at,
     prediction:payload.prediction,checkpoint_seconds:payload.checkpoint_seconds??null,u_source:payload.u_source??null});
   if(claimError)throw new Error(claimError.code==='23505'?'DELIVERY_ALREADY_ATTEMPTED':'DELIVERY_JOURNAL_UNAVAILABLE');
+  const journalMs=Date.now()-secretRead, httpStarted=Date.now();
   try {
     const response=await fetch(destination+ROUTES[route].endpoint,{method:'POST',body:raw,redirect:'error',
       signal:AbortSignal.timeout(2500),headers:{'content-type':'application/json','x-btc15m-signature':'sha256='+signature,
@@ -31,11 +33,14 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
     const result=await response.json();
     if(typeof result.execution_enabled!=='boolean' || !['shadow','live'].includes(result.mode))
       throw new Error('SHADOW_RECEIVER_CONTRACT_MISMATCH');
+    // Bounded durations only: no credentials, payloads or receiver bodies.
+    const timings={secret_and_journal_ms:journalMs,http_ms:Date.now()-httpStarted};
     const {error}=await sb.from('v12_prediction_events').update({delivery_status:'ACKNOWLEDGED',
       acknowledged_at:new Date().toISOString(),receiver_status:typeof result.status==='string'?result.status:null,
       receiver_receipt_id:typeof result.id==='string'?result.id:null}).eq('event_key',eventKey);
     // A missing local receipt must not provoke a second outbound request.
-    return {...result,event_key:eventKey,receipt_journaled:!error};
+    return {...result,event_key:eventKey,receipt_journaled:!error,timings};
+
   } catch(e) {
     const code=e instanceof Error && /^SHADOW_RECEIVER_[A-Z_0-9]+$/.test(e.message)?e.message:'DELIVERY_ACK_UNKNOWN';
     await sb.from('v12_prediction_events').update({delivery_status:'UNKNOWN',error_code:code}).eq('event_key',eventKey);
