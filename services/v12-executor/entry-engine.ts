@@ -54,11 +54,15 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     let q = await ready; allowed();
     if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) q = await d.quote();
     const ceiling = firstCeiling(q, p);
-    const desired = Math.floor(checks.budget / (ceiling + p.feeReserve));
+    const kinds: ('maker' | 'taker')[] = p.executionRoute === 'taker_only' ? ['taker'] :
+      p.executionRoute === 'maker_then_taker' ? ['maker', 'taker'] : ['maker'];
+    // Sizing uses the FIRST leg's own reserve so maker quantities are unchanged
+    // by the existence of a fallback; the IOC leg re-plans against the budget
+    // actually left over, with the taker reserve applied.
+    const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
     trace.initial_ceiling = ceiling; trace.budget = checks.budget; trace.desired_count = desired;
     let remaining = desired; let budget = checks.budget; let totalFill = 0; let spent = 0;
     let actualKnown = true; let fees = 0;
-    const kinds: ('maker' | 'taker')[] = p.executionRoute === 'maker_only' ? ['maker'] : ['taker'];
     if (p.mode === 'shadow') {
       trace.status = 'SHADOW_PLAN'; trace.plans = kinds.map(k => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
       d.log(trace); return trace; // No claims, ledger updates, order POSTs or cancels.
@@ -68,10 +72,18 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
       if (attempts.length) {
         const again = await d.preflight();
         if (again.paused || again.stopped) {event('fallback_preflight_blocked'); break;}
+        // The fallback can never exceed what a fresh preflight still allows.
+        const capped = Math.max(0, Math.min(budget, again.budget));
+        event('fallback_budget_refreshed', {previous_budget: budget, preflight_budget: again.budget, budget: capped});
+        budget = capped;
+        if (!Number.isFinite(budget) || budget <= 0) {event('fallback_budget_exhausted'); break;}
         q = await d.quote();
       }
       let plan = planOrder(q, p, kind, budget, ceiling, remaining, d.now());
-      if (!plan) { event('price_or_size_abstention', {kind, quote: q}); continue; }
+      // Never submitted means never rejected: a price or size abstention on the
+      // maker leg ends the attempt instead of promoting it to a taker.
+      if (!plan) { event('price_or_size_abstention', {kind, quote: q}); break; }
+
       // A quote collected in parallel with the claim can already be old enough
       // that saving an intent will expire it. Refresh BEFORE that first save,
       // retaining the original ceiling and never increasing the planned count.
