@@ -22,7 +22,10 @@ export interface Policy {
   makerEnabled: boolean; maxEntryAgeMs: number; quoteMaxAgeMs: number;
   pollMs: number;
   // V1.2 requires an explicit route; these copies are not wired to a receiver.
-  executionRoute?: 'maker_only' | 'taker_only';
+  executionRoute?: 'maker_only' | 'taker_only' | 'maker_then_taker';
+  // Distinct from feeReserve: the maker leg's assumed zero fee must never be
+  // applied to an IOC taker order, which always reserves the taker allowance.
+  makerFeeReserve?: number;
   admissionFeeReserve?: number;
   valueLimit?: number;
   knownAsk?: number;
@@ -30,6 +33,10 @@ export interface Policy {
   // the V1.2 route overlay is carried separately here.
   strategyVersion?: string;
 }
+export function kindFeeReserve(p: Policy, kind: 'maker' | 'taker') {
+  return kind === 'maker' ? (p.makerFeeReserve ?? p.feeReserve) : p.feeReserve;
+}
+
 export function policyFromEnv(get: (name: string) => string | undefined): Policy {
   const num = (key: string, fallback: number) => {
     const text = get(key); const value = text === undefined ? fallback : Number(text);
