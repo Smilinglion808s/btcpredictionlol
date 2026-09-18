@@ -117,8 +117,10 @@ function LegRecord({ title, r, hint, dot }: { title: string; r: any; hint?: stri
   );
 }
 
-export function V11Card({ stats, loading, error }: V11Props) {
-  if (error) {
+export function V11Card({ stats, live: now12, loading, error }: V11Props) {
+  // History can fail on its own without hiding the live call state, and vice
+  // versa: the title and the current interval must stay on screen.
+  if (error && !now12) {
     return (
       <section className="v11-shell self-start rounded-2xl p-6">
         <span className="v11-orbit-ring" aria-hidden />
