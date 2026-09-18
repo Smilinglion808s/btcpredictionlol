@@ -310,7 +310,45 @@ class Service:
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
                 wait=adapter_backoff(e)
             time.sleep(wait or .5)
+    SLOTS={'V1':-1,'T45R2':-45}
+    def early_dispatch(self,cap,open_ms,pending,early):
+        """Signed minimal read + durable claim + dispatch in one round trip.
+
+        The adapter's interval/leg journal is the authoritative exactly-once
+        guard, so a restart mid-interval cannot resend. Any outcome other than
+        NOT_COMMITTED retires the leg for this interval: nothing is retried.
+        """
+        legs=list(pending)
+        if self.ticker:
+            legs=[r for r in legs if not cap.db.execute('select 1 from attempts where ticker=? and checkpoint=?',
+              (self.ticker,self.SLOTS[r])).fetchone()]
+            for r in pending:
+                if r not in legs:early[r]=early.get(r,'ALREADY_RECORDED')
+        if not legs:return
+        started=millis()
+        try:
+            result=self.adapter.call('early_dispatch',open_ms,legs=legs)
+            self.status.pop('early_dispatch_error',None)
+        except Exception as e:
+            self.status['early_dispatch_error']=error_label(e);raise
+        self.status.update(early_dispatch_at=iso(millis()),early_dispatch_ms=millis()-started)
+        if not result.get('context_ready'):return
+        ticker=result.get('ticker')
+        if ticker:self.ticker=ticker
+        for item in result.get('dispatched') or []:
+            leg=item.get('leg');status=item.get('status')
+            if leg not in self.SLOTS or status=='NOT_COMMITTED':continue
+            early[leg]=status
+            if self.ticker:
+                self.record(cap,self.SLOTS[leg],'EARLY_'+str(status),{k:item.get(k) for k in
+                  ('receiver_status','receiver_mode','decision_at','sent_at','error',
+                   'decision_to_dispatch_ms','decision_to_receipt_ms','timings')})
+            if status=='DISPATCHED':
+                self.status.update(last_dispatch_leg=leg,last_dispatch_at=item.get('sent_at'),
+                  last_dispatch_decision_to_dispatch_ms=item.get('decision_to_dispatch_ms'),
+                  last_dispatch_decision_to_receipt_ms=item.get('decision_to_receipt_ms'))
     def record(self,cap,checkpoint,status,details):
+
         cap.db.execute('insert or replace into attempts values(?,?,?,?)',(self.ticker,checkpoint,status,json.dumps(details,allow_nan=False)))
         cap.db.commit();self.status['last_attempt']={'ticker':self.ticker,'checkpoint':checkpoint,'status':status}
         self.status.update(last_attempt_at=iso(millis()),last_attempt_status=status,last_attempt_checkpoint=checkpoint)
