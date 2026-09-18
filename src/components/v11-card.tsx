@@ -233,6 +233,13 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
             : `${ageSec}s ago`;
   // A stale payload must not keep claiming the worker is connected right now.
   const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
+  const predictorLabel =
+    shownWorkerState === "CONNECTED"
+      ? "Prediction feed connected"
+      : shownWorkerState === "WAITING"
+        ? "Waiting for inputs"
+        : "No recent worker status";
+
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
