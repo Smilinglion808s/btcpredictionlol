@@ -149,6 +149,19 @@ export function V11Card({ stats, loading, error }: V11Props) {
   const BREAK_EVEN = 0.5;
   const aboveBreakeven = winRate != null && winRate >= BREAK_EVEN;
   const sideLabel = latest?.side === 1 ? "UP" : latest?.side === -1 ? "DOWN" : null;
+  const legs: any[] = predictor?.legs ?? [];
+  const uLeg = legs.find((l) => l.leg === "U") ?? null;
+  const uRecord = uLeg
+    ? { calls: uLeg.calls ?? 0, wins: uLeg.wins ?? 0, losses: uLeg.losses ?? 0,
+        pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
+        netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
+    : null;
+  const latestEvent = predictor?.latest ?? null;
+  const latestDelivery = latest && latestEvent?.candle_starts_at && latest?.targetTs &&
+      new Date(latestEvent.candle_starts_at).toISOString() === new Date(latest.targetTs).toISOString()
+    ? latestEvent
+    : null;
+  const deliveryLeg = latestDelivery ? legs.find((l) => l.leg === latestDelivery.route) ?? null : null;
 
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
