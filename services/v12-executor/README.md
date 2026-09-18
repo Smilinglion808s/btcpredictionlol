@@ -1,6 +1,6 @@
-# Prepared V1.2 execution engine
+# V1.2 execution engine with an operator release gate
 
-This directory is a tested code candidate, not a deployed receiver. It copies
+This directory supplies the receiver executor bundle. It copies
 the existing version-155 engine's durable intent, cancellation confirmation,
 partial-fill accounting and ambiguous-response protections. Changes make the
 execution route explicit: V1/U can submit maker orders only; T45R2 can submit
@@ -13,10 +13,13 @@ block the budget; no flat-dollar fallback. The conservative U admission test
 still includes its original fee allowance and penny reserve even when a
 maker fill is assumed to have zero fees.
 
-The caller must supply the existing durable shared interval claim and an
-authoritative day-opening snapshot. It must also revalidate current U
-eligibility against V1/T45 before claiming. These dependencies are not invented
-here. No network credentials, endpoint, cron, or financial activation is added.
+`live.ts` consumes only a durable LIVE_ACCEPTED receipt from record_v12_signal.
+That RPC binds the release switch, activation time, existing daily_balance
+snapshot and interval claim. The signed predictor adapter revalidates U against
+current committed V1/T45 decisions. Execution rechecks activation and the bot
+pause before submission and uses bet_history's shared unique claim, durable
+order intent, current available cash and existing settlement reconciliation.
 
-The existing live `place-trade` function remains untouched. Do not treat this
-directory as an activated trading system or the shadow pipeline as a fill test.
+The existing `place-trade` function remains untouched. Deployment leaves the
+V1.2 release switch in shadow. See docs/v12-activation.md for operator controls;
+shadow pipeline evidence does not establish a real-money fill.
