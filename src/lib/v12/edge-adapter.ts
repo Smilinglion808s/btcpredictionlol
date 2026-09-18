@@ -76,8 +76,10 @@ type Dependencies = {
   clock?: () => number;
   transport?: typeof fetch;
   readContext?: typeof readV12Context;
+  readEarlyContext?: typeof readV12EarlyContext;
   publish?: typeof publishV12Shadow;
 };
+
 
 export function createAdapterHandler(deps: Dependencies) {
   const clock=deps.clock ?? Date.now;
