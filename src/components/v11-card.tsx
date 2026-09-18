@@ -191,35 +191,6 @@ export function V11Card({ stats, loading, error }: V11Props) {
         </span>
       </header>
 
-      <section className="v11-chip relative p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Webhook delivery</span>
-          <span className="h-px flex-1 bg-gradient-to-r from-signal-orange-vivid/40 via-steel-vivid/25 to-transparent" />
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {(predictor?.legs??[{leg:'V1',endpoint:'v12-v1'},{leg:'T45R2',endpoint:'v12-t45r2'},{leg:'U',endpoint:'v12-u'}]).map((r:any)=>(
-            <div key={r.leg} className="rounded-lg border border-border/60 px-2.5 py-2">
-              <div className="flex items-center justify-between gap-1.5">
-                <span className="text-[10px] font-semibold uppercase">{r.leg==='T45R2'?'T45 R2 fallback':r.leg==='U'?'Original U':'V1'}</span>
-                <span className={`size-1.5 shrink-0 rounded-full ${r.authenticated?'bg-bull':'bg-muted-foreground/50'}`} title={r.authenticated?'Authentication verified':'Awaiting authentication check'} />
-              </div>
-              <div className="mt-1 text-xs tabular-nums">{r.acknowledged??'—'} acknowledged · {r.calls??'—'} signals</div>
-              <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">/{r.endpoint}</div>
-              {r.calls>0?<div className="mt-1 text-[9px] text-muted-foreground tabular-nums">{r.wins}W / {r.losses}L · {r.pending} pending · {pct(r.winRate)}</div>:null}
-              {r.unconfirmed>0?<div className="mt-1 text-[9px] text-signal-orange-vivid">{r.unconfirmed} acknowledgements unconfirmed</div>:null}
-            </div>
-          ))}
-        </div>
-        <div className="text-[10px] text-muted-foreground">
-          U: {predictor?.fitValid===false?'Fit expired — U paused':uReasons[predictor?.uBlockReason]??'Waiting for current status'}
-          {' · '}Refresh: {predictor?.refreshStatus?.replaceAll('_',' ')??'not reported'}
-        </div>
-        <div className="text-[9px] text-muted-foreground/80">
-          Receipts confirm delivery; results use official settlement; orders and fills are tracked externally.
-          {predictor?.truncated?' Showing the latest 1,000 signals.':''}
-        </div>
-      </section>
-
       <section className="relative flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="flex items-center gap-3 sm:gap-4">
           <Gauge value={winRate} label="win rate" sublabel="total" />
