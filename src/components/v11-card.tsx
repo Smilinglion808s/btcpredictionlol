@@ -260,6 +260,23 @@ export function V11Card({ stats, loading, error }: V11Props) {
               <span className="opacity-40">·</span>
               <span>{latest.reason ?? "—"}</span>
             </div>
+            {sideLabel ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground tabular-nums">
+                <span
+                  className={`size-1.5 shrink-0 rounded-full ${deliveryLeg?.authenticated ? "bg-bull" : "bg-muted-foreground/50"}`}
+                  title={deliveryLeg?.authenticated ? "Authentication verified" : "Awaiting authentication check"}
+                />
+                {latestDelivery ? (
+                  <span>
+                    Webhook <span className="font-mono">/{deliveryLeg?.endpoint ?? latestDelivery.route}</span>
+                    {" · "}{(latestDelivery.delivery_status ?? "—").toLowerCase().replaceAll("_", " ")}
+                    {latestDelivery.receiver_status ? ` · receiver ${latestDelivery.receiver_status}` : ""}
+                  </span>
+                ) : (
+                  <span>No V1.2 webhook recorded for this interval yet</span>
+                )}
+              </div>
+            ) : null}
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
