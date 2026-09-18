@@ -193,44 +193,49 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
         pending: uLeg.pending ?? 0, winRate: uLeg.winRate ?? null,
         netWins: (uLeg.wins ?? 0) - (uLeg.losses ?? 0) }
     : null;
-  // Current-interval authority: the V1.2 event journal, not the V1.1 baseline.
-  // When it is unavailable we fall back to the slow baseline snapshot rather
-  // than showing nothing.
+  // Current-interval authority: the V1.2 event journal only. The slow baseline
+  // snapshot is history and is never shown as the current interval.
   const nowLegs: any[] = now12?.legs ?? [];
-  const nowCalled = nowLegs.filter((l) => l.status !== "WAITING");
-  const nowSide =
-    now12?.decision?.side ??
-    (nowCalled[0]?.prediction === "YES" ? "UP" : nowCalled[0]?.prediction === "NO" ? "DOWN" : null);
-  const intervalTs = now12?.intervalOpen ?? latest?.targetTs ?? null;
-  const intervalStale = !!now12 && now12.isCurrentInterval === false;
+  const nowSide = now12?.decision?.side ?? null;
   const fmtTs = (iso: string | null | undefined) =>
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
-  // Freshness. Measured against the timestamp the SERVER put in the payload,
-  // so a cached-on-failure response (the read cache can serve an old value for
-  // up to ten minutes) ages visibly instead of posing as current. The clock
-  // boundary counts too: once a new 15-minute candle opens, a payload from the
-  // previous one is stale even if it arrived a second ago.
+  // Freshness, measured against the timestamp the SERVER put in the payload —
+  // not when the fetch happened — so a response served from cache after a
+  // failure ages visibly instead of posing as current. The server timestamp
+  // also gives a clock offset, so the 15-minute boundary is judged on the
+  // server's clock: once a new candle opens, a payload from the previous one
+  // is no longer current even if it arrived a second ago.
   const serverNow = now12?.now ? Date.parse(now12.now) : null;
   const clientAt = liveMeta?.updatedAt ?? null;
-  const ageMs =
-    serverNow != null ? Math.max(0, tick - serverNow) : clientAt != null ? Math.max(0, tick - clientAt) : null;
+  const offset = serverNow != null && clientAt != null ? serverNow - clientAt : 0;
+  const serverTick = tick + offset;
+  const ageMs = serverNow != null ? Math.max(0, serverTick - serverNow) : null;
   const ageSec = ageMs == null ? null : Math.round(ageMs / 1000);
+  const shownOpenMs = now12?.intervalOpen ? Date.parse(now12.intervalOpen) : null;
   const rolledOver =
-    serverNow != null && Math.floor(tick / 900_000) !== Math.floor(serverNow / 900_000);
+    shownOpenMs != null && Math.floor(serverTick / 900_000) * 900_000 !== shownOpenMs;
+  const connecting = !now12 && liveMeta?.error !== true;
+  // Usable = this payload really describes the interval that is open now.
   const liveStale = liveMeta?.error === true || rolledOver || (ageSec != null && ageSec > 10);
+  const liveUsable = !!now12 && !liveStale;
+  const intervalTs = liveUsable
+    ? now12.intervalOpen
+    : new Date(Math.floor(serverTick / 900_000) * 900_000).toISOString();
   const freshLabel = liveMeta?.error
     ? "connection issue"
-    : ageSec == null
+    : connecting
       ? "connecting"
       : rolledOver
-        ? "new candle — updating"
-        : ageSec <= 2
-          ? "live"
-          : ageSec > 10
-            ? `stale · ${ageSec}s old`
-            : `${ageSec}s ago`;
+        ? "new interval — updating"
+        : ageSec == null
+          ? "connecting"
+          : ageSec <= 2
+            ? "live"
+            : ageSec > 10
+              ? `stale · ${ageSec}s old`
+              : `${ageSec}s ago`;
   // A stale payload must not keep claiming the worker is connected right now.
   const shownWorkerState = liveStale && workerState === "CONNECTED" ? "WAITING" : workerState;
   const predictorLabel =
