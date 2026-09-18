@@ -193,6 +193,18 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
     iso ? new Date(iso).toISOString().slice(5, 16).replace("T", " ") : "—";
   const authFor = (leg: string) => legs.find((l) => l.leg === leg)?.authenticated === true;
 
+  // Freshness of the live read itself. Shown compactly so a paused or failing
+  // poll is visible instead of silently presenting an old interval as current.
+  const ageSec = liveMeta?.updatedAt ? Math.max(0, Math.round((Date.now() - liveMeta.updatedAt) / 1000)) : null;
+  const liveStale = liveMeta?.error === true || (ageSec != null && ageSec > 30);
+  const freshLabel = liveMeta?.error
+    ? "connection issue"
+    : ageSec == null
+      ? "connecting"
+      : ageSec < 2
+        ? "live"
+        : `${ageSec}s ago`;
+
   return (
     <section className="v11-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
       <span className="v11-orbit-ring" aria-hidden />
