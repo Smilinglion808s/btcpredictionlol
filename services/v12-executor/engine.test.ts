@@ -50,7 +50,10 @@ test('late U timing and Boise-day budget are route-bound',()=>{
   const open=Date.parse('2026-09-17T19:00:00Z'),decision=open+480000;
   const signal={leg:'U',model_version:ROUTES.U.model,execution_policy:'maker_only',candle_starts_at:new Date(open).toISOString(),
     decision_at:new Date(decision).toISOString(),checkpoint_seconds:480,limit_all_in:.8,known_ask:.7};
-  const p=routePolicy(base,signal,decision+1000);assert.equal(p.version,'entry-controls-r1');assert.equal(p.strategyVersion,'v12-original-u-4-5-10-r1');assert.equal(p.maxEntryAgeMs,485000);assert.equal(p.executionRoute,'maker_only');assert.equal(p.feeReserve,0);
+  // The signal still carries the legacy maker_only wire alias; the effective
+  // route must be the normalized maker_then_taker policy.
+  const p=routePolicy(base,signal,decision+1000);assert.equal(p.version,'entry-controls-r1');assert.equal(p.strategyVersion,'v12-original-u-4-5-10-r1');assert.equal(p.maxEntryAgeMs,485000);assert.equal(p.executionRoute,'maker_then_taker');assert.equal(p.feeReserve,0);
+
   const snap={boiseDay:'2026-09-17',openingEquityCents:100000};
   assert.equal(routeBudget('V1',snap,decision,100000),40);assert.equal(routeBudget('T45R2',snap,decision,100000),50);assert.equal(routeBudget('U',snap,decision,100000),100);
   assert.throws(()=>routeBudget('U',null,decision,100000));assert.throws(()=>routePolicy(base,signal,decision+10001));
