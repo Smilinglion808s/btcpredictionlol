@@ -285,12 +285,16 @@ function computeV11Vol(history, current) {
 		ready: true
 	};
 }
+//#endregion
+//#region src/lib/v12/contract.ts
+/** Frozen V1.2 request. This module cannot place or dispatch an order. */
+var V12_VERSION = "v12-original-u-4-5-10-r1";
 var ROUTES = {
 	V1: {
 		model: "v12-v1-r1",
 		fraction: .04,
 		percent: 4,
-		execution: "maker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-v1"
 	},
 	T45R2: {
@@ -304,10 +308,27 @@ var ROUTES = {
 		model: "v12-original-u-r1",
 		fraction: .1,
 		percent: 10,
-		execution: "maker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-u"
 	}
 };
+/**
+* Rolling compatibility only. A V1/U sender still on the wire value
+* `maker_only` is accepted and normalized to the current policy; every other
+* substitution — including a taker policy on a maker-first route, or any alias
+* at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+*/
+var LEGACY_EXECUTION_ALIASES = {
+	V1: ["maker_only"],
+	T45R2: [],
+	U: ["maker_only"]
+};
+function normalizeExecutionPolicy(route, value) {
+	const locked = ROUTES[route]?.execution;
+	if (!locked) return null;
+	if (value === locked) return locked;
+	return typeof value === "string" && LEGACY_EXECUTION_ALIASES[route].includes(value) ? locked : null;
+}
 var U_CHECKPOINTS = [
 	120,
 	180,
@@ -338,7 +359,8 @@ function uEligible(v1, t45, anyPriorClaim) {
 }
 function validateSignal(p, route, nowMs) {
 	const r = ROUTES[route];
-	if (p.model_version !== r.model || p.combined_model_version !== "v12-original-u-4-5-10-r1" || p.leg !== route || p.execution_policy !== r.execution || p.stake_fraction_of_boise_day_opening_principal !== r.fraction) throw new Error("ROUTE_POLICY_MISMATCH");
+	const execution = normalizeExecutionPolicy(route, p.execution_policy);
+	if (p.model_version !== r.model || p.combined_model_version !== "v12-original-u-4-5-10-r1" || p.leg !== route || execution === null || p.stake_fraction_of_boise_day_opening_principal !== r.fraction) throw new Error("ROUTE_POLICY_MISMATCH");
 	if (p.mode !== "shadow" || !["YES", "NO"].includes(p.prediction)) throw new Error("INVALID_SHADOW_SIGNAL");
 	const open = Date.parse(p.candle_starts_at), decision = Date.parse(p.decision_at), sent = Date.parse(p.sent_at);
 	if (![
@@ -358,11 +380,39 @@ function validateSignal(p, route, nowMs) {
 		key,
 		route,
 		policy: r,
+		execution,
+		legacyExecutionAlias: p.execution_policy !== execution,
 		day: boiseDay(new Date(nowMs))
 	};
 }
 //#endregion
 //#region src/lib/v12/context.server.ts
+/**
+* Minimal early-route reader for the latency-critical V1/T45R2 dispatch.
+*
+* It resolves exactly the same identity, committed state, input validity, run
+* mode and signed T45 provenance that `readV12Context` applies to those two
+* legs, using two parallel reads. It deliberately omits the U feature row, the
+* 96-row volatility history and the U-only prior-claim read: none of those are
+* inputs to a V1 or T45R2 decision. U always goes through `readV12Context`, and
+* the full reader remains the authoritative revalidation path.
+*/
+async function readV12EarlyContext(sb, open) {
+	const [target, fallback] = await Promise.all([sb.from("c85_targets").select("ticker,target_open_utc,run_mode,final_side,probability_yes,publication_offset_ms,features").eq("model_version", "lite-a-floor4-top10-r1").eq("target_open_utc", open).maybeSingle(), sb.from("v11_decisions").select("ticker,target_ts,leg,side,reason,probability,decision_offset_ms,run_mode,evidence,within_publication_ceiling,created_at").eq("target_ts", open).maybeSingle()]);
+	for (const result of [target, fallback]) if (result.error) throw result.error;
+	const v1 = target.data, t45 = fallback.data;
+	if (!v1 || v1.run_mode !== "LIVE") return {
+		ready: false,
+		reason: "V1_NOT_COMMITTED_LIVE"
+	};
+	return {
+		ready: true,
+		ticker: v1.ticker,
+		open: new Date(open).toISOString(),
+		v1,
+		t45: t45 && t45.ticker === v1.ticker && t45.within_publication_ceiling === true ? t45 : null
+	};
+}
 async function readV12Context(sb, open) {
 	const [snapshot, target, fallback, early, history] = await Promise.all([
 		readV1Snapshot(sb, open),
@@ -454,6 +504,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 	if (endpoints.length !== 1 || !endpoints[0].secret) throw new Error("SINGLE_BETTING_SECRET_UNAVAILABLE");
 	const raw = JSON.stringify(payload), signature = createHmac("sha256", endpoints[0].secret).update(raw).digest("hex");
 	const eventKey = payload.interval_key + ":" + route;
+	const secretRead = Date.now();
 	const { error: claimError } = await sb.from("v12_prediction_events").insert({
 		event_key: eventKey,
 		request_hash: createHash("sha256").update(raw).digest("hex"),
@@ -467,6 +518,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 		u_source: payload.u_source ?? null
 	});
 	if (claimError) throw new Error(claimError.code === "23505" ? "DELIVERY_ALREADY_ATTEMPTED" : "DELIVERY_JOURNAL_UNAVAILABLE");
+	const journalMs = Date.now() - secretRead, httpStarted = Date.now();
 	try {
 		const response = await fetch(destination + ROUTES[route].endpoint, {
 			method: "POST",
@@ -484,6 +536,10 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 		if (!response.ok) throw new Error("SHADOW_RECEIVER_HTTP_" + response.status);
 		const result = await response.json();
 		if (typeof result.execution_enabled !== "boolean" || !["shadow", "live"].includes(result.mode)) throw new Error("SHADOW_RECEIVER_CONTRACT_MISMATCH");
+		const timings = {
+			secret_and_journal_ms: journalMs,
+			http_ms: Date.now() - httpStarted
+		};
 		const { error } = await sb.from("v12_prediction_events").update({
 			delivery_status: "ACKNOWLEDGED",
 			acknowledged_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -493,7 +549,8 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 		return {
 			...result,
 			event_key: eventKey,
-			receipt_journaled: !error
+			receipt_journaled: !error,
+			timings
 		};
 	} catch (e) {
 		const code = e instanceof Error && /^SHADOW_RECEIVER_[A-Z_0-9]+$/.test(e.message) ? e.message : "DELIVERY_ACK_UNKNOWN";
@@ -526,7 +583,14 @@ var FIELDS = [
 	"training_latest_at",
 	"last_attempt_at",
 	"last_attempt_status",
-	"last_attempt_checkpoint"
+	"last_attempt_checkpoint",
+	"early_dispatch_at",
+	"early_dispatch_ms",
+	"early_dispatch_error",
+	"last_dispatch_leg",
+	"last_dispatch_at",
+	"last_dispatch_decision_to_dispatch_ms",
+	"last_dispatch_decision_to_receipt_ms"
 ];
 async function recordRuntime(sb, input) {
 	if (!input || typeof input !== "object" || Array.isArray(input) || input.mode !== "shadow" || input.execution_enabled !== false) throw new Error("INVALID_PREDICTOR_STATUS");
@@ -554,9 +618,62 @@ async function recordRuntime(sb, input) {
 }
 //#endregion
 //#region src/lib/v12/edge-adapter.ts
-var ADAPTER_REVISION = "v12-edge-adapter-r3";
+var ADAPTER_REVISION = "v12-edge-adapter-r4";
 var RECEIVERS = V12_RECEIVER_BASE;
 var encoder = new TextEncoder();
+var EARLY_LEGS = ["V1", "T45R2"];
+/**
+* Build a V1/T45R2 signal straight from the committed decision the adapter just
+* read. Direction, decision time and market all come from the authoritative row
+* — the worker cannot assert any of them — so a historical or non-current
+* decision can never be dispatched.
+*/
+function buildEarlySignal(leg, context, open, now) {
+	const v1 = context.v1, t45 = context.t45;
+	if (!v1 || v1.features?.input_valid !== true) return {
+		leg,
+		status: "V1_INPUT_INVALID"
+	};
+	if (leg === "T45R2" && (!t45 || t45.leg !== "T45R2" || t45.run_mode !== "LIVE_SHADOW" || t45.evidence?.trigger_signed !== true)) return {
+		leg,
+		status: "NOT_COMMITTED"
+	};
+	const side = leg === "V1" ? v1.final_side : t45?.side;
+	const offset = leg === "V1" ? v1.publication_offset_ms : t45?.decision_offset_ms;
+	if (![1, -1].includes(side) || typeof offset !== "number") return {
+		leg,
+		status: "NOT_COMMITTED"
+	};
+	const decision = open + offset;
+	if (now < decision) return {
+		leg,
+		status: "NOT_COMMITTED"
+	};
+	if (now - decision > 8e3) return {
+		leg,
+		status: "DECISION_EXPIRED"
+	};
+	const r = ROUTES[leg];
+	return {
+		leg,
+		status: "READY",
+		decision,
+		signal: {
+			mode: "shadow",
+			model_version: r.model,
+			combined_model_version: V12_VERSION,
+			leg,
+			execution_policy: r.execution,
+			stake_fraction_of_boise_day_opening_principal: r.fraction,
+			market: context.ticker,
+			candle_starts_at: new Date(open).toISOString(),
+			decision_at: new Date(decision).toISOString(),
+			sent_at: new Date(now).toISOString(),
+			interval_key: intervalKey(context.ticker, new Date(open).toISOString()),
+			prediction: side === 1 ? "YES" : "NO"
+		}
+	};
+}
 async function verifyWorkerSignature(raw, timestamp, signature, secret, now) {
 	if (!secret || !timestamp || !/^\d{13}$/.test(timestamp) || !signature || !/^[0-9a-f]{64}$/.test(signature) || Math.abs(now - Number(timestamp)) > 1e4) return false;
 	const key = await crypto.subtle.importKey("raw", encoder.encode(secret), {
@@ -658,6 +775,7 @@ function createAdapterHandler(deps) {
 		const now = clock(), open = Date.parse(p.open);
 		if (![
 			"context",
+			"early_dispatch",
 			"publish",
 			"probe",
 			"heartbeat"
@@ -667,7 +785,7 @@ function createAdapterHandler(deps) {
 		});
 		try {
 			const sb = deps.client();
-			if (p.op !== "context") {
+			if (p.op !== "context" && p.op !== "early_dispatch") {
 				const { error } = await sb.from("c85_request_nonces").insert({
 					nonce: p.nonce,
 					op: "v12-shadow." + p.op,
@@ -687,6 +805,67 @@ function createAdapterHandler(deps) {
 				ok: true,
 				...await recordRuntime(sb, p.status)
 			});
+			if (p.op === "early_dispatch") {
+				const requested = Array.isArray(p.legs) ? p.legs : EARLY_LEGS;
+				const legs = EARLY_LEGS.filter((l) => requested.includes(l));
+				if (!legs.length) return reply(400, {
+					ok: false,
+					error: "NO_EARLY_LEGS"
+				});
+				const readStarted = clock();
+				const early = await (deps.readEarlyContext ?? readV12EarlyContext)(sb, new Date(open).toISOString());
+				const contextReadMs = clock() - readStarted;
+				if (!early.ready) return reply(200, {
+					ok: true,
+					context_ready: false,
+					reason: early.reason,
+					dispatched: [],
+					timings: { context_read_ms: contextReadMs }
+				});
+				const dispatched = [];
+				for (const leg of legs) {
+					const started = clock();
+					const built = buildEarlySignal(leg, early, open, started);
+					if (built.status !== "READY") {
+						dispatched.push({
+							leg,
+							status: built.status
+						});
+						continue;
+					}
+					try {
+						validateSignal(built.signal, leg, clock());
+						const published = await (deps.publish ?? publishV12Shadow)(sb, built.signal, clock());
+						dispatched.push({
+							leg,
+							status: "DISPATCHED",
+							receiver_status: published.status ?? null,
+							receiver_mode: published.mode ?? null,
+							decision_at: built.signal.decision_at,
+							sent_at: built.signal.sent_at,
+							decision_to_dispatch_ms: started - built.decision,
+							decision_to_receipt_ms: clock() - built.decision,
+							timings: published.timings ?? null
+						});
+					} catch (e) {
+						dispatched.push({
+							leg,
+							status: "FAILED",
+							error: e instanceof Error ? e.message : "DISPATCH_ERROR"
+						});
+					}
+				}
+				return reply(200, {
+					ok: true,
+					context_ready: true,
+					ticker: early.ticker,
+					dispatched,
+					timings: {
+						context_read_ms: contextReadMs,
+						total_ms: clock() - readStarted
+					}
+				});
+			}
 			const context = await (deps.readContext ?? readV12Context)(sb, new Date(open).toISOString());
 			if (p.op === "context") return reply(200, {
 				ok: true,
@@ -724,4 +903,4 @@ function createAdapterHandler(deps) {
 	};
 }
 //#endregion
-export { ADAPTER_REVISION, createAdapterHandler, readV12Context, verifyWorkerSignature };
+export { ADAPTER_REVISION, createAdapterHandler, readV12Context, readV12EarlyContext, verifyWorkerSignature };
