@@ -108,7 +108,14 @@ export type DecisionSource = {
   /** c85_targets row for that interval, if any. */
   target: { run_mode?: string | null; final_side?: number | null; features?: any } | null;
   /** v11_decisions row for that interval, if any. */
-  fallback: { leg?: string | null; side?: number | null; reason?: string | null; run_mode?: string | null } | null;
+  fallback: {
+    leg?: string | null;
+    side?: number | null;
+    reason?: string | null;
+    run_mode?: string | null;
+    evidence?: any;
+    within_publication_ceiling?: boolean | null;
+  } | null;
 };
 
 /**
