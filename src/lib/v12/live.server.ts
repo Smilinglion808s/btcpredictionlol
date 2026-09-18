@@ -102,6 +102,59 @@ export function legsFromEvents(rows: EventRow[]): V12LegLive[] {
   });
 }
 
+export type DecisionSource = {
+  /** Webhook rows for the interval being shown (any leg). */
+  events: EventRow[];
+  /** c85_targets row for that interval, if any. */
+  target: { run_mode?: string | null; final_side?: number | null; features?: any } | null;
+  /** v11_decisions row for that interval, if any. */
+  fallback: { leg?: string | null; side?: number | null; reason?: string | null; run_mode?: string | null } | null;
+};
+
+/**
+ * Which leg and direction to show for an interval.
+ *
+ * Precedence:
+ *  1. The authoritative sender journal. If a webhook went out, that row IS the
+ *     decision — its route is the leg and its prediction is the direction.
+ *  2. Otherwise a committed V1 call only: run_mode LIVE, valid inputs and a
+ *     non-zero side. A V1 abstention (side 0) is NOT a V1 call.
+ *  3. Otherwise the T45 R2 fallback, from the same sender provenance
+ *     (LIVE_SHADOW, leg T45R2, non-zero side).
+ *  4. Otherwise nothing — never tag an abstained interval as a V1 call.
+ */
+export function selectDecision(src: DecisionSource): V12Live['decision'] {
+  const dir = (side: number | null | undefined) =>
+    side === 1 ? ('UP' as const) : side === -1 ? ('DOWN' as const) : null;
+
+  const newest = [...src.events].sort(
+    (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+  )[0];
+  if (newest) {
+    return {
+      side: newest.prediction === 'YES' ? 'UP' : newest.prediction === 'NO' ? 'DOWN' : null,
+      leg: newest.route,
+      reason: src.fallback?.reason ?? null,
+      runMode: src.target?.run_mode ?? src.fallback?.run_mode ?? null,
+      committed: true,
+    };
+  }
+
+  const t = src.target;
+  const tSide = dir(t?.final_side);
+  if (t && t.run_mode === 'LIVE' && t.features?.input_valid === true && tSide) {
+    return { side: tSide, leg: 'V1', reason: src.fallback?.reason ?? null, runMode: 'LIVE', committed: true };
+  }
+
+  const f = src.fallback;
+  const fSide = dir(f?.side);
+  if (f && f.run_mode === 'LIVE_SHADOW' && f.leg === 'T45R2' && fSide) {
+    return { side: fSide, leg: 'T45R2', reason: f.reason ?? null, runMode: f.run_mode, committed: true };
+  }
+
+  return null;
+}
+
 export async function buildV12Live(nowMs: number = Date.now()): Promise<V12Live> {
   const sb = client();
   const open = intervalOpen(nowMs);
