@@ -2,7 +2,11 @@
 const FIELDS=['stage','fit_expires_at','fit_version','last_context_at','last_error','u_eligible','u_block_reason',
   'early_features_ready','quote_received_at','quote_error','index_complete_through','spot_complete_through',
   'perp_complete_through','refresh_status','refresh_error','training_rows','training_latest_at',
-  'last_attempt_at','last_attempt_status','last_attempt_checkpoint'];
+  'last_attempt_at','last_attempt_status','last_attempt_checkpoint',
+  // Bounded latency observability. Durations and timestamps only.
+  'early_dispatch_at','early_dispatch_ms','early_dispatch_error','last_dispatch_leg','last_dispatch_at',
+  'last_dispatch_decision_to_dispatch_ms','last_dispatch_decision_to_receipt_ms'];
+
 export async function recordRuntime(sb:any,input:Record<string,unknown>){
   if(!input || typeof input!=='object' || Array.isArray(input) || input.mode!=='shadow' || input.execution_enabled!==false)
     throw new Error('INVALID_PREDICTOR_STATUS');
