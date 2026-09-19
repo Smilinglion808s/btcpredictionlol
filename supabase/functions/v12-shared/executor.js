@@ -660,7 +660,7 @@ function routePolicy(base, signal, nowMs) {
 		feeReserve: base.feeReserve,
 		makerFeeReserve: 0,
 		admissionFeeReserve: route === "U" ? 0 : base.feeReserve,
-		minOdds: route === "U" ? 1 / signal.limit_all_in : route === "T45R2" ? 1.4 : 1.5,
+		minOdds: route === "U" ? 1 / signal.limit_all_in : route === "T45R2" ? 1.3 : 1.5,
 		maxEntryAgeMs: route === "U" ? signal.checkpoint_seconds * 1e3 + 5e3 : 6e4,
 		...route === "U" ? {
 			valueLimit: signal.limit_all_in,
