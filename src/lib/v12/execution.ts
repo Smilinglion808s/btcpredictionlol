@@ -22,7 +22,9 @@ export function planEntry(i:PlanInput){
   const target=budgetCents(i.openingEquityCents,i.route);
   // Insufficient cash means a smaller affordable order, never borrowed buying power.
   const budget=Math.min(target,i.availableCashCents);
-  const taker=r.execution==='taker_only';
+  // Every current route is maker_then_taker; the taker branch remains only as
+  // the engine's explicit taker_only policy path, so compare widened.
+  const taker=(r.execution as string)==='taker_only';
   let price=taker?i.askCents:Math.min(i.bidCents+i.tickCents,i.askCents-i.tickCents);
   if(i.route==='U'){
     if(!Number.isFinite(i.uLimitAllIn) || !Number.isFinite(i.uKnownAsk) || i.uLimitAllIn!<=0 || i.uLimitAllIn!>=1)
