@@ -38,7 +38,7 @@ test('lost shared interval claim reaches no exchange request',async()=>{
   const r=await executeEntry(h.d,base,{ticker:'FIXTURE',side:'yes',target:0,received:1000});
   assert.equal(r.status,'CLAIM_REJECTED');assert.equal(h.submitted.length,0);
 });
-test('T45 is IOC only and never attempts maker',async()=>{
+test('explicit taker-only policy never attempts maker',async()=>{
   const h=harness('empty');await executeEntry(h.d,{...base,executionRoute:'taker_only',makerEnabled:false},{ticker:'FIXTURE',side:'yes',target:0,received:1000});
   assert.equal(h.submitted.length,1);assert.equal(h.submitted[0].post_only,false);assert.equal(h.submitted[0].time_in_force,'immediate_or_cancel');
 });

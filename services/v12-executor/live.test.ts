@@ -45,8 +45,8 @@ function harness(route:Route,checkpoint=120){
       return Response.json({order:{order_id:'order-fixture'}});
     }
     if(path.endsWith('/portfolio/orders/order-fixture')){
-      const price=Number(posts[0].price);return Response.json({order:{status:'canceled',fill_count_fp:'2.00',remaining_count_fp:'0.00',
-        maker_fill_cost_dollars:route==='T45R2'?'0':String(price*2),taker_fill_cost_dollars:route==='T45R2'?String(price*2):'0',maker_fees_dollars:'0',taker_fees_dollars:'0'}});
+      const order=posts.at(-1),price=Number(order.price);return Response.json({order:{status:'canceled',fill_count_fp:'2.00',remaining_count_fp:'0.00',
+        maker_fill_cost_dollars:order.post_only?String(price*2):'0',taker_fill_cost_dollars:order.post_only?'0':String(price*2),maker_fees_dollars:'0',taker_fees_dollars:'0'}});
     }
     throw Error('Unexpected network '+path);
   };
@@ -60,7 +60,7 @@ for(const route of ['V1','T45R2','U'] as const){
     const response=await r(new Request('https://receiver.test',{method:'POST',body:raw,headers:{'x-btc15m-signature':sig}}));
     assert.equal(response.status,200);assert.equal((await response.json()).execution_enabled,true);await pending;
     // The fixture fills 2 of the planned count, so a maker-first route submits a
-    // capped IOC taker for the remainder; T45R2 stays a single taker order.
+    // capped IOC taker for the remainder on every route.
     const fallback=ROUTES[route].execution==='maker_then_taker';
     assert.equal(h.posts.length,fallback?2:1);
     assert.equal(h.posts[0].post_only,fallback);
@@ -127,4 +127,14 @@ test('a quote aged by gate reads refreshes before a bounded POST',async()=>{
  const h=harness('V1'); h.state.expiredBeforePost=true;
  const r=await executeV12(h.signal,h.receipt,k=>env[k],h.transport,h.clock);
  assert.ok(h.posts.length>0); assert.ok(r.events.some((e:any)=>e.type==='refresh_after_gate'));
+});
+
+test('legacy T45 sender executes maker first at 1.3 odds with one shared budget',async()=>{
+ const h=harness('T45R2');h.signal.execution_policy='taker_only';
+ const trace=await executeV12(h.signal,h.receipt,k=>env[k],h.transport,h.clock);
+ assert.equal(trace.status,'FILLED');assert.equal(h.posts.length,2);
+ assert.equal(h.posts[0].post_only,true);assert.equal(h.posts[1].post_only,false);
+ assert.equal(h.posts[1].time_in_force,'immediate_or_cancel');
+ assert.equal(trace.policy.minOdds,1.3);assert.equal(trace.policy.executionRoute,'maker_then_taker');
+ assert.equal(trace.budget,50);assert.equal(h.claims.length,1);
 });

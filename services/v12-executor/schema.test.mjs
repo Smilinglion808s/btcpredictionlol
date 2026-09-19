@@ -79,3 +79,20 @@ test('fallback migration preserves activation and normalizes both wire policies'
   await assert.rejects(()=>record(invalid),/INVALID_V12_POLICY/);
   await db.exec("update v12_release_config set mode='shadow'");
 });
+
+test('T45 maker rollout preserves activation, sizing, access and legacy sender compatibility',async()=>{
+ await db.exec("update v12_release_config set mode='live'");
+ const before=(await db.query('select mode,live_enabled_at,policy from v12_release_config')).rows[0];
+ await db.exec(await readFile(new URL('../../docs/v12_t45_maker_then_taker.sql',import.meta.url),'utf8'));
+ const after=(await db.query('select mode,live_enabled_at,policy from v12_release_config')).rows[0];
+ assert.equal(after.mode,before.mode);assert.equal(after.live_enabled_at.getTime(),before.live_enabled_at.getTime());
+ assert.equal(after.policy.T45R2.percent,5);assert.equal(after.policy.T45R2.execution,'maker_then_taker');
+ for(const execution of ['taker_only','maker_then_taker']){
+  const p=await payload('T45R2');p.execution_policy=execution;const r=await record(p);
+  assert.equal(r.status,'LIVE_ACCEPTED');assert.equal(r.execution_policy,'maker_then_taker');assert.equal(r.budget_cents,5000);
+  assert.equal((await db.query('select payload from v12_shadow_signals where id=$1',[r.id])).rows[0].payload.execution_policy,'maker_then_taker');
+ }
+ const invalid=await payload('T45R2');invalid.execution_policy='maker_only';await assert.rejects(()=>record(invalid),/INVALID_V12_POLICY/);
+ const rights=(await db.query("select has_function_privilege('anon','public.record_v12_signal(jsonb,text)','EXECUTE') a,has_function_privilege('authenticated','public.record_v12_signal(jsonb,text)','EXECUTE') u")).rows[0];
+ assert.deepEqual(rights,{a:false,u:false});
+});

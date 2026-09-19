@@ -595,7 +595,7 @@ var ROUTES = {
 		model: "v12-t45r2-r1",
 		fraction: .05,
 		percent: 5,
-		execution: "taker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-t45r2"
 	},
 	U: {
@@ -607,14 +607,13 @@ var ROUTES = {
 	}
 };
 /**
-* Rolling compatibility only. A V1/U sender still on the wire value
-* `maker_only` is accepted and normalized to the current policy; every other
-* substitution — including a taker policy on a maker-first route, or any alias
-* at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+* Legacy sender values normalize to the receiver-owned execution policy.
+* V1/U accept maker_only; T45R2 accepts its former taker_only wire value.
+* Unknown substitutions remain a ROUTE_POLICY_MISMATCH.
 */
 var LEGACY_EXECUTION_ALIASES = {
 	V1: ["maker_only"],
-	T45R2: [],
+	T45R2: ["taker_only"],
 	U: ["maker_only"]
 };
 function normalizeExecutionPolicy(route, value) {
