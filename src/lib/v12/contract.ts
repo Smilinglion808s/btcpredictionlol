@@ -2,18 +2,17 @@
 export const V12_VERSION = 'v12-original-u-4-5-10-r1';
 export const ROUTES = {
   V1: { model: 'v12-v1-r1', fraction: 0.04, percent: 4, execution: 'maker_then_taker', endpoint: 'v12-v1' },
-  T45R2: { model: 'v12-t45r2-r1', fraction: 0.05, percent: 5, execution: 'taker_only', endpoint: 'v12-t45r2' },
+  T45R2: { model: 'v12-t45r2-r1', fraction: 0.05, percent: 5, execution: 'maker_then_taker', endpoint: 'v12-t45r2' },
   U: { model: 'v12-original-u-r1', fraction: 0.10, percent: 10, execution: 'maker_then_taker', endpoint: 'v12-u' },
 } as const;
 export type Route = keyof typeof ROUTES;
 /**
- * Rolling compatibility only. A V1/U sender still on the wire value
- * `maker_only` is accepted and normalized to the current policy; every other
- * substitution — including a taker policy on a maker-first route, or any alias
- * at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+ * Legacy sender values normalize to the receiver-owned execution policy.
+ * V1/U accept maker_only; T45R2 accepts its former taker_only wire value.
+ * Unknown substitutions remain a ROUTE_POLICY_MISMATCH.
  */
 export const LEGACY_EXECUTION_ALIASES: Record<Route, readonly string[]> = {
-  V1: ['maker_only'], T45R2: [], U: ['maker_only'],
+  V1: ['maker_only'], T45R2: ['taker_only'], U: ['maker_only'],
 };
 export function normalizeExecutionPolicy(route: Route, value: unknown): string | null {
   const locked = ROUTES[route]?.execution;
