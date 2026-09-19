@@ -5,12 +5,12 @@ import {OrderHttpError,planOrder,reservedOrderCost,type Policy} from './entry-po
 const policy:Policy={version:'entry-controls-r1',mode:'live',minOdds:1.5,feeReserve:.03,makerFeeReserve:0,
   admissionFeeReserve:.03,slippage:.01,makerImprovement:.01,makerWaitMs:1500,makerEnabled:true,
   maxEntryAgeMs:60000,quoteMaxAgeMs:1000,pollMs:300,executionRoute:'maker_then_taker'};
-async function run(variant='empty'){
+async function run(variant='empty',configured:Policy=policy,initialAsk=.56,fallbackAsk=initialAsk,initialBudget=40){
   let now=1000,checks=0,reads=0;const posts:any[]=[],saved:any[]=[];
-  const quote=()=>({bid:.54,ask:variant==='price'&&posts.length?.8:.56,askSize:1000,observedAt:now,requestStartedAt:now,source:'test'});
+  const quote=()=>{const ask=variant==='price'&&posts.length?.8:posts.length?fallbackAsk:initialAsk;return {bid:ask-.01,ask,askSize:1000,observedAt:now,requestStartedAt:now,source:'test'};};
   const trace=await executeEntry({now:()=>now,sleep:async ms=>{now+=ms},id:()=>`client-${posts.length}`,claim:async()=> 'bet',
     ready:async()=>quote(),quote:async()=>quote(),preflight:async()=>{
-      checks++;return {paused:variant==='pause'&&checks>1,stopped:false,budget:checks>1?(variant==='cash'?0:variant==='smallCash'?.5:40):40};},
+      checks++;return {paused:variant==='pause'&&checks>1,stopped:false,budget:checks>1?(variant==='cash'?0:variant==='smallCash'?.5:initialBudget):initialBudget};},
     save:async(_,p)=>{saved.push(p)},submit:async body=>{
       posts.push(body);if(variant==='timeout')throw Error('lost response');
       if(variant==='rejected'&&body.post_only)throw new OrderHttpError(400,{error:{code:'invalid_order',details:'post only cross'}});
@@ -25,7 +25,7 @@ async function run(variant='empty'){
         maker_fill_cost_dollars:maker?String(cost):'0',taker_fill_cost_dollars:maker?'0':String(cost),
         maker_fees_dollars:'0',taker_fees_dollars:String(fee)}};
     },cancel:async()=>{if(variant==='404')throw Object.assign(Error('not found'),{status:404});return {};},log:()=>{}
-  },policy,{ticker:'TEST',side:'yes',target:0,received:1000});
+  },configured,{ticker:'TEST',side:'yes',target:0,received:1000});
   return {trace,posts,saved};
 }
 test('empty maker and explicit post-only rejection reach one capped IOC',async()=>{
@@ -57,4 +57,38 @@ test('fractional taker fee rounding stays inside cash and odds bounds',()=>{
     const p=planOrder(q,policy,'taker',budget,.53,8,1000);
     if(p){assert.ok(p.maxCost<=budget+1e-9);assert.ok(p.minimumOdds>=policy.minOdds);assert.equal(p.maxCost,reservedOrderCost(p.count,p.limit,.03));}
   }
+});
+
+test('recorded 48c to 52c move passes fallback at 1.5x with the original $5.82 budget',async()=>{
+ const old=await run('empty',policy,.48,.52,5.82);
+ assert.equal(old.posts.length,1);assert.equal(old.trace.status,'NO_FILL');assert.equal(old.trace.initial_ceiling,.49);
+ const updated=await run('empty',{...policy,repriceTakerFallback:true},.48,.52,5.82);
+ assert.equal(updated.posts.length,2);assert.equal(updated.trace.status,'FILLED');
+ assert.equal(updated.posts[0].post_only,true);assert.equal(Number(updated.posts[1].price),.53);
+ assert.equal(updated.posts[1].time_in_force,'immediate_or_cancel');
+ const plan=updated.saved.flatMap(s=>s.order_attempts||[]).filter(a=>a.kind==='taker').at(-1).plan;
+ assert.ok(plan.minimumOdds>=1.5);assert.ok(plan.maxCost<=5.82);assert.ok(plan.count<=11);
+ assert.ok(updated.trace.events.some((e:any)=>e.type==='fallback_price_refreshed'&&e.price_ceiling===.63));
+});
+test('repriced fallback still rejects odds below the fee-adjusted floor on both early legs',async()=>{
+ for(const [minOdds,tooExpensive] of [[1.5,.64],[1.3,.74]]){
+  const h=await run('empty',{...policy,minOdds,repriceTakerFallback:true},.48,tooExpensive,5.82);
+  assert.equal(h.posts.length,1);assert.equal(h.trace.status,'NO_FILL');
+  const reason=h.trace.events.find((e:any)=>e.type==='price_or_size_abstention');
+  assert.equal(reason.minimum_odds,minOdds);assert.ok(reason.price_ceiling<tooExpensive);
+ }
+});
+test('repricing preserves full-fill, ambiguous-order, deadline, pause, cash and partial-fill guards',async()=>{
+ const p={...policy,repriceTakerFallback:true};
+ for(const v of ['full','timeout','unknown','deadline','pause','cash']){
+  const h=await run(v,p,.48,.52,5.82);assert.equal(h.posts.length,1,v);
+ }
+ const partial=await run('partial',p,.48,.52,5.82);
+ assert.equal(partial.posts.length,2);assert.ok(Number(partial.posts[1].count)<=Number(partial.posts[0].count)-2);
+ assert.ok(partial.trace.cost_or_reserved_cost<=5.82);
+});
+test('U value-based pricing never opts into early-leg fallback repricing',async()=>{
+ const h=await run('empty',{...policy,repriceTakerFallback:true,valueLimit:.8,knownAsk:.48},.48,.52,5.82);
+ assert.equal(h.posts.length,1);assert.equal(h.trace.status,'NO_FILL');
+ assert.ok(!h.trace.events.some((e:any)=>e.type==='fallback_price_refreshed'));
 });
