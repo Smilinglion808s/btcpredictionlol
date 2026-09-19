@@ -81,8 +81,11 @@ function validateMarket(m, ticker, target, now) {
 	if (m.result === "yes" || m.result === "no") throw new Error("MARKET_ALREADY_RESOLVED");
 }
 var downCent = (x) => Math.floor((x + 1e-10) * 100) / 100;
+function oddsCeiling(p) {
+	return downCent(Math.min(.99, 1 / p.minOdds - (p.admissionFeeReserve ?? p.feeReserve)));
+}
 function firstCeiling(q, p) {
-	return downCent(Math.min(.99, 1 / p.minOdds - (p.admissionFeeReserve ?? p.feeReserve), q.ask + p.slippage));
+	return downCent(Math.min(oddsCeiling(p), q.ask + p.slippage));
 }
 function planOrder(q, p, kind, budget, ceiling, remaining, now) {
 	if (now < q.observedAt || now - q.requestStartedAt > p.quoteMaxAgeMs) throw new Error("STALE_ORDERBOOK");
@@ -238,17 +241,17 @@ async function executeEntry(d, p, input) {
 		let q = await ready;
 		allowed();
 		if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) q = await d.quote();
-		const ceiling = firstCeiling(q, p);
+		const initialCeiling = firstCeiling(q, p);
 		const kinds = p.executionRoute === "taker_only" ? ["taker"] : p.executionRoute === "maker_then_taker" ? ["maker", "taker"] : ["maker"];
-		const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
-		trace.initial_ceiling = ceiling;
+		const desired = Math.floor(checks.budget / (initialCeiling + kindFeeReserve(p, kinds[0])));
+		trace.initial_ceiling = initialCeiling;
 		trace.budget = checks.budget;
 		trace.desired_count = desired;
 		let remaining = desired;
 		let budget = checks.budget;
 		if (p.mode === "shadow") {
 			trace.status = "SHADOW_PLAN";
-			trace.plans = kinds.map((k) => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
+			trace.plans = kinds.map((k) => planOrder(q, p, k, budget, initialCeiling, remaining, d.now()));
 			d.log(trace);
 			return trace;
 		}
@@ -273,11 +276,27 @@ async function executeEntry(d, p, input) {
 				}
 				q = await d.quote();
 			}
+			const reprice = kind === "taker" && attempts.length > 0 && p.repriceTakerFallback === true && p.valueLimit === void 0;
+			const ceiling = reprice ? oddsCeiling(p) : initialCeiling;
+			if (reprice) event("fallback_price_refreshed", {
+				initial_ceiling: initialCeiling,
+				price_ceiling: ceiling,
+				quote: q,
+				minimum_odds: p.minOdds,
+				remaining_budget: budget,
+				remaining_count: remaining
+			});
 			let plan = planOrder(q, p, kind, budget, ceiling, remaining, d.now());
 			if (!plan) {
 				event("price_or_size_abstention", {
 					kind,
-					quote: q
+					quote: q,
+					price_ceiling: ceiling,
+					minimum_odds: p.minOdds,
+					available_odds_before_fees: 1 / q.ask,
+					fee_reserve_per_contract: kindFeeReserve(p, kind),
+					remaining_budget: budget,
+					remaining_count: remaining
 				});
 				break;
 			}
@@ -660,6 +679,7 @@ function routePolicy(base, signal, nowMs) {
 		makerFeeReserve: 0,
 		admissionFeeReserve: route === "U" ? 0 : base.feeReserve,
 		minOdds: route === "U" ? 1 / signal.limit_all_in : route === "T45R2" ? 1.3 : 1.5,
+		repriceTakerFallback: route === "V1" || route === "T45R2",
 		maxEntryAgeMs: route === "U" ? signal.checkpoint_seconds * 1e3 + 5e3 : 6e4,
 		...route === "U" ? {
 			valueLimit: signal.limit_all_in,
@@ -712,7 +732,7 @@ function marketSource(get, now, sleep, ticker, target, side, p, log) {
 }
 //#endregion
 //#region services/v12-executor/live.ts
-var EXECUTOR_REVISION = "v12-executor-r3";
+var EXECUTOR_REVISION = "v12-executor-r4";
 function confidencePercent(value) {
 	if (value === void 0 || value === null) return 0;
 	if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) throw Error("INVALID_PROBABILITY");
@@ -927,7 +947,7 @@ async function executeV12(signal, receipt, get, transport = fetch, clock = Date.
 				execution_trace: {
 					policy,
 					policy_version: "entry-controls-r1",
-					execution_revision: "v12-executor-r3",
+					execution_revision: "v12-executor-r4",
 					receipt_id: receipt.id,
 					sizing,
 					status: "CLAIMED"

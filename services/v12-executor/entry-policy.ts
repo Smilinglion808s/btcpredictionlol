@@ -27,6 +27,8 @@ export interface Policy {
   // applied to an IOC taker order, which always reserves the taker allowance.
   makerFeeReserve?: number;
   admissionFeeReserve?: number;
+  // Early v1.2 legs may reprice a confirmed maker fallback within their odds floor.
+  repriceTakerFallback?: boolean;
   valueLimit?: number;
   knownAsk?: number;
   // Settle-bets selects its safe cancellation/reconciliation branch on version==='entry-controls-r1';
@@ -104,8 +106,11 @@ export function validateMarket(m: any, ticker: string, target: number, now: numb
   if (m.result === 'yes' || m.result === 'no') throw new Error('MARKET_ALREADY_RESOLVED');
 }
 const downCent = (x: number) => Math.floor((x + 1e-10) * 100) / 100;
+export function oddsCeiling(p: Policy) {
+  return downCent(Math.min(.99, 1 / p.minOdds - (p.admissionFeeReserve ?? p.feeReserve)));
+}
 export function firstCeiling(q: Quote, p: Policy) {
-  return downCent(Math.min(.99, 1 / p.minOdds - (p.admissionFeeReserve ?? p.feeReserve), q.ask + p.slippage));
+  return downCent(Math.min(oddsCeiling(p), q.ask + p.slippage));
 }
 export function planOrder(q: Quote, p: Policy, kind: 'maker' | 'taker', budget: number,
                           ceiling: number, remaining: number, now: number) {

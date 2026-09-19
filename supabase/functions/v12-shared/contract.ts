@@ -14,7 +14,7 @@ export type Route = keyof typeof ROUTES;
 export const LEGACY_EXECUTION_ALIASES: Record<Route, readonly string[]> = {
   V1: ['maker_only'], T45R2: ['taker_only'], U: ['maker_only'],
 };
-export function normalizeExecutionPolicy(route: Route, value: unknown): string | null {
+export function normalizeExecutionPolicy(route: Route, value: unknown): 'maker_only' | 'taker_only' | 'maker_then_taker' | null {
   const locked = ROUTES[route]?.execution;
   if (!locked) return null;
   if (value === locked) return locked;
