@@ -54,17 +54,17 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
     }
     let q = await ready; allowed();
     if (d.now() - q.requestStartedAt > p.quoteMaxAgeMs) q = await d.quote();
-    const ceiling = firstCeiling(q, p);
+    const initialCeiling = firstCeiling(q, p);
     const kinds: ('maker' | 'taker')[] = p.executionRoute === 'taker_only' ? ['taker'] :
       p.executionRoute === 'maker_then_taker' ? ['maker', 'taker'] : ['maker'];
     // Sizing uses the FIRST leg's own reserve so maker quantities are unchanged
     // by the existence of a fallback; the IOC leg re-plans against the budget
     // actually left over, with the taker reserve applied.
-    const desired = Math.floor(checks.budget / (ceiling + kindFeeReserve(p, kinds[0])));
-    trace.initial_ceiling = ceiling; trace.budget = checks.budget; trace.desired_count = desired;
+    const desired = Math.floor(checks.budget / (initialCeiling + kindFeeReserve(p, kinds[0])));
+    trace.initial_ceiling = initialCeiling; trace.budget = checks.budget; trace.desired_count = desired;
     let remaining = desired; let budget = checks.budget;
     if (p.mode === 'shadow') {
-      trace.status = 'SHADOW_PLAN'; trace.plans = kinds.map(k => planOrder(q, p, k, budget, ceiling, remaining, d.now()));
+      trace.status = 'SHADOW_PLAN'; trace.plans = kinds.map(k => planOrder(q, p, k, budget, initialCeiling, remaining, d.now()));
       d.log(trace); return trace; // No claims, ledger updates, order POSTs or cancels.
     }
     for (const kind of kinds) {
@@ -79,10 +79,19 @@ export async function executeEntry(d: Deps, p: Policy, input: {ticker: string; s
         if (!Number.isFinite(budget) || budget <= 0) {event('fallback_budget_exhausted'); break;}
         q = await d.quote();
       }
+      // This point is reachable only after the prior maker is terminal/accounted
+      // or explicitly rejected. Reprice from the fresh book, retaining the odds,
+      // fee, quantity and remaining-cash bounds. U retains its original ceiling.
+      const reprice = kind==='taker' && attempts.length>0 && p.repriceTakerFallback===true && p.valueLimit===undefined;
+      const ceiling = reprice ? oddsCeiling(p) : initialCeiling;
+      if(reprice) event('fallback_price_refreshed', {initial_ceiling:initialCeiling, price_ceiling:ceiling,
+        quote:q, minimum_odds:p.minOdds, remaining_budget:budget, remaining_count:remaining});
       let plan = planOrder(q, p, kind, budget, ceiling, remaining, d.now());
       // Never submitted means never rejected: a price or size abstention on the
       // maker leg ends the attempt instead of promoting it to a taker.
-      if (!plan) { event('price_or_size_abstention', {kind, quote: q}); break; }
+      if (!plan) { event('price_or_size_abstention', {kind, quote: q, price_ceiling:ceiling,
+        minimum_odds:p.minOdds, available_odds_before_fees:1/q.ask,
+        fee_reserve_per_contract:kindFeeReserve(p,kind), remaining_budget:budget, remaining_count:remaining}); break; }
 
       // A quote collected in parallel with the claim can already be old enough
       // that saving an intent will expire it. Refresh BEFORE that first save,

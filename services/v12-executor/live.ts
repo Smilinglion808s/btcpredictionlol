@@ -5,7 +5,7 @@ import {routePolicy} from './route-policy.ts';
 import {marketSource} from './market-source.ts';
 import {boiseDay, V12_VERSION, ROUTES, type Route} from '../../src/lib/v12/contract.ts';
 
-export const EXECUTOR_REVISION='v12-executor-r3';
+export const EXECUTOR_REVISION='v12-executor-r4';
 type Get=(key:string)=>string|undefined;
 type Receipt={id:string;status:string;mode:string;execution_enabled:boolean;budget_cents:number;boise_day:string;opening_balance:number};
 export function confidencePercent(value:unknown):number {

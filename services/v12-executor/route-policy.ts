@@ -23,6 +23,7 @@ export function routePolicy(base:Policy,signal:Record<string,any>,nowMs:number):
     // assumed to be free just because the maker leg pays nothing.
     feeReserve:base.feeReserve,makerFeeReserve:0,admissionFeeReserve:route==='U'?0:base.feeReserve,
     minOdds:route==='U'?1/signal.limit_all_in:route==='T45R2'?1.3:1.5,
+    repriceTakerFallback:route==='V1'||route==='T45R2',
     maxEntryAgeMs:route==='U'?signal.checkpoint_seconds*1000+5000:60000,
     ...(route==='U'?{valueLimit:signal.limit_all_in,knownAsk:signal.known_ask}:{}),
   };
