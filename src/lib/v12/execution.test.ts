@@ -13,19 +13,21 @@ test('maker-first plans preserve route budgets and price below the ask',()=>{
     assert(p.totalCostCents<=p.budgetCents);assert(p.priceCents<base.askCents);
   }
 });
-test('T45R2 never gains a maker leg or a fallback',()=>{
-  const p=planEntry({...base,route:'T45R2',minOdds:1.4});
+test('T45R2 plans maker first at 1.3 with a capped taker fallback',()=>{
+  const p=planEntry({...base,route:'T45R2',minOdds:1.3});
   assert.equal(p.status,'PLANNED');if(p.status!=='PLANNED')return;
-  assert.equal(p.postOnly,false);assert.equal(p.allowTakerFallback,false);
+  assert.equal(p.targetBudgetCents,5000);
+  assert(p.postOnly);assert.equal(p.allowTakerFallback,true);assert.equal(p.feesCents,0);
+  assert(p.totalCostCents<=p.budgetCents);assert(p.priceCents<base.askCents);
 });
 
 test('T45 exact rounded fees fit within 5 percent, cash cap and affordability',()=>{
   assert.equal(takerFeeCents(100,50),175);assert.equal(takerFeeCents(1,50),2);
-  const p=planEntry({...base,route:'T45R2',minOdds:1.4,availableCashCents:4300});
+  const p=planEntry({...base,route:'T45R2',minOdds:1.3,availableCashCents:4300});
   assert.equal(p.status,'PLANNED');if(p.status!=='PLANNED')return;
-  assert.equal(p.targetBudgetCents,5000);assert.equal(p.budgetCents,4300);assert.equal(p.postOnly,false);
+  assert.equal(p.targetBudgetCents,5000);assert.equal(p.budgetCents,4300);assert.equal(p.postOnly,true);
   assert(p.totalCostCents<=4300);
-  assert((p.quantity+1)*p.priceCents+takerFeeCents(p.quantity+1,p.priceCents)>4300);
+  assert((p.quantity+1)*p.priceCents>4300);
 });
 test('missing or breached original U admission cannot become a maker order',()=>{
   assert.throws(()=>planEntry({...base,route:'U'}));
