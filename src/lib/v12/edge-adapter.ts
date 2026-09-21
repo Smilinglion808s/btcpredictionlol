@@ -6,8 +6,8 @@ import { ROUTES, V12_VERSION, intervalKey, validateSignal, type Route } from './
 import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } from './receiver-destination';
 import { recordRuntime } from './runtime.server';
 
-export { readV12Context, readV12EarlyContext };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r4';
+export { readV12Context, readV12EarlyContext, readV12UContext };
+export const ADAPTER_REVISION = 'v12-edge-adapter-r5-u-latency';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 const EARLY_LEGS = ['V1', 'T45R2'] as const;
