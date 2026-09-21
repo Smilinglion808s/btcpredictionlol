@@ -281,7 +281,7 @@ class Service:
             now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
-                    self.ticker=None;market=None;last_open=open_ms;early={};last_context=0
+                    self.ticker=None;self.context=None;market=None;last_open=open_ms;early={};last_context=0
                 age=now-open_ms
                 # Critical path. One signed round trip performs the minimal
                 # authoritative read, the durable sender claim and the dispatch,
