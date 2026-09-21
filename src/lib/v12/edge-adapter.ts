@@ -7,7 +7,7 @@ import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } 
 import { recordRuntime } from './runtime.server';
 
 export { readV12Context, readV12EarlyContext, readV12UContext };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r5-u-latency';
+export const ADAPTER_REVISION = 'v12-edge-adapter-r6-status-bridge';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 const EARLY_LEGS = ['V1', 'T45R2'] as const;
@@ -79,6 +79,7 @@ type Dependencies = {
   readEarlyContext?: typeof readV12EarlyContext;
   readUContext?: typeof readV12UContext;
   publish?: typeof publishV12Shadow;
+  readExecution?: (sb:any)=>Promise<any>;
 };
 
 
@@ -114,7 +115,7 @@ export function createAdapterHandler(deps: Dependencies) {
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
       }
       if (p.op==='probe') return reply(200,{ok:true,...await probeReceivers(sb,deps.transport ?? fetch,clock())});
-      if (p.op==='heartbeat') return reply(200,{ok:true,...await recordRuntime(sb,p.status)});
+      if (p.op==='heartbeat') return reply(200,{ok:true,...await recordRuntime(sb,p.status,deps.readExecution)});
       if (p.op==='early_dispatch') {
         const requested=Array.isArray(p.legs)?p.legs:EARLY_LEGS;
         const legs=EARLY_LEGS.filter(l=>requested.includes(l));
