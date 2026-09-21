@@ -301,7 +301,7 @@ var ROUTES = {
 		model: "v12-t45r2-r1",
 		fraction: .05,
 		percent: 5,
-		execution: "taker_only",
+		execution: "maker_then_taker",
 		endpoint: "v12-t45r2"
 	},
 	U: {
@@ -313,14 +313,13 @@ var ROUTES = {
 	}
 };
 /**
-* Rolling compatibility only. A V1/U sender still on the wire value
-* `maker_only` is accepted and normalized to the current policy; every other
-* substitution — including a taker policy on a maker-first route, or any alias
-* at all on T45R2 — remains a ROUTE_POLICY_MISMATCH.
+* Legacy sender values normalize to the receiver-owned execution policy.
+* V1/U accept maker_only; T45R2 accepts its former taker_only wire value.
+* Unknown substitutions remain a ROUTE_POLICY_MISMATCH.
 */
 var LEGACY_EXECUTION_ALIASES = {
 	V1: ["maker_only"],
-	T45R2: [],
+	T45R2: ["taker_only"],
 	U: ["maker_only"]
 };
 function normalizeExecutionPolicy(route, value) {
@@ -394,8 +393,7 @@ function validateSignal(p, route, nowMs) {
 * mode and signed T45 provenance that `readV12Context` applies to those two
 * legs, using two parallel reads. It deliberately omits the U feature row, the
 * 96-row volatility history and the U-only prior-claim read: none of those are
-* inputs to a V1 or T45R2 decision. U always goes through `readV12Context`, and
-* the full reader remains the authoritative revalidation path.
+* inputs to a V1 or T45R2 decision. U publishing uses readV12UContext below.
 */
 async function readV12EarlyContext(sb, open) {
 	const [target, fallback] = await Promise.all([sb.from("c85_targets").select("ticker,target_open_utc,run_mode,final_side,probability_yes,publication_offset_ms,features").eq("model_version", "lite-a-floor4-top10-r1").eq("target_open_utc", open).maybeSingle(), sb.from("v11_decisions").select("ticker,target_ts,leg,side,reason,probability,decision_offset_ms,run_mode,evidence,within_publication_ceiling,created_at").eq("target_ts", open).maybeSingle()]);
@@ -476,6 +474,47 @@ async function readV12Context(sb, open) {
 		u_eligible: uEligible(eligibility.v1, eligibility.t45, eligibility.anyPriorClaim)
 	};
 }
+/** Revalidate U eligibility at send time without rebuilding its model features.
+* Features are supplied only by the full reader before scoring; all mutable
+* eligibility and prior-claim checks are still read authoritatively here.
+*/
+async function readV12UContext(sb, open) {
+	const [snapshot, target, fallback] = await Promise.all([
+		readV1Snapshot(sb, open),
+		sb.from("c85_targets").select("ticker").eq("model_version", "lite-a-floor4-top10-r1").eq("target_open_utc", open).maybeSingle(),
+		sb.from("v11_decisions").select("ticker,run_mode,side,evidence,within_publication_ceiling").eq("target_ts", open).maybeSingle()
+	]);
+	if (target.error) throw target.error;
+	if (fallback.error) throw fallback.error;
+	if (!target.data || !snapshot.committed || snapshot.runMode !== "LIVE") return {
+		ready: false,
+		reason: "V1_NOT_COMMITTED_LIVE"
+	};
+	const early = {
+		ready: true,
+		ticker: target.data.ticker,
+		open: new Date(open).toISOString()
+	};
+	const t45 = fallback.data;
+	const eligibility = {
+		v1: {
+			inputValid: snapshot.inputValid,
+			reason: snapshot.reason,
+			ordinaryFloorAllows: snapshot.ordinaryFloorOpen === true,
+			finalSide: snapshot.finalSide
+		},
+		t45: {
+			finalized: !!t45 && t45.run_mode === "LIVE_SHADOW" && t45.ticker === early.ticker && t45.evidence?.trigger_signed === true && t45.within_publication_ceiling === true,
+			finalSide: t45?.side
+		},
+		anyPriorClaim: snapshot.sendClaim !== "none"
+	};
+	return {
+		...early,
+		eligibility,
+		u_eligible: uEligible(eligibility.v1, eligibility.t45, eligibility.anyPriorClaim)
+	};
+}
 //#endregion
 //#region src/lib/v12/receiver-destination.ts
 var V12_RECEIVER_BASE = "https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/";
@@ -527,6 +566,7 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 			redirect: "error",
 			signal: AbortSignal.timeout(2500),
 			headers: {
+				"x-region": "us-west-1",
 				"content-type": "application/json",
 				"x-btc15m-signature": "sha256=" + signature,
 				"x-v12-event-id": eventKey,
@@ -621,7 +661,7 @@ async function recordRuntime(sb, input) {
 }
 //#endregion
 //#region src/lib/v12/edge-adapter.ts
-var ADAPTER_REVISION = "v12-edge-adapter-r4";
+var ADAPTER_REVISION = "v12-edge-adapter-r5-u-latency";
 var RECEIVERS = V12_RECEIVER_BASE;
 var encoder = new TextEncoder();
 var EARLY_LEGS = ["V1", "T45R2"];
@@ -706,6 +746,7 @@ async function probeReceivers(sb, transport, now) {
 				redirect: "error",
 				signal: AbortSignal.timeout(2500),
 				headers: {
+					"x-region": "us-west-1",
 					"content-type": "application/json",
 					"x-btc15m-signature": "sha256=" + signature
 				}
@@ -788,7 +829,8 @@ function createAdapterHandler(deps) {
 		});
 		try {
 			const sb = deps.client();
-			if (p.op !== "context" && p.op !== "early_dispatch") {
+			const uPublish = p.op === "publish" && p.signal?.leg === "U";
+			if (p.op !== "context" && p.op !== "early_dispatch" && !uPublish) {
 				const { error } = await sb.from("c85_request_nonces").insert({
 					nonce: p.nonce,
 					op: "v12-shadow." + p.op,
@@ -868,7 +910,7 @@ function createAdapterHandler(deps) {
 					}
 				});
 			}
-			const context = await (deps.readContext ?? readV12Context)(sb, new Date(open).toISOString());
+			const context = await (uPublish ? deps.readUContext ?? readV12UContext : deps.readContext ?? readV12Context)(sb, new Date(open).toISOString());
 			if (p.op === "context") return reply(200, {
 				ok: true,
 				context,
@@ -905,4 +947,4 @@ function createAdapterHandler(deps) {
 	};
 }
 //#endregion
-export { ADAPTER_REVISION, createAdapterHandler, readV12Context, readV12EarlyContext, verifyWorkerSignature };
+export { ADAPTER_REVISION, createAdapterHandler, readV12Context, readV12EarlyContext, readV12UContext, verifyWorkerSignature };
