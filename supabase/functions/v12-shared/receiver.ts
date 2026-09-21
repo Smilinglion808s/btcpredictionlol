@@ -1,4 +1,5 @@
 // Independent V1.2 receiver. The database release gate is shadow until operator activation.
+import {executionStatus} from './execution-status.ts';
 import {validateSignal, type Route} from './contract.ts';
 import {executeV12,executionReadiness,EXECUTOR_REVISION} from './executor.js';
 export async function validSignature(raw: string, signature: string, secret: string) {
