@@ -77,6 +77,7 @@ type Dependencies = {
   transport?: typeof fetch;
   readContext?: typeof readV12Context;
   readEarlyContext?: typeof readV12EarlyContext;
+  readUContext?: typeof readV12UContext;
   publish?: typeof publishV12Shadow;
 };
 
