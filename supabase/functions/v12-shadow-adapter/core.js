@@ -605,6 +605,52 @@ async function publishV12Shadow(sb, payload, now = Date.now()) {
 	}
 }
 //#endregion
+//#region src/lib/v12/execution-status.server.ts
+async function readUExecution(sb) {
+	try {
+		const { data, error } = await sb.from("webhook_endpoints").select("url,secret").in("url", V12_SECRET_ENDPOINTS);
+		const endpoints = (data ?? []).filter((e) => isAuthorizedBettingEndpoint(e.url));
+		if (error || endpoints.length !== 1 || !endpoints[0].secret) return null;
+		const raw = JSON.stringify({
+			kind: "V12_EXECUTION_STATUS",
+			leg: "U",
+			sent_at: (/* @__PURE__ */ new Date()).toISOString()
+		});
+		const signature = createHmac("sha256", endpoints[0].secret).update(raw).digest("hex");
+		const response = await fetch(V12_RECEIVER_BASE + "v12-u", {
+			method: "POST",
+			body: raw,
+			redirect: "error",
+			signal: AbortSignal.timeout(3e3),
+			headers: {
+				"content-type": "application/json",
+				"x-region": "us-west-1",
+				"x-btc15m-signature": "sha256=" + signature
+			}
+		});
+		if (!response.ok) return null;
+		const r = await response.json();
+		if (r.kind !== "V12_EXECUTION_STATUS" || r.route !== "U") return null;
+		const keys = [
+			"received",
+			"filled",
+			"won",
+			"lost",
+			"pending",
+			"skipped",
+			"unresolved"
+		];
+		if (!keys.every((k) => Number.isSafeInteger(r[k]) && r[k] >= 0)) return null;
+		return Object.fromEntries([
+			...keys,
+			"as_of",
+			"truncated"
+		].map((k) => [k, r[k]]));
+	} catch {
+		return null;
+	}
+}
+//#endregion
 //#region src/lib/v12/runtime.server.ts
 var FIELDS = [
 	"stage",
@@ -635,7 +681,7 @@ var FIELDS = [
 	"last_dispatch_decision_to_dispatch_ms",
 	"last_dispatch_decision_to_receipt_ms"
 ];
-async function recordRuntime(sb, input) {
+async function recordRuntime(sb, input, readExecution = readUExecution) {
 	if (!input || typeof input !== "object" || Array.isArray(input) || input.mode !== "shadow" || input.execution_enabled !== false) throw new Error("INVALID_PREDICTOR_STATUS");
 	const status = {
 		mode: "shadow",
@@ -651,6 +697,7 @@ async function recordRuntime(sb, input) {
 		"T45R2",
 		"U"
 	].map((leg) => [leg, probe.receivers.some((r) => r.leg === leg && r.authenticated === true)]));
+	status.u_execution = await readExecution(sb);
 	const { error } = await sb.from("v12_predictor_runtime").upsert({
 		worker_id: "v12-shadow-worker",
 		received_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -661,7 +708,7 @@ async function recordRuntime(sb, input) {
 }
 //#endregion
 //#region src/lib/v12/edge-adapter.ts
-var ADAPTER_REVISION = "v12-edge-adapter-r5-u-latency";
+var ADAPTER_REVISION = "v12-edge-adapter-r6-status-bridge";
 var RECEIVERS = V12_RECEIVER_BASE;
 var encoder = new TextEncoder();
 var EARLY_LEGS = ["V1", "T45R2"];
@@ -848,7 +895,7 @@ function createAdapterHandler(deps) {
 			});
 			if (p.op === "heartbeat") return reply(200, {
 				ok: true,
-				...await recordRuntime(sb, p.status)
+				...await recordRuntime(sb, p.status, deps.readExecution)
 			});
 			if (p.op === "early_dispatch") {
 				const requested = Array.isArray(p.legs) ? p.legs : EARLY_LEGS;
