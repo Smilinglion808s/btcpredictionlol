@@ -61,7 +61,7 @@ async function probeReceivers(sb: any, transport: typeof fetch, now: number) {
     const signature = createHmac('sha256',endpoints[0].secret).update(raw).digest('hex');
     try {
       const response = await transport(RECEIVERS+ROUTES[leg].endpoint, {method:'POST',body:raw,redirect:'error',
-        signal:AbortSignal.timeout(2500),headers:{'content-type':'application/json','x-btc15m-signature':'sha256='+signature}});
+        signal:AbortSignal.timeout(2500),headers:{'x-region':'us-west-1','content-type':'application/json','x-btc15m-signature':'sha256='+signature}});
       const result = await response.json();
       return {leg,authenticated:response.status===200 && result.kind==='V12_READINESS_PROBE',status:response.status,
         ready_for_activation:result.ready_for_activation===true,release_mode:result.mode??null,checks:result.checks??null};
