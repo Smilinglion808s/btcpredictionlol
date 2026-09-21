@@ -294,12 +294,14 @@ class Service:
                         # context/history round trip back on the early path.
                         self.status.update(stage='EARLY_DISPATCH',last_error=None)
                         time.sleep(.25);continue
-                last_context=millis()
-                context=self.adapter.call('context',open_ms)['context']
+                if context_refresh_due(self.context,open_ms,last_context,millis()):
+                    self.context=self.adapter.call('context',open_ms)['context']
+                    last_context=millis()
+                context=self.context
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
                 self.context=context
                 self.ticker=context['ticker'];age=millis()-open_ms
-                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
+                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(last_context),last_error=None,worker_revision='v12-u-latency-r1',
                   u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None,
                   u_block_reason=u_block_reason(context))
                 if not context.get('u_eligible'):time.sleep(.7);continue
