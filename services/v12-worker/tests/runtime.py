@@ -4,9 +4,17 @@ from unittest.mock import patch,MagicMock
 import pandas as pd
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from capture import Capture
-from service import payload,score_checkpoint,Service,Adapter,BACKEND_ADAPTER,WEBSITE_ADAPTER
+from service import payload,score_checkpoint,Service,Adapter,BACKEND_ADAPTER,WEBSITE_ADAPTER,context_refresh_due
 
 class RuntimeTests(unittest.TestCase):
+    def test_context_is_warm_bounded_and_interval_specific(self):
+        opening=int(pd.Timestamp('2026-09-17T19:00:00Z').timestamp()*1000)
+        context={'open':pd.Timestamp(opening,unit='ms',tz='UTC').isoformat(),'ready':True,'early':{}}
+        self.assertFalse(context_refresh_due(context,opening,opening+117000,opening+120100))
+        self.assertTrue(context_refresh_due(context,opening,opening+110000,opening+120100))
+        self.assertTrue(context_refresh_due(context,opening+900000,opening+117000,opening+900001))
+        self.assertTrue(context_refresh_due(context,opening,opening+100000,opening+103000))
+
     def test_adapter_destinations_are_exact_and_owner_controlled(self):
         for url in (BACKEND_ADAPTER,WEBSITE_ADAPTER):
             with patch.dict('os.environ',{'V12_SHADOW_ADAPTER_URL':url}):self.assertEqual(Adapter().url,url)
