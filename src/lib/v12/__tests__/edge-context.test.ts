@@ -47,3 +47,13 @@ describe('Edge bundle decision-reader parity',()=>{
     if(['stringFalse','floorClosed','noFallback','selectedFallback','unsignedFallback','lateFallback','claimed','failedClaimRead','sent'].includes(name))expect(actual.u_eligible).toBe(false);
   });
 });
+
+it('U send validation does not read feature history',async()=>{
+  const f=fixture(),base=database(f);
+  const sb={from:(table:string)=>{
+    if(table==='t45_features')throw Error('feature read on critical path');
+    const q=base.from(table);q.lte=()=>{throw Error('history on critical path');};return q;
+  }};
+  const result=await readV12UContext(sb as any,open);
+  expect(result.ready && result.u_eligible).toBe(true);
+});
