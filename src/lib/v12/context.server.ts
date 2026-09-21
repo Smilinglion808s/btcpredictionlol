@@ -11,8 +11,7 @@ import { uEligible } from './contract';
  * mode and signed T45 provenance that `readV12Context` applies to those two
  * legs, using two parallel reads. It deliberately omits the U feature row, the
  * 96-row volatility history and the U-only prior-claim read: none of those are
- * inputs to a V1 or T45R2 decision. U always goes through `readV12Context`, and
- * the full reader remains the authoritative revalidation path.
+ * inputs to a V1 or T45R2 decision. U publishing uses readV12UContext below.
  */
 export async function readV12EarlyContext(sb: SupabaseClient, open: string) {
   const [target, fallback] = await Promise.all([
@@ -67,4 +66,27 @@ export async function readV12Context(sb: SupabaseClient, open: string) {
   }
   return {ready:true,ticker:v1.ticker,open:new Date(open).toISOString(),v1,t45,eligibility,early:features,
     u_eligible:uEligible(eligibility.v1 as any,eligibility.t45 as any,eligibility.anyPriorClaim)};
+}
+
+/** Revalidate U eligibility at send time without rebuilding its model features.
+ * Features are supplied only by the full reader before scoring; all mutable
+ * eligibility and prior-claim checks are still read authoritatively here.
+ */
+export async function readV12UContext(sb: SupabaseClient, open: string) {
+  const [snapshot,target,fallback] = await Promise.all([
+    readV1Snapshot(sb,open),
+    sb.from('c85_targets').select('ticker').eq('model_version','lite-a-floor4-top10-r1').eq('target_open_utc',open).maybeSingle(),
+    sb.from('v11_decisions').select('ticker,run_mode,side,evidence,within_publication_ceiling').eq('target_ts',open).maybeSingle(),
+  ]);
+  if(target.error)throw target.error;if(fallback.error)throw fallback.error;
+  if (!target.data || !snapshot.committed || snapshot.runMode !== 'LIVE')
+    return {ready:false, reason:'V1_NOT_COMMITTED_LIVE'} as const;
+  const early={ready:true as const,ticker:target.data.ticker,open:new Date(open).toISOString()};
+  const t45=fallback.data;
+  const eligibility={v1:{inputValid:snapshot.inputValid,reason:snapshot.reason,
+    ordinaryFloorAllows:snapshot.ordinaryFloorOpen===true,finalSide:snapshot.finalSide},
+    t45:{finalized:!!t45 && t45.run_mode==='LIVE_SHADOW' && t45.ticker===early.ticker &&
+      t45.evidence?.trigger_signed===true && t45.within_publication_ceiling===true,finalSide:t45?.side},
+    anyPriorClaim:snapshot.sendClaim!=='none'};
+  return {...early,eligibility,u_eligible:uEligible(eligibility.v1 as any,eligibility.t45 as any,eligibility.anyPriorClaim)};
 }

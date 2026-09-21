@@ -1,13 +1,13 @@
 // Standalone recording backend. Bundle the canonical readers; do not proxy the website.
 import { createHmac } from 'node:crypto';
-import { readV12Context, readV12EarlyContext } from './context.server';
+import { readV12Context, readV12EarlyContext, readV12UContext } from './context.server';
 import { publishV12Shadow } from './shadow.server';
 import { ROUTES, V12_VERSION, intervalKey, validateSignal, type Route } from './contract';
 import { V12_RECEIVER_BASE, V12_SECRET_ENDPOINTS, isAuthorizedBettingEndpoint } from './receiver-destination';
 import { recordRuntime } from './runtime.server';
 
-export { readV12Context, readV12EarlyContext };
-export const ADAPTER_REVISION = 'v12-edge-adapter-r4';
+export { readV12Context, readV12EarlyContext, readV12UContext };
+export const ADAPTER_REVISION = 'v12-edge-adapter-r5-u-latency';
 const RECEIVERS = V12_RECEIVER_BASE;
 const encoder = new TextEncoder();
 const EARLY_LEGS = ['V1', 'T45R2'] as const;
@@ -61,7 +61,7 @@ async function probeReceivers(sb: any, transport: typeof fetch, now: number) {
     const signature = createHmac('sha256',endpoints[0].secret).update(raw).digest('hex');
     try {
       const response = await transport(RECEIVERS+ROUTES[leg].endpoint, {method:'POST',body:raw,redirect:'error',
-        signal:AbortSignal.timeout(2500),headers:{'content-type':'application/json','x-btc15m-signature':'sha256='+signature}});
+        signal:AbortSignal.timeout(2500),headers:{'x-region':'us-west-1','content-type':'application/json','x-btc15m-signature':'sha256='+signature}});
       const result = await response.json();
       return {leg,authenticated:response.status===200 && result.kind==='V12_READINESS_PROBE',status:response.status,
         ready_for_activation:result.ready_for_activation===true,release_mode:result.mode??null,checks:result.checks??null};
@@ -77,6 +77,7 @@ type Dependencies = {
   transport?: typeof fetch;
   readContext?: typeof readV12Context;
   readEarlyContext?: typeof readV12EarlyContext;
+  readUContext?: typeof readV12UContext;
   publish?: typeof publishV12Shadow;
 };
 
@@ -105,7 +106,9 @@ export function createAdapterHandler(deps: Dependencies) {
       // `early_dispatch` is polled on the critical path, so it skips the nonce
       // write: its exactly-once guarantee is the durable interval/leg journal
       // claim in publishV12Shadow, which no replay can bypass.
-      if (p.op!=='context' && p.op!=='early_dispatch') {
+      // U also uses the durable event claim, before any outbound delivery.
+      const uPublish=p.op==='publish' && p.signal?.leg==='U';
+      if (p.op!=='context' && p.op!=='early_dispatch' && !uPublish) {
         const {error}=await sb.from('c85_request_nonces').insert({nonce:p.nonce,op:'v12-shadow.'+p.op,worker_id:'v12-shadow-worker'});
         if (error?.code==='23505') return reply(409,{ok:false,error:'REPLAYED'});
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
@@ -142,7 +145,7 @@ export function createAdapterHandler(deps: Dependencies) {
           timings:{context_read_ms:contextReadMs,total_ms:clock()-readStarted}});
       }
 
-      const context=await (deps.readContext ?? readV12Context)(sb,new Date(open).toISOString());
+      const context:any=await (uPublish ? (deps.readUContext ?? readV12UContext) : (deps.readContext ?? readV12Context))(sb,new Date(open).toISOString());
       if (p.op==='context') return reply(200,{ok:true,context,observed_at:new Date(clock()).toISOString()});
       const signal=p.signal;
       if (!context.ready || !signal || signal.market!==context.ticker || Date.parse(signal.candle_starts_at)!==open)

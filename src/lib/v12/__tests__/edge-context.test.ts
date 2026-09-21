@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {readV12Context as canonical} from '../context.server';
+import {readV12Context as canonical,readV12UContext} from '../context.server';
 // The generated, deployable bundle must retain the canonical behavior.
 // @ts-ignore generated JavaScript has no declaration file
 import {readV12Context as bundled} from '../../../../supabase/functions/v12-shadow-adapter/core.js';
@@ -38,9 +38,22 @@ describe('Edge bundle decision-reader parity',()=>{
     const f:any=fixture();mutate(f);
     const expected=await canonical(database(f) as any,open),actual=await bundled(database(f),open);
     expect(actual).toEqual(expected);
+    const minimal=await readV12UContext(database(f) as any,open);
+    expect(minimal.ready).toEqual(expected.ready);
+    if(expected.ready && minimal.ready){expect(minimal.u_eligible).toEqual(expected.u_eligible);expect(minimal.eligibility).toEqual(expected.eligibility);}
     if(name==='eligible')expect(actual.u_eligible).toBe(true);
     if(name==='unrelatedPriorMissing')expect(actual.early).not.toBeNull();
     if(['incompleteSpot','stringSpotFlag','nullInput','missingEarly','tooFewVol'].includes(name))expect(actual.early).toBeNull();
     if(['stringFalse','floorClosed','noFallback','selectedFallback','unsignedFallback','lateFallback','claimed','failedClaimRead','sent'].includes(name))expect(actual.u_eligible).toBe(false);
   });
+});
+
+it('U send validation does not read feature history',async()=>{
+  const f=fixture(),base=database(f);
+  const sb={from:(table:string)=>{
+    if(table==='t45_features')throw Error('feature read on critical path');
+    const q=base.from(table);q.lte=()=>{throw Error('history on critical path');};return q;
+  }};
+  const result=await readV12UContext(sb as any,open);
+  expect(result.ready && result.u_eligible).toBe(true);
 });

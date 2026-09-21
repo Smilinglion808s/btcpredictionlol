@@ -46,7 +46,7 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
     return receiver(new Request(target,init));
   };
   const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,
-    readContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
+    readContext:async()=>{reads++;return context;},readUContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
   const signal:any={mode:'shadow',model_version:ROUTES[leg].model,combined_model_version:V12_VERSION,leg,
     execution_policy:ROUTES[leg].execution,stake_fraction_of_boise_day_opening_principal:ROUTES[leg].fraction,
     market:ticker,candle_starts_at:new Date(open).toISOString(),decision_at:new Date(open+offset).toISOString(),sent_at:new Date(now).toISOString(),
@@ -95,7 +95,8 @@ test('valid route signals use canonical publish and each independent receiver; d
     assert.equal(body.status,'SHADOW_RECORDED');assert.equal(t.counts().writes,1);
     assert.equal([...t.journal.values()][0].delivery_status,'ACKNOWLEDGED');
     assert.deepEqual(t.destinations,[receiverRoot+ROUTES[leg].endpoint]);
-    assert.equal((await t.handler(request(t.envelope('publish'),t.now))).status,409);
+    assert.equal((await t.handler(request(t.envelope('publish'),t.now))).status,leg==='U'?400:409);
+    if(leg==='U')assert.equal(t.counts().nonceWrites,0);
     assert.equal((await t.handler(request(t.envelope('publish','fresh-nonce-same-event'),t.now))).status,400);
     assert.equal(t.counts().writes,1);
   }}finally{globalThis.fetch=originalFetch;}

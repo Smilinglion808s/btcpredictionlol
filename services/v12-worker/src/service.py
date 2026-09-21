@@ -79,7 +79,7 @@ class Adapter:
         conn=self._client()
         try:
             conn.request('POST',self.path,body=body,headers={'content-type':'application/json','connection':'keep-alive',
-              'content-length':str(len(body)),'x-c85-timestamp':ts,'x-c85-signature':sig})
+              'content-length':str(len(body)),**({'x-region':'us-west-2'} if self.url==BACKEND_ADAPTER else {}),'x-c85-timestamp':ts,'x-c85-signature':sig})
             response=conn.getresponse();raw=response.read();status=response.status
         except Exception:
             # A publish or early dispatch is never retried automatically: the
@@ -130,6 +130,21 @@ def score_checkpoint(capture,scorer,context,market,second,now_ms):
     f=checkpoint_frame(capture,context,market,second,now_ms)
     chosen,rows=scorer.score(f,pd.Timestamp(now_ms,unit='ms',tz='UTC'))
     return chosen,rows
+
+def context_refresh_due(context, open_ms, last_context, now):
+    """Warm context before checkpoints; publishing always revalidates eligibility.
+
+    Cache is interval-bound and at most 10 seconds old near a checkpoint. No
+    historical quote or model feature is fabricated and no deadline is widened.
+    """
+    if not context or context.get('open') is None or int(pd.Timestamp(context['open']).timestamp()*1000)!=open_ms:
+        return True
+    if not context.get('ready') or context.get('early') is None:return True
+    age=now-last_context
+    if age<0 or age>=10000:return True
+    near=any(-2500<=now-(open_ms+sec*1000)<=5000 for sec in CHECKPOINTS)
+    return not near and age>=2000
+
 
 def u_block_reason(context):
     e=context.get('eligibility') or {};v=e.get('v1') or {};t=e.get('t45') or {}
@@ -266,7 +281,7 @@ class Service:
             now=millis();open_ms=now//900000*900000;wait=0
             try:
                 if last_open!=open_ms:
-                    self.ticker=None;market=None;last_open=open_ms;early={};last_context=0
+                    self.ticker=None;self.context=None;market=None;last_open=open_ms;early={};last_context=0
                 age=now-open_ms
                 # Critical path. One signed round trip performs the minimal
                 # authoritative read, the durable sender claim and the dispatch,
@@ -279,12 +294,14 @@ class Service:
                         # context/history round trip back on the early path.
                         self.status.update(stage='EARLY_DISPATCH',last_error=None)
                         time.sleep(.25);continue
-                last_context=millis()
-                context=self.adapter.call('context',open_ms)['context']
+                if context_refresh_due(self.context,open_ms,last_context,millis()):
+                    self.context=self.adapter.call('context',open_ms)['context']
+                    last_context=millis()
+                context=self.context
                 if not context.get('ready'):raise ValueError(context.get('reason','CONTEXT_NOT_READY'))
                 self.context=context
                 self.ticker=context['ticker'];age=millis()-open_ms
-                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(millis()),last_error=None,
+                self.status.update(stage='RECORDING',ticker=self.ticker,last_context_at=iso(last_context),last_error=None,worker_revision='v12-u-latency-r1',
                   u_eligible=context.get('u_eligible') is True,early_features_ready=context.get('early') is not None,
                   u_block_reason=u_block_reason(context))
                 if not context.get('u_eligible'):time.sleep(.7);continue
@@ -306,13 +323,17 @@ class Service:
                       v11_eligibility=context['eligibility'],limit_all_in=chosen.limit_all_in,u_source=chosen.source,
                       probability=chosen.probability,known_ask=chosen.known_ask,arrival_ask=ask,fit_version=self.scorer.manifest['version'])
                     self.record(cap,sec,'U_SUBMITTING',p)
+                    dispatch_started=millis()
                     result=self.adapter.call('publish',open_ms,signal=p)
+                    self.status.update(last_u_decision_at=p['decision_at'],last_u_publish_ms=millis()-dispatch_started,
+                      last_u_receiver_status=result.get('status'),last_u_timings=result.get('timings'))
                     self.record(cap,sec,'U_RECORDED',result)
             except Exception as e:
                 # Do not log credentials, request bodies or remote error pages.
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
                 wait=adapter_backoff(e)
-            time.sleep(wait or .5)
+            near=any(0<=millis()-(open_ms+sec*1000)<=5000 for sec in CHECKPOINTS)
+            time.sleep(wait or (.1 if near else .5))
     SLOTS={'V1':-1,'T45R2':-45}
     def early_dispatch(self,cap,open_ms,pending,early):
         """Signed minimal read + durable claim + dispatch in one round trip.
