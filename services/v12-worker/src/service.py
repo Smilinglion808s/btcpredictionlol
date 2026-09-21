@@ -79,7 +79,7 @@ class Adapter:
         conn=self._client()
         try:
             conn.request('POST',self.path,body=body,headers={'content-type':'application/json','connection':'keep-alive',
-              'content-length':str(len(body)),'x-c85-timestamp':ts,'x-c85-signature':sig})
+              'content-length':str(len(body)),**({'x-region':'us-west-2'} if self.url==BACKEND_ADAPTER else {}),'x-c85-timestamp':ts,'x-c85-signature':sig})
             response=conn.getresponse();raw=response.read();status=response.status
         except Exception:
             # A publish or early dispatch is never retried automatically: the
