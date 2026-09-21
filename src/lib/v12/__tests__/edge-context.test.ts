@@ -38,6 +38,9 @@ describe('Edge bundle decision-reader parity',()=>{
     const f:any=fixture();mutate(f);
     const expected=await canonical(database(f) as any,open),actual=await bundled(database(f),open);
     expect(actual).toEqual(expected);
+    const minimal=await readV12UContext(database(f) as any,open);
+    expect(minimal.ready).toEqual(expected.ready);
+    if(expected.ready && minimal.ready){expect(minimal.u_eligible).toEqual(expected.u_eligible);expect(minimal.eligibility).toEqual(expected.eligibility);}
     if(name==='eligible')expect(actual.u_eligible).toBe(true);
     if(name==='unrelatedPriorMissing')expect(actual.early).not.toBeNull();
     if(['incompleteSpot','stringSpotFlag','nullInput','missingEarly','tooFewVol'].includes(name))expect(actual.early).toBeNull();
