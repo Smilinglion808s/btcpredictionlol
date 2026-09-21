@@ -20,6 +20,12 @@ export function createReceiver(route:Route,get:(key:string)=>string|undefined,tr
     let payload:Record<string,any>;
     try{
       payload=JSON.parse(raw);
+      if(payload?.kind==='V12_EXECUTION_STATUS'){
+        const sent=Date.parse(payload.sent_at);
+        if(payload.leg!==route||!Number.isFinite(sent)||Math.abs(clock()-sent)>10000)throw Error('INVALID_STATUS_REQUEST');
+        try{return reply(200,await executionStatus(route,get,transport,clock()));}
+        catch{return reply(503,{error:'EXECUTION_STATUS_UNAVAILABLE'});}
+      }
       if(payload?.kind==='V12_READINESS_PROBE'){
         const sent=Date.parse(payload.sent_at);
         if(payload.leg!==route||!Number.isFinite(sent)||Math.abs(clock()-sent)>10000)throw Error('INVALID_PROBE');
