@@ -389,7 +389,7 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
       <section>
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Live shadow by leg · official settlement only
+            Prediction outcomes by leg · not filled bets
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-steel-vivid/40 via-signal-orange-vivid/25 to-transparent" />
         </div>
