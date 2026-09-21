@@ -46,7 +46,7 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
     return receiver(new Request(target,init));
   };
   const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,
-    readContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
+    readContext:async()=>{reads++;return context;},readUContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
   const signal:any={mode:'shadow',model_version:ROUTES[leg].model,combined_model_version:V12_VERSION,leg,
     execution_policy:ROUTES[leg].execution,stake_fraction_of_boise_day_opening_principal:ROUTES[leg].fraction,
     market:ticker,candle_starts_at:new Date(open).toISOString(),decision_at:new Date(open+offset).toISOString(),sent_at:new Date(now).toISOString(),
