@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {readV12Context as canonical} from '../context.server';
+import {readV12Context as canonical,readV12UContext} from '../context.server';
 // The generated, deployable bundle must retain the canonical behavior.
 // @ts-ignore generated JavaScript has no declaration file
 import {readV12Context as bundled} from '../../../../supabase/functions/v12-shadow-adapter/core.js';
