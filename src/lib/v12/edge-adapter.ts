@@ -145,7 +145,7 @@ export function createAdapterHandler(deps: Dependencies) {
           timings:{context_read_ms:contextReadMs,total_ms:clock()-readStarted}});
       }
 
-      const context=await (deps.readContext ?? readV12Context)(sb,new Date(open).toISOString());
+      const context:any=await (uPublish ? (deps.readUContext ?? readV12UContext) : (deps.readContext ?? readV12Context))(sb,new Date(open).toISOString());
       if (p.op==='context') return reply(200,{ok:true,context,observed_at:new Date(clock()).toISOString()});
       const signal=p.signal;
       if (!context.ready || !signal || signal.market!==context.ticker || Date.parse(signal.candle_starts_at)!==open)
