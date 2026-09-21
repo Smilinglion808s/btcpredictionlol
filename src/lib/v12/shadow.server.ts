@@ -28,7 +28,7 @@ export async function publishV12Shadow(sb:SupabaseClient,payload:Record<string,a
   const journalMs=Date.now()-secretRead, httpStarted=Date.now();
   try {
     const response=await fetch(destination+ROUTES[route].endpoint,{method:'POST',body:raw,redirect:'error',
-      signal:AbortSignal.timeout(2500),headers:{'content-type':'application/json','x-btc15m-signature':'sha256='+signature,
+      signal:AbortSignal.timeout(2500),headers:{'x-region':'us-west-1','content-type':'application/json','x-btc15m-signature':'sha256='+signature,
         'x-v12-event-id':eventKey,'x-v12-model':ROUTES[route].model,'x-v12-leg':route}});
     if(!response.ok)throw new Error('SHADOW_RECEIVER_HTTP_'+response.status);
     const result=await response.json();
