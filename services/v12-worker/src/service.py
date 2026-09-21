@@ -332,7 +332,8 @@ class Service:
                 # Do not log credentials, request bodies or remote error pages.
                 self.status.update(stage='WAITING',last_error=str(e) if isinstance(e,ValueError) else type(e).__name__)
                 wait=adapter_backoff(e)
-            time.sleep(wait or .5)
+            near=any(0<=millis()-(open_ms+sec*1000)<=5000 for sec in CHECKPOINTS)
+            time.sleep(wait or (.1 if near else .5))
     SLOTS={'V1':-1,'T45R2':-45}
     def early_dispatch(self,cap,open_ms,pending,early):
         """Signed minimal read + durable claim + dispatch in one round trip.
