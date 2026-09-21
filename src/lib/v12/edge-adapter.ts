@@ -106,7 +106,9 @@ export function createAdapterHandler(deps: Dependencies) {
       // `early_dispatch` is polled on the critical path, so it skips the nonce
       // write: its exactly-once guarantee is the durable interval/leg journal
       // claim in publishV12Shadow, which no replay can bypass.
-      if (p.op!=='context' && p.op!=='early_dispatch') {
+      // U also uses the durable event claim, before any outbound delivery.
+      const uPublish=p.op==='publish' && p.signal?.leg==='U';
+      if (p.op!=='context' && p.op!=='early_dispatch' && !uPublish) {
         const {error}=await sb.from('c85_request_nonces').insert({nonce:p.nonce,op:'v12-shadow.'+p.op,worker_id:'v12-shadow-worker'});
         if (error?.code==='23505') return reply(409,{ok:false,error:'REPLAYED'});
         if (error) throw new Error('NONCE_STORE_UNAVAILABLE');
