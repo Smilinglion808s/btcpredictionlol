@@ -95,7 +95,8 @@ test('valid route signals use canonical publish and each independent receiver; d
     assert.equal(body.status,'SHADOW_RECORDED');assert.equal(t.counts().writes,1);
     assert.equal([...t.journal.values()][0].delivery_status,'ACKNOWLEDGED');
     assert.deepEqual(t.destinations,[receiverRoot+ROUTES[leg].endpoint]);
-    assert.equal((await t.handler(request(t.envelope('publish'),t.now))).status,409);
+    assert.equal((await t.handler(request(t.envelope('publish'),t.now))).status,leg==='U'?400:409);
+    if(leg==='U')assert.equal(t.counts().nonceWrites,0);
     assert.equal((await t.handler(request(t.envelope('publish','fresh-nonce-same-event'),t.now))).status,400);
     assert.equal(t.counts().writes,1);
   }}finally{globalThis.fetch=originalFetch;}
