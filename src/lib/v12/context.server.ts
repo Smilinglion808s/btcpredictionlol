@@ -11,8 +11,7 @@ import { uEligible } from './contract';
  * mode and signed T45 provenance that `readV12Context` applies to those two
  * legs, using two parallel reads. It deliberately omits the U feature row, the
  * 96-row volatility history and the U-only prior-claim read: none of those are
- * inputs to a V1 or T45R2 decision. U always goes through `readV12Context`, and
- * the full reader remains the authoritative revalidation path.
+ * inputs to a V1 or T45R2 decision. U publishing uses readV12UContext below.
  */
 export async function readV12EarlyContext(sb: SupabaseClient, open: string) {
   const [target, fallback] = await Promise.all([
