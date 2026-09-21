@@ -58,6 +58,7 @@ class RuntimeTests(unittest.TestCase):
                 adapter.call('context',1789671600000)
                 self.assertEqual(make.call_count,1)
                 self.assertEqual(conn.request.call_count,2)
+                self.assertEqual(conn.request.call_args.kwargs["headers"]["x-region"],"us-west-2")
                 conn.getresponse.side_effect=OSError('ambiguous transport')
                 self.assertRaises(OSError,adapter.call,'early_dispatch',1789671600000)
                 self.assertEqual(conn.request.call_count,3)
