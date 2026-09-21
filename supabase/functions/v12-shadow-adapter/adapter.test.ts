@@ -45,7 +45,7 @@ function setup(leg:'V1'|'T45R2'|'U'='V1') {
       async(u:any)=>{assert.equal(String(u),'https://database.invalid/rest/v1/rpc/record_v12_signal');writes++;return Response.json({status:'SHADOW_RECORDED',mode:'shadow',execution_enabled:false});},()=>now,{readiness:async()=>({mode:'shadow',ready_for_activation:true,checks:{},records_created:0,orders_submitted:0,execution_enabled:false})});
     return receiver(new Request(target,init));
   };
-  const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,
+  const handler=createAdapterHandler({secret:()=>secret,client:()=>sb,clock:()=>now,transport,readExecution:async()=>null,
     readContext:async()=>{reads++;return context;},readUContext:async()=>{reads++;return context;},readEarlyContext:async()=>context});
   const signal:any={mode:'shadow',model_version:ROUTES[leg].model,combined_model_version:V12_VERSION,leg,
     execution_policy:ROUTES[leg].execution,stake_fraction_of_boise_day_opening_principal:ROUTES[leg].fraction,
