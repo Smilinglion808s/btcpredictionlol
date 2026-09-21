@@ -397,10 +397,19 @@ export function V11Card({ stats, live: now12, liveMeta, loading, error }: V11Pro
           <LegRecord title="Combined" r={live?.combined} />
           <LegRecord title="V1 leg" r={live?.v1Leg} />
           <LegRecord title="T45 R2 fallback" r={live?.fallbackLeg} />
-          <LegRecord title="U leg" hint="V1.2" r={uRecord} dot={uLeg ? uLeg.authenticated === true : null} />
+          <LegRecord title="U predictions" hint="V1.2" r={uRecord} dot={uLeg ? uLeg.authenticated === true : null} />
+        </div>
+        <div className="mt-3 rounded-lg border border-border/70 p-3 text-xs">
+          <div className="font-semibold">U betting account</div>
+          {predictor?.uExecution ? <>
+            <div className="mt-1 tabular-nums">{predictor.uExecution.received} received · {predictor.uExecution.filled} filled · {predictor.uExecution.skipped} skipped</div>
+            <div className="mt-1 text-muted-foreground">{predictor.uExecution.won} won bets · {predictor.uExecution.lost} lost bets · {predictor.uExecution.pending} awaiting settlement · {predictor.uExecution.unresolved} awaiting execution confirmation</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Checked {fmtTs(predictor.uExecution.as_of)} UTC{predictor.uExecution.truncated ? ' · latest 1,000 receipts' : ''}</div>
+          </> : <div className="mt-1 text-muted-foreground">Bet execution status unavailable — prediction wins do not confirm fills.</div>}
+          <div className="mt-1 text-[10px] text-muted-foreground">Dedicated webhook: v12-u</div>
         </div>
         <div className="mt-2 text-[9px] text-muted-foreground/80">
-          V1 and T45 R2 are the V1.1 baseline; the U leg counts V1.2 signals only.
+          These wins count correct predictions, not money won. V1 and T45 R2 are the V1.1 baseline; U counts V1.2 signals only.
           {" "}U status: {predictor?.fitValid===false?'fit expired — U paused':uReasons[predictor?.uBlockReason]?.toLowerCase()??'waiting for current status'}
           {" · "}refresh: {predictor?.refreshStatus?.replaceAll('_',' ').toLowerCase()??'not reported'}
           {predictor?.truncated?' · showing the latest 1,000 signals':''}
