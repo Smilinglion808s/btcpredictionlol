@@ -1,10 +1,13 @@
 // Aggregate-only predictor status. Never returns secrets or webhook payloads.
+import {createHmac} from 'node:crypto';
+import {V12_RECEIVER_BASE,V12_SECRET_ENDPOINTS,isAuthorizedBettingEndpoint} from './receiver-destination';
 import {createClient} from '@supabase/supabase-js';
 import {ROUTES,type Route,V12_VERSION} from './contract';
 
 export async function buildV12Stats(){
   const sb=createClient(process.env.SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {auth:{persistSession:false,autoRefreshToken:false}});
+  const executionPromise=readUExecution(sb);
   const [runtime,events]=await Promise.all([
     sb.from('v12_predictor_runtime').select('received_at,status').eq('worker_id','v12-shadow-worker').maybeSingle(),
     sb.from('v12_prediction_events').select('route,model_version,candle_starts_at,decision_at,prediction,delivery_status,acknowledged_at,receiver_status')
