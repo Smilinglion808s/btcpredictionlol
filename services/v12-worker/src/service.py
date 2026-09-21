@@ -323,7 +323,10 @@ class Service:
                       v11_eligibility=context['eligibility'],limit_all_in=chosen.limit_all_in,u_source=chosen.source,
                       probability=chosen.probability,known_ask=chosen.known_ask,arrival_ask=ask,fit_version=self.scorer.manifest['version'])
                     self.record(cap,sec,'U_SUBMITTING',p)
+                    dispatch_started=millis()
                     result=self.adapter.call('publish',open_ms,signal=p)
+                    self.status.update(last_u_decision_at=p['decision_at'],last_u_publish_ms=millis()-dispatch_started,
+                      last_u_receiver_status=result.get('status'),last_u_timings=result.get('timings'))
                     self.record(cap,sec,'U_RECORDED',result)
             except Exception as e:
                 # Do not log credentials, request bodies or remote error pages.
