@@ -131,6 +131,21 @@ def score_checkpoint(capture,scorer,context,market,second,now_ms):
     chosen,rows=scorer.score(f,pd.Timestamp(now_ms,unit='ms',tz='UTC'))
     return chosen,rows
 
+def context_refresh_due(context, open_ms, last_context, now):
+    """Warm context before checkpoints; publishing always revalidates eligibility.
+
+    Cache is interval-bound and at most 10 seconds old near a checkpoint. No
+    historical quote or model feature is fabricated and no deadline is widened.
+    """
+    if not context or context.get('open') is None or int(pd.Timestamp(context['open']).timestamp()*1000)!=open_ms:
+        return True
+    if not context.get('ready') or context.get('early') is None:return True
+    age=now-last_context
+    if age<0 or age>=10000:return True
+    near=any(-2500<=now-(open_ms+sec*1000)<=5000 for sec in CHECKPOINTS)
+    return not near and age>=2000
+
+
 def u_block_reason(context):
     e=context.get('eligibility') or {};v=e.get('v1') or {};t=e.get('t45') or {}
     if context.get('u_eligible'):return 'ELIGIBLE'
