@@ -17,6 +17,7 @@ export default defineConfig({
       "src/lib/v12/execution.test.ts",
       "src/lib/v12/live.test.ts",
       "src/lib/v12/freshness.test.ts",
+      "src/lib/t45/threshold.test.ts",
     ],
   },
 });
