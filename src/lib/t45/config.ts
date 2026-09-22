@@ -56,8 +56,8 @@ export const T45_SOLVER = "ts-lbfgs-certified" as const;
 /** Confidence rank: midrank against the previous 768 finite confidences. */
 export const T45_RANK_WINDOW = 768;
 export const T45_RANK_MIN_HISTORY = 192;
-/** Static confidence-rank gate: trade only when rank >= 0.72. */
-export const T45_RANK_THRESHOLD = 0.72;
+/** Frozen Q37.5 gate: trade only when rank >= 0.625. */
+export const T45_RANK_THRESHOLD = 0.625;
 
 export const T45_PRICE_FEATURES = [
   "t45_ret_5s_bps",
