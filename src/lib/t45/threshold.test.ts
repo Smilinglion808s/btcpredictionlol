@@ -5,9 +5,8 @@ import { T45_RANK_THRESHOLD, T45_RANK_MIN_HISTORY } from './config.ts';
 
 assert.equal(T45_RANK_THRESHOLD, 0.72);
 
-/** Build a prior-confidence history whose midrank for `confidence` is exact. */
-function historyForRank(confidence: number, rank: number, n = 256): number[] {
-  const below = Math.round(rank * n);
+/** Build a prior-confidence history whose midrank for `confidence` is exactly below/n. */
+function historyForRank(confidence: number, below: number, n: number): number[] {
   const history: number[] = [];
   for (let i = 0; i < below; i++) history.push(confidence - 0.001 * (i + 1));
   while (history.length < n) history.push(confidence + 0.001 * (history.length - below + 1));
