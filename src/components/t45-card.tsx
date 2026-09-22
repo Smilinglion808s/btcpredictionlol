@@ -105,7 +105,7 @@ export function T45Card({
             1s Spot bars · offsets 0-44 · RobustScaler(10,90) · L-BFGS
           </div>
           <div className="text-[9px] text-muted-foreground/80 mt-0.5 font-mono truncate">
-            {String(stats.modelVersion ?? "t45-balanced")} · Q37.5 ≥ {Number(stats.rankThreshold ?? 0.625).toFixed(3)}
+            {String(stats.modelVersion ?? "t45-balanced")} · Q37.5 ≥ {Number(stats.rankThreshold ?? 0.72).toFixed(3)}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
