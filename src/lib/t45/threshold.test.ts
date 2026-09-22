@@ -17,13 +17,13 @@ test('rank exactly at 0.72 trades; immediately below abstains', () => {
   // probability 0.5 ± 0.1 → confidence 0.1; direction follows the sign.
   for (const p of [0.6, 0.4]) {
     const side = p >= 0.5 ? 1 : -1;
-    const at = t45Decide(p, historyForRank(0.1, 0.72));
+    const at = t45Decide(p, historyForRank(0.1, 144, 200));
     assert.equal(at.confidenceRank, 0.72);
     assert.equal(at.activeWouldTrade, true);
     assert.equal(at.activePrediction, side);
     assert.equal(at.activeSleeve, 'Q375');
 
-    const justBelow = t45Decide(p, historyForRank(0.1, 0.719));
+    const justBelow = t45Decide(p, historyForRank(0.1, 719, 1000));
     assert(justBelow.confidenceRank! < 0.72);
     assert.equal(justBelow.activeWouldTrade, false);
     assert.equal(justBelow.activePrediction, 0);
@@ -32,7 +32,7 @@ test('rank exactly at 0.72 trades; immediately below abstains', () => {
 });
 
 test('rank above 0.72 trades', () => {
-  const above = t45Decide(0.6, historyForRank(0.1, 0.85));
+  const above = t45Decide(0.6, historyForRank(0.1, 170, 200));
   assert(above.confidenceRank! > 0.72);
   assert.equal(above.activeWouldTrade, true);
 });
