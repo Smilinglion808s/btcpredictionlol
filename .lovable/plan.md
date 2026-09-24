@@ -1,12 +1,15 @@
-# Answer: this project is the predictor only (no changes planned)
+# Capability check result — no action taken
 
-## Finding
-- No app screen reads `public.bet_history`. A search of `src/` finds no reference to `bet_history`.
-- The only mention of the betting project (ruxndqfjfdbtdbkheuge) in `src/` is `src/lib/v12/receiver-destination.ts`. That file holds the webhook address the predictor sends signals to.
-- The single betting-related thing on the dashboard is the "U betting account" card in `src/components/v11-card.tsx`. It shows **aggregate counts** only (received, filled, skipped, won, lost, pending, unresolved). The betting receiver's signed status call supplies those counts. The adapter heartbeat stores them in `v12_predictor_runtime.status.u_execution`. They are not individual `bet_history` rows.
-- Other `bet_history` references are receiver and executor code that runs on the betting project, not in this site: `services/v12-executor/*`, `supabase/functions/v12-shared/executor.js`, `supabase/functions/v12-shared/execution-status.ts`, and SQL docs in `docs/`.
+The user asked a read-only capability question. Findings (already delivered in chat):
 
-## Conclusion
-This is the predictor dashboard. The live betting dashboard that lists fills from `bet_history` is a different project and is not in this repository.
+1. `deploy_edge_functions` deploys by function name only, from `supabase/functions/` in this project. It cannot accept supplied source files or a Git ref. There is no deploy path that leaves the default branch untouched; the r3 adapter change stays undeployed until applied through the user's normal flow. No workaround will be attempted.
+2. Signed readiness probes to the three receiver endpoints are already supported by the deployed adapter's `probe` op: deliberately invalid signed payloads, receivers answer 400 ROUTE_POLICY_MISMATCH, zero signal/bet records written, secret never exposed.
 
-No edits or deployments.
+## Plan
+
+No code, file, deployment, database, or live-control changes. This plan records the capability answer only.
+
+- Take no action on the V1.2 adapter r3 code.
+- Do not modify, commit, or push anything.
+- No real-money activation; receivers remain behind their shadow release gate.
+- If the user later wants a readiness check, run one signed `probe` (and optionally `context`) against the deployed adapter and report only status-level results.
