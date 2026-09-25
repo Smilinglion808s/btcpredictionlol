@@ -1,0 +1,21 @@
+{
+  "docs/v12-p2/README.md": "5ccb737ce4fd019962c80d669fc01e61d65816e3f6af6c675c6b48cdcfc9d8b2",
+  "docs/v12-p2/activate.sql": "8d6417f897d4e3eae0ae8b64613287cd035b63d8318c2ff74e97350fc0e3079f",
+  "docs/v12-p2/disable.sql": "047998b16604b3f823a0e3f3afc5fce0c1c483a6878162e9b029664d4b8ccd54",
+  "docs/v12-p2/inspect.sql": "8077f4a5a6ae00beba16b0df1ed09fcb484d54402533a2fbed53e9b75155810a",
+  "docs/v12-p2/observer-index.ts": "19a837017c24c6cdd7108962253a1b6a8d1c7580864f3c0cf02a73c6a77c99e4",
+  "docs/v12-p2/observer.js": "dc2beb494b930facde104dd57d80796996224b0e0356eb91c7c0a3e93f9841b1",
+  "docs/v12-p2/p2-archive-fixture.json": "194c3285d12bb97e082a4247d30b592759783587997ab22e0f3e1914ce804450",
+  "docs/v12-p2/postgres-verification.json": "429368d088ea25e38e95f9c0c21c57fb501a09bca32d86cedba80c89d7b365e6",
+  "docs/v12-p2/prepare.sql": "d552abb14a9834988cca08df370af7fcfe381dc4a7683bd8cab81d18a5e48ff3",
+  "docs/v12-p2/record_v12_signal_baseline.sql": "d2b80154497aac7ce0eb1b99a031834ab07fe2a90ee2089e7f7d7c9f4bfc5d35",
+  "docs/v12-p2/record_v12_signal_p2.sql": "9d17f59b7b91512a47a326509540c80b595adf36e316aca4573f65104e510ea4",
+  "docs/v12-p2/recorder.diff": "ba959382f00eaeaf0a9d68b94e4e922fc9ed1df99f8f76777755e5d7d2d5671e",
+  "docs/v12-p2/schedule-observer.sql": "f51cae09567bd664144700f678ad21509ba2661f3903501da6c8313b374e23c1",
+  "docs/v12-p2/schema.sql": "a6b45bba2d3934fbefb340f879c7e8f7798b96db3d0953b9a7070f18eef7c648",
+  "scripts/build-v12-p2-observer.mjs": "b76910e70bb37f6c5e048f581d94575dad186ed75413e018bc980ee5b32663ec",
+  "services/v12-executor/p2-outcomes.node-check.ts": "823a402b5d55dfc0f6d26705e5dbb4ad4272b7a0c3a8ba1f078d6ea0341fc280",
+  "services/v12-executor/p2-outcomes.ts": "d175c39c501af63070c42b5166502a0c52d84411fe06f6432a6010cc0725b0cd",
+  "services/v12-executor/p2-sizing.node-check.ts": "ea8b947d6cfef124b0db79b5ff5f6af980a3e3a333790183672bbb7362ee6ccc",
+  "services/v12-executor/p2-sizing.ts": "7603d0b6b602dcc3f85d1d0fa2f4467a83c8a4f545f5e18ab3d3faba890ed520"
+}

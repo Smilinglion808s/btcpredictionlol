@@ -1,0 +1,40 @@
+--- record_v12_signal.before.sql
++++ record_v12_signal.p2.sql
+@@ -8,7 +8,7 @@
+   chosen_route text:=p_payload->>'leg'; release_mode text; activated timestamptz;
+   result_status text; receipt timestamptz:=clock_timestamp(); day_key date;
+   expected_model text; expected_execution text; sent_execution text;
+-  normalized jsonb; executable boolean:=false;
++  normalized jsonb; executable boolean:=false; p2_snapshot jsonb;
+ begin
+   stake:=case chosen_route when 'V1' then 4 when 'T45R2' then 5 when 'U' then 10 else null end;
+   expected_model:=case chosen_route when 'V1' then 'v12-v1-r1' when 'T45R2' then 'v12-t45r2-r1' when 'U' then 'v12-original-u-r1' end;
+@@ -36,6 +36,10 @@
+   day_key:=(receipt at time zone 'America/Boise')::date;
+   select balance_at_midnight into opening from public.daily_balance where date=day_key;
+   budget:=floor(opening*stake)::bigint;
++  if opening is not null and opening>=0 then
++    p2_snapshot:=public.evaluate_v12_p2(receipt,opening,stake);
++    budget:=(p2_snapshot->>'budget_cents')::bigint;
++  end if;
+   result_status:=case when release_mode='live' then 'LIVE_ACCEPTED' else 'SHADOW_RECORDED' end;
+   if receipt-(p_payload->>'decision_at')::timestamptz>interval '10 seconds'
+       or receipt-(p_payload->>'sent_at')::timestamptz>interval '5 seconds'
+@@ -48,14 +52,14 @@
+   end if;
+   executable:=result_status='LIVE_ACCEPTED';
+   insert into public.v12_shadow_signals(request_hash,interval_key,version,route,model_version,candle_starts_at,
+-    market,received_at,status,budget_cents,payload,execution_enabled)
++    market,received_at,status,budget_cents,payload,execution_enabled,p2_sizing)
+   values(p_hash,normalized->>'interval_key',normalized->>'combined_model_version',chosen_route,expected_model,
+-    (normalized->>'candle_starts_at')::timestamptz,normalized->>'market',receipt,result_status,budget,normalized,executable)
++    (normalized->>'candle_starts_at')::timestamptz,normalized->>'market',receipt,result_status,budget,normalized,executable,p2_snapshot)
+     returning id into row_id;
+   if result_status in ('LIVE_ACCEPTED','SHADOW_RECORDED') then
+     insert into public.v12_shadow_claims(interval_key,signal_id,route) values(normalized->>'interval_key',row_id,chosen_route);
+   end if;
+   return jsonb_build_object('id',row_id,'status',result_status,'route',chosen_route,'budget_cents',budget,
+     'opening_balance',opening,'boise_day',day_key,'mode',release_mode,'execution_enabled',executable,
+-    'execution_policy',expected_execution,'received_at',receipt);
++    'execution_policy',expected_execution,'received_at',receipt,'p2_sizing',p2_snapshot);
+ end; $function$

@@ -1,0 +1,18 @@
+{
+  "engine": "PGlite 0.5.8, local PostgreSQL; no production database mutations",
+  "passed": [
+    "Exact production recorder definition reproduced in local PostgreSQL",
+    "Source guard rejects concurrent changes; complete SQL preparation executes",
+    "Preparation starts P2 off and preserves the existing release mode",
+    "All three admission budgets, duplicate suppression, and accepted-call capture verified",
+    "RLS and grants deny public access; service role can use the receiver and capture trigger",
+    "PostgreSQL matches all 5,088 archived P2 decisions, while off mode never raises stakes",
+    "No-fill calls get official outcomes; repeated observations preserve timestamps; conflicts are rejected",
+    "Activation boundary, Boise window, penny rounding, no dollar cap, and shadow-only budget verified"
+  ],
+  "archive_comparison": {
+    "n": 5088,
+    "mismatches": 0,
+    "unintended_boosts": 0
+  }
+}
