@@ -654,60 +654,11 @@ function CsvDataPage() {
               }}
             />
             <ExportButton id="v6" variant="secondary" label="V6" hint="Frozen V6 router history" base="V6" />
-            <ExportButton
-              id="es1"
-              variant="secondary"
-              label="B4x4-ES1"
-              hint="Balanced Binance 3-of-4 decisions"
-              base="B4x4_ES1"
-            />
-            <ExportButton
-              id="es1-24h"
-              variant="secondary"
-              label="B4x4-ES1 (last 24h)"
-              hint="LIVE, non-catchup rows only"
-              base="B4x4_ES1_last24h"
-            />
 
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold">Binance order-book data</h2>
-            <span className="text-[11px] text-muted-foreground">SPOT + PERP, 1s sampling</span>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <ExportButton
-              id="ob-combined"
-              variant="default"
-              label="Order Book — Full Dataset"
-              hint="SPOT + PERP features, all policies & outcomes"
-              base="B4x4-ES1-Binance-OB"
-            />
-            <ExportButton
-              id="ob-features"
-              label="Boundary Features"
-              hint="One row per boundary per market"
-              base="Binance_OB_Features"
-            />
-            <ExportButton
-              id="ob-policies"
-              label="Policy Shadows"
-              hint="Six frozen shadow policies, scored"
-              base="Binance_OB_Policies"
-            />
-            <ExportButton
-              id="ob-observations"
-              label="Raw Observations"
-              hint="1-second samples, last 96 boundaries"
-              base="Binance_OB_Observations"
-            />
-          </div>
-        </CardContent>
-      </Card>
 
 
 
