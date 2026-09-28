@@ -25,8 +25,6 @@ import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
 import { getV12Live } from "@/lib/v12Live.functions";
 
-import { BinanceObCard } from "@/components/binance-ob-card";
-import { getBinanceObDashboard } from "@/lib/binanceOb.functions";
 import { Button } from "@/components/ui/button";
 import { forceRefreshStats } from "@/lib/statsRefresh.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,12 +54,6 @@ function StatsPage() {
 
 
 
-  const binanceObFn = useServerFn(getBinanceObDashboard);
-  const binanceObQ = useQuery({
-    queryKey: ["binance-ob-stats"],
-    queryFn: () => binanceObFn(),
-    refetchInterval: 60_000,
-  });
 
   // T45 Balanced — shadow only. Its pending tile must flip as soon as the
   // collector-triggered T+45s decision lands, so poll it at the same cadence.
@@ -302,7 +294,6 @@ function StatsPage() {
 
 
 
-        <BinanceObCard dashboard={(binanceObQ.data as any) ?? null} />
         {/* B4x4-ES1 retired — model stopped and CSV archived. */}
 
 
