@@ -1,0 +1,5 @@
+SELECT cron.unschedule(jobname) FROM cron.job WHERE jobname IN ('model7-nightly-audit','prewarm-b4-2');
+TRUNCATE public.t30_cross89_policy_shadows, public.t30_cross89_predictions, public.t30_cross89_features, public.t30_cross89_samples, public.t30_cross89_fits, public.t30_features, public.t30_pf_policy_shadows, public.t30_pf_predictions, public.t30_pf_fits, public.t30_samples, public.t30_collector_health,
+ public.t10_bridge_predictions, public.t10_bridge_samples, public.t10_bridge_fits, public.t10_prior_klines, public.t10_collector_health,
+ public.model7_shadow, public.model7_td1_rc_shadow, public.model7_td1_rc_resolutions, public.model7_aas96_shadow, public.model7_b4_2_resolutions, public.model7_aas96_fits, public.model7_training_fits, public.model7_b4_2_no_history, public.model7_td1_fits,
+ public.v6_predictions CASCADE;
