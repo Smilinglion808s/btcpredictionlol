@@ -221,11 +221,6 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["predictions-list"] });
         qc.invalidateQueries({ queryKey: ["model-versions"] });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "model7_shadow" }, () => {
-        qc.invalidateQueries({ queryKey: ["model7-shadow-stats"] });
-        qc.invalidateQueries({ queryKey: ["model7-shadow-pending"] });
-        qc.invalidateQueries({ queryKey: ["b2-recent"] });
-      })
       .on("postgres_changes", { event: "*", schema: "public", table: "v11_decisions" }, () => {
         qc.invalidateQueries({ queryKey: ["v11-stats"] });
       })

@@ -9,7 +9,6 @@ import {
   exportTd1RcShadow,
   exportUniversalV2,
 } from "@/lib/predictions.functions";
-import { exportV6Csv } from "@/lib/v6.functions";
 import { exportEs1Csv, exportEs1Last24hCsv } from "@/lib/b4x4es1.functions";
 import {
   exportBinanceObFeaturesCsv,
@@ -463,7 +462,6 @@ function CsvDataPage() {
   const listFn = useServerFn(listAllPredictionsForHistory);
   const listQ = useQuery({ queryKey: ["predictions-history-all"], queryFn: () => listFn() });
   const exportTd1 = useServerFn(exportTd1RcShadow);
-  const exportV6 = useServerFn(exportV6Csv);
   const exportEs1 = useServerFn(exportEs1Csv);
   const exportEs1Last24h = useServerFn(exportEs1Last24hCsv);
   const exportObFeatures = useServerFn(exportBinanceObFeaturesCsv);
@@ -559,7 +557,6 @@ function CsvDataPage() {
 
 
   const csvFetchers: Record<string, () => Promise<{ csv: string; rows: number } | null>> = {
-    v6: () => exportV6().catch(() => null),
     es1: () => exportEs1().catch(() => null),
     "es1-24h": () => exportEs1Last24h().catch(() => null),
     "ob-combined": () => exportObCombined().catch(() => null),
@@ -653,7 +650,6 @@ function CsvDataPage() {
                 }
               }}
             />
-            <ExportButton id="v6" variant="secondary" label="V6" hint="Frozen V6 router history" base="V6" />
 
           </div>
         </CardContent>
