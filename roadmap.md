@@ -202,3 +202,4 @@ at 10s. v11-card now takes the live payload as the authority for the current
 interval and all three legs including U, labels delivery state only (never a
 fill), and keeps the title on screen during refresh and partial failure. No
 model, executor, stake, gate, receiver or Railway change.
+- [ ] 2026-09-28: Remove everything B4x4 (jobs, code, UI, data) to cut network/storage
