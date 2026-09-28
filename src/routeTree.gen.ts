@@ -17,8 +17,6 @@ import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as ApiC85SelfcheckRouteImport } from './routes/api/c85-selfcheck'
 import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
-import { Route as ApiExportT10CsvRouteImport } from './routes/api/export/t10-csv'
-import { Route as ApiExportT30CsvRouteImport } from './routes/api/export/t30-csv'
 import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
 import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
 import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
@@ -27,18 +25,10 @@ import { Route as ApiPublicHooksC85DecisionRouteImport } from './routes/api/publ
 import { Route as ApiPublicHooksC85OpsRouteImport } from './routes/api/public/hooks/c85-ops'
 import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
 import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
-import { Route as ApiPublicHooksModel7NightlyAuditRouteImport } from './routes/api/public/hooks/model7-nightly-audit'
 import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
-import { Route as ApiPublicHooksPrewarmB4_2RouteImport } from './routes/api/public/hooks/prewarm-b4_2'
 import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
-import { Route as ApiPublicHooksT10BoundaryRunRouteImport } from './routes/api/public/hooks/t10-boundary-run'
-import { Route as ApiPublicHooksT10HostProbeRouteImport } from './routes/api/public/hooks/t10-host-probe'
-import { Route as ApiPublicHooksT10IngestRouteImport } from './routes/api/public/hooks/t10-ingest'
-import { Route as ApiPublicHooksT30BoundaryRunRouteImport } from './routes/api/public/hooks/t30-boundary-run'
-import { Route as ApiPublicHooksT30IngestRouteImport } from './routes/api/public/hooks/t30-ingest'
 import { Route as ApiPublicHooksT45BoundaryRunRouteImport } from './routes/api/public/hooks/t45-boundary-run'
 import { Route as ApiPublicHooksT45IngestRouteImport } from './routes/api/public/hooks/t45-ingest'
-import { Route as ApiPublicHooksTd1RcRetrainRouteImport } from './routes/api/public/hooks/td1-rc-retrain'
 import { Route as ApiPublicHooksV12ShadowRouteImport } from './routes/api/public/hooks/v12-shadow'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
@@ -81,16 +71,6 @@ const ApiC85SelfcheckRoute = ApiC85SelfcheckRouteImport.update({
 const ApiExportC85CsvRoute = ApiExportC85CsvRouteImport.update({
   id: '/api/export/c85-csv',
   path: '/api/export/c85-csv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExportT10CsvRoute = ApiExportT10CsvRouteImport.update({
-  id: '/api/export/t10-csv',
-  path: '/api/export/t10-csv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExportT30CsvRoute = ApiExportT30CsvRouteImport.update({
-  id: '/api/export/t30-csv',
-  path: '/api/export/t30-csv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportT45pfCsvRoute = ApiExportT45pfCsvRouteImport.update({
@@ -139,22 +119,10 @@ const ApiPublicHooksEs1BoundaryRunRoute =
     path: '/api/public/hooks/es1-boundary-run',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicHooksModel7NightlyAuditRoute =
-  ApiPublicHooksModel7NightlyAuditRouteImport.update({
-    id: '/api/public/hooks/model7-nightly-audit',
-    path: '/api/public/hooks/model7-nightly-audit',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicHooksModel8V3BootstrapRoute =
   ApiPublicHooksModel8V3BootstrapRouteImport.update({
     id: '/api/public/hooks/model8-v3-bootstrap',
     path: '/api/public/hooks/model8-v3-bootstrap',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksPrewarmB4_2Route =
-  ApiPublicHooksPrewarmB4_2RouteImport.update({
-    id: '/api/public/hooks/prewarm-b4_2',
-    path: '/api/public/hooks/prewarm-b4_2',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksScheduled15mRunRoute =
@@ -163,34 +131,6 @@ const ApiPublicHooksScheduled15mRunRoute =
     path: '/api/public/hooks/scheduled-15m-run',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicHooksT10BoundaryRunRoute =
-  ApiPublicHooksT10BoundaryRunRouteImport.update({
-    id: '/api/public/hooks/t10-boundary-run',
-    path: '/api/public/hooks/t10-boundary-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksT10HostProbeRoute =
-  ApiPublicHooksT10HostProbeRouteImport.update({
-    id: '/api/public/hooks/t10-host-probe',
-    path: '/api/public/hooks/t10-host-probe',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksT10IngestRoute = ApiPublicHooksT10IngestRouteImport.update({
-  id: '/api/public/hooks/t10-ingest',
-  path: '/api/public/hooks/t10-ingest',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicHooksT30BoundaryRunRoute =
-  ApiPublicHooksT30BoundaryRunRouteImport.update({
-    id: '/api/public/hooks/t30-boundary-run',
-    path: '/api/public/hooks/t30-boundary-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksT30IngestRoute = ApiPublicHooksT30IngestRouteImport.update({
-  id: '/api/public/hooks/t30-ingest',
-  path: '/api/public/hooks/t30-ingest',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicHooksT45BoundaryRunRoute =
   ApiPublicHooksT45BoundaryRunRouteImport.update({
     id: '/api/public/hooks/t45-boundary-run',
@@ -202,12 +142,6 @@ const ApiPublicHooksT45IngestRoute = ApiPublicHooksT45IngestRouteImport.update({
   path: '/api/public/hooks/t45-ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicHooksTd1RcRetrainRoute =
-  ApiPublicHooksTd1RcRetrainRouteImport.update({
-    id: '/api/public/hooks/td1-rc-retrain',
-    path: '/api/public/hooks/td1-rc-retrain',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicHooksV12ShadowRoute = ApiPublicHooksV12ShadowRouteImport.update({
   id: '/api/public/hooks/v12-shadow',
   path: '/api/public/hooks/v12-shadow',
@@ -239,8 +173,6 @@ export interface FileRoutesByFullPath {
   '/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
-  '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
@@ -249,18 +181,10 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
-  '/api/public/hooks/t10-host-probe': typeof ApiPublicHooksT10HostProbeRoute
-  '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
-  '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
-  '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
   '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -274,8 +198,6 @@ export interface FileRoutesByTo {
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
-  '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
@@ -284,18 +206,10 @@ export interface FileRoutesByTo {
   '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
-  '/api/public/hooks/t10-host-probe': typeof ApiPublicHooksT10HostProbeRoute
-  '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
-  '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
-  '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
   '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -311,8 +225,6 @@ export interface FileRoutesById {
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t10-csv': typeof ApiExportT10CsvRoute
-  '/api/export/t30-csv': typeof ApiExportT30CsvRoute
   '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
   '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
   '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
@@ -321,18 +233,10 @@ export interface FileRoutesById {
   '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
   '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
   '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model7-nightly-audit': typeof ApiPublicHooksModel7NightlyAuditRoute
   '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/prewarm-b4_2': typeof ApiPublicHooksPrewarmB4_2Route
   '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t10-boundary-run': typeof ApiPublicHooksT10BoundaryRunRoute
-  '/api/public/hooks/t10-host-probe': typeof ApiPublicHooksT10HostProbeRoute
-  '/api/public/hooks/t10-ingest': typeof ApiPublicHooksT10IngestRoute
-  '/api/public/hooks/t30-boundary-run': typeof ApiPublicHooksT30BoundaryRunRoute
-  '/api/public/hooks/t30-ingest': typeof ApiPublicHooksT30IngestRoute
   '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/td1-rc-retrain': typeof ApiPublicHooksTd1RcRetrainRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
@@ -348,8 +252,6 @@ export interface FileRouteTypes {
     | '/stats'
     | '/api/c85-selfcheck'
     | '/api/export/c85-csv'
-    | '/api/export/t10-csv'
-    | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/binance-ob-finalize'
@@ -358,18 +260,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t10-boundary-run'
-    | '/api/public/hooks/t10-host-probe'
-    | '/api/public/hooks/t10-ingest'
-    | '/api/public/hooks/t30-boundary-run'
-    | '/api/public/hooks/t30-ingest'
     | '/api/public/hooks/t45-boundary-run'
     | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -383,8 +277,6 @@ export interface FileRouteTypes {
     | '/api/c85-selfcheck'
     | '/'
     | '/api/export/c85-csv'
-    | '/api/export/t10-csv'
-    | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/binance-ob-finalize'
@@ -393,18 +285,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t10-boundary-run'
-    | '/api/public/hooks/t10-host-probe'
-    | '/api/public/hooks/t10-ingest'
-    | '/api/public/hooks/t30-boundary-run'
-    | '/api/public/hooks/t30-ingest'
     | '/api/public/hooks/t45-boundary-run'
     | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -419,8 +303,6 @@ export interface FileRouteTypes {
     | '/api/c85-selfcheck'
     | '/_authenticated/'
     | '/api/export/c85-csv'
-    | '/api/export/t10-csv'
-    | '/api/export/t30-csv'
     | '/api/export/t45pf-csv'
     | '/api/public/hooks/b4x4-es1-warmup'
     | '/api/public/hooks/binance-ob-finalize'
@@ -429,18 +311,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/c85-ops'
     | '/api/public/hooks/daily-archive'
     | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model7-nightly-audit'
     | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/prewarm-b4_2'
     | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t10-boundary-run'
-    | '/api/public/hooks/t10-host-probe'
-    | '/api/public/hooks/t10-ingest'
-    | '/api/public/hooks/t30-boundary-run'
-    | '/api/public/hooks/t30-ingest'
     | '/api/public/hooks/t45-boundary-run'
     | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/td1-rc-retrain'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
@@ -451,8 +325,6 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ApiC85SelfcheckRoute: typeof ApiC85SelfcheckRoute
   ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
-  ApiExportT10CsvRoute: typeof ApiExportT10CsvRoute
-  ApiExportT30CsvRoute: typeof ApiExportT30CsvRoute
   ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
   ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
   ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
@@ -461,18 +333,10 @@ export interface RootRouteChildren {
   ApiPublicHooksC85OpsRoute: typeof ApiPublicHooksC85OpsRoute
   ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
   ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
-  ApiPublicHooksModel7NightlyAuditRoute: typeof ApiPublicHooksModel7NightlyAuditRoute
   ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
-  ApiPublicHooksPrewarmB4_2Route: typeof ApiPublicHooksPrewarmB4_2Route
   ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
-  ApiPublicHooksT10BoundaryRunRoute: typeof ApiPublicHooksT10BoundaryRunRoute
-  ApiPublicHooksT10HostProbeRoute: typeof ApiPublicHooksT10HostProbeRoute
-  ApiPublicHooksT10IngestRoute: typeof ApiPublicHooksT10IngestRoute
-  ApiPublicHooksT30BoundaryRunRoute: typeof ApiPublicHooksT30BoundaryRunRoute
-  ApiPublicHooksT30IngestRoute: typeof ApiPublicHooksT30IngestRoute
   ApiPublicHooksT45BoundaryRunRoute: typeof ApiPublicHooksT45BoundaryRunRoute
   ApiPublicHooksT45IngestRoute: typeof ApiPublicHooksT45IngestRoute
-  ApiPublicHooksTd1RcRetrainRoute: typeof ApiPublicHooksTd1RcRetrainRoute
   ApiPublicHooksV12ShadowRoute: typeof ApiPublicHooksV12ShadowRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
@@ -537,20 +401,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExportC85CsvRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/export/t10-csv': {
-      id: '/api/export/t10-csv'
-      path: '/api/export/t10-csv'
-      fullPath: '/api/export/t10-csv'
-      preLoaderRoute: typeof ApiExportT10CsvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/export/t30-csv': {
-      id: '/api/export/t30-csv'
-      path: '/api/export/t30-csv'
-      fullPath: '/api/export/t30-csv'
-      preLoaderRoute: typeof ApiExportT30CsvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/export/t45pf-csv': {
       id: '/api/export/t45pf-csv'
       path: '/api/export/t45pf-csv'
@@ -607,13 +457,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksEs1BoundaryRunRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/model7-nightly-audit': {
-      id: '/api/public/hooks/model7-nightly-audit'
-      path: '/api/public/hooks/model7-nightly-audit'
-      fullPath: '/api/public/hooks/model7-nightly-audit'
-      preLoaderRoute: typeof ApiPublicHooksModel7NightlyAuditRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/model8-v3-bootstrap': {
       id: '/api/public/hooks/model8-v3-bootstrap'
       path: '/api/public/hooks/model8-v3-bootstrap'
@@ -621,53 +464,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksModel8V3BootstrapRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/prewarm-b4_2': {
-      id: '/api/public/hooks/prewarm-b4_2'
-      path: '/api/public/hooks/prewarm-b4_2'
-      fullPath: '/api/public/hooks/prewarm-b4_2'
-      preLoaderRoute: typeof ApiPublicHooksPrewarmB4_2RouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/scheduled-15m-run': {
       id: '/api/public/hooks/scheduled-15m-run'
       path: '/api/public/hooks/scheduled-15m-run'
       fullPath: '/api/public/hooks/scheduled-15m-run'
       preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t10-boundary-run': {
-      id: '/api/public/hooks/t10-boundary-run'
-      path: '/api/public/hooks/t10-boundary-run'
-      fullPath: '/api/public/hooks/t10-boundary-run'
-      preLoaderRoute: typeof ApiPublicHooksT10BoundaryRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t10-host-probe': {
-      id: '/api/public/hooks/t10-host-probe'
-      path: '/api/public/hooks/t10-host-probe'
-      fullPath: '/api/public/hooks/t10-host-probe'
-      preLoaderRoute: typeof ApiPublicHooksT10HostProbeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t10-ingest': {
-      id: '/api/public/hooks/t10-ingest'
-      path: '/api/public/hooks/t10-ingest'
-      fullPath: '/api/public/hooks/t10-ingest'
-      preLoaderRoute: typeof ApiPublicHooksT10IngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t30-boundary-run': {
-      id: '/api/public/hooks/t30-boundary-run'
-      path: '/api/public/hooks/t30-boundary-run'
-      fullPath: '/api/public/hooks/t30-boundary-run'
-      preLoaderRoute: typeof ApiPublicHooksT30BoundaryRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t30-ingest': {
-      id: '/api/public/hooks/t30-ingest'
-      path: '/api/public/hooks/t30-ingest'
-      fullPath: '/api/public/hooks/t30-ingest'
-      preLoaderRoute: typeof ApiPublicHooksT30IngestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/t45-boundary-run': {
@@ -682,13 +483,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/t45-ingest'
       fullPath: '/api/public/hooks/t45-ingest'
       preLoaderRoute: typeof ApiPublicHooksT45IngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/td1-rc-retrain': {
-      id: '/api/public/hooks/td1-rc-retrain'
-      path: '/api/public/hooks/td1-rc-retrain'
-      fullPath: '/api/public/hooks/td1-rc-retrain'
-      preLoaderRoute: typeof ApiPublicHooksTd1RcRetrainRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/v12-shadow': {
@@ -745,8 +539,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ApiC85SelfcheckRoute: ApiC85SelfcheckRoute,
   ApiExportC85CsvRoute: ApiExportC85CsvRoute,
-  ApiExportT10CsvRoute: ApiExportT10CsvRoute,
-  ApiExportT30CsvRoute: ApiExportT30CsvRoute,
   ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
   ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
   ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
@@ -755,18 +547,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksC85OpsRoute: ApiPublicHooksC85OpsRoute,
   ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
   ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
-  ApiPublicHooksModel7NightlyAuditRoute: ApiPublicHooksModel7NightlyAuditRoute,
   ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
-  ApiPublicHooksPrewarmB4_2Route: ApiPublicHooksPrewarmB4_2Route,
   ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
-  ApiPublicHooksT10BoundaryRunRoute: ApiPublicHooksT10BoundaryRunRoute,
-  ApiPublicHooksT10HostProbeRoute: ApiPublicHooksT10HostProbeRoute,
-  ApiPublicHooksT10IngestRoute: ApiPublicHooksT10IngestRoute,
-  ApiPublicHooksT30BoundaryRunRoute: ApiPublicHooksT30BoundaryRunRoute,
-  ApiPublicHooksT30IngestRoute: ApiPublicHooksT30IngestRoute,
   ApiPublicHooksT45BoundaryRunRoute: ApiPublicHooksT45BoundaryRunRoute,
   ApiPublicHooksT45IngestRoute: ApiPublicHooksT45IngestRoute,
-  ApiPublicHooksTd1RcRetrainRoute: ApiPublicHooksTd1RcRetrainRoute,
   ApiPublicHooksV12ShadowRoute: ApiPublicHooksV12ShadowRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
