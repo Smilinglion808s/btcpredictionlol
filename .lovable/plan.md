@@ -1,15 +1,26 @@
-# Capability check result — no action taken
+# Cut network and storage use
 
-The user asked a read-only capability question. Findings (already delivered in chat):
+## What's using the most
+- 9 scheduled jobs still run, several for models you already retired (T45, B4x4, Model 7 / Model C audits, Binance order-book capture). The T45 watchdog runs **every minute** (1,440 calls a day). Each one calls the site and writes rows.
+- About 1.5 GB of stored data, mostly from retired models:
+  - B4x4 order-book observations/snapshots: ~400 MB
+  - C85 checkpoints: 221 MB, plus 39 MB of old one-time request codes
+  - Scheduled-job run log: 125 MB
+  - Run log (`api_runs`): 78 MB
+  - T30 / T45 / T10 / Model 7 / V6 retired history: ~600 MB
+- The dashboard polls the V1.2 status every 1s and full stats every 10s.
 
-1. `deploy_edge_functions` deploys by function name only, from `supabase/functions/` in this project. It cannot accept supplied source files or a Git ref. There is no deploy path that leaves the default branch untouched; the r3 adapter change stays undeployed until applied through the user's normal flow. No workaround will be attempted.
-2. Signed readiness probes to the three receiver endpoints are already supported by the deployed adapter's `probe` op: deliberately invalid signed payloads, receivers answer 400 ROUTE_POLICY_MISMATCH, zero signal/bet records written, secret never exposed.
+## Changes
+1. **Stop retired jobs**: t45-boundary-watchdog, t45-resolve-backlog, b4x4-ob-shadow-capture, binance-ob-finalize, prewarm-b4-2, model7-nightly-audit, modelc-nightly-audit. Keep btc15m-predict and btc15m-resolve (V1).
+2. **Clear logs that are safe to wipe**: scheduled-job run log, `api_runs` (keep last 7 days), expired C85 request codes, B4x4 raw order-book observations and snapshots.
+3. **Retired model history** (T30, T45, T10, Model 7, V6, C85 checkpoints): export each one to a CSV file in your Files, then delete it from the database. `predictions` and `predictions_archive` are **never touched**.
+4. **Add auto-cleanup**: one daily job that keeps the job log and `api_runs` to 7 days.
+5. **Slow the dashboard**: V1.2 status polls every 3s while waiting (not 1s), 15s once settled, and stops when the tab is hidden. Full stats every 60s instead of 10s.
+6. After cleanup, reclaim the disk space and report before/after sizes.
 
-## Plan
+## Not touched
+V1 prediction/resolve, V1.2 sender and adapter, betting receivers, Railway, live gate, `predictions` history.
 
-No code, file, deployment, database, or live-control changes. This plan records the capability answer only.
-
-- Take no action on the V1.2 adapter r3 code.
-- Do not modify, commit, or push anything.
-- No real-money activation; receivers remain behind their shadow release gate.
-- If the user later wants a readiness check, run one signed `probe` (and optionally `context`) against the deployed adapter and report only status-level results.
+## Technical details
+- `cron.unschedule(...)` for each retired job; `delete from cron.job_run_details`; `VACUUM (FULL)` on the affected tables where allowed.
+- Before dropping each retired table's rows, check `rg` in src/ for live readers; tiles for retired models get removed from the stats page with their server reads.
