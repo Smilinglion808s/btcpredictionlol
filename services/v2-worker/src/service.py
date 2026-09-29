@@ -138,14 +138,14 @@ class Engine:
         return not (pd.Timestamp(self.manifest["valid_from"]) <= now < pd.Timestamp(self.manifest["valid_until"]))
 
     def feed_ready(self, now_ms: int) -> bool:
-        """Current target backfilled AND the socket live (or its bars still arriving)."""
+        """Current target is backfilled AND the socket is live/recently heard from."""
         target = now_ms - now_ms % INTERVAL_MS
         if self.feed.backfilled_through_ms < target:
             return False
         if self.feed.connected:
             return True
-        elapsed = max(0, min(45, (now_ms - target) // 1000) - 1)
-        return self.feed.has_all(target, elapsed)
+        last = self.feed.last_message_ms
+        return bool(last) and 0 <= now_ms - last <= self.FEED_STALE_MS
 
     def preopen_current(self, now_ms: int) -> bool:
         return bool(self.preopen and self.preopen["target_ms"] == now_ms - now_ms % INTERVAL_MS)
