@@ -49,6 +49,7 @@ def synth_seconds(open_ms: int, count: int, price: float, drift_bps: float = 2.0
             "open_ms": open_ms + i * 1000, "close_ms": open_ms + i * 1000 + 999,
             "open": p * 0.99995, "high": p * 1.0001, "low": p * 0.9999, "close": p,
             "volume": 1.5, "quote_volume": 1.5 * p, "trade_count": 40, "taker_buy_volume": 0.8,
+            "received_at_ms": open_ms + i * 1000 + 999 + 50,
         }
     return bars
 
