@@ -1,0 +1,21 @@
+{
+  "file": "spot15_seed.csv.gz",
+  "decoded_sha256": "653de0771d34878132d9acd1c35dfa8c69e1c0d6b6b1de29130fff968c13caf5",
+  "rows": 80160,
+  "columns": [
+    "bar_open",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "quote_volume",
+    "trade_count",
+    "complete",
+    "taker_buy_volume"
+  ],
+  "first_bar_open": "2024-06-01 00:00:00+00:00",
+  "last_bar_open": "2026-09-13 23:45:00+00:00",
+  "source": "binance spot BTCUSDT 15m; taker_buy_volume joined from activity15 on bar_open",
+  "note": "Continuous indicator warmup seed. Never truncate; never substitute another venue."
+}
