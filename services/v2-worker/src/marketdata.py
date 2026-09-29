@@ -99,19 +99,38 @@ class BarHistory:
         return out
 
     # -- assembly --------------------------------------------------------------
+    @staticmethod
+    def seed_prefix_matches(df: pd.DataFrame, seed: pd.DataFrame) -> bool:
+        """Every verified seed bar must still be present, byte-equal, at the front."""
+        if len(df) < len(seed):
+            return False
+        head = df.iloc[: len(seed)].reset_index(drop=True)
+        ref = seed.reset_index(drop=True)
+        if not head.bar_open.equals(ref.bar_open):
+            return False
+        for c in ["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_volume"]:
+            if not np.array_equal(head[c].to_numpy(), ref[c].to_numpy()):
+                return False
+        return bool(np.array_equal(head.trade_count.to_numpy(), ref.trade_count.to_numpy()))
+
     def load(self) -> pd.DataFrame:
-        """Persistent volume copy if present, else the repo seed."""
+        """Persistent volume copy if present, else the repo seed.
+
+        The stored copy is read with round-trip float precision and is only
+        trusted when its leading rows still equal the verified seed exactly —
+        a matching row count or start date is not sufficient.
+        """
         with self.lock:
+            seed = self.load_seed()
             if self.path.exists():
                 try:
-                    df = self._normalize(pd.read_csv(self.path))
-                    seed = self.load_seed()
-                    if len(df) >= len(seed) and df.bar_open.iloc[0] == seed.bar_open.iloc[0]:
+                    df = self._normalize(pd.read_csv(self.path, float_precision="round_trip"))
+                    if self.seed_prefix_matches(df, seed):
                         self.df = df
                         return self.df
                 except Exception:  # noqa: BLE001 — corrupt cache: fall back to the verified seed
                     pass
-            self.df = self.load_seed()
+            self.df = seed
             return self.df
 
     def backfill(self, through_open_ms: int) -> int:
