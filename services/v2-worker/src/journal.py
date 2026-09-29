@@ -58,7 +58,15 @@ class Journal:
             self.db.execute("UPDATE outbox SET state=?,attempts=attempts+1,last_status=?,updated_ms=? WHERE key=?",
                             (state, str(status)[:200], int(time.time() * 1000), key))
 
+    def has_pending(self, candle_open: str, checkpoint: str) -> bool:
+        """True while a checkpoint of this candle is still waiting to be delivered."""
+        with self.lock:
+            row = self.db.execute("SELECT COUNT(*) FROM outbox WHERE state='PENDING' AND key LIKE ?",
+                                  (f"{candle_open}|{checkpoint}|%",)).fetchone()
+        return bool(row[0])
+
     # -- reads ----------------------------------------------------------------
+
     def pending(self, max_age_ms: int = INTERVAL_MS) -> list[tuple[str, dict]]:
         """Undelivered rows still inside their own candle. Stale rows expire, never replay."""
         cutoff = int(time.time() * 1000) - max_age_ms
