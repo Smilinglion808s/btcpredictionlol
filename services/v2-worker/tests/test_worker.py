@@ -168,14 +168,121 @@ class WarmupAndScoring(unittest.TestCase):
         self.assertEqual(cp["reason"], "CHECKPOINT_WINDOW_MISSED")
         self.assertFalse(cp["eligible"])
 
-    def test_t45_runs_after_a_failed_t8_abstention(self):
-        self.eng.run_checkpoint(VALID_TARGET_MS, 8, VALID_TARGET_MS + 9_100)  # fail closed at T+8
+    def test_t45_is_blocked_after_a_failed_t8(self):
+        """A T+8 error is audit-only: it must never grant T+45 permission."""
+        first = self.eng.run_checkpoint(VALID_TARGET_MS, 8, VALID_TARGET_MS + 9_100)
+        self.assertEqual(first["reason"], "CHECKPOINT_WINDOW_MISSED")
+        self.assertIsNone(self.eng.frozen_record(VALID_TARGET_MS))
+        self.eng.feed.bars.update(
+            synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
+        self.assertEqual(cp["reason"], "T8_UNRESOLVED")
+        self.assertFalse(cp["eligible"])
+        self.assertEqual(cp["side"], 0)
+
+    def test_t45_runs_after_a_genuine_frozen_t8_abstention(self):
+        cp8 = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
         self.eng.feed.bars.update(
             synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
         cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         self.assertEqual(cp["checkpoint"], "T45")
-        self.assertEqual(cp["sleeve"], "v2-direction45-r1")
+        if cp8["eligible"]:
+            self.assertEqual(cp["reason"], "DUPLICATE_INTENT")
+        else:
+            self.assertIsNone(cp["reason"])
+            self.assertEqual(cp["sleeve"], "v2-direction45-r1")
+
+    def test_late_final_second_still_scores_inside_the_window(self):
+        """Finding A: the closed second-7 bar usually lands after 8.000."""
+        price = float(self.eng.history.df.close.iloc[-1])
+        full = synth_seconds(VALID_TARGET_MS, 8, price)
+        last_key = VALID_TARGET_MS + 7 * 1000 + 999
+        self.eng.feed.bars = {k: v for k, v in full.items() if k != last_key}
+        clock = {"ms": VALID_TARGET_MS + 8_000}
+
+        def now():
+            if clock["ms"] >= VALID_TARGET_MS + 8_080 and last_key not in self.eng.feed.bars:
+                self.eng.feed.put(full[last_key], received_at_ms=VALID_TARGET_MS + 8_080)
+            return clock["ms"]
+
+        def sleep(secs):
+            clock["ms"] += max(1, int(secs * 1000))
+
+        cp = service.run_window(self.eng, VALID_TARGET_MS, 8, now=now, sleep=sleep)
         self.assertIsNone(cp["reason"])
+        self.assertEqual(cp["decision_at"], service.iso_ms(VALID_TARGET_MS + 8_080))
+
+    def test_missing_until_deadline_fails_closed(self):
+        self.eng.feed.bars.pop(VALID_TARGET_MS + 7 * 1000 + 999)
+        clock = {"ms": VALID_TARGET_MS + 8_000}
+        cp = service.run_window(self.eng, VALID_TARGET_MS, 8,
+                                now=lambda: clock["ms"],
+                                sleep=lambda s: clock.__setitem__("ms", clock["ms"] + max(1, int(s * 1000))))
+        self.assertEqual(cp["reason"], "MISSING_SECONDS")
+        self.assertFalse(cp["eligible"])
+        self.assertIsNone(self.eng.frozen_record(VALID_TARGET_MS))
+
+    def test_unrelated_later_bar_does_not_move_required_receipt_time(self):
+        """Finding C: receipt time comes from the required bars only."""
+        price = float(self.eng.history.df.close.iloc[-1])
+        self.eng.feed.bars = {}
+        for i, bar in enumerate(synth_seconds(VALID_TARGET_MS, 8, price).values()):
+            self.eng.feed.put(bar, received_at_ms=VALID_TARGET_MS + i * 1000 + 1_040)
+        before = self.eng.feed.tape(VALID_TARGET_MS, 8)["last_received_ms"]
+        later = synth_seconds(VALID_TARGET_MS, 30, price)[VALID_TARGET_MS + 29 * 1000 + 999]
+        self.eng.feed.put(later, received_at_ms=VALID_TARGET_MS + 30_000)
+        after = self.eng.feed.tape(VALID_TARGET_MS, 8)
+        self.assertEqual(after["last_received_ms"], before)
+        self.assertEqual(before, VALID_TARGET_MS + 7 * 1000 + 1_040)
+        self.assertEqual(len(after["received_at_ms"]), 8)
+
+    def test_receipt_after_decision_fails_closed(self):
+        key = VALID_TARGET_MS + 7 * 1000 + 999
+        self.eng.feed.bars[key] = {**self.eng.feed.bars[key], "received_at_ms": self.now + 5_000}
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        self.assertEqual(cp["reason"], "INVALID_RECEIPT_TIME")
+        self.assertFalse(cp["eligible"])
+
+    def test_crash_before_journal_write_recovers_exactly_once(self):
+        """Finding D: an intent committed to the frozen store is never lost."""
+        boom = {"n": 0}
+
+        def failing_record(cp):
+            boom["n"] += 1
+            raise RuntimeError("crash between store commit and journal write")
+
+        self.eng.journal.record = failing_record
+        with self.assertRaises(RuntimeError):
+            self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        row = self.eng.frozen_record(VALID_TARGET_MS)
+        self.assertIsNotNone(row)
+        if not row[1]:
+            self.skipTest("synthetic tape produced an abstention; no intent to recover")
+        original = self.eng.store.poll_pending()[0]
+        self.eng.journal.close()
+
+        restarted = make_engine(self.tmp, self.now)
+        self.assertEqual(restarted.reconcile_store(), 1)
+        self.assertEqual(restarted.reconcile_store(), 0)  # acked; never delivered twice
+        pending = restarted.journal.pending()
+        self.assertEqual(len(pending), 1)
+        body = pending[0][1]
+        self.assertEqual(body["payload"]["event_id"], original["event_id"])
+        self.assertEqual(body["side"], original["side"])
+        self.assertAlmostEqual(body["probability"], float(original["confidence"]))
+        self.assertEqual(body["decision_at"],
+                         service.iso_ms(int(pd.Timestamp(original["decision_time"]).value // 1_000_000)))
+        self.assertTrue(body["eligible"])
+        # T+45 stays blocked: the candle already holds a committed call.
+        restarted.history.df = self.eng.history.df
+        restarted.history_ready = True
+        restarted.clock_skew_ms = 0
+        restarted.build_preopen(VALID_TARGET_MS)
+        restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1]))
+        restarted.feed.backfilled_through_ms = self.now
+        late = restarted.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
+        self.assertEqual(late["reason"], "DUPLICATE_INTENT")
+        self.assertFalse(late["eligible"])
 
     def test_no_second_intent_after_a_call(self):
         first = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
