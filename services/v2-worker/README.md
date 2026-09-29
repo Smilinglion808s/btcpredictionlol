@@ -46,11 +46,17 @@ locally and posted to the dashboard with `receipt_latency_ms` and `inputs_hash`.
 
 ## Health
 
-`GET /health` always answers 200 while the process is alive; `alive` and
-`prediction_ready` are reported separately, alongside `feed_connected`,
-`feed_age_ms`, `clock_skew_ms`, `history_bars`, `preopen_target`,
-`model_valid_until`, `refit_required` and `outbox_pending`.
-`GET /checkpoints` returns the last 20 journaled attempts.
+`GET /healthz` is the Railway health check path (`GET /health` and `GET /`
+answer identically). It always returns 200 while the process is alive: `alive`
+is process liveness only, and `prediction_ready` is reported separately — it is
+true only when the package, model validity, clock skew, a complete history, a
+pre-open frame **for the current candle** (`preopen_current`) and a live/fresh
+feed covering that candle (`feed_ready`) all hold. Also reported:
+`feed_connected`, `feed_age_ms`, `clock_skew_ms`, `history_bars`,
+`preopen_target`, `model_valid_until`, `refit_required` and `outbox_pending`.
+`GET /checkpoints` returns the last 20 journaled attempts. Receiver rejections
+are logged as an allow-listed error code only; raw HTTP response bodies are
+never logged or exposed.
 
 ## Refit
 
@@ -65,7 +71,8 @@ here (hash-verified, atomic swap, previous bundle kept) and updates
 ## Railway
 
 Service name `v2-predictor-worker`, root directory `services/v2-worker`,
-start command `python src/service.py`, persistent volume mounted at `/data/v2`.
+start command `python src/service.py`, health check path `/healthz`,
+persistent volume mounted at `/data/v2`.
 
 ```
 V2_DATA_DIR=/data/v2
