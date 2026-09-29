@@ -1,53 +1,33 @@
-# V2 Final R1 — architecture inspection and minimal integration plan
+# Version 2 — connect predictions to the betting app
 
-Read-only findings, then the smallest build that captures live V2 predictions with order execution strictly OFF.
+## What this does
+Every time Version 2 settles on its single call for a 15-minute interval, this site sends a signed message to the betting app. That message says "bet up" or "bet down" on that interval. The betting app then places the bet with its own sizing: 4% of the balance, reset each Boise day, capped at $200.
 
-## Current state (verified in this turn)
+Nothing is sent until you turn on a new "Version 2 betting" switch. It starts off.
 
-- **Repo / branch:** Lovable-hosted git for project `23a724c5-6c5b-4434-85e6-dc54b111c7e2`, synced to GitHub `Smilinglion808s/btcpredictionlol` `main`. The sandbox is on an edit branch (`edit/edt-…`); HEAD is `4db1d201` ("Removed T30, T10, v6, M7 refs"). Commits are made by the platform, and direct `git push` has no GitHub auth.
-- **New service folder:** `services/` already holds `binance-ob-collector`, `c85-worker`, `v12-worker` and `v12-executor`, all committed through this project. `services/v2-worker/` can be committed the same way. **Blocker:** new `supabase/functions/<name>/` folders are rejected by this editor, so V2 must not depend on a new Edge Function.
-- **Backend:** Lovable Cloud, ref `alevdzyisibxcvwoyrqb`. It is the only database reachable from here and has 171 migrations. The betting project `ruxndqfjfdbtdbkheuge` (btc-trader) cannot be reached.
-- **AGENTS.md:** has only the Lovable block: no force-push or history rewrites, and keep the connected branch working. Project memory adds: never delete from `predictions` (archive first), and `roadmap.md` is append-only.
+## What I build in this project
+1. **Lift the record-only rule** for Version 2 and write down the new rule: Version 2 sends to its own receiver in the betting app, never to the Version 1.2 receivers.
+2. **Sending switch.** A stored on/off setting for Version 2 betting. It starts off, and I show its state on the Version 2 tile. The "Betting off (recording only)" label becomes "Betting ON" or "Betting OFF".
+3. **Sending queue.** When a Version 2 call is saved, a message goes into a queue in the same save. If the switch is on, it is sent right away. Failed sends are retried for up to 2 minutes, and anything older is dropped rather than sent late. Each interval gets exactly one message, marked so the betting app can ignore repeats.
+4. **Signed message.** It carries the interval, up/down, which sleeve (early or late check), the decision time, the model version, and the sizing policy text. It is signed with a shared secret so the betting app can confirm it came from here.
+5. **Delivery log on the tile.** Shows the last messages sent, whether each was accepted, and how long each took.
+6. **Handoff document for the betting app.** The exact message format, signature check, repeat handling and sizing rule, ready to paste into that project so it can build its receiving side.
 
-## Reusable signed conventions
+## What you need to do
+- **In the betting app (separate project, which I can't touch):** paste the handoff document and have it build a Version 2 receiver with its own on/off switch. It will give you a receiver address.
+- **Give me two things** through a secure form: the receiver address, and a shared secret. Make the secret with a password manager, and put the same value in both projects.
+- **Publish this site**, and start the Version 2 worker in Railway. The worker is what makes the predictions, so without it nothing gets sent.
+- **Turn on both switches**, this site's and the betting app's, when you're ready.
 
-- Signature: `src/lib/c85/gateway.server.ts` `verifyC85Signature`. It uses HMAC-SHA256 over `${x-c85-timestamp}.${rawBody}` with `C85_GATEWAY_SECRET`, allows 60s of skew by default, and v12 uses 10s.
-- Nonce and service client: `claimNonce`, `serviceClient` in `src/lib/c85/ops.server.ts`.
-- Pattern to copy: `src/routes/api/public/hooks/v12-shadow.ts`. It checks a 32 KB cap, the signature, JSON, and that `open` is the current interval aligned to 900000, then runs `op` `context`/`publish` with a nonce claimed on publish.
-- Worker ops RPC: `src/routes/api/public/hooks/c85-ops.ts` handles enumerated ops. Its Python client, `services/c85-worker/src/backend.py`, gives each request a new nonce and retries idempotently.
-- Market/timing lookup: `GET /api/public/timing/btc-15m` (`src/lib/timing.server.ts`) returns `server_now_ms`, `next_close_ms` and `kalshi_ticker`. Kalshi helpers are in `src/lib/kalshi.server.ts`.
-- Heartbeat/runtime: `src/lib/v12/runtime.server.ts` writes `v12_predictor_runtime`. The live tile reads it through `src/lib/v12/live.server.ts` + `src/lib/v12Live.functions.ts` (1s/5s polling; realtime is off).
+## Safety
+- I never send test bets or replay old calls.
+- Nothing goes to the Version 1.2 receivers.
+- Version 1.2 stays halted.
+- The frozen model files, thresholds and seed are not changed.
 
-## Outdated or stale items
-
-- `services/v12-worker/README.md` and `service.py` point the adapter at the Edge Function (`…supabase.co/functions/v1/v12-shadow-adapter`). The site route `/api/public/hooks/v12-shadow` still exists but is the legacy hop.
-- `services/c85-worker/.env.example` describes C85 as live. C85 is archived.
-- Hook routes left over after the B4x4 removal: `b4x4-es1-warmup.ts`, `es1-boundary-run.ts`, `binance-ob-ingest.ts`, `binance-ob-finalize.ts`. These are not needed for V2.
-
-## btc-trader recorder mapping
-
-- The fixed receivers are `https://ruxndqfjfdbtdbkheuge.supabase.co/functions/v1/{v12-v1,v12-t45r2,v12-u}` (`src/lib/v12/receiver-destination.ts`, `docs/v12-webhook-handoff.md`). Each one records the signal and also runs the executor while the gate is `mode='live'`.
-- **Blocker:** V2 must NOT post to any of them, because the gate is live and a post could place an order. Execution-OFF capture therefore means **no btc-trader webhook at all** in R1. A V2 recorder there would need a new function plus a table with no executor path, created in btc-trader by the user (as a prompt only). That is deferred.
-
-## Minimal integration (execution OFF)
-
-```text
-services/v2-worker (Railway, Python)
-  Binance spot BTCUSDT 15m + 1s klines -> T+8 / T+45 features (25/33 inputs)
-  joblib: Direction8 > Fade8 > Direction45
-  --signed HMAC--> POST /api/public/hooks/v2-record  (this site, predictor DB)
-                    ops: heartbeat | publish(checkpoint T8|T45)
-dashboard: V2 tile polls getV2Live (current interval only)
-```
-
-1. `services/v2-worker/`: the frozen package, the three joblib bundles under `artifacts/`, a pinned `requirements.txt`, a `Dockerfile`, and `src/service.py` with `V2_MODE=record` (refuses any other value). The worker gets no order or betting URLs and no DB keys, only `C85_GATEWAY_SECRET` (or a new `V2_GATEWAY_SECRET`) and `V2_RECORD_URL`.
-2. Migration: `v2_predictions` (interval_open, checkpoint, route Direction8/Fade8/Direction45, side, probability, inputs_hash, model_hash, received_at, unique(interval_open, checkpoint)) and `v2_worker_runtime` (a single heartbeat row). Add grants, RLS, and an anon select policy for status only.
-3. Route `src/routes/api/public/hooks/v2-record.ts` copies the v12-shadow checks (signature, 10s skew, current interval, nonce on publish) and upserts idempotently. It has no outbound calls.
-4. Settlement: grade from Binance 15m close vs open, using the existing daily/sweeper pattern. Only when enabled; no extra cron in R1.
-5. UI: `src/lib/v2Live.functions.ts` + `src/components/v2-card.tsx` on the stats page. Polling matches V1.2 but slower (5s pending, 30s settled) to keep network cost down.
-
-## Decisions needed
-
-- Secret: reuse `C85_GATEWAY_SECRET` or add a separate `V2_GATEWAY_SECRET` (recommended for isolation).
-- Confirm R1 sends no btc-trader webhook (recording stays in the predictor DB only).
-- Is the Binance `api.binance.com` spot endpoint reachable from your Railway region? It returns 451 from US regions; `data-api.binance.vision` is the fallback.
+## Technical details
+- New migration: table `v2_forward_outbox` (candle_open PK, payload jsonb, status, attempts, last_error, sent_at, response_ms), with GRANTs to service_role only and RLS on. Also a table `v2_forward_settings` (enabled bool default false), and `v2_record_checkpoint` extended to insert the outbox row in the same transaction when an intent is created.
+- `src/routes/api/public/hooks/v2-record.ts`: after a new intent, if enabled, POST to `V2_FORWARD_URL` with HMAC-SHA256 (`x-v2-timestamp`, `x-v2-signature`) using `V2_FORWARD_SECRET`, 5s timeout, and update the outbox. A retry sweep runs on each heartbeat, only for rows under 2 minutes old.
+- `src/lib/v2/contract.ts`: `V2_EXECUTION` becomes derived from the setting.
+- New doc: `docs/v2-betting-receiver-handoff.md`.
+- Update the rule in `AGENTS.md`, plus the tests (contract and SQL checks).
