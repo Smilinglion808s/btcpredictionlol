@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { V2_SLEEVES } from "@/lib/v2/contract";
+import { V2_SLEEVES, deriveSleeveStatus } from "@/lib/v2/contract";
 
 const SLEEVE_LABEL: Record<string, string> = {
   "v2-direction8-r1": "Direction 8s",
@@ -25,6 +25,10 @@ export function V2Card({ data, error }: Props) {
   const cps: any[] = data?.checkpoints ?? [];
   const current = cps.filter((c) => new Date(c.candle_open).toISOString() === open);
   const intent = (data?.intents ?? []).find((i: any) => new Date(i.candle_open).toISOString() === open);
+  const status = deriveSleeveStatus(current, now - Date.parse(open));
+  const ready = st.prediction_ready === true;
+  const targetMatch = st.preopen_target ? new Date(st.preopen_target).toISOString() === open : null;
+  const yn = (v: unknown, y: string, n: string) => (v == null ? "not reported" : v ? y : n);
   const errors: string[] = Array.isArray(st.errors) ? st.errors.slice(0, 3) : [];
 
   return (
@@ -36,26 +40,29 @@ export function V2Card({ data, error }: Props) {
         </div>
         <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
           <span className={`mr-1 inline-block h-2 w-2 rounded-full ${connected ? "bg-primary" : "bg-destructive"}`} />
-          {error ? "Status unavailable" : connected ? "Worker connected" : rt ? `Worker silent ${ago(rt.updated_at, now)}` : "Worker not started"}
+          {error ? "Status unavailable" : connected ? (ready ? "Ready to predict" : "Connected · not ready") : rt ? `Worker silent ${ago(rt.updated_at, now)}` : "Worker not started"}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <Stat k="Price feed" v={st.feed_age_ms != null ? `${Math.round(st.feed_age_ms / 1000)}s old` : "unknown"} />
-        <Stat k="Inputs ready" v={st.features_ready == null ? "unknown" : st.features_ready ? "yes" : "no"} />
-        <Stat k="Model files" v={st.model_valid == null ? "unknown" : st.model_valid ? "valid" : "missing / invalid"} />
-        <Stat k="Betting" v="off" />
+        <Stat k="Prediction ready" v={!connected ? "no heartbeat" : yn(st.prediction_ready, "yes", "no")} />
+        <Stat k="Price feed" v={st.feed_age_ms != null ? `${yn(st.feed_ready, "fresh", "stale")} · ${(st.feed_age_ms / 1000).toFixed(1)}s` : yn(st.feed_ready, "fresh", "stale")} />
+        <Stat k="History" v={yn(st.history_ready, `ready${st.history_bars ? ` · ${st.history_bars} bars` : ""}`, "not ready")} />
+        <Stat k="Current interval inputs" v={targetMatch == null ? yn(st.preopen_current, "current", "not current") : targetMatch ? "current" : "stale target"} />
+        <Stat k="Model valid until" v={st.model_valid_until ? `${String(st.model_valid_until).slice(0, 10)}${st.refit_required ? " · refit required" : ""}` : "not reported"} />
+        <Stat k="Betting" v="off (recording only)" />
       </div>
 
       <div className="space-y-1">
         <p className="text-xs font-medium text-muted-foreground">Current 15-minute interval</p>
         {V2_SLEEVES.map((s) => {
           const r = current.find((c) => c.sleeve === s);
+          const v = status[s];
           return (
             <div key={s} className="flex justify-between text-sm">
               <span>{SLEEVE_LABEL[s]}</span>
-              <span className="text-muted-foreground">
-                {!r ? "waiting" : r.eligible ? `call ${sideLabel(r.side)}` : `no call${r.reason ? ` · ${r.reason}` : ""}`}
+              <span className={v.tone === "bad" ? "text-destructive" : v.tone === "call" ? "font-medium" : "text-muted-foreground"}>
+                {v.text}
                 {r?.receipt_latency_ms != null ? ` · ${r.receipt_latency_ms} ms` : ""}
               </span>
             </div>
@@ -84,6 +91,9 @@ export function V2Card({ data, error }: Props) {
           {cps.length === 0 && <p className="text-muted-foreground">Nothing recorded yet.</p>}
         </div>
       </details>
+      <p className="text-[11px] text-muted-foreground">
+        Sizing policy (not a live stake): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.
+      </p>
       <p className="text-[11px] text-muted-foreground">
         Inputs: Binance spot. Lab grading used Binance index direction, not spot candles or Kalshi results.
       </p>

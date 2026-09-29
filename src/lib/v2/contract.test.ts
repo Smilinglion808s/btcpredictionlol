@@ -43,3 +43,25 @@ test("heartbeat allowlist drops principal/secrets/raw exceptions", () => {
   assert.deepEqual(s.errors, ["05:00:01Z score T8: ValueError"]);
   assert.equal(s.execution, "OFF");
 });
+
+import { deriveSleeveStatus } from "./contract.ts";
+const row = (o: any) => ({ checkpoint: "T8", sleeve: "v2-direction8-r1", side: 0, eligible: false, features_ready: true, reason: null, sleeve_name: "ABSTAIN", ...o });
+const txt = (r: any) => Object.fromEntries(Object.entries(r).map(([k, v]: any) => [k, v.text]));
+test("status: D8 call skips Fade8 and D45", () =>
+  assert.deepEqual(txt(deriveSleeveStatus([row({ eligible: true, side: 1, sleeve_name: "Direction8" })], 10_000)),
+    { "v2-direction8-r1": "call UP", "v2-fade8-r1": "skipped · earlier call", "v2-direction45-r1": "skipped · earlier call" }));
+test("status: Fade8 call -> D8 abstained, D45 skipped", () =>
+  assert.deepEqual(txt(deriveSleeveStatus([row({ sleeve: "v2-fade8-r1", eligible: true, side: -1, sleeve_name: "Fade8" })], 10_000)),
+    { "v2-direction8-r1": "abstained", "v2-fade8-r1": "call DOWN", "v2-direction45-r1": "skipped · earlier call" }));
+test("status: scored T8 ABSTAIN -> no calls, D45 waits then reads its record", () => {
+  assert.deepEqual(txt(deriveSleeveStatus([row({})], 20_000)),
+    { "v2-direction8-r1": "no call", "v2-fade8-r1": "no call", "v2-direction45-r1": "waiting for 45s" });
+  assert.equal(deriveSleeveStatus([row({}), row({ checkpoint: "T45", sleeve: "v2-direction45-r1", eligible: true, side: 1, sleeve_name: "Direction45" })], 50_000)["v2-direction45-r1"].text, "call UP");
+});
+test("status: failed T8 blocks D45", () => {
+  const r = deriveSleeveStatus([row({ features_ready: false, reason: "CHECKPOINT_LATE" })], 50_000);
+  assert.equal(r["v2-direction8-r1"].text, "failed · CHECKPOINT_LATE");
+  assert.equal(r["v2-direction45-r1"].text, "blocked · 8s not scored");
+});
+test("status: never fabricates before T8", () =>
+  assert.equal(deriveSleeveStatus([], 3_000)["v2-fade8-r1"].text, "waiting for 8s"));
