@@ -10,7 +10,7 @@ export const getV2Live = createServerFn({ method: "POST" }).handler(async () => 
   const [rt, cps, intents] = await Promise.all([
     sb.from("v2_worker_runtime").select("worker_id,status,updated_at").order("updated_at", { ascending: false }).limit(3),
     sb.from("v2_checkpoints")
-      .select("candle_open,checkpoint,sleeve,side,probability,eligible,features_ready,reason,decision_at,received_at,receipt_latency_ms")
+      .select("candle_open,checkpoint,sleeve,side,probability,eligible,features_ready,reason,decision_at,received_at,receipt_latency_ms,sleeve_name:payload->>sleeve_name")
       .gte("candle_open", since).order("received_at", { ascending: false }).limit(60),
     sb.from("v2_candle_intents").select("candle_open,sleeve,side,execution,created_at")
       .gte("candle_open", since).order("candle_open", { ascending: false }).limit(24),

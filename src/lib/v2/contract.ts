@@ -93,8 +93,49 @@ export function selectIntent(rows: { sleeve: V2Sleeve; eligible: boolean; side: 
   return null;
 }
 
+// ---------------------------------------------------------------- dashboard sleeve status
+export type V2RecordRow = {
+  checkpoint: string; sleeve: string; side: number | null; eligible: boolean;
+  features_ready: boolean; reason: string | null; sleeve_name?: string | null;
+};
+export type V2SleeveStatus = { text: string; tone: "call" | "muted" | "bad" };
+
+/** A T+8 row counts as a scored combined abstention only with the exact frozen shape. */
+export const isScoredT8Abstain = (r: V2RecordRow) =>
+  r.checkpoint === "T8" && !r.eligible && r.features_ready && r.reason == null && r.side === 0 && r.sleeve_name === "ABSTAIN";
+
+/** Honest per-sleeve status from the recorded T+8/T+45 rows only (never inferred confidence). */
+export function deriveSleeveStatus(rows: V2RecordRow[], msIntoCandle: number): Record<V2Sleeve, V2SleeveStatus> {
+  const side = (s: number | null) => (s === 1 ? "UP" : "DOWN");
+  const t8 = rows.find((r) => r.checkpoint === "T8" && r.eligible) ?? rows.find((r) => r.checkpoint === "T8");
+  const t45 = rows.find((r) => r.checkpoint === "T45");
+  const skip: V2SleeveStatus = { text: "skipped · earlier call", tone: "muted" };
+  const noCall: V2SleeveStatus = { text: "no call", tone: "muted" };
+  if (t8?.eligible && t8.sleeve === "v2-direction8-r1")
+    return { "v2-direction8-r1": { text: `call ${side(t8.side)}`, tone: "call" }, "v2-fade8-r1": skip, "v2-direction45-r1": skip };
+  if (t8?.eligible && t8.sleeve === "v2-fade8-r1")
+    return { "v2-direction8-r1": { text: "abstained", tone: "muted" }, "v2-fade8-r1": { text: `call ${side(t8.side)}`, tone: "call" }, "v2-direction45-r1": skip };
+  if (t8 && isScoredT8Abstain(t8)) {
+    const d45: V2SleeveStatus = t45
+      ? t45.eligible ? { text: `call ${side(t45.side)}`, tone: "call" }
+        : { text: t45.reason ? `no call · ${t45.reason}` : "no call", tone: t45.reason ? "bad" : "muted" }
+      : msIntoCandle < 46_000 ? { text: "waiting for 45s", tone: "muted" } : { text: "no 45s record", tone: "bad" };
+    return { "v2-direction8-r1": noCall, "v2-fade8-r1": noCall, "v2-direction45-r1": d45 };
+  }
+  if (t8) {
+    const f: V2SleeveStatus = { text: `failed · ${t8.reason ?? "not scored"}`, tone: "bad" };
+    return { "v2-direction8-r1": f, "v2-fade8-r1": f, "v2-direction45-r1": { text: "blocked · 8s not scored", tone: "bad" } };
+  }
+  if (msIntoCandle < 9_000) {
+    const w: V2SleeveStatus = { text: "waiting for 8s", tone: "muted" };
+    return { "v2-direction8-r1": w, "v2-fade8-r1": w, "v2-direction45-r1": w };
+  }
+  const m: V2SleeveStatus = { text: "no 8s record", tone: "bad" };
+  return { "v2-direction8-r1": m, "v2-fade8-r1": m, "v2-direction45-r1": { text: "blocked · 8s not scored", tone: "bad" } };
+}
+
 // ---------------------------------------------------------------- heartbeat
-const BOOL_FIELDS = ["package_ok", "model_valid", "refit_required", "history_ready", "feed_connected", "prediction_ready"] as const;
+const BOOL_FIELDS = ["package_ok", "model_valid", "refit_required", "history_ready", "feed_connected", "feed_ready", "preopen_current", "prediction_ready"] as const;
 const NUM_FIELDS = ["history_bars", "feed_age_ms", "feed_reconnects", "clock_skew_ms", "outbox_pending", "uptime_s"] as const;
 const TIME_FIELDS = ["model_valid_until", "history_last_open", "preopen_target"] as const;
 const SAFE_TEXT = /^[\w .:+\-()\/]{0,120}$/;
