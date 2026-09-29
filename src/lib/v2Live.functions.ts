@@ -17,7 +17,7 @@ export const getV2Live = createServerFn({ method: "POST" }).handler(async () => 
   ]);
   return {
     serverNow: Date.now(),
-    runtime: (rt.data ?? []).map((r: any) => ({ worker_id: r.worker_id, updated_at: r.updated_at, status: sanitizeStatus(r.status) })),
+    runtime: (rt.data ?? []).map((r: any) => ({ worker_id: r.worker_id, updated_at: r.updated_at, status: sanitizeStatus(r.status) as Record<string, any> })),
     checkpoints: (cps.data ?? []) as any[],
     intents: (intents.data ?? []) as any[],
     error: rt.error || cps.error || intents.error ? "READ_FAILED" : null,
