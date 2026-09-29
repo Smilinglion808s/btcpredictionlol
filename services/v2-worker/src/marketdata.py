@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
 import threading
 import time
@@ -80,7 +81,7 @@ class BarHistory:
         digest = hashlib.sha256(raw).hexdigest()
         if digest != meta["decoded_sha256"]:
             raise ValueError(f"seed sha256 mismatch: {digest} != {meta['decoded_sha256']}")
-        df = pd.read_csv(gzip.GzipFile(fileobj=None, mode="rb") if False else __import__("io").BytesIO(raw))
+        df = pd.read_csv(io.BytesIO(raw))
         if len(df) != meta["rows"]:
             raise ValueError("seed row count mismatch")
         return self._normalize(df)
