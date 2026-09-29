@@ -6,6 +6,7 @@ scipy==1.17.0
 scikit-learn==1.8.0
 joblib==1.5.3
 pyarrow==25.0.1
+matplotlib==3.10.8
 threadpoolctl==3.6.0
 httpx==0.28.1
 websockets==15.0.1
