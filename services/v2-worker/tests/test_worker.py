@@ -126,7 +126,7 @@ class WarmupAndScoring(unittest.TestCase):
         self.eng.history.df = extend_history(self.eng.history.load_seed(), VALID_TARGET_MS)
         self.eng.history.assert_continuous()
         self.eng.history_ready = True
-        self.eng.check_clock()
+        self.eng.clock_skew_ms = 0  # simulated wall clock; real skew is checked against Binance in production
         self.eng.build_preopen(VALID_TARGET_MS)
         self.eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(self.eng.history.df.close.iloc[-1]))
         self.eng.feed.backfilled_through_ms = self.now
