@@ -176,6 +176,7 @@ class WarmupAndScoring(unittest.TestCase):
         self.assertIsNone(self.eng.frozen_record(VALID_TARGET_MS))
         self.eng.feed.bars.update(
             synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
+        self.eng.feed.last_message_ms = VALID_TARGET_MS + 44_049
         cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         self.assertEqual(cp["reason"], "T8_UNRESOLVED")
         self.assertFalse(cp["eligible"])
@@ -185,6 +186,7 @@ class WarmupAndScoring(unittest.TestCase):
         cp8 = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
         self.eng.feed.bars.update(
             synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
+        self.eng.feed.last_message_ms = VALID_TARGET_MS + 44_049
         cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         self.assertEqual(cp["checkpoint"], "T45")
         if cp8["eligible"]:
@@ -289,6 +291,7 @@ class WarmupAndScoring(unittest.TestCase):
         restarted.clock_skew_ms = 0
         restarted.build_preopen(VALID_TARGET_MS)
         restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1]))
+        restarted.feed.last_message_ms = VALID_TARGET_MS + 44_049
         restarted.feed.backfilled_through_ms = self.now
         restarted.feed.connected = True
         late = restarted.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
@@ -299,6 +302,7 @@ class WarmupAndScoring(unittest.TestCase):
         first = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
         self.eng.feed.bars.update(
             synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
+        self.eng.feed.last_message_ms = VALID_TARGET_MS + 44_049
         second = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         if first["eligible"]:
             self.assertEqual(second["reason"], "DUPLICATE_INTENT")
@@ -311,6 +315,71 @@ class WarmupAndScoring(unittest.TestCase):
         self.assertEqual(cp["reason"], "MODEL_EXPIRED")
         self.assertFalse(cp["eligible"])
         self.assertTrue(self.eng.status()["refit_required"] in (True, False))
+
+
+    def test_continuous_socket_scores_two_subsequent_candles_without_rest(self):
+        """A startup watermark must not disable later candle checkpoints."""
+        original_watermark = self.eng.feed.backfilled_through_ms
+        real_score = self.eng.store.model.score
+
+        def abstain_at_t8(request):
+            out = real_score(request)
+            if request["decision_second"] == 8:
+                return {**out, "sleeve": "ABSTAIN", "side": 0, "direction": "ABSTAIN",
+                        "model_eligible": False, "assumed_effective_odds": None}
+            return out
+
+        # Force only the early selection to exercise legitimate T45 permission;
+        # both checkpoints still run the real frozen feature/scoring pipeline.
+        self.eng.store.model.score = abstain_at_t8
+        for offset in (1, 2):
+            target = VALID_TARGET_MS + offset * marketdata.INTERVAL_MS
+            self.eng.history.df = extend_history(self.eng.history.df, target)
+            self.eng.build_preopen(target)
+            price = float(self.eng.history.df.close.iloc[-1])
+            for second, count in ((8, 8), (45, 44)):
+                for bar in synth_seconds(target, count, price).values():
+                    self.eng.feed.put(bar, received_at_ms=bar["received_at_ms"])
+                clock = {"ms": target + second * 1000 + 300}
+                cp = service.run_window(self.eng, target, second,
+                                        now=lambda: clock["ms"],
+                                        sleep=lambda s: clock.__setitem__("ms", clock["ms"] + int(s * 1000)))
+                self.assertIsNone(cp["reason"])
+                self.assertTrue(cp["features_ready"])
+                self.assertEqual(cp["decision_at"], service.iso_ms(clock["ms"]))
+                self.assertEqual(self.eng.feed.backfilled_through_ms, original_watermark)
+
+
+class FeedReadiness(unittest.TestCase):
+    def test_readiness_depends_on_observed_current_data_not_socket_flag(self):
+        eng = service.Engine.__new__(service.Engine)
+        eng.feed = marketdata.SecondFeed(FakeRest(0), "unused")
+        now = VALID_TARGET_MS + 8_400
+        bar = synth_seconds(VALID_TARGET_MS, 8, 100.0)[VALID_TARGET_MS + 7_999]
+        eng.feed.connected = True
+        eng.feed.backfilled_through_ms = now
+        self.assertFalse(eng.feed_ready(now))  # a socket and watermark prove nothing
+        eng.feed.put(bar, received_at_ms=VALID_TARGET_MS + 8_049)
+        eng.feed.backfilled_through_ms = VALID_TARGET_MS - marketdata.INTERVAL_MS
+        self.assertTrue(eng.feed_ready(now))
+        eng.feed.connected = False
+        self.assertTrue(eng.feed_ready(now))  # fresh observed data survives brief disconnect
+        eng.feed.connected = True
+        self.assertFalse(eng.feed_ready(now + service.Engine.FEED_STALE_MS))
+        eng.feed.last_message_ms = now + 1
+        self.assertFalse(eng.feed_ready(now))  # no future receipts
+        eng.feed.last_message_ms = now
+        self.assertFalse(eng.feed_ready(now + marketdata.INTERVAL_MS))
+        eng.feed.put({**bar, "close_ms": now + 1}, received_at_ms=now)
+        self.assertFalse(eng.feed_ready(now))  # no future closed bars
+
+    def test_recent_delivery_of_old_market_data_is_not_ready(self):
+        eng = service.Engine.__new__(service.Engine)
+        eng.feed = marketdata.SecondFeed(FakeRest(0), "unused")
+        now = VALID_TARGET_MS + 45_300
+        bar = synth_seconds(VALID_TARGET_MS, 8, 100.0)[VALID_TARGET_MS + 7_999]
+        eng.feed.put(bar, received_at_ms=now)
+        self.assertFalse(eng.feed_ready(now))
 
 
 class SeedReference(unittest.TestCase):
@@ -415,6 +484,7 @@ class HistoryAndHealth(unittest.TestCase):
             eng.clock_skew_ms = 0
             eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
             eng.feed.backfilled_through_ms = now
+            eng.feed.last_message_ms = VALID_TARGET_MS + 8_049
             eng.feed.connected = True
             called = {"n": 0}
 
@@ -442,10 +512,10 @@ class HistoryAndHealth(unittest.TestCase):
             eng.build_preopen(VALID_TARGET_MS)
             eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
             eng.feed.connected = True
-            eng.feed.backfilled_through_ms = 0  # feed has not covered this candle
+            eng.feed.backfilled_through_ms = 0  # REST watermark is not readiness evidence
             self.assertFalse(eng.feed_ready(now))
             self.assertFalse(eng.prediction_ready(now))
-            eng.feed.backfilled_through_ms = now
+            eng.feed.last_message_ms = VALID_TARGET_MS + 8_049
             self.assertTrue(eng.prediction_ready(now))
             # a pre-open frame for an older candle is not current
             stale = now + marketdata.INTERVAL_MS
@@ -479,6 +549,7 @@ class FinalEdgeCases(unittest.TestCase):
         self.eng.build_preopen(VALID_TARGET_MS)
         self.price = float(self.eng.history.df.close.iloc[-1])
         self.eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, self.price)
+        self.eng.feed.last_message_ms = VALID_TARGET_MS + 8_049
         self.eng.feed.backfilled_through_ms = self.now
         self.eng.feed.connected = True
 
@@ -534,6 +605,7 @@ class FinalEdgeCases(unittest.TestCase):
         restarted.clock_skew_ms = 0
         restarted.build_preopen(VALID_TARGET_MS)
         restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, self.price)
+        restarted.feed.last_message_ms = VALID_TARGET_MS + 44_049
         restarted.feed.backfilled_through_ms = self.now
         restarted.feed.connected = True
         self.force(restarted, "Direction45")
