@@ -31,6 +31,9 @@ export function V2Card({ data, error }: Props) {
   const yn = (v: unknown, y: string, n: string) => (v == null ? "not reported" : v ? y : n);
   const errors: string[] = Array.isArray(st.errors) ? st.errors.slice(0, 3) : [];
 
+  const rec = data?.record;
+  const dayNet = Number(rec?.today?.net ?? 0);
+  const totNet = Number(rec?.total?.net ?? 0);
   const badge = error ? "Status unavailable" : connected ? (ready ? "Ready to predict" : "Connected · not ready") : rt ? `Worker silent ${ago(rt.updated_at, now)}` : "Worker not started";
 
   return (
@@ -149,6 +152,25 @@ function Stat({ k, v }: { k: string; v: string }) {
     <div className="v2-chip px-3 py-2.5">
       <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{k}</div>
       <div className="mt-1 text-sm font-medium tabular-nums truncate">{v}</div>
+    </div>
+  );
+}
+
+function Ring({ value, sub }: { value: number | null; sub: string }) {
+  const r = 34, c = 2 * Math.PI * r;
+  const p = value == null ? 0 : Math.max(0, Math.min(1, value));
+  return (
+    <div className="relative size-[72px] shrink-0">
+      <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--border)" strokeWidth="7" />
+        <circle cx="40" cy="40" r={r} fill="none" stroke={value != null && value >= 0.5 ? "var(--crimson-foreground)" : "var(--crimson)"}
+          strokeWidth="7" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-sm font-bold tabular-nums">{value == null ? "\u2014" : `${(value * 100).toFixed(1)}%`}</span>
+        <span className="text-[7px] uppercase tracking-wider text-muted-foreground">win rate</span>
+        <span className="text-[6px] uppercase tracking-wider text-muted-foreground/70">{sub}</span>
+      </div>
     </div>
   );
 }
