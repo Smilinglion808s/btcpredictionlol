@@ -1,9 +1,10 @@
 """Durable checkpoint journal + at-least-once outbox.
 
 Every checkpoint attempt — call, abstention, fail-closed error — is written
-here before any network call, so a restart never loses or repeats a decision.
-Delivery is idempotent downstream: the receiver deduplicates on the natural
-key (candle_open, checkpoint, sleeve).
+here before any network call, so a restart never loses a decision. Transport is
+at-least-once: a row may be re-sent after a crash or timeout, and the receiver
+deduplicates on the natural key (candle_open, checkpoint, sleeve). A candle can
+still only ever produce one intent.
 """
 from __future__ import annotations
 
