@@ -1,6 +1,7 @@
 // V2 Final R1 dashboard status. Read-only; public like the other tile feeds
 // (see the access note in v12Live.functions.ts). Status only — no secrets.
 import { createServerFn } from "@tanstack/react-start";
+import { sanitizeStatus } from "./v2/contract";
 
 export const getV2Live = createServerFn({ method: "POST" }).handler(async () => {
   const { serviceClient } = await import("./c85/ops.server");
@@ -16,9 +17,9 @@ export const getV2Live = createServerFn({ method: "POST" }).handler(async () => 
   ]);
   return {
     serverNow: Date.now(),
-    runtime: (rt.data ?? []) as any[],
+    runtime: (rt.data ?? []).map((r: any) => ({ worker_id: r.worker_id, updated_at: r.updated_at, status: sanitizeStatus(r.status) })),
     checkpoints: (cps.data ?? []) as any[],
     intents: (intents.data ?? []) as any[],
-    error: rt.error?.message ?? cps.error?.message ?? intents.error?.message ?? null,
+    error: rt.error || cps.error || intents.error ? "READ_FAILED" : null,
   };
 });
