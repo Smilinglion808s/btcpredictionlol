@@ -19,7 +19,7 @@ recording endpoint `/api/public/hooks/v2-record` on the predictor site.
 | `src/service.py` | Engine: readiness, checkpoints, journaling, health. |
 | `src/marketdata.py` | 15m history (seed + REST backfill) and the 1s websocket feed. |
 | `src/journal.py` | Durable SQLite checkpoint journal + at-least-once outbox. |
-| `src/promote.py` | `inspect` / `promote` for model bundles (atomic manifest swap). |
+| `src/promote.py` | `inspect` / offline `prepare` of a complete new release (all 3 sleeves + regenerated CONTENT_HASHES); no live swap. |
 | `tests/test_worker.py` | Offline tests; no network, no orders. |
 
 ## Timing
@@ -64,7 +64,7 @@ Auto-refit is **not** available: refitting needs causal index-direction labels
 settled at least a minute before the fit cutoff, and no label pipeline exists in
 this repository. After **2026-10-12T00:00:00Z** the bundles expire, the worker
 fails closed and `refit_required` turns true. A human runs `package/refit.py`
-in the lab, then `python src/promote.py promote --candidate <dir> --activate`
+in the lab, then `python src/promote.py prepare --candidate <dir> --out <new-release>`, review, replace `package/` and redeploy
 here (hash-verified, atomic swap, previous bundle kept) and updates
 `package/CONTENT_HASHES.json`.
 

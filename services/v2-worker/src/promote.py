@@ -1,101 +1,159 @@
-"""Refit / promote command for the V2 Final R1 bundles.
+"""Offline release preparation for V2 Final R1 model bundles.
 
     python src/promote.py inspect
-    python src/promote.py promote --candidate <dir> [--activate]
+    python src/promote.py prepare --candidate <dir> --out <new-release-dir>
 
-`promote` verifies that the candidate directory contains a manifest whose
-model_id is v2-final-r1, that every joblib matches its recorded sha256, and
-that the validity window is coherent. It then copies the candidate into
-models/<version>/ and, with --activate, atomically repoints models/current
-(write to a temp dir, os.replace the symlink/dir) so a partially written
-bundle can never be loaded.
+This is NOT a live pointer swap and it never touches the running package.
+Only replacing model files inside package/models/current would break the frozen
+CONTENT_HASHES.json check on the next restart, so the only supported path is:
 
-AUTO-REFIT IS NOT AVAILABLE. Refitting requires causal index-direction labels
-settled at least one minute before the fit cutoff. This repository contains no
-label pipeline, so the worker cannot retrain itself. After 2026-10-12T00:00:00Z
-the current bundles expire and the worker fails closed and reports
-refit_required=true; a human must run package/refit.py in the lab, then
-promote the resulting bundle here. The first release truthfully reports
-"refit required" rather than pretending a label feed exists.
+1. `prepare` verifies the candidate manifest + all three sleeve files
+   independently against the currently deployed release;
+2. it writes a COMPLETE new package tree to --out (a directory that must not
+   exist yet): frozen code/docs copied byte-for-byte, the three candidate
+   models staged together in models/current, and a regenerated
+   CONTENT_HASHES.json;
+3. it re-verifies the staged tree exactly as the worker does at startup;
+4. a human reviews the diff and replaces services/v2-worker/package with the
+   staged tree via normal review + redeploy.
+
+The old release is left intact. There is no activation, no auto-refit and no
+live training here: refitting requires causal index-direction labels (lab only).
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 import shutil
-import tempfile
+import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MODELS = ROOT / "package" / "models"
+PACKAGE = ROOT / "package"
 MODEL_ID = "v2-final-r1"
+SLEEVES = ("direction8", "fade8", "direction45")
+VALIDITY = timedelta(weeks=4)
 
 
-def verify_bundle(d: Path) -> dict:
-    manifest = json.loads((d / "manifest.json").read_text())
-    if manifest.get("model_id") != MODEL_ID:
+def sha256(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def features_hash(features: list[str]) -> str:
+    return hashlib.sha256(json.dumps(list(features), separators=(",", ":")).encode()).hexdigest()
+
+
+def parse_utc(s: str) -> datetime:
+    d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    if d.tzinfo is None or d.utcoffset() != timedelta(0):
+        raise ValueError(f"timestamp must be explicit UTC: {s!r}")
+    return d.astimezone(timezone.utc)
+
+
+def verify_bundle(d: Path, reference: dict | None = None, load_models: bool = True) -> dict:
+    """Independently verify one bundle; with `reference`, also check it is a valid successor."""
+    m = json.loads((d / "manifest.json").read_text())
+    if m.get("model_id") != MODEL_ID:
         raise ValueError(f"manifest model_id must be {MODEL_ID}")
-    for name, rec in manifest["models"].items():
+    if set(m.get("models", {})) != set(SLEEVES):
+        raise ValueError(f"exactly three sleeves required {SLEEVES}, got {sorted(m.get('models', {}))}")
+    start, end = parse_utc(m["valid_from"]), parse_utc(m["valid_until"])
+    if start.time() != datetime.min.time():
+        raise ValueError("valid_from must be a UTC midnight cutoff")
+    if end - start != VALIDITY:
+        raise ValueError(f"validity must be exactly 4 weeks (got {end - start})")
+    for name in SLEEVES:
+        rec = m["models"][name]
         f = d / rec["file"]
-        got = hashlib.sha256(f.read_bytes()).hexdigest()
-        if got != rec["sha256"]:
-            raise ValueError(f"{name}: sha256 mismatch ({got})")
-    if not manifest["valid_from"] < manifest["valid_until"]:
-        raise ValueError("invalid validity window")
-    return manifest
+        if f.name != rec["file"] or not f.is_file():
+            raise ValueError(f"{name}: model file missing or not flat: {rec['file']}")
+        if sha256(f) != rec["sha256"]:
+            raise ValueError(f"{name}: sha256 mismatch")
+        if parse_utc(rec["fit_end"]) != start:
+            raise ValueError(f"{name}: fit_end must equal valid_from cutoff")
+        if not parse_utc(rec["cal_last_settlement"]) < start:
+            raise ValueError(f"{name}: calibration labels must settle before the cutoff")
+        if load_models:
+            import joblib  # offline only
+            bundle = joblib.load(f)
+            if list(bundle.get("features", [])) != list(rec["features"]):
+                raise ValueError(f"{name}: joblib feature order differs from manifest")
+    if reference is not None:
+        if m.get("feed") != reference.get("feed"):
+            raise ValueError(f"feed identity changed: {m.get('feed')!r} != {reference.get('feed')!r}")
+        if m.get("policy_sha256") != reference.get("policy_sha256"):
+            raise ValueError("policy_sha256 changed; frozen policy must be identical")
+        for name in SLEEVES:
+            if features_hash(m["models"][name]["features"]) != features_hash(reference["models"][name]["features"]):
+                raise ValueError(f"{name}: feature order/hash differs from the deployed release")
+        if start <= parse_utc(reference["valid_from"]):
+            raise ValueError("candidate validity must be a new window after the deployed one")
+    return m
 
 
 def inspect() -> None:
-    m = verify_bundle(MODELS / "current")
+    m = verify_bundle(PACKAGE / "models" / "current", load_models=False)
     print(json.dumps({"model_id": m["model_id"], "valid_from": m["valid_from"], "valid_until": m["valid_until"],
-                      "sleeves": sorted(m["models"]), "auto_refit_available": False,
+                      "feed": m.get("feed"), "sleeves": list(SLEEVES),
+                      "features_sha256": {n: features_hash(m["models"][n]["features"]) for n in SLEEVES},
+                      "auto_refit_available": False,
                       "refit_requires": "causal index-direction labels (lab only)"}, indent=2))
 
 
-def promote(candidate: Path, activate: bool) -> None:
-    manifest = verify_bundle(candidate)
-    version = manifest["valid_from"][:10].replace("-", "")
-    dest = MODELS / version
-    if dest.exists():
-        raise SystemExit(f"{dest} already exists; refusing to overwrite a promoted bundle")
-    staging = Path(tempfile.mkdtemp(dir=str(MODELS)))
-    for f in ["manifest.json", *[r["file"] for r in manifest["models"].values()]]:
-        shutil.copy2(candidate / f, staging / f)
-    verify_bundle(staging)
-    os.replace(staging, dest)
-    print(f"promoted -> {dest}")
-    if activate:
-        tmp = MODELS / f".current.{version}"
-        if tmp.exists():
-            shutil.rmtree(tmp)
-        shutil.copytree(dest, tmp)
-        verify_bundle(tmp)
-        backup = MODELS / f"previous-{version}"
-        if (MODELS / "current").exists():
-            if backup.exists():
-                shutil.rmtree(backup)
-            os.replace(MODELS / "current", backup)
-        os.replace(tmp, MODELS / "current")
-        print("activated models/current (atomic swap; previous bundle kept)")
-        print("NOTE: update package/CONTENT_HASHES.json and redeploy; the worker "
-              "refuses to start scoring on an unverified package.")
+def prepare(candidate: Path, out: Path, load_models: bool = True) -> dict:
+    reference = verify_bundle(PACKAGE / "models" / "current", load_models=False)
+    manifest = verify_bundle(candidate, reference, load_models)
+    if out.exists():
+        raise SystemExit(f"{out} already exists; refusing to overwrite")
+    if PACKAGE.resolve() in [out.resolve(), *out.resolve().parents]:
+        raise SystemExit("--out must be outside the deployed package")
+    spec = json.loads((PACKAGE / "CONTENT_HASHES.json").read_text())
+    staging = out.with_name(out.name + ".partial")
+    if staging.exists():
+        shutil.rmtree(staging)
+    try:
+        for rel in spec["files"]:
+            if rel.startswith("models/current/"):
+                continue
+            (staging / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(PACKAGE / rel, staging / rel)
+        models = staging / "models" / "current"
+        models.mkdir(parents=True)
+        for f in ["manifest.json", *[manifest["models"][n]["file"] for n in SLEEVES]]:
+            shutil.copy2(candidate / f, models / f)
+        files = {rel: h for rel, h in spec["files"].items() if not rel.startswith("models/current/")}
+        for f in sorted(p.name for p in models.iterdir()):
+            files[f"models/current/{f}"] = sha256(models / f)
+        (staging / "CONTENT_HASHES.json").write_text(json.dumps({**spec, "files": files}, indent=2) + "\n")
+        # Re-verify the staged tree exactly as the worker does at startup.
+        for rel, want in files.items():
+            if sha256(staging / rel) != want:
+                raise ValueError(f"staged hash mismatch: {rel}")
+        verify_bundle(models, reference, load_models)
+        staging.rename(out)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return {"release_dir": str(out), "valid_from": manifest["valid_from"], "valid_until": manifest["valid_until"],
+            "content_hashes_sha256": sha256(out / "CONTENT_HASHES.json"),
+            "next_step": "review, replace services/v2-worker/package with this tree, redeploy"}
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Inspect or promote V2 Final R1 model bundles")
+    ap = argparse.ArgumentParser(description="Inspect or prepare (offline) a V2 Final R1 release")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("inspect")
-    p = sub.add_parser("promote")
+    p = sub.add_parser("prepare")
     p.add_argument("--candidate", required=True, type=Path)
-    p.add_argument("--activate", action="store_true")
+    p.add_argument("--out", required=True, type=Path)
     a = ap.parse_args()
     if a.cmd == "inspect":
         inspect()
     else:
-        promote(a.candidate, a.activate)
+        print(json.dumps(prepare(a.candidate, a.out), indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

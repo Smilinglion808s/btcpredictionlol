@@ -12,7 +12,7 @@
   `python src/service.py`, volume `/data/v2`, `V2_MODE=shadow`.
 - Bundles valid 2026-09-14 → 2026-10-12 UTC. After expiry the worker fails
   closed with `refit_required=true`; auto-refit is unavailable (no causal
-  index-direction label pipeline), promotion is manual via `src/promote.py`.
+  index-direction label pipeline), promotion is an offline release-preparation step (`src/promote.py prepare`) followed by normal review + redeploy; there is no live model swap.
 - Execution: OFF. V2 never calls `v12-v1`, `v12-t45r2`, `v12-u`, `place-trade`
   or any executor.
 
@@ -65,3 +65,12 @@ App-side: V2 contract 11/11, vitest 490/490, tsc clean, build clean.
 
 Still recording-only: no btc-trader forwarding, no V1.2 receiver contact, no
 orders. Nothing deployed — deploy from Railway when you are ready.
+
+## Review fixes (T45 gate, release prep, edge access)
+- `v2_record_checkpoint` (migration 0004): T45 intent only when the candle has a scored T+8 ABSTAIN (not eligible,
+  features_ready, reason null, side 0, payload.sleeve_name='ABSTAIN', decision_at in [T+8,T+9)) and no eligible T+8.
+  Failed/missing/late T+8 audits never qualify. SECURITY INVOKER, `search_path=''`, EXECUTE for service_role only.
+- `promote.py` no longer swaps directories (that was not atomic and broke CONTENT_HASHES). `prepare` writes a complete
+  new release tree with all 3 sleeves and regenerated hashes; old release untouched; no activation/refit.
+- Worker sends an honest `User-Agent: v2-predictor-worker/...` (library default UAs can trip the edge's 1010 rule).
+  No browser-header spoofing. The first Railway heartbeat is the connectivity proof.

@@ -436,7 +436,7 @@ class Sender:
 
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
-        self.http = httpx.Client(timeout=4.0)
+        self.http = httpx.Client(timeout=4.0, headers={"User-Agent": f"v2-predictor-worker/{MODEL_VERSION} (+railway; hmac-signed)"})
 
     def signed_post(self, op: str, **payload) -> httpx.Response:
         cfg = self.engine.cfg
