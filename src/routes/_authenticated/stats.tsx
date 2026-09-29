@@ -24,6 +24,18 @@ import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
 import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
 import { getV12Live } from "@/lib/v12Live.functions";
+import { getV2Live } from "@/lib/v2Live.functions";
+import { V2Card } from "@/components/v2-card";
+
+function V2Tile() {
+  const fetchV2 = useServerFn(getV2Live);
+  const q = useQuery({
+    queryKey: ["v2-live"],
+    queryFn: () => fetchV2(),
+    refetchInterval: () => (typeof document !== "undefined" && document.hidden ? 60_000 : 10_000),
+  });
+  return <V2Card data={q.data ?? null} error={q.isError} />;
+}
 
 import { Button } from "@/components/ui/button";
 import { forceRefreshStats } from "@/lib/statsRefresh.functions";
@@ -282,6 +294,9 @@ function StatsPage() {
           loading={v11Q.isLoading}
           error={v11Q.isError}
         />
+
+        <V2Tile />
+
 
 
 
