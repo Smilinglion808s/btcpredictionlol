@@ -88,7 +88,7 @@ def verify_bundle(d: Path, reference: dict | None = None, load_models: bool = Tr
         for name in SLEEVES:
             if features_hash(m["models"][name]["features"]) != features_hash(reference["models"][name]["features"]):
                 raise ValueError(f"{name}: feature order/hash differs from the deployed release")
-        if not start >= parse_utc(reference["valid_until"]) - timedelta(days=7) or start <= parse_utc(reference["valid_from"]):
+        if start <= parse_utc(reference["valid_from"]):
             raise ValueError("candidate validity must be a new window after the deployed one")
     return m
 
