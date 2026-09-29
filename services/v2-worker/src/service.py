@@ -138,14 +138,20 @@ class Engine:
         return not (pd.Timestamp(self.manifest["valid_from"]) <= now < pd.Timestamp(self.manifest["valid_until"]))
 
     def feed_ready(self, now_ms: int) -> bool:
-        """Current target is backfilled AND the socket is live/recently heard from."""
+        """Recent receipts and observed closed bars cover the current candle.
+
+        REST's startup/reconnect watermark does not advance on a continuous
+        socket. Exact checkpoint coverage remains enforced by has_all/tape.
+        A connected flag alone is never evidence of fresh market data.
+        """
         target = now_ms - now_ms % INTERVAL_MS
-        if self.feed.backfilled_through_ms < target:
-            return False
-        if self.feed.connected:
-            return True
-        last = self.feed.last_message_ms
-        return bool(last) and 0 <= now_ms - last <= self.FEED_STALE_MS
+        with self.feed.lock:
+            last = self.feed.last_message_ms
+            latest_close = max(self.feed.bars, default=None)
+        return bool(last and latest_close is not None
+                    and 0 <= now_ms - last <= self.FEED_STALE_MS
+                    and target <= latest_close <= now_ms
+                    and now_ms - latest_close <= self.FEED_STALE_MS)
 
     def preopen_current(self, now_ms: int) -> bool:
         return bool(self.preopen and self.preopen["target_ms"] == now_ms - now_ms % INTERVAL_MS)
