@@ -40,3 +40,28 @@ worker delivers to the predictor site only.
 - Heartbeat status is allowlisted (no principal, cash, secrets or raw exceptions); body read is byte-bounded.
 - Local check: `NODE_PATH=<pglite> node scripts/check-v2-record-rpc.mjs` (never against production).
 - External btc-trader forwarding remains disconnected (approval blocked).
+
+## P0 worker review — findings A–G (applied, source only)
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| A | Scheduler fired once at exactly `sec.000`, before the last closed 1s bar had arrived | `run_window()` polls locally inside `[T+8,T+9)` / `[T+45,T+46)`, scores **once** the instant every required closed bar and a current pre-open frame are present, and only records the real blocking reason (or `CHECKPOINT_LATE`) at the deadline. No REST/network work in the scoring loop. |
+| B | Worker wrote a fake frozen `decisions` row on a T+8 error, letting T+45 run | Removed. Errors go to the worker's own audit journal only. A candle with no frozen T+8 record fails closed at T+45 with `T8_UNRESOLVED`; only a genuine frozen T+8 ABSTAIN permits T+45. Frozen package bytes untouched (16-hash check still passes). |
+| C | Receipt time was `max(last_message_ms, last_close_ms)` — clamped and polluted by unrelated traffic | Each closed bar stores its own real `received_at_ms` at `put()`. `tape()` returns the max over the **required** bars only, unclamped. A receipt after the decision time, in the future, or earlier than the bar's close fails closed with `INVALID_RECEIPT_TIME`. |
+| D | An intent committed to the frozen store but not yet journaled was lost on restart | `reconcile_store()` runs at startup and before every score: it rebuilds the journal record from the immutable frozen payload (original decision time, sleeve, side, confidence, `event_id`) and acks the frozen row **only after** the journal + outbox write is durable. Exactly-once, and T+45 stays blocked afterwards. |
+| E | Decision time could be re-read at serialization | `decision_at` is always the model's own `decision_time`, normalized only in format. Runtime measurements live in separate fields: `receipt_latency_ms`, `scoring_latency_ms`. |
+| F | A failed startup warmup left `history_ready` false forever; stored CSV trusted on row count alone | `refresh_boundary()` retries the full warmup; readiness returns only after a complete verified history **and** a current pre-open frame. The persisted CSV is read with `float_precision="round_trip"` and accepted only if its leading rows still equal the verified seed byte-for-byte. |
+| G | `/healthz` undocumented; readiness keyed off historical backfill; risk of raw response bodies in logs | `/healthz` documented as the Railway health-check path (`/health`, `/` identical). `prediction_ready` now requires `preopen_current` **and** `feed_ready` (current target covered + socket live/fresh). Receiver rejections log an allow-listed error code only. |
+
+Regression tests: `python -m unittest discover -s tests` — **41 passed, 0 skipped**
+(new: late final second scores inside the window; missing until the deadline
+fails closed; T+45 blocked after a failed T+8; T+45 after a genuine frozen
+abstention; unrelated later bar does not move the required receipt time;
+receipt after decision fails closed; crash between store commit and journal
+write recovers exactly once; tampered stored history falls back to the seed;
+round-trip history accepted; readiness recovers after a failed warmup;
+readiness requires current target + feed).
+App-side: V2 contract 11/11, vitest 490/490, tsc clean, build clean.
+
+Still recording-only: no btc-trader forwarding, no V1.2 receiver contact, no
+orders. Nothing deployed — deploy from Railway when you are ready.
