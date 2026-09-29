@@ -326,26 +326,47 @@ class Engine:
                         "model_version": MODEL_VERSION, "worker_id": self.cfg.worker_id},
         }
 
-    def reconcile_store(self) -> int:
-        """Drain frozen-store intents committed before their journal write.
+    def store_recoverable(self, now_ms: int | None = None) -> list[dict]:
+        """Committed frozen decisions that may still be missing their journal row.
 
-        Runs at startup and ahead of any new scoring. The payload is never
-        altered and the frozen row is acked only once the journal + outbox row
-        is durable, so a recovered intent is delivered exactly once.
+        Both kinds count: unacknowledged calls (poll_pending) and scored T+8
+        ABSTAIN rows, which never enter poll_pending because called=0 yet are the
+        record that permits T+45. Only real committed payloads are returned —
+        nothing is manufactured.
         """
         if not self.store:
-            return 0
+            return []
+        rows: list[dict] = []
         try:
-            pending = self.store.poll_pending()
+            rows.extend(self.store.poll_pending())
         except Exception as e:  # noqa: BLE001
             self.err(f"reconcile read: {type(e).__name__}")
-            return 0
+        cutoff = (self.now() if now_ms is None else now_ms) - 2 * INTERVAL_MS
+        try:
+            rows.extend(json.loads(r[0]) for r in self.store.db.execute(
+                "SELECT payload FROM decisions WHERE called=0 AND target_ms>=? ORDER BY target_ms", (cutoff,)))
+        except Exception as e:  # noqa: BLE001
+            self.err(f"reconcile abstention read: {type(e).__name__}")
+        return rows
+
+    def reconcile_store(self, now_ms: int | None = None) -> int:
+        """Drain frozen-store decisions committed before their journal write.
+
+        Runs at startup and ahead of any new scoring — so the T+8 abstention is
+        journaled before a T+45 evaluation overwrites the frozen row. The payload
+        is never altered and a call is acked only once the journal + outbox row is
+        durable. Transport is at-least-once with downstream deduplication on the
+        natural key; a candle still yields at most one intent.
+        """
         n = 0
-        for event in pending:
+        for event in self.store_recoverable(now_ms):
             try:
                 cp = self.checkpoint_from_event(event)
-                self.journal.record(cp)  # insert-once; identical body on replay
-                self.store.ack(event["event_id"])  # only after journal+outbox durable
+                fresh = self.journal.record(cp)  # insert-once; identical body on replay
+                if event.get("model_eligible"):
+                    self.store.ack(event["event_id"])  # only after journal+outbox durable
+                elif not fresh:
+                    continue  # abstention already journaled; nothing to recover
                 self.last_checkpoint = {"candle_open": cp["candle_open"], "checkpoint": cp["checkpoint"],
                                         "sleeve": cp["sleeve"], "eligible": cp["eligible"],
                                         "reason": "RECOVERED"}
@@ -353,6 +374,7 @@ class Engine:
             except Exception as e:  # noqa: BLE001
                 self.err(f"reconcile: {type(e).__name__}")
         return n
+
 
     def run_checkpoint(self, target_ms: int, second: int, now_ms: int | None = None) -> dict:
         self.reconcile_store()
