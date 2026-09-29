@@ -2,7 +2,7 @@
 // Run: NODE_PATH=<dir with @electric-sql/pglite> node scripts/check-v2-record-rpc.mjs
 import { PGlite } from "@electric-sql/pglite"; import fs from "fs"; import assert from "assert";
 const db = new PGlite();
-await db.exec("create role service_role; create role anon; create role authenticated;");
+await db.exec("create role service_role bypassrls; grant usage on schema public to service_role; create role anon; create role authenticated;");
 await db.exec(fs.readFileSync(new URL("../drizzle/migrations/0002_v2_final_r1_recording.sql", import.meta.url),"utf8").replaceAll("--> statement-breakpoint",""));
 for (const f of ["0003_v2_record_checkpoint_atomic.sql","0004_v2_t45_requires_scored_t8.sql"])
   await db.exec(fs.readFileSync(new URL("../drizzle/migrations/"+f, import.meta.url),"utf8").replaceAll("--> statement-breakpoint",""));
