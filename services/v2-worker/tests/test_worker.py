@@ -246,10 +246,20 @@ class WarmupAndScoring(unittest.TestCase):
 
     def test_crash_before_journal_write_recovers_exactly_once(self):
         """Finding D: an intent committed to the frozen store is never lost."""
-        boom = {"n": 0}
+        # Force a called (eligible) decision so there is an intent to recover.
+        real_score = self.eng.store.model.score
+
+        def eligible_score(request):
+            out = real_score(request)
+            if out["model_eligible"]:
+                return out
+            return {**out, "sleeve": "Direction8", "side": 1, "direction": "GREEN",
+                    "confidence": 0.61, "model_eligible": True, "model_id": "v2-direction8-r1",
+                    "assumed_effective_odds": 1.75}
+
+        self.eng.store.model.score = eligible_score
 
         def failing_record(cp):
-            boom["n"] += 1
             raise RuntimeError("crash between store commit and journal write")
 
         self.eng.journal.record = failing_record
@@ -257,8 +267,7 @@ class WarmupAndScoring(unittest.TestCase):
             self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
         row = self.eng.frozen_record(VALID_TARGET_MS)
         self.assertIsNotNone(row)
-        if not row[1]:
-            self.skipTest("synthetic tape produced an abstention; no intent to recover")
+        self.assertEqual(row[1], 1)
         original = self.eng.store.poll_pending()[0]
         self.eng.journal.close()
 
