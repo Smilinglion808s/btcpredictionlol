@@ -9,7 +9,7 @@ import {validateSignal} from '@/lib/v12/contract';
 export const Route=createFileRoute('/api/public/hooks/v12-shadow')({server:{handlers:{
   POST:async({request})=>{
     // HALTED 2026-09-29 by owner request: no V1.2 context or publishing.
-    if(request)return new Response('V12_HALTED',{status:503});
+    if(request.method==='POST')return new Response('V12_HALTED',{status:503});
     const raw=await request.text();
     if(raw.length>32768)return new Response('Too large',{status:413});
     if(!verifyC85Signature(raw,request.headers.get('x-c85-timestamp'),request.headers.get('x-c85-signature'),10000))
