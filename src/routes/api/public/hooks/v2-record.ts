@@ -1,8 +1,10 @@
-// V2 Final R1 signed recording route. Records only; it makes NO outbound calls
-// and never reaches any V1.2 receiver, executor or betting endpoint.
+// V2 Final R1 signed recording route. Records checkpoints; when an intent exists it
+// flushes the V2 forward outbox to the betting app's V2 receiver (only when the
+// v2_forward_settings switch is on). Never reaches any V1.2 receiver or executor.
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyC85Signature } from "@/lib/c85/gateway.server";
 import { claimNonce, serviceClient } from "@/lib/c85/ops.server";
+import { flushV2Forward } from "@/lib/v2/forward.server";
 import {
   V2_EXECUTION, V2_INPUT_SOURCE, V2_LABEL_SOURCE, V2_MODEL_VERSION, V2_STAKE_POLICY,
   readBounded, sanitizeStatus, validateCheckpoint,
@@ -41,6 +43,7 @@ export const Route = createFileRoute("/api/public/hooks/v2-record")({
               updated_at: new Date(now).toISOString(),
             });
             if (error) throw new Error("heartbeat_upsert");
+            await flushV2Forward(sb).catch(() => console.error("v2-forward retry failed"));
             return Response.json({ ok: true, execution: V2_EXECUTION, server_now_ms: now });
           }
 
@@ -59,6 +62,7 @@ export const Route = createFileRoute("/api/public/hooks/v2-record")({
           if (error) throw new Error("record_rpc");
           const r = data as any;
           if (!r?.ok) return bad(r?.error ?? "RECORD_REJECTED", 409);
+          if (r.intent) await flushV2Forward(sb).catch(() => console.error("v2-forward failed"));
           return Response.json({
             ok: true, id: r.id, duplicate: !!r.duplicate, intent: r.intent ?? null, intent_note: r.intent_note ?? null,
             receipt_latency_ms: r.receipt_latency_ms, execution: V2_EXECUTION,
