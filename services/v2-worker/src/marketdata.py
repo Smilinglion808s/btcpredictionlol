@@ -133,17 +133,35 @@ class BarHistory:
             self.df = seed
             return self.df
 
-    def backfill(self, through_open_ms: int) -> int:
-        """Append every closed 15m bar after the last stored bar, up to (not incl.) through_open_ms."""
+    def backfill(self, through_open_ms: int, server_time_ms: int | None = None) -> int:
+        """Append every FINAL closed 15m bar after the last stored bar, below through_open_ms.
+
+        A bar is appended only when its own stamps prove it is closed:
+        ``close_ms == open_ms + INTERVAL_MS - 1`` and ``close_ms < exchange now``.
+        The exchange clock is read here (never inside the scoring path), so a local
+        clock running ahead can no longer append a still-forming bar. A partial bar
+        stops the walk; it is retried on the next boundary refresh.
+        """
+        if server_time_ms is None:
+            server_time_ms = self.rest.server_time_ms()
         added: list[dict] = []
         cursor = self.last_open_ms + INTERVAL_MS
-        while cursor < through_open_ms:
+        truncated = False
+        while cursor < through_open_ms and not truncated:
             batch = self.rest.klines("15m", cursor, min(cursor + 1000 * INTERVAL_MS, through_open_ms))
-            batch = [b for b in batch if b["open_ms"] < through_open_ms]
-            if not batch:
+            final: list[dict] = []
+            for b in batch:
+                if b["open_ms"] >= through_open_ms:
+                    truncated = True
+                    break
+                if b["close_ms"] != b["open_ms"] + INTERVAL_MS - 1 or b["close_ms"] >= server_time_ms:
+                    truncated = True  # still forming (or malformed): retain and retry later
+                    break
+                final.append(b)
+            if not final:
                 break
-            added.extend(batch)
-            cursor = batch[-1]["open_ms"] + INTERVAL_MS
+            added.extend(final)
+            cursor = final[-1]["open_ms"] + INTERVAL_MS
         if added:
             rows = pd.DataFrame([{
                 "bar_open": pd.Timestamp(b["open_ms"], unit="ms", tz="UTC"), "open": b["open"], "high": b["high"],
@@ -154,6 +172,7 @@ class BarHistory:
                 self.df = self._normalize(pd.concat([self.df, rows], ignore_index=True))
         self.assert_continuous()
         return len(added)
+
 
     def assert_continuous(self) -> None:
         gaps = self.df.bar_open.diff().dropna()
