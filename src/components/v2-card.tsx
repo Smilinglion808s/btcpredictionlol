@@ -53,6 +53,28 @@ export function V2Card({ data, error }: Props) {
         </span>
       </header>
 
+      <section className="relative flex flex-wrap items-center gap-4 sm:gap-5">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Ring value={rec?.total?.winRate ?? null} sub="total" />
+          <Ring value={rec?.today?.winRate ?? null} sub="today" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Net wins · today</div>
+          <div className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${dayNet > 0 ? "text-crimson-foreground" : dayNet < 0 ? "text-crimson" : "text-foreground"}`}>
+            {dayNet > 0 ? "+" : ""}{dayNet}
+          </div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
+            total net {totNet > 0 ? "+" : ""}{totNet} · predictions, not bets
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <Stat k="Coverage" v={rec?.coverage == null ? "—" : `${(rec.coverage * 100).toFixed(0)}%`} />
+        <Stat k="Wins / losses" v={`${rec?.total?.wins ?? 0} / ${rec?.total?.losses ?? 0}`} />
+        <Stat k="Today calls" v={`${rec?.today?.calls ?? 0}/${rec?.dayIntervals ?? 0}`} />
+      </div>
+
       <div className="grid grid-cols-2 gap-2.5">
         <Stat k="Prediction ready" v={!connected ? "no heartbeat" : yn(st.prediction_ready, "yes", "no")} />
         <Stat k="Price feed" v={st.feed_age_ms != null ? `${yn(st.feed_ready, "fresh", "stale")} · ${(st.feed_age_ms / 1000).toFixed(1)}s` : yn(st.feed_ready, "fresh", "stale")} />
