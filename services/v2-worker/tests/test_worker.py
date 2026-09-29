@@ -407,8 +407,15 @@ class HistoryAndHealth(unittest.TestCase):
             eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
             eng.feed.backfilled_through_ms = now
             eng.feed.connected = True
-            eng.warm_history_called = False
+            called = {"n": 0}
+
+            def warm():  # the real warmup succeeds on the retry
+                called["n"] += 1
+                eng.history_ready = True
+
+            eng.warm_history = warm
             eng.refresh_boundary(VALID_TARGET_MS)  # boundary refresh performs the full warmup
+            self.assertEqual(called["n"], 1)
             self.assertTrue(eng.history_ready)
             self.assertTrue(eng.preopen_current(now))
             self.assertTrue(eng.prediction_ready(now))
