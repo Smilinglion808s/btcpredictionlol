@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Architecture rules
+- V2 Final R1 is record-only: `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables; it must never call V1.2 receivers/executors. Why: real-money execution is unconditionally off for this release.

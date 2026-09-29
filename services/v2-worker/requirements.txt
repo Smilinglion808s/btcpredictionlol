@@ -1,0 +1,7 @@
+# Placeholder pins. Replace with the exact versions from the frozen V2 package
+# lockfile before deploying — joblib bundles require the same sklearn version.
+httpx==0.28.1
+numpy==2.3.5
+pandas==2.2.3
+scikit-learn==1.8.0
+joblib==1.5.2
