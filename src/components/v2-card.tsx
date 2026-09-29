@@ -43,7 +43,7 @@ export function V2Card({ data, error }: Props) {
       <header className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-crimson-foreground/80">
-            Recording only · betting off
+            {data?.forward?.enabled ? "Live · betting on" : "Recording only · betting off"}
           </div>
           <h3 className="v2-title text-4xl font-heading font-bold tracking-tight leading-none">Version 2 Final</h3>
           <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-crimson/50 bg-crimson/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-crimson-foreground">
@@ -52,7 +52,7 @@ export function V2Card({ data, error }: Props) {
           </div>
         </div>
         <span className="shrink-0 rounded-full border border-crimson-foreground/30 bg-crimson-foreground/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-crimson-foreground/90">
-          Execution off
+          {data?.forward?.enabled ? "Execution on" : "Execution off"}
         </span>
       </header>
 
@@ -84,7 +84,7 @@ export function V2Card({ data, error }: Props) {
         <Stat k="History" v={yn(st.history_ready, `ready${st.history_bars ? ` · ${st.history_bars} bars` : ""}`, "not ready")} />
         <Stat k="Current interval inputs" v={targetMatch == null ? yn(st.preopen_current, "current", "not current") : targetMatch ? "current" : "stale target"} />
         <Stat k="Model valid until" v={st.model_valid_until ? `${String(st.model_valid_until).slice(0, 10)}${st.refit_required ? " · refit required" : ""}` : "not reported"} />
-        <Stat k="Betting" v="off (recording only)" />
+        <Stat k="Betting" v={data?.forward?.enabled ? (data.forward.configured ? "ON · sending" : "ON · receiver not set") : "OFF"} />
       </div>
 
       <section className="v2-chip relative p-4">
@@ -97,7 +97,7 @@ export function V2Card({ data, error }: Props) {
             <span className="text-crimson-foreground">
               Chosen: {SLEEVE_LABEL[intent.sleeve]}{" "}
               <span className="rounded-md border border-crimson/60 bg-crimson/20 px-1.5 py-0.5 text-xs">{sideLabel(intent.side)}</span>{" "}
-              <span className="text-xs font-normal text-muted-foreground">(not bet)</span>
+              <span className="text-xs font-normal text-muted-foreground">({data?.forward?.enabled ? "sent to betting app" : "not bet"})</span>
             </span>
           ) : (
             <span className="text-muted-foreground">No chosen call yet</span>
@@ -139,8 +139,21 @@ export function V2Card({ data, error }: Props) {
           {cps.length === 0 && <p className="text-muted-foreground">Nothing recorded yet.</p>}
         </div>
       </details>
+      {(data?.forward?.recent?.length ?? 0) > 0 && (
+        <section className="v2-chip p-3">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Sent to betting app</div>
+          <ul className="mt-1.5 space-y-1 text-[11px] tabular-nums">
+            {data!.forward.recent.map((f: any) => (
+              <li key={f.candle_open} className="flex justify-between gap-2">
+                <span>{new Date(f.candle_open).toISOString().slice(11, 16)} UTC · {f.side}</span>
+                <span className="text-muted-foreground">{f.status}{f.response_ms != null ? ` · ${f.response_ms}ms` : ""}{f.last_error && f.status !== "sent" ? ` · ${String(f.last_error).slice(0, 24)}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="space-y-1 text-[9px] text-muted-foreground/80">
-        <p>Sizing policy (not a live stake): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.</p>
+        <p>Sizing policy (applied by the betting app): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.</p>
         <p>Inputs: Binance spot. Lab grading used Binance index direction, not spot candles or Kalshi results.</p>
       </div>
     </section>

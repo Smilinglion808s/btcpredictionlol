@@ -16,12 +16,23 @@ export const getV2Live = createServerFn({ method: "POST" }).handler(async () => 
       .gte("candle_open", since).order("candle_open", { ascending: false }).limit(24),
   ]);
   const record = await buildRecord(sb).catch(() => null);
+  const [fs, fo] = await Promise.all([
+    sb.from("v2_forward_settings").select("enabled").eq("id", true).maybeSingle(),
+    sb.from("v2_forward_outbox").select("candle_open,status,attempts,response_status,response_ms,last_error,payload->>side,payload->>sleeve")
+      .order("candle_open", { ascending: false }).limit(6),
+  ]);
+  const forward = {
+    enabled: !!(fs.data as any)?.enabled,
+    configured: !!process.env["V2_FORWARD_URL"] && !!process.env["V2_FORWARD_SECRET"],
+    recent: ((fo.data ?? []) as any[]),
+  };
   return {
     serverNow: Date.now(),
     runtime: (rt.data ?? []).map((r: any) => ({ worker_id: r.worker_id, updated_at: r.updated_at, status: sanitizeStatus(r.status) as Record<string, any> })),
     checkpoints: (cps.data ?? []) as any[],
     intents: (intents.data ?? []) as any[],
     record,
+    forward,
     error: rt.error || cps.error || intents.error ? "READ_FAILED" : null,
   };
 });

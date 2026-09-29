@@ -10,4 +10,4 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- V2 Final R1 is record-only: `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables; it must never call V1.2 receivers/executors. Why: real-money execution is unconditionally off for this release.
+- V2 Final R1 records via `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables, and forwards each candle intent through `v2_forward_outbox` (trigger-enqueued, gated by `v2_forward_settings.enabled`, default off) to the betting app's own V2 receiver only; never to V1.2 receivers/executors. Why: user authorized V2 betting 2026-09-29; V1.2 stays halted.

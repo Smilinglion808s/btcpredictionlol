@@ -43,6 +43,13 @@
       "when": 1790661000000,
       "tag": "0005_v2_intent_eventual_completion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790698786612,
+      "tag": "0006_v2_forward_outbox",
+      "breakpoints": true
     }
   ]
 }
