@@ -16,7 +16,7 @@ describe("V2Card (read-only mock records)", () => {
     expect(html).toContain("fresh · 0.4s");
     expect(html).toContain("2026-10-12");
     expect(html).toContain("waiting for 45s");
-    expect(html).toContain("off (recording only)");
+    expect(html).toContain("Execution off");
     expect(html).toContain("capped at $200");
     expect(html).not.toContain("unknown");
   });
