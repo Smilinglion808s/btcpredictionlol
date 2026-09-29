@@ -131,6 +131,7 @@ class WarmupAndScoring(unittest.TestCase):
         self.eng.build_preopen(VALID_TARGET_MS)
         self.eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(self.eng.history.df.close.iloc[-1]))
         self.eng.feed.backfilled_through_ms = self.now
+        self.eng.feed.connected = True
         self.eng.feed.last_message_ms = VALID_TARGET_MS + 7_999
 
     def tearDown(self):
@@ -280,6 +281,7 @@ class WarmupAndScoring(unittest.TestCase):
         restarted.build_preopen(VALID_TARGET_MS)
         restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1]))
         restarted.feed.backfilled_through_ms = self.now
+        restarted.feed.connected = True
         late = restarted.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         self.assertEqual(late["reason"], "DUPLICATE_INTENT")
         self.assertFalse(late["eligible"])
@@ -404,6 +406,7 @@ class HistoryAndHealth(unittest.TestCase):
             eng.clock_skew_ms = 0
             eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
             eng.feed.backfilled_through_ms = now
+            eng.feed.connected = True
             eng.warm_history_called = False
             eng.refresh_boundary(VALID_TARGET_MS)  # boundary refresh performs the full warmup
             self.assertTrue(eng.history_ready)
@@ -422,6 +425,7 @@ class HistoryAndHealth(unittest.TestCase):
             eng.clock_skew_ms = 0
             eng.build_preopen(VALID_TARGET_MS)
             eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
+            eng.feed.connected = True
             eng.feed.backfilled_through_ms = 0  # feed has not covered this candle
             self.assertFalse(eng.feed_ready(now))
             self.assertFalse(eng.prediction_ready(now))
