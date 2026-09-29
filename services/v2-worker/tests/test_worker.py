@@ -369,5 +369,82 @@ class OutboxDurability(unittest.TestCase):
         j.close()
 
 
+class HistoryAndHealth(unittest.TestCase):
+    """Findings F and G."""
+
+    def test_tampered_stored_history_falls_back_to_verified_seed(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            seed = h.load_seed()
+            bad = seed.copy()
+            bad.loc[10, "close"] = float(bad.loc[10, "close"]) + 1.0
+            bad.to_csv(h.path, index=False, compression="gzip")
+            self.assertFalse(marketdata.BarHistory.seed_prefix_matches(bad, seed))
+            loaded = h.load()
+            self.assertTrue(marketdata.BarHistory.seed_prefix_matches(loaded, seed))
+
+    def test_round_trip_stored_history_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            h.df = h.load_seed()
+            h.persist()
+            h2 = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            loaded = h2.load()
+            self.assertEqual(len(loaded), 80_160)
+            self.assertTrue(marketdata.BarHistory.seed_prefix_matches(loaded, h.df))
+
+    def test_readiness_recovers_after_a_failed_startup_warmup(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            now = VALID_TARGET_MS + 8_400
+            eng = make_engine(tmp, now)
+            eng.history_ready = False  # startup warmup failed
+            self.assertFalse(eng.prediction_ready(now))
+            eng.history.df = extend_history(eng.history.load_seed(), VALID_TARGET_MS)
+            eng.clock_skew_ms = 0
+            eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
+            eng.feed.backfilled_through_ms = now
+            eng.warm_history_called = False
+            eng.refresh_boundary(VALID_TARGET_MS)  # boundary refresh performs the full warmup
+            self.assertTrue(eng.history_ready)
+            self.assertTrue(eng.preopen_current(now))
+            self.assertTrue(eng.prediction_ready(now))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_readiness_requires_current_target_and_feed(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            now = VALID_TARGET_MS + 8_400
+            eng = make_engine(tmp, now)
+            eng.history.df = extend_history(eng.history.load_seed(), VALID_TARGET_MS)
+            eng.history_ready = True
+            eng.clock_skew_ms = 0
+            eng.build_preopen(VALID_TARGET_MS)
+            eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
+            eng.feed.backfilled_through_ms = 0  # feed has not covered this candle
+            self.assertFalse(eng.feed_ready(now))
+            self.assertFalse(eng.prediction_ready(now))
+            eng.feed.backfilled_through_ms = now
+            self.assertTrue(eng.prediction_ready(now))
+            # a pre-open frame for an older candle is not current
+            stale = now + marketdata.INTERVAL_MS
+            self.assertFalse(eng.preopen_current(stale))
+            self.assertFalse(eng.prediction_ready(stale))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_health_paths(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            eng = make_engine(tmp, VALID_TARGET_MS)
+            handler = service.make_health_handler(eng)
+            self.assertTrue(callable(handler))
+            readme = (ROOT / "README.md").read_text()
+            self.assertIn("/healthz", readme)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
