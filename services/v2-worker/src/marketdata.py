@@ -191,10 +191,12 @@ class SecondFeed:
         self.backfilled_through_ms = 0
         self.reconnects = 0
 
-    def put(self, bar: dict) -> None:
+    def put(self, bar: dict, received_at_ms: int | None = None) -> None:
+        """Store a closed bar and stamp the real local receipt time for THAT bar."""
+        now = int(time.time() * 1000) if received_at_ms is None else int(received_at_ms)
         with self.lock:
-            self.bars[bar["close_ms"]] = bar
-            self.last_message_ms = int(time.time() * 1000)
+            self.bars[bar["close_ms"]] = {**bar, "received_at_ms": now}
+            self.last_message_ms = now
             if len(self.bars) > self.KEEP_MS // 1000:
                 cutoff = max(self.bars) - self.KEEP_MS
                 for k in [k for k in self.bars if k < cutoff]:
