@@ -10650,6 +10650,77 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_forward_outbox: {
+        Row: {
+          attempts: number
+          candle_open: string
+          created_at: string
+          decision_at: string
+          dedupe_key: string
+          last_error: string | null
+          payload: Json
+          response_ms: number | null
+          response_status: number | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          candle_open: string
+          created_at?: string
+          decision_at: string
+          dedupe_key: string
+          last_error?: string | null
+          payload: Json
+          response_ms?: number | null
+          response_status?: number | null
+          sent_at?: string | null
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          candle_open?: string
+          created_at?: string
+          decision_at?: string
+          dedupe_key?: string
+          last_error?: string | null
+          payload?: Json
+          response_ms?: number | null
+          response_status?: number | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_forward_outbox_candle_open_fkey"
+            columns: ["candle_open"]
+            isOneToOne: true
+            referencedRelation: "v2_candle_intents"
+            referencedColumns: ["candle_open"]
+          },
+        ]
+      }
+      v2_forward_settings: {
+        Row: {
+          enabled: boolean
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       v2_worker_runtime: {
         Row: {
           model_version: string
