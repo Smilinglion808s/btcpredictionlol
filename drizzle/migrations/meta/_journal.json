@@ -15,6 +15,13 @@
       "when": 1790612543256,
       "tag": "0001_retire_t30_t10_model7_v6",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790658404674,
+      "tag": "0002_v2_final_r1_recording",
+      "breakpoints": true
     }
   ]
 }
