@@ -218,18 +218,31 @@ class SecondFeed:
         self.backfilled_through_ms = max(self.backfilled_through_ms, end_ms)
         return got
 
+    def has_all(self, open_ms: int, seconds: int) -> bool:
+        with self.lock:
+            return all(open_ms + i * 1000 + 999 in self.bars for i in range(seconds))
+
     def tape(self, open_ms: int, seconds: int) -> dict:
-        """Exactly `seconds` closed bars: 0..seconds-1 of this candle. Fails closed."""
+        """Exactly `seconds` closed bars: 0..seconds-1 of this candle. Fails closed.
+
+        `last_received_ms` is the real local receipt time of the LATEST REQUIRED
+        bar only. Unrelated later traffic never moves it, and it is never
+        clamped to a close time or to the current clock.
+        """
         expected = [open_ms + i * 1000 + 999 for i in range(seconds)]
         with self.lock:
             missing = [c for c in expected if c not in self.bars]
             if missing:
                 raise MissingSeconds(f"missing {len(missing)} of {seconds} one-second bars")
-            rows = [self.bars[c] for c in expected]
+            rows = [dict(self.bars[c]) for c in expected]
+        stamps = [r.get("received_at_ms") for r in rows]
+        if any(s is None for s in stamps):
+            raise MissingSeconds("a required one-second bar has no recorded receipt time")
         tape = {k: [r[k] for r in rows] for k in ["open", "high", "low", "close", "volume", "taker_buy_volume"]}
         tape["count"] = [r["trade_count"] for r in rows]
         return {"tape": tape, "close_time_ms": expected,
-                "last_received_ms": max(self.last_message_ms, expected[-1])}
+                "received_at_ms": [int(s) for s in stamps],
+                "last_received_ms": int(max(stamps))}
 
     def age_ms(self) -> int | None:
         return None if not self.last_message_ms else int(time.time() * 1000) - self.last_message_ms
