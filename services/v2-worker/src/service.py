@@ -318,7 +318,8 @@ class Engine:
             "sleeve": self.wire_sleeve(sec, event["sleeve"]),
             "side": int(event["side"]), "probability": conf,
             "eligible": bool(event["model_eligible"]), "features_ready": True, "reason": None,
-            "decision_at": event["decision_time"],  # original decision time, never "now"
+            # the original decision instant, normalized; never "now"
+            "decision_at": iso_ms(int(pd.Timestamp(event["decision_time"]).value // 1_000_000)),
             "payload": {"recovered": True, "event_id": event["event_id"], "sleeve_name": event["sleeve"],
                         "assumed_effective_odds": event.get("assumed_effective_odds"),
                         "execution": EXECUTION, "mode": self.cfg.mode,
