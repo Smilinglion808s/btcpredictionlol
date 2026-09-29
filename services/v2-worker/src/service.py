@@ -27,7 +27,6 @@ import sqlite3
 import sys
 import threading
 import time
-import traceback
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -205,7 +204,8 @@ class Engine:
         return WIRE_SLEEVES.get(sleeve, WIRE_SLEEVES["Direction8"])
 
     def journal_checkpoint(self, target_ms: int, second: int, sleeve: str, side, probability,
-                           eligible: bool, features_ready: bool, reason: str | None, payload: dict) -> dict:
+                           eligible: bool, features_ready: bool, reason: str | None, payload: dict,
+                           decision_ms: int | None = None) -> dict:
         cp = {
             "candle_open": iso_ms(target_ms),
             "checkpoint": "T8" if second == 8 else "T45",
@@ -213,7 +213,8 @@ class Engine:
             "side": side, "probability": probability,
             "eligible": bool(eligible), "features_ready": bool(features_ready),
             "reason": reason,
-            "decision_at": iso_ms(int(time.time() * 1000)),
+            # The model's own decision time, never a later serializer clock.
+            "decision_at": iso_ms(decision_ms if decision_ms is not None else int(time.time() * 1000)),
             "payload": {**payload, "execution": EXECUTION, "mode": self.cfg.mode,
                         "model_version": MODEL_VERSION, "worker_id": self.cfg.worker_id},
         }
@@ -235,12 +236,12 @@ class Engine:
                 "payload=excluded.payload WHERE decisions.called=0",
                 (target_ms, second, body))
         except sqlite3.Error as e:  # noqa: BLE001
-            self.err(f"abstention persist failed: {e}")
+            self.err(f"abstention persist failed: {type(e).__name__}")
 
-    def fail_closed(self, target_ms: int, second: int, reason: str) -> dict:
+    def fail_closed(self, target_ms: int, second: int, reason: str, now_ms: int | None = None) -> dict:
         self.note_abstention(target_ms, second, reason)
         return self.journal_checkpoint(target_ms, second, "ABSTAIN", 0, None, False, False, reason,
-                                       {"fail_closed": True})
+                                       {"fail_closed": True}, now_ms)
 
     def run_checkpoint(self, target_ms: int, second: int, now_ms: int | None = None) -> dict:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
@@ -249,15 +250,15 @@ class Engine:
                       "PACKAGE_INVALID" if not self.package_ok else
                       "CLOCK_SKEW" if self.clock_skew_ms is None or abs(self.clock_skew_ms) > MAX_SKEW_MS else
                       "PREOPEN_NOT_READY" if not self.preopen else "FEED_NOT_READY")
-            return self.fail_closed(target_ms, second, reason)
+            return self.fail_closed(target_ms, second, reason, now_ms)
         if not (target_ms + second * 1000 <= now_ms < target_ms + second * 1000 + 1000):
-            return self.fail_closed(target_ms, second, "CHECKPOINT_WINDOW_MISSED")
+            return self.fail_closed(target_ms, second, "CHECKPOINT_WINDOW_MISSED", now_ms)
         if self.preopen["target_ms"] != target_ms:
-            return self.fail_closed(target_ms, second, "PREOPEN_STALE")
+            return self.fail_closed(target_ms, second, "PREOPEN_STALE", now_ms)
         try:
             tape = self.feed.tape(target_ms, 8 if second == 8 else 44)
         except MissingSeconds as e:
-            return self.fail_closed(target_ms, second, f"MISSING_SECONDS: {e}")
+            return self.fail_closed(target_ms, second, "MISSING_SECONDS", now_ms)
 
         request = {
             "target_open": iso_ms(target_ms),
@@ -272,11 +273,11 @@ class Engine:
         try:
             out = self.store.evaluate(request)
         except Exception as e:  # noqa: BLE001 — fail closed, never guess
-            self.err(f"score {second}: {type(e).__name__}: {str(e)[:100]}")
-            return self.fail_closed(target_ms, second, f"SCORE_FAILED: {type(e).__name__}")
+            self.err(f"score T{second}: {type(e).__name__}")
+            return self.fail_closed(target_ms, second, f"SCORE_FAILED_{type(e).__name__}", now_ms)
         if out.get("duplicate"):
             return self.journal_checkpoint(target_ms, second, out["sleeve"], out["side"], out.get("confidence"),
-                                           False, True, "DUPLICATE_INTENT", {"duplicate": True})
+                                           False, True, "DUPLICATE_INTENT", {"duplicate": True}, now_ms)
         payload = {
             "inputs_hash": inputs_hash(self.preopen["preopen"], self.preopen["scale"],
                                        tape["tape"], tape["close_time_ms"]),
@@ -288,10 +289,18 @@ class Engine:
         prob = out.get("confidence")
         prob = None if prob is None or not pd.notna(prob) else float(prob)
         return self.journal_checkpoint(target_ms, second, out["sleeve"], int(out["side"]), prob,
-                                       bool(out["model_eligible"]), True, None, payload)
+                                       bool(out["model_eligible"]), True, None, payload, now_ms)
 
 
 # --------------------------------------------------------------------------- transport
+def _error_code(r: httpx.Response) -> str:
+    """Receiver error code only (allowlisted characters), never raw body text."""
+    try:
+        code = str(r.json().get("error", ""))
+    except Exception:  # noqa: BLE001
+        code = ""
+    return code if code.replace("_", "").isalnum() and len(code) <= 40 else "UNKNOWN"
+
 class Sender:
     """Outbox delivery. Runs on its own thread so scoring is never delayed."""
 
@@ -322,8 +331,9 @@ class Sender:
             elif r.status_code >= 500:
                 eng.err(f"deliver {r.status_code}")
             else:  # terminal 4xx (e.g. NOT_CURRENT_INTERVAL) — never replayed into a later candle
-                eng.journal.mark(key, "REJECTED", f"{r.status_code} {r.text[:120]}")
-                eng.err(f"rejected {r.status_code} {r.text[:80]}")
+                code = _error_code(r)
+                eng.journal.mark(key, "REJECTED", f"{r.status_code} {code}")
+                eng.err(f"rejected {r.status_code} {code}")
         eng.journal.expire_stale()
 
     def run_forever(self) -> None:  # pragma: no cover - network loop
@@ -355,7 +365,7 @@ def boundary_loop(engine: Engine) -> None:  # pragma: no cover - timing loop
                 engine.refresh_boundary(target)
                 done = {target}
         except Exception as e:  # noqa: BLE001
-            engine.err(f"preopen build: {type(e).__name__}: {str(e)[:80]}")
+            engine.err(f"preopen build: {type(e).__name__}")
             time.sleep(2)
         time.sleep(0.2)
 
@@ -381,12 +391,11 @@ def scheduler_loop(engine: Engine) -> None:  # pragma: no cover - timing loop
                 try:
                     engine.run_checkpoint(target, sec, now)
                 except Exception as e:  # noqa: BLE001
-                    engine.err(f"{name}: {type(e).__name__}: {str(e)[:80]}")
-                    traceback.print_exc()
+                    engine.err(f"{name}: {type(e).__name__}")
             elif now >= start + 1000 and f"{target}:{name}:late" not in fired:
                 fired.add(f"{target}:{name}:late")
                 fired.add(key)
-                engine.fail_closed(target, sec, "CHECKPOINT_LATE")
+                engine.fail_closed(target, sec, "CHECKPOINT_LATE", now)
         if len(fired) > 24:
             fired = {k for k in fired if k.startswith(str(target))}
         time.sleep(0.02)
@@ -429,12 +438,12 @@ def main() -> None:  # pragma: no cover - process entry
     try:
         engine.load_model()
     except Exception as e:  # noqa: BLE001 — stay alive and report; never predict
-        engine.err(f"model load failed: {type(e).__name__}: {str(e)[:120]}")
+        engine.err(f"model load failed: {type(e).__name__}")
     engine.check_clock()
     try:
         engine.warm_history()
     except Exception as e:  # noqa: BLE001
-        engine.err(f"history warmup failed: {type(e).__name__}: {str(e)[:120]}")
+        engine.err(f"history warmup failed: {type(e).__name__}")
     threading.Thread(target=engine.feed.run_forever, args=(engine.err,), daemon=True).start()
     threading.Thread(target=boundary_loop, args=(engine,), daemon=True).start()
     threading.Thread(target=clock_loop, args=(engine,), daemon=True).start()

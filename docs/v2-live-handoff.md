@@ -30,3 +30,13 @@ Awaiting the user's strict V2 wire contract for the new `v2-record` function.
 When it arrives: add a second outbox target, forwarded only after local durable
 recording, signed with server-side `BTC15M_WEBHOOK_SECRET`. Until then the
 worker delivers to the predictor site only.
+
+## Review fixes (atomic recording)
+- `/api/public/hooks/v2-record` stores checkpoint + single candle intent in one transaction via
+  `public.v2_record_checkpoint(jsonb)` (service_role only). Retries re-verify the stored immutable
+  row (`CONFLICTING_DUPLICATE` on any difference) and idempotently finish a missing intent; the
+  response carries the actually persisted intent.
+- Eligible calls only inside [T+8,T+9) / [T+45,T+46); T45 intents require a persisted T8 abstention.
+- Heartbeat status is allowlisted (no principal, cash, secrets or raw exceptions); body read is byte-bounded.
+- Local check: `NODE_PATH=<pglite> node scripts/check-v2-record-rpc.mjs` (never against production).
+- External btc-trader forwarding remains disconnected (approval blocked).

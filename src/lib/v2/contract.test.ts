@@ -23,3 +23,23 @@ test("stake 4% floor cents, $200 cap", () => {
   assert.equal(v2StakeCents(10_000_000), 20_000);
   assert.equal(v2StakeCents(0), null);
 });
+
+import { sanitizeStatus } from "./contract.ts";
+test("eligible only inside [T+8,T+9)", () => {
+  assert.equal(validateCheckpoint({ ...base, decision_at: new Date(open + 9000).toISOString() }, open + 9500).ok, false);
+  assert.equal(validateCheckpoint({ ...base, decision_at: new Date(open + 7999).toISOString() }, open + 9500).ok, false);
+});
+test("eligible T45 only inside [T+45,T+46)", () => {
+  const t45 = { ...base, checkpoint: "T45", sleeve: "v2-direction45-r1" };
+  assert.equal(validateCheckpoint({ ...t45, decision_at: new Date(open + 45_200).toISOString() }, open + 46_000).ok, true);
+  assert.equal(validateCheckpoint({ ...t45, decision_at: new Date(open + 46_000).toISOString() }, open + 47_000).ok, false);
+});
+test("late ineligible audit row with reason accepted", () =>
+  assert.equal(validateCheckpoint({ ...base, eligible: false, side: 0, reason: "CHECKPOINT_LATE", decision_at: new Date(open + 12_000).toISOString() }, open + 12_500).ok, true));
+test("heartbeat allowlist drops principal/secrets/raw exceptions", () => {
+  const s = sanitizeStatus({ mode: "shadow", prediction_ready: true, feed_age_ms: 120.4, principal_cents: 5000, cash: 1,
+    secret: "x", errors: ["05:00:01Z score T8: ValueError", "bad {\"raw\": 1} traceback\n"], last_checkpoint: { sleeve: "nope", eligible: false } });
+  assert.deepEqual(Object.keys(s).sort(), ["errors", "execution", "feed_age_ms", "last_checkpoint", "mode", "prediction_ready"]);
+  assert.deepEqual(s.errors, ["05:00:01Z score T8: ValueError"]);
+  assert.equal(s.execution, "OFF");
+});

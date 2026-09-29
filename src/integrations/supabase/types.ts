@@ -12875,6 +12875,7 @@ export type Database = {
         }
         Returns: Json
       }
+      v2_record_checkpoint: { Args: { p: Json }; Returns: Json }
     }
     Enums: {
       binance_ob_capture_status:

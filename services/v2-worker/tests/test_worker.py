@@ -194,6 +194,39 @@ class WarmupAndScoring(unittest.TestCase):
         self.assertTrue(self.eng.status()["refit_required"] in (True, False))
 
 
+class SeedReference(unittest.TestCase):
+    """Transformed seed values vs the independent reference (not just file hashes)."""
+
+    def test_preopen_values_match_reference(self):
+        from v2final.features import preopen_frame
+        df = marketdata.BarHistory(ROOT / "seed", Path(tempfile.mkdtemp()), FakeRest(0)).load_seed()
+        pre, sc = preopen_frame(df)
+        ts = pd.Timestamp("2026-09-14T00:00Z")
+        p, s = pre[pre.ts == ts].iloc[0], sc[sc.ts == ts].iloc[0]
+        ref = {"vol": 0.001020929926524234, "meanvol": 72.49670479166667, "meancount": 13286.489583333334,
+               "rsi14": -0.27563801407814026, "macd_hist_atr": -0.45522651076316833, "adx14": 0.3240223824977875,
+               "taker_imbalance4": -0.12731964886188507, "variance_ratio4_96": 0.3058508038520813}
+        for k, want in ref.items():
+            got = float(s[k] if k in ("vol", "meanvol", "meancount") else p[k])
+            self.assertAlmostEqual(got, want, delta=abs(want) * 1e-12, msg=k)
+
+
+class DecisionTimeAndErrors(WarmupAndScoring):
+    def test_decision_at_is_model_decision_time(self):
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        self.assertEqual(cp["decision_at"], service.iso_ms(self.now))
+
+    def test_fail_closed_uses_decision_time(self):
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 8, VALID_TARGET_MS + 9_100)
+        self.assertEqual(cp["decision_at"], service.iso_ms(VALID_TARGET_MS + 9_100))
+
+    def test_rejected_body_logs_error_code_only(self):
+        import httpx
+        r = httpx.Response(409, json={"ok": False, "error": "CONFLICTING_DUPLICATE"})
+        self.assertEqual(service._error_code(r), "CONFLICTING_DUPLICATE")
+        self.assertEqual(service._error_code(httpx.Response(500, text="Traceback secret=abc")), "UNKNOWN")
+
+
 class OutboxDurability(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

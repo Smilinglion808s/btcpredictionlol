@@ -63,6 +63,10 @@ export function validateCheckpoint(c: any, nowMs: number): { ok: true; value: V2
   if (c.eligible && (!c.features_ready || (c.side !== 1 && c.side !== -1))) return { ok: false, error: "ELIGIBLE_WITHOUT_SIDE" };
   const decided = Date.parse(c.decision_at);
   if (!Number.isFinite(decided) || decided < open || decided > nowMs + 2_000) return { ok: false, error: "INVALID_DECISION_AT" };
+  if (c.eligible) {
+    const sec = c.checkpoint === "T8" ? 8 : 45;
+    if (decided < open + sec * 1000 || decided >= open + (sec + 1) * 1000) return { ok: false, error: "ELIGIBLE_OUTSIDE_WINDOW" };
+  }
   if (c.reason != null && (typeof c.reason !== "string" || c.reason.length > 200)) return { ok: false, error: "INVALID_REASON" };
   const payload = c.payload ?? {};
   if (typeof payload !== "object" || Array.isArray(payload)) return { ok: false, error: "INVALID_PAYLOAD" };
@@ -87,4 +91,62 @@ export function validateCheckpoint(c: any, nowMs: number): { ok: true; value: V2
 export function selectIntent(rows: { sleeve: V2Sleeve; eligible: boolean; side: number | null }[]): V2Sleeve | null {
   for (const s of V2_PRIORITY) if (rows.some((r) => r.sleeve === s && r.eligible && (r.side === 1 || r.side === -1))) return s;
   return null;
+}
+
+// ---------------------------------------------------------------- heartbeat
+const BOOL_FIELDS = ["package_ok", "model_valid", "refit_required", "history_ready", "feed_connected", "prediction_ready"] as const;
+const NUM_FIELDS = ["history_bars", "feed_age_ms", "feed_reconnects", "clock_skew_ms", "outbox_pending", "uptime_s"] as const;
+const TIME_FIELDS = ["model_valid_until", "history_last_open", "preopen_target"] as const;
+const SAFE_TEXT = /^[\w .:+\-()\/]{0,120}$/;
+const ISO = /^\d{4}-\d{2}-\d{2}[T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?$/;
+
+/** Allowlisted operational heartbeat fields only. Never principal, cash, secrets or raw exceptions. */
+export function sanitizeStatus(s: unknown): Record<string, unknown> {
+  const src = s && typeof s === "object" && !Array.isArray(s) ? (s as Record<string, unknown>) : {};
+  const out: Record<string, unknown> = {};
+  if (src.mode === "shadow" || src.mode === "record") out.mode = src.mode;
+  for (const k of BOOL_FIELDS) if (typeof src[k] === "boolean") out[k] = src[k];
+  for (const k of NUM_FIELDS) {
+    const v = src[k];
+    if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) < 1e12) out[k] = Math.round(v);
+  }
+  for (const k of TIME_FIELDS) {
+    const v = src[k];
+    if (typeof v === "string" && v.length <= 40 && ISO.test(v)) out[k] = v;
+  }
+  const lc = src.last_checkpoint as Record<string, unknown> | null | undefined;
+  if (lc && typeof lc === "object" && !Array.isArray(lc)) {
+    const r: Record<string, unknown> = {};
+    if (typeof lc.candle_open === "string" && ISO.test(lc.candle_open)) r.candle_open = lc.candle_open;
+    if (lc.checkpoint === "T8" || lc.checkpoint === "T45") r.checkpoint = lc.checkpoint;
+    if (V2_SLEEVES.includes(lc.sleeve as V2Sleeve)) r.sleeve = lc.sleeve;
+    if (typeof lc.eligible === "boolean") r.eligible = lc.eligible;
+    if (typeof lc.reason === "string" && SAFE_TEXT.test(lc.reason)) r.reason = lc.reason;
+    out.last_checkpoint = r;
+  }
+  if (Array.isArray(src.errors))
+    out.errors = src.errors.filter((e): e is string => typeof e === "string" && SAFE_TEXT.test(e)).slice(0, 10);
+  out.execution = V2_EXECUTION;
+  return out;
+}
+
+/** Read at most `max` bytes; returns null if the body is larger. */
+export async function readBounded(request: Request, max: number): Promise<string | null> {
+  const len = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(len) && len > max) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) { await reader.cancel().catch(() => {}); return null; }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) { buf.set(c, o); o += c.byteLength; }
+  return new TextDecoder().decode(buf);
 }
