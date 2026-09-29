@@ -1,8 +1,8 @@
-// V2 Final R1 — pure wire contract. Recording only.
+// V2 Final R1 — pure wire contract.
 //
-// EXECUTION is a literal constant, not configuration. Nothing in this module,
-// the recording route, the database (CHECK execution = 'OFF') or the worker
-// can route a V2 call to an order. Sizing below is informational metadata.
+// Recorded intents keep execution = 'OFF' (worker never places orders). Betting is
+// done by the betting app after the site forwards the intent (see v2/forward.server.ts,
+// gated by v2_forward_settings.enabled). Sizing below is sent as policy metadata.
 
 export const V2_MODEL_VERSION = "v2-final-r1" as const;
 export const V2_SLEEVES = ["v2-direction8-r1", "v2-fade8-r1", "v2-direction45-r1"] as const;
