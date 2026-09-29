@@ -10549,6 +10549,128 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_candle_intents: {
+        Row: {
+          candle_open: string
+          checkpoint_id: string
+          created_at: string
+          execution: string
+          model_version: string
+          side: number
+          sleeve: string
+          stake_policy: Json
+        }
+        Insert: {
+          candle_open: string
+          checkpoint_id: string
+          created_at?: string
+          execution?: string
+          model_version: string
+          side: number
+          sleeve: string
+          stake_policy?: Json
+        }
+        Update: {
+          candle_open?: string
+          checkpoint_id?: string
+          created_at?: string
+          execution?: string
+          model_version?: string
+          side?: number
+          sleeve?: string
+          stake_policy?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_candle_intents_checkpoint_id_fkey"
+            columns: ["checkpoint_id"]
+            isOneToOne: false
+            referencedRelation: "v2_checkpoints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_checkpoints: {
+        Row: {
+          candle_open: string
+          checkpoint: string
+          decision_at: string
+          eligible: boolean
+          features_ready: boolean
+          id: string
+          input_source: string
+          label_source: string
+          model_version: string
+          payload: Json
+          probability: number | null
+          reason: string | null
+          receipt_latency_ms: number | null
+          received_at: string
+          side: number | null
+          sleeve: string
+          worker_id: string
+        }
+        Insert: {
+          candle_open: string
+          checkpoint: string
+          decision_at: string
+          eligible?: boolean
+          features_ready: boolean
+          id?: string
+          input_source?: string
+          label_source?: string
+          model_version: string
+          payload?: Json
+          probability?: number | null
+          reason?: string | null
+          receipt_latency_ms?: number | null
+          received_at?: string
+          side?: number | null
+          sleeve: string
+          worker_id: string
+        }
+        Update: {
+          candle_open?: string
+          checkpoint?: string
+          decision_at?: string
+          eligible?: boolean
+          features_ready?: boolean
+          id?: string
+          input_source?: string
+          label_source?: string
+          model_version?: string
+          payload?: Json
+          probability?: number | null
+          reason?: string | null
+          receipt_latency_ms?: number | null
+          received_at?: string
+          side?: number | null
+          sleeve?: string
+          worker_id?: string
+        }
+        Relationships: []
+      }
+      v2_worker_runtime: {
+        Row: {
+          model_version: string
+          status: Json
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          model_version: string
+          status?: Json
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          model_version?: string
+          status?: Json
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: []
+      }
       v6_broad_red_state: {
         Row: {
           broad_red_history_count: number

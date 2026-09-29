@@ -203,3 +203,5 @@ interval and all three legs including U, labels delivery state only (never a
 fill), and keeps the title on screen during refresh and partial failure. No
 model, executor, stake, gate, receiver or Railway change.
 - [ ] 2026-09-28: Remove everything B4x4 (jobs, code, UI, data) to cut network/storage
+- [x] 2026-09-29: V2 Final R1 record-only infrastructure (v2-record route, v2 tables, dashboard tile, services/v2-worker). Execution OFF.
+- [ ] 2026-09-29: V2 frozen model package + seed bars (awaiting user ZIP); btc-trader v2-record forwarding (awaiting wire contract).
