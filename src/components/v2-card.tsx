@@ -43,7 +43,7 @@ export function V2Card({ data, error }: Props) {
       <header className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-crimson-foreground/80">
-            Recording only · betting off
+            {data?.forward?.enabled ? "Live · betting on" : "Recording only · betting off"}
           </div>
           <h3 className="v2-title text-4xl font-heading font-bold tracking-tight leading-none">Version 2 Final</h3>
           <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-crimson/50 bg-crimson/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-crimson-foreground">
@@ -52,7 +52,7 @@ export function V2Card({ data, error }: Props) {
           </div>
         </div>
         <span className="shrink-0 rounded-full border border-crimson-foreground/30 bg-crimson-foreground/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-crimson-foreground/90">
-          Execution off
+          {data?.forward?.enabled ? "Execution on" : "Execution off"}
         </span>
       </header>
 
