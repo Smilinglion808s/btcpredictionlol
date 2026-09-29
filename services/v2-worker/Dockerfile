@@ -1,9 +1,18 @@
-FROM python:3.12.13-slim
-ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 V2_MODE=record V2_DATA_DIR=/data/v2
+FROM python:3.12-slim
+
 WORKDIR /app
-COPY requirements.txt .
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY package ./package
+COPY seed ./seed
 COPY src ./src
-COPY artifacts ./artifacts
-WORKDIR /app/src
-CMD ["python", "service.py"]
+COPY tests ./tests
+
+ENV V2_MODE=shadow V2_DATA_DIR=/data/v2 PORT=8080
+EXPOSE 8080
+
+# Recording only. No exchange or betting credentials are used by this image.
+CMD ["python", "src/service.py"]

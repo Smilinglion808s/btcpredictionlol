@@ -1,21 +1,88 @@
-# V2 Final R1 recording worker
+# v2-predictor-worker — V2 Final R1 (recording only)
 
-Separate from `services/v12-worker`. IDs: `v2-final-r1`; sleeves
-`v2-direction8-r1`, `v2-fade8-r1`, `v2-direction45-r1` (priority in that order).
+Independent shadow worker for the frozen V2 Final R1 model
+(`v2-final-r1`; sleeves `v2-direction8-r1`, `v2-fade8-r1`, `v2-direction45-r1`).
 
-**Execution is unconditionally OFF.** No setting routes V2 to orders; `V2_MODE`
-other than `record` refuses startup; the database rejects any intent whose
-execution is not `OFF`.
+**Execution is unconditionally OFF.** This service holds no exchange or betting
+credentials, imports no executor, and contains no code path that submits,
+cancels or retries an order. It never contacts a V1.2 receiver. Its only
+outbound calls are Binance public market data (read-only) and the signed
+recording endpoint `/api/public/hooks/v2-record` on the predictor site.
 
-Railway: root `services/v2-worker`, Dockerfile, one replica, volume at `/data/v2`
-(SQLite journal + outbox), health `/healthz`.
+## Layout
 
-Env: `V2_RECORD_URL=https://project--23a724c5-6c5b-4434-85e6-dc54b111c7e2.lovable.app/api/public/hooks/v2-record`,
-`C85_GATEWAY_SECRET` (reference existing Railway secret), optional `V2_WORKER_ID`,
-`V2_BINANCE_REST` (default `https://data-api.binance.vision`, US-safe).
+| Path | Contents |
+| --- | --- |
+| `package/` | Frozen model package, byte-identical to the delivered ZIP. Verified at startup against `package/CONTENT_HASHES.json` (16 files). Never edit. |
+| `package/models/current/` | `direction8`, `fade8`, `direction45` joblib bundles + manifest. Valid **2026-09-14 → 2026-10-12 UTC**. |
+| `seed/spot15_seed.csv.gz` | 80,160 continuous Binance spot BTCUSDT 15m bars, 2024-06-01 → 2026-09-13 23:45 UTC. Prices/volume/quote_volume/trade_count/complete from `spot15`, `taker_buy_volume` joined from `activity15` on `bar_open`. Decoded SHA-256 recorded in `seed/SEED_SHA256.json` and verified on every load. |
+| `src/service.py` | Engine: readiness, checkpoints, journaling, health. |
+| `src/marketdata.py` | 15m history (seed + REST backfill) and the 1s websocket feed. |
+| `src/journal.py` | Durable SQLite checkpoint journal + at-least-once outbox. |
+| `src/promote.py` | `inspect` / `promote` for model bundles (atomic manifest swap). |
+| `tests/test_worker.py` | Offline tests; no network, no orders. |
 
-Signing: HMAC-SHA256 over `<ms timestamp>.<raw body>` in `x-c85-signature`,
-timestamp in `x-c85-timestamp` (10 s skew), single-use nonce per request.
+## Timing
 
-Settlement: lab labels are Binance INDEX direction proxies. Spot candle
-grading is not lab-equivalent; official Kalshi results are a separate source.
+- Pre-open frame is computed off the hot path right after each 15m boundary,
+  from the full continuous history (never truncated, never OKX). The previous
+  closed bar finalizes at T0; `preopen_asof` is exactly `T-1ms`; the target's
+  own bar is never an input. Normalizers (`vol`, `meanvol`, `meancount`) are
+  refreshed in the same pass.
+- **T+8** uses exactly seconds 0–7 (internally 0–6 for Direction8, second 7 for
+  the Fade8 price gate). **T+45** uses exactly seconds 0–43.
+- Evaluation must land inside `[8,9)` / `[45,46)`. Outside the window, or with
+  any missing second, the worker fails closed and records the reason. Missing
+  seconds are never filled.
+- The sender runs on its own thread; delivery never delays scoring.
+
+## Fail-closed reasons
+
+`MODEL_EXPIRED`, `PACKAGE_INVALID`, `CLOCK_SKEW` (>1.5s vs Binance server time),
+`PREOPEN_NOT_READY`, `PREOPEN_STALE`, `FEED_NOT_READY`, `MISSING_SECONDS`,
+`CHECKPOINT_WINDOW_MISSED`, `CHECKPOINT_LATE`, `SCORE_FAILED`,
+`DUPLICATE_INTENT`. Every attempt — call, abstention or error — is journaled
+locally and posted to the dashboard with `receipt_latency_ms` and `inputs_hash`.
+
+## Health
+
+`GET /health` always answers 200 while the process is alive; `alive` and
+`prediction_ready` are reported separately, alongside `feed_connected`,
+`feed_age_ms`, `clock_skew_ms`, `history_bars`, `preopen_target`,
+`model_valid_until`, `refit_required` and `outbox_pending`.
+`GET /checkpoints` returns the last 20 journaled attempts.
+
+## Refit
+
+Auto-refit is **not** available: refitting needs causal index-direction labels
+settled at least a minute before the fit cutoff, and no label pipeline exists in
+this repository. After **2026-10-12T00:00:00Z** the bundles expire, the worker
+fails closed and `refit_required` turns true. A human runs `package/refit.py`
+in the lab, then `python src/promote.py promote --candidate <dir> --activate`
+here (hash-verified, atomic swap, previous bundle kept) and updates
+`package/CONTENT_HASHES.json`.
+
+## Railway
+
+Service name `v2-predictor-worker`, root directory `services/v2-worker`,
+start command `python src/service.py`, persistent volume mounted at `/data/v2`.
+
+```
+V2_DATA_DIR=/data/v2
+V2_MODE=shadow
+V2_RECORD_URL=https://btcpredictionlol.lovable.app/api/public/hooks/v2-record
+C85_GATEWAY_SECRET=<copied securely from the existing worker>
+```
+
+Optional: `V2_WORKER_ID` (default `v2-predictor-worker`), `V2_BINANCE_REST`
+(default `https://data-api.binance.vision`), `V2_BINANCE_WS`
+(default `wss://data-stream.binance.vision/ws/btcusdt@kline_1s`), `PORT`.
+`V2_MODE` accepts only `shadow` or `record`; anything else exits at start.
+
+Python 3.12; dependencies pinned in `requirements.txt` (matching the package pins).
+
+## Tests
+
+```
+python -m unittest discover -s tests
+```

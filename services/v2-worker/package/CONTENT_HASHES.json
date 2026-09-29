@@ -1,0 +1,21 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "README.md": "0d4420957ab59769e3e290c9cebc5a6214458e1f0cf6a4fb2317b69c78c194d5",
+    "PORTING.md": "13eea7fc401fff1330ea70c0edbf0c1d8cff052fd2f61eddb770584066027ed6",
+    "FINAL_SPEC.md": "4e11b03384b9a6bc9d8f8b6ebb85c3baa57a0bfa93b3cea17cf92b3a3515e6b1",
+    "requirements.txt": "749f474419b1f65fa090c6fabe6ed7be0afdffb0c99ea0ef488b090eccfe4a51",
+    "refit.py": "8bc7a346d39d76e2c995a34e84c2fd3ce73ba0f856e5d9bf6edfd17cf62bf5a7",
+    "v2final/__init__.py": "8c3106531cfd385ed3c35e84b9f1bae4290916531747cce9c3d570a5ac335c49",
+    "v2final/features.py": "ec7e676821fd9c4ec2c1ef0806baf3a790bf97fd9883c640f09ebfaa1d9dc749",
+    "v2final/indicators.py": "58940d7210343b25d2c5371da8510a97d697e9aafa589d295fbc120d910d66b7",
+    "v2final/runtime.py": "5b25ad1e0524323f9ccb346ab8d0c3cdfebc53ea19494ab0ad854616a82ea3d5",
+    "v2final/scoring.py": "7e7493b7152d7db8e8a995478ae92cb6b47c7867014f86046a4fada42ec6e25a",
+    "v2final/training_direction.py": "ba03b20d929e86b67b31ceb501b905995c6c79febbb3608eb510e20f4cf57781",
+    "v2final/training_fade.py": "9a5a7d896b55920988f33abde2d9e40c9bd03103b02bee2f08444b2af74cbbdb",
+    "models/current/direction45.joblib": "81959c5dfa3cbd2367b32fdc652ff26a19cd8c0fe8decd0cd7b91adb813b4b8b",
+    "models/current/direction8.joblib": "08175e4a69c93dace41d1e035bd4b1147a4e0cea02523cb2202b909119cf0ee4",
+    "models/current/fade8.joblib": "86b02c72d3fbe32b5facf4b02051ebab9f4c819b9f57de8386846b6e830da32a",
+    "models/current/manifest.json": "abe913b7cdbea7962781361b82a1e8673483f740b0e3f55205018e3f73c558a0"
+  }
+}
