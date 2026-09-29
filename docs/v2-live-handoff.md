@@ -4,7 +4,15 @@
 - Predictor recording: `/api/public/hooks/v2-record` (this site). Tables
   `v2_checkpoints` (immutable), `v2_candle_intents` (one per candle,
   `execution = 'OFF'` enforced by CHECK), `v2_worker_runtime`.
-- Worker: `services/v2-worker`, journal/outbox at `/data/v2/journal.sqlite`.
+- Worker: `services/v2-worker`, journal/outbox at `/data/v2/v2.sqlite`, 15m
+  history carried at `/data/v2/bars15.csv.gz`. Frozen model package in
+  `services/v2-worker/package` (hash-verified, 16 files); continuous 80,160-bar
+  indicator seed in `services/v2-worker/seed` (decoded SHA-256 verified).
+- Railway: service `v2-predictor-worker`, root `services/v2-worker`, start
+  `python src/service.py`, volume `/data/v2`, `V2_MODE=shadow`.
+- Bundles valid 2026-09-14 → 2026-10-12 UTC. After expiry the worker fails
+  closed with `refit_required=true`; auto-refit is unavailable (no causal
+  index-direction label pipeline), promotion is manual via `src/promote.py`.
 - Execution: OFF. V2 never calls `v12-v1`, `v12-t45r2`, `v12-u`, `place-trade`
   or any executor.
 
