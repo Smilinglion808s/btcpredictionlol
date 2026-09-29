@@ -49,6 +49,7 @@ def synth_seconds(open_ms: int, count: int, price: float, drift_bps: float = 2.0
             "open_ms": open_ms + i * 1000, "close_ms": open_ms + i * 1000 + 999,
             "open": p * 0.99995, "high": p * 1.0001, "low": p * 0.9999, "close": p,
             "volume": 1.5, "quote_volume": 1.5 * p, "trade_count": 40, "taker_buy_volume": 0.8,
+            "received_at_ms": open_ms + i * 1000 + 999 + 50,
         }
     return bars
 
@@ -130,6 +131,7 @@ class WarmupAndScoring(unittest.TestCase):
         self.eng.build_preopen(VALID_TARGET_MS)
         self.eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(self.eng.history.df.close.iloc[-1]))
         self.eng.feed.backfilled_through_ms = self.now
+        self.eng.feed.connected = True
         self.eng.feed.last_message_ms = VALID_TARGET_MS + 7_999
 
     def tearDown(self):
@@ -167,14 +169,131 @@ class WarmupAndScoring(unittest.TestCase):
         self.assertEqual(cp["reason"], "CHECKPOINT_WINDOW_MISSED")
         self.assertFalse(cp["eligible"])
 
-    def test_t45_runs_after_a_failed_t8_abstention(self):
-        self.eng.run_checkpoint(VALID_TARGET_MS, 8, VALID_TARGET_MS + 9_100)  # fail closed at T+8
+    def test_t45_is_blocked_after_a_failed_t8(self):
+        """A T+8 error is audit-only: it must never grant T+45 permission."""
+        first = self.eng.run_checkpoint(VALID_TARGET_MS, 8, VALID_TARGET_MS + 9_100)
+        self.assertEqual(first["reason"], "CHECKPOINT_WINDOW_MISSED")
+        self.assertIsNone(self.eng.frozen_record(VALID_TARGET_MS))
+        self.eng.feed.bars.update(
+            synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
+        self.assertEqual(cp["reason"], "T8_UNRESOLVED")
+        self.assertFalse(cp["eligible"])
+        self.assertEqual(cp["side"], 0)
+
+    def test_t45_runs_after_a_genuine_frozen_t8_abstention(self):
+        cp8 = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
         self.eng.feed.bars.update(
             synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1])))
         cp = self.eng.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
         self.assertEqual(cp["checkpoint"], "T45")
-        self.assertEqual(cp["sleeve"], "v2-direction45-r1")
+        if cp8["eligible"]:
+            self.assertEqual(cp["reason"], "DUPLICATE_INTENT")
+        else:
+            self.assertIsNone(cp["reason"])
+            self.assertEqual(cp["sleeve"], "v2-direction45-r1")
+
+    def test_late_final_second_still_scores_inside_the_window(self):
+        """Finding A: the closed second-7 bar usually lands after 8.000."""
+        price = float(self.eng.history.df.close.iloc[-1])
+        full = synth_seconds(VALID_TARGET_MS, 8, price)
+        last_key = VALID_TARGET_MS + 7 * 1000 + 999
+        self.eng.feed.bars = {k: v for k, v in full.items() if k != last_key}
+        clock = {"ms": VALID_TARGET_MS + 8_000}
+
+        def now():
+            if clock["ms"] >= VALID_TARGET_MS + 8_080 and last_key not in self.eng.feed.bars:
+                self.eng.feed.put(full[last_key], received_at_ms=VALID_TARGET_MS + 8_080)
+            return clock["ms"]
+
+        def sleep(secs):
+            clock["ms"] += max(1, int(secs * 1000))
+
+        cp = service.run_window(self.eng, VALID_TARGET_MS, 8, now=now, sleep=sleep)
         self.assertIsNone(cp["reason"])
+        self.assertEqual(cp["decision_at"], service.iso_ms(VALID_TARGET_MS + 8_080))
+
+    def test_missing_until_deadline_fails_closed(self):
+        self.eng.feed.bars.pop(VALID_TARGET_MS + 7 * 1000 + 999)
+        clock = {"ms": VALID_TARGET_MS + 8_000}
+        cp = service.run_window(self.eng, VALID_TARGET_MS, 8,
+                                now=lambda: clock["ms"],
+                                sleep=lambda s: clock.__setitem__("ms", clock["ms"] + max(1, int(s * 1000))))
+        self.assertEqual(cp["reason"], "MISSING_SECONDS")
+        self.assertFalse(cp["eligible"])
+        self.assertIsNone(self.eng.frozen_record(VALID_TARGET_MS))
+
+    def test_unrelated_later_bar_does_not_move_required_receipt_time(self):
+        """Finding C: receipt time comes from the required bars only."""
+        price = float(self.eng.history.df.close.iloc[-1])
+        self.eng.feed.bars = {}
+        for i, bar in enumerate(synth_seconds(VALID_TARGET_MS, 8, price).values()):
+            self.eng.feed.put(bar, received_at_ms=VALID_TARGET_MS + i * 1000 + 1_040)
+        before = self.eng.feed.tape(VALID_TARGET_MS, 8)["last_received_ms"]
+        later = synth_seconds(VALID_TARGET_MS, 30, price)[VALID_TARGET_MS + 29 * 1000 + 999]
+        self.eng.feed.put(later, received_at_ms=VALID_TARGET_MS + 30_000)
+        after = self.eng.feed.tape(VALID_TARGET_MS, 8)
+        self.assertEqual(after["last_received_ms"], before)
+        self.assertEqual(before, VALID_TARGET_MS + 7 * 1000 + 1_040)
+        self.assertEqual(len(after["received_at_ms"]), 8)
+
+    def test_receipt_after_decision_fails_closed(self):
+        key = VALID_TARGET_MS + 7 * 1000 + 999
+        self.eng.feed.bars[key] = {**self.eng.feed.bars[key], "received_at_ms": self.now + 5_000}
+        cp = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        self.assertEqual(cp["reason"], "INVALID_RECEIPT_TIME")
+        self.assertFalse(cp["eligible"])
+
+    def test_crash_before_journal_write_recovers_exactly_once(self):
+        """Finding D: an intent committed to the frozen store is never lost."""
+        # Force a called (eligible) decision so there is an intent to recover.
+        real_score = self.eng.store.model.score
+
+        def eligible_score(request):
+            out = real_score(request)
+            if out["model_eligible"]:
+                return out
+            return {**out, "sleeve": "Direction8", "side": 1, "direction": "GREEN",
+                    "confidence": 0.61, "model_eligible": True, "model_id": "v2-direction8-r1",
+                    "assumed_effective_odds": 1.75}
+
+        self.eng.store.model.score = eligible_score
+
+        def failing_record(cp):
+            raise RuntimeError("crash between store commit and journal write")
+
+        self.eng.journal.record = failing_record
+        with self.assertRaises(RuntimeError):
+            self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        row = self.eng.frozen_record(VALID_TARGET_MS)
+        self.assertIsNotNone(row)
+        self.assertEqual(row[1], 1)
+        original = self.eng.store.poll_pending()[0]
+        self.eng.journal.close()
+
+        restarted = make_engine(self.tmp, self.now)
+        self.assertEqual(restarted.reconcile_store(), 1)
+        self.assertEqual(restarted.reconcile_store(), 0)  # acked; never delivered twice
+        pending = restarted.journal.pending()
+        self.assertEqual(len(pending), 1)
+        body = pending[0][1]
+        self.assertEqual(body["payload"]["event_id"], original["event_id"])
+        self.assertEqual(body["side"], original["side"])
+        self.assertAlmostEqual(body["probability"], float(original["confidence"]))
+        self.assertEqual(body["decision_at"],
+                         service.iso_ms(int(pd.Timestamp(original["decision_time"]).value // 1_000_000)))
+        self.assertTrue(body["eligible"])
+        # T+45 stays blocked: the candle already holds a committed call.
+        restarted.history.df = self.eng.history.df
+        restarted.history_ready = True
+        restarted.clock_skew_ms = 0
+        restarted.build_preopen(VALID_TARGET_MS)
+        restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, float(self.eng.history.df.close.iloc[-1]))
+        restarted.feed.backfilled_through_ms = self.now
+        restarted.feed.connected = True
+        late = restarted.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
+        self.assertEqual(late["reason"], "DUPLICATE_INTENT")
+        self.assertFalse(late["eligible"])
 
     def test_no_second_intent_after_a_call(self):
         first = self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
@@ -259,6 +378,92 @@ class OutboxDurability(unittest.TestCase):
         self.assertEqual(j.expire_stale(max_age_ms=-1), 1)
         self.assertEqual(j.pending_count(), 0)
         j.close()
+
+
+class HistoryAndHealth(unittest.TestCase):
+    """Findings F and G."""
+
+    def test_tampered_stored_history_falls_back_to_verified_seed(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            seed = h.load_seed()
+            bad = seed.copy()
+            bad.loc[10, "close"] = float(bad.loc[10, "close"]) + 1.0
+            bad.to_csv(h.path, index=False, compression="gzip")
+            self.assertFalse(marketdata.BarHistory.seed_prefix_matches(bad, seed))
+            loaded = h.load()
+            self.assertTrue(marketdata.BarHistory.seed_prefix_matches(loaded, seed))
+
+    def test_round_trip_stored_history_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            h.df = h.load_seed()
+            h.persist()
+            h2 = marketdata.BarHistory(ROOT / "seed", Path(d), FakeRest(0))
+            loaded = h2.load()
+            self.assertEqual(len(loaded), 80_160)
+            self.assertTrue(marketdata.BarHistory.seed_prefix_matches(loaded, h.df))
+
+    def test_readiness_recovers_after_a_failed_startup_warmup(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            now = VALID_TARGET_MS + 8_400
+            eng = make_engine(tmp, now)
+            eng.history_ready = False  # startup warmup failed
+            self.assertFalse(eng.prediction_ready(now))
+            eng.history.df = extend_history(eng.history.load_seed(), VALID_TARGET_MS)
+            eng.clock_skew_ms = 0
+            eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
+            eng.feed.backfilled_through_ms = now
+            eng.feed.connected = True
+            called = {"n": 0}
+
+            def warm():  # the real warmup succeeds on the retry
+                called["n"] += 1
+                eng.history_ready = True
+
+            eng.warm_history = warm
+            eng.refresh_boundary(VALID_TARGET_MS)  # boundary refresh performs the full warmup
+            self.assertEqual(called["n"], 1)
+            self.assertTrue(eng.history_ready)
+            self.assertTrue(eng.preopen_current(now))
+            self.assertTrue(eng.prediction_ready(now))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_readiness_requires_current_target_and_feed(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            now = VALID_TARGET_MS + 8_400
+            eng = make_engine(tmp, now)
+            eng.history.df = extend_history(eng.history.load_seed(), VALID_TARGET_MS)
+            eng.history_ready = True
+            eng.clock_skew_ms = 0
+            eng.build_preopen(VALID_TARGET_MS)
+            eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, float(eng.history.df.close.iloc[-1]))
+            eng.feed.connected = True
+            eng.feed.backfilled_through_ms = 0  # feed has not covered this candle
+            self.assertFalse(eng.feed_ready(now))
+            self.assertFalse(eng.prediction_ready(now))
+            eng.feed.backfilled_through_ms = now
+            self.assertTrue(eng.prediction_ready(now))
+            # a pre-open frame for an older candle is not current
+            stale = now + marketdata.INTERVAL_MS
+            self.assertFalse(eng.preopen_current(stale))
+            self.assertFalse(eng.prediction_ready(stale))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_health_paths(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            eng = make_engine(tmp, VALID_TARGET_MS)
+            handler = service.make_health_handler(eng)
+            self.assertTrue(callable(handler))
+            readme = (ROOT / "README.md").read_text()
+            self.assertIn("/healthz", readme)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

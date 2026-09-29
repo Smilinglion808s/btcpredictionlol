@@ -99,19 +99,38 @@ class BarHistory:
         return out
 
     # -- assembly --------------------------------------------------------------
+    @staticmethod
+    def seed_prefix_matches(df: pd.DataFrame, seed: pd.DataFrame) -> bool:
+        """Every verified seed bar must still be present, byte-equal, at the front."""
+        if len(df) < len(seed):
+            return False
+        head = df.iloc[: len(seed)].reset_index(drop=True)
+        ref = seed.reset_index(drop=True)
+        if not head.bar_open.equals(ref.bar_open):
+            return False
+        for c in ["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_volume"]:
+            if not np.array_equal(head[c].to_numpy(), ref[c].to_numpy()):
+                return False
+        return bool(np.array_equal(head.trade_count.to_numpy(), ref.trade_count.to_numpy()))
+
     def load(self) -> pd.DataFrame:
-        """Persistent volume copy if present, else the repo seed."""
+        """Persistent volume copy if present, else the repo seed.
+
+        The stored copy is read with round-trip float precision and is only
+        trusted when its leading rows still equal the verified seed exactly —
+        a matching row count or start date is not sufficient.
+        """
         with self.lock:
+            seed = self.load_seed()
             if self.path.exists():
                 try:
-                    df = self._normalize(pd.read_csv(self.path))
-                    seed = self.load_seed()
-                    if len(df) >= len(seed) and df.bar_open.iloc[0] == seed.bar_open.iloc[0]:
+                    df = self._normalize(pd.read_csv(self.path, float_precision="round_trip"))
+                    if self.seed_prefix_matches(df, seed):
                         self.df = df
                         return self.df
                 except Exception:  # noqa: BLE001 — corrupt cache: fall back to the verified seed
                     pass
-            self.df = self.load_seed()
+            self.df = seed
             return self.df
 
     def backfill(self, through_open_ms: int) -> int:
@@ -172,10 +191,12 @@ class SecondFeed:
         self.backfilled_through_ms = 0
         self.reconnects = 0
 
-    def put(self, bar: dict) -> None:
+    def put(self, bar: dict, received_at_ms: int | None = None) -> None:
+        """Store a closed bar and stamp the real local receipt time for THAT bar."""
+        now = int(time.time() * 1000) if received_at_ms is None else int(received_at_ms)
         with self.lock:
-            self.bars[bar["close_ms"]] = bar
-            self.last_message_ms = int(time.time() * 1000)
+            self.bars[bar["close_ms"]] = {**bar, "received_at_ms": now}
+            self.last_message_ms = now
             if len(self.bars) > self.KEEP_MS // 1000:
                 cutoff = max(self.bars) - self.KEEP_MS
                 for k in [k for k in self.bars if k < cutoff]:
@@ -197,18 +218,31 @@ class SecondFeed:
         self.backfilled_through_ms = max(self.backfilled_through_ms, end_ms)
         return got
 
+    def has_all(self, open_ms: int, seconds: int) -> bool:
+        with self.lock:
+            return all(open_ms + i * 1000 + 999 in self.bars for i in range(seconds))
+
     def tape(self, open_ms: int, seconds: int) -> dict:
-        """Exactly `seconds` closed bars: 0..seconds-1 of this candle. Fails closed."""
+        """Exactly `seconds` closed bars: 0..seconds-1 of this candle. Fails closed.
+
+        `last_received_ms` is the real local receipt time of the LATEST REQUIRED
+        bar only. Unrelated later traffic never moves it, and it is never
+        clamped to a close time or to the current clock.
+        """
         expected = [open_ms + i * 1000 + 999 for i in range(seconds)]
         with self.lock:
             missing = [c for c in expected if c not in self.bars]
             if missing:
                 raise MissingSeconds(f"missing {len(missing)} of {seconds} one-second bars")
-            rows = [self.bars[c] for c in expected]
+            rows = [dict(self.bars[c]) for c in expected]
+        stamps = [r.get("received_at_ms") for r in rows]
+        if any(s is None for s in stamps):
+            raise MissingSeconds("a required one-second bar has no recorded receipt time")
         tape = {k: [r[k] for r in rows] for k in ["open", "high", "low", "close", "volume", "taker_buy_volume"]}
         tape["count"] = [r["trade_count"] for r in rows]
         return {"tape": tape, "close_time_ms": expected,
-                "last_received_ms": max(self.last_message_ms, expected[-1])}
+                "received_at_ms": [int(s) for s in stamps],
+                "last_received_ms": int(max(stamps))}
 
     def age_ms(self) -> int | None:
         return None if not self.last_message_ms else int(time.time() * 1000) - self.last_message_ms
