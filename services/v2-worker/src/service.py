@@ -290,7 +290,8 @@ class Engine:
             "eligible": bool(eligible), "features_ready": bool(features_ready),
             "reason": reason,
             # The model's own decision time, never a later serializer clock.
-            "decision_at": decision_at or iso_ms(decision_ms if decision_ms is not None else self.now()),
+            "decision_at": (iso_ms(int(pd.Timestamp(decision_at).value // 1_000_000)) if decision_at
+                            else iso_ms(decision_ms if decision_ms is not None else self.now())),
             "payload": {**payload, "execution": EXECUTION, "mode": self.cfg.mode,
                         "model_version": MODEL_VERSION, "worker_id": self.cfg.worker_id},
         }
