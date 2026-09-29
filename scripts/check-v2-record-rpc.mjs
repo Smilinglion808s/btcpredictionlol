@@ -4,7 +4,7 @@ import { PGlite } from "@electric-sql/pglite"; import fs from "fs"; import asser
 const db = new PGlite();
 await db.exec("create role service_role bypassrls; grant usage on schema public to service_role; create role anon; create role authenticated;");
 await db.exec(fs.readFileSync(new URL("../drizzle/migrations/0002_v2_final_r1_recording.sql", import.meta.url),"utf8").replaceAll("--> statement-breakpoint",""));
-for (const f of ["0003_v2_record_checkpoint_atomic.sql","0004_v2_t45_requires_scored_t8.sql"])
+for (const f of ["0003_v2_record_checkpoint_atomic.sql","0004_v2_t45_requires_scored_t8.sql","0005_v2_intent_eventual_completion.sql"])
   await db.exec(fs.readFileSync(new URL("../drizzle/migrations/"+f, import.meta.url),"utf8").replaceAll("--> statement-breakpoint",""));
 const fn=(await db.query("select prosecdef, proconfig from pg_proc where proname='v2_record_checkpoint'")).rows[0];
 assert.equal(fn.prosecdef,false); assert.deepEqual(fn.proconfig,['search_path=""']); console.log("security invoker + empty search_path: ok");
@@ -40,4 +40,28 @@ await db.exec("reset role");
 // late eligible rejected, fade blocked by higher priority
 await assert.rejects(call({...t8,candle_open:"2026-09-29T05:45:00.000Z",decision_at:"2026-09-29T05:45:09.500Z"}),/ELIGIBLE_OUTSIDE_WINDOW/); console.log("late eligible rejected: ok");
 r=await call({...t8,sleeve:"v2-fade8-r1",side:-1}); assert.equal(r.intent.sleeve,"v2-direction8-r1"); assert.equal(r.intent_note,"HIGHER_PRIORITY_ELIGIBLE"); console.log("returns persisted intent, not caller sleeve: ok");
+// --- out-of-order arrival: T45 first, then the valid T8 abstention -> exactly one late intent
+const o7="2026-09-29T07:00:00.000Z";
+r=await call({...t45,candle_open:o7,decision_at:"2026-09-29T07:00:45.100Z"});
+assert.equal(r.intent,null); assert.equal(r.intent_note,"T8_ABSTENTION_NOT_PERSISTED");
+r=await call({...abst,candle_open:o7,decision_at:"2026-09-29T07:00:08.100Z"});
+assert.equal(r.intent.sleeve,"v2-direction45-r1"); console.log("late T8 abstention completes stored T45: ok");
+r=await call({...t45,candle_open:o7,decision_at:"2026-09-29T07:00:45.100Z"});
+assert.equal(r.duplicate,true); assert.equal(r.intent.sleeve,"v2-direction45-r1"); assert.equal(r.intent_note,null);
+r=await call({...abst,candle_open:o7,decision_at:"2026-09-29T07:00:08.100Z"});
+assert.equal((await db.query("select count(*)::int n from v2_candle_intents where candle_open=$1",[o7])).rows[0].n,1);
+console.log("retries idempotent, one intent only: ok");
+// failed T8 arriving after an eligible T45 still creates no intent
+const o8="2026-09-29T07:15:00.000Z";
+await call({...t45,candle_open:o8,decision_at:"2026-09-29T07:15:45.100Z"});
+r=await call({...t8,candle_open:o8,eligible:false,side:0,probability:null,reason:"MISSING_SECONDS",features_ready:false,decision_at:"2026-09-29T07:15:08.100Z"});
+assert.equal(r.intent,null);
+r=await call({...t45,candle_open:o8,decision_at:"2026-09-29T07:15:45.100Z"}); assert.equal(r.intent,null);
+assert.equal(r.intent_note,"T8_ABSTENTION_NOT_PERSISTED"); console.log("failed T8 after T45 -> still no intent: ok");
+// an eligible T8 arriving late outranks a stored T45
+const o9="2026-09-29T07:30:00.000Z";
+await call({...abst,candle_open:o9,decision_at:"2026-09-29T07:30:08.100Z"});
+await call({...t45,candle_open:o9,decision_at:"2026-09-29T07:30:45.100Z"});
+assert.equal((await db.query("select sleeve from v2_candle_intents where candle_open=$1",[o9])).rows[0].sleeve,"v2-direction45-r1");
+console.log("priority preserved with out-of-order rows: ok");
 const n=(await db.query("select count(*)::int n from v2_candle_intents")).rows[0].n; console.log("intents",n);

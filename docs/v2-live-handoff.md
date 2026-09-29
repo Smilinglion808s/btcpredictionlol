@@ -48,7 +48,7 @@ worker delivers to the predictor site only.
 | A | Scheduler fired once at exactly `sec.000`, before the last closed 1s bar had arrived | `run_window()` polls locally inside `[T+8,T+9)` / `[T+45,T+46)`, scores **once** the instant every required closed bar and a current pre-open frame are present, and only records the real blocking reason (or `CHECKPOINT_LATE`) at the deadline. No REST/network work in the scoring loop. |
 | B | Worker wrote a fake frozen `decisions` row on a T+8 error, letting T+45 run | Removed. Errors go to the worker's own audit journal only. A candle with no frozen T+8 record fails closed at T+45 with `T8_UNRESOLVED`; only a genuine frozen T+8 ABSTAIN permits T+45. Frozen package bytes untouched (16-hash check still passes). |
 | C | Receipt time was `max(last_message_ms, last_close_ms)` — clamped and polluted by unrelated traffic | Each closed bar stores its own real `received_at_ms` at `put()`. `tape()` returns the max over the **required** bars only, unclamped. A receipt after the decision time, in the future, or earlier than the bar's close fails closed with `INVALID_RECEIPT_TIME`. |
-| D | An intent committed to the frozen store but not yet journaled was lost on restart | `reconcile_store()` runs at startup and before every score: it rebuilds the journal record from the immutable frozen payload (original decision time, sleeve, side, confidence, `event_id`) and acks the frozen row **only after** the journal + outbox write is durable. Exactly-once, and T+45 stays blocked afterwards. |
+| D | An intent committed to the frozen store but not yet journaled was lost on restart | `reconcile_store()` runs at startup and before every score: it rebuilds the journal record from the immutable frozen payload (original decision time, sleeve, side, confidence, `event_id`) and acks the frozen row **only after** the journal + outbox write is durable. Transport is at-least-once with receiver deduplication; the candle still yields one intent, and T+45 stays blocked afterwards. |
 | E | Decision time could be re-read at serialization | `decision_at` is always the model's own `decision_time`, normalized only in format. Runtime measurements live in separate fields: `receipt_latency_ms`, `scoring_latency_ms`. |
 | F | A failed startup warmup left `history_ready` false forever; stored CSV trusted on row count alone | `refresh_boundary()` retries the full warmup; readiness returns only after a complete verified history **and** a current pre-open frame. The persisted CSV is read with `float_precision="round_trip"` and accepted only if its leading rows still equal the verified seed byte-for-byte. |
 | G | `/healthz` undocumented; readiness keyed off historical backfill; risk of raw response bodies in logs | `/healthz` documented as the Railway health-check path (`/health`, `/` identical). `prediction_ready` now requires `preopen_current` **and** `feed_ready` (current target covered + socket live/fresh). Receiver rejections log an allow-listed error code only. |
@@ -58,7 +58,7 @@ Regression tests: `python -m unittest discover -s tests` — **41 passed, 0 skip
 fails closed; T+45 blocked after a failed T+8; T+45 after a genuine frozen
 abstention; unrelated later bar does not move the required receipt time;
 receipt after decision fails closed; crash between store commit and journal
-write recovers exactly once; tampered stored history falls back to the seed;
+write is recovered once into the journal; tampered stored history falls back to the seed;
 round-trip history accepted; readiness recovers after a failed warmup;
 readiness requires current target + feed).
 App-side: V2 contract 11/11, vitest 490/490, tsc clean, build clean.
@@ -74,3 +74,21 @@ orders. Nothing deployed — deploy from Railway when you are ready.
   new release tree with all 3 sleeves and regenerated hashes; old release untouched; no activation/refit.
 - Worker sends an honest `User-Agent: v2-predictor-worker/...` (library default UAs can trip the edge's 1010 rule).
   No browser-header spoofing. The first Railway heartbeat is the connectivity proof.
+
+## Final delivery review fixes
+- Recovery now also drains committed **scored T+8 ABSTAIN** rows (`called=0`, invisible to `poll_pending`) from the
+  frozen store into the journal/outbox, at startup and before any new scoring, so a crash between the store commit
+  and the journal write cannot leave the site without the abstention that permits T+45.
+- The sender holds a T+45 row while its own candle's T+8 row is still pending, and `v2_record_checkpoint`
+  (migration 0005) re-resolves the single candle intent from all stored rows on every insert and retry — a
+  late-arriving valid T+8 abstention completes a previously stored eligible T+45 exactly one time. Failed, missing,
+  late or unready T+8 audits still never qualify.
+- `BarHistory.backfill` appends a 15m bar only when `close_ms == open_ms + 899999` and the bar has closed against the
+  Binance server clock (read off the scoring path). A still-forming or malformed bar stops the walk and is retried.
+- Delivery is documented as at-least-once with deduplication, never "exactly-once".
+
+Tests: worker `python -m unittest discover -s tests` — **52 passed, 0 skipped** (new: abstention crash recovery before
+T+45; T+45 delivery waits for its T+8; partially forming REST bar rejected). Database rules
+`node scripts/check-v2-record-rpc.mjs` — **16 checks ok** (new: T45 first then valid T8 abstention -> one late intent;
+failed T8 after T45 -> no intent; retries idempotent; priority preserved out of order).
+Still recording-only: no btc-trader connection, no orders, nothing deployed.

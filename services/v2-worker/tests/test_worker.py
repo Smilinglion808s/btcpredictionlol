@@ -466,5 +466,148 @@ class HistoryAndHealth(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class FinalEdgeCases(unittest.TestCase):
+    """Delivery ordering, abstention recovery and partial REST bars."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.now = VALID_TARGET_MS + 8_400
+        self.eng = make_engine(self.tmp, self.now)
+        self.eng.history.df = extend_history(self.eng.history.load_seed(), VALID_TARGET_MS)
+        self.eng.history_ready = True
+        self.eng.clock_skew_ms = 0
+        self.eng.build_preopen(VALID_TARGET_MS)
+        self.price = float(self.eng.history.df.close.iloc[-1])
+        self.eng.feed.bars = synth_seconds(VALID_TARGET_MS, 8, self.price)
+        self.eng.feed.backfilled_through_ms = self.now
+        self.eng.feed.connected = True
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @staticmethod
+    def force(engine, sleeve):
+        real = engine.store.model.score
+
+        def scored(request):
+            out = real(request)
+            if sleeve == "ABSTAIN":
+                return {**out, "sleeve": "ABSTAIN", "side": 0, "direction": "ABSTAIN",
+                        "model_eligible": False, "assumed_effective_odds": None}
+            return {**out, "sleeve": sleeve, "side": 1, "direction": "GREEN", "confidence": 0.61,
+                    "model_eligible": True, "model_id": "v2-direction8-r1" if sleeve == "Direction8"
+                    else "v2-direction45-r1", "assumed_effective_odds": 1.75}
+
+        engine.store.model.score = scored
+
+    def test_crash_after_t8_abstention_commit_is_recovered_before_t45(self):
+        """Finding 1: a committed scored T+8 ABSTAIN must reach the journal on restart."""
+        self.force(self.eng, "ABSTAIN")
+
+        def failing_record(cp):
+            raise RuntimeError("crash between store commit and journal write")
+
+        self.eng.journal.record = failing_record
+        with self.assertRaises(RuntimeError):
+            self.eng.run_checkpoint(VALID_TARGET_MS, 8, self.now)
+        row = self.eng.frozen_record(VALID_TARGET_MS)
+        self.assertEqual(row, (8, 0))  # committed abstention, not a call
+        self.assertEqual(self.eng.store.poll_pending(), [])  # never visible to the call drain
+        self.eng.journal.close()
+
+        restarted = make_engine(self.tmp, self.now)
+        self.assertEqual(restarted.reconcile_store(self.now), 1)
+        self.assertEqual(restarted.reconcile_store(self.now), 0)  # already journaled
+        pending = restarted.journal.pending()
+        self.assertEqual(len(pending), 1)
+        early = pending[0][1]
+        self.assertEqual(early["checkpoint"], "T8")
+        self.assertFalse(early["eligible"])
+        self.assertEqual(early["side"], 0)
+        self.assertIsNone(early["reason"])
+        self.assertTrue(early["features_ready"])
+        self.assertEqual(early["payload"]["sleeve_name"], "ABSTAIN")
+
+        # the recovered abstention still permits a late eligible T+45
+        restarted.history.df = self.eng.history.df
+        restarted.history_ready = True
+        restarted.clock_skew_ms = 0
+        restarted.build_preopen(VALID_TARGET_MS)
+        restarted.feed.bars = synth_seconds(VALID_TARGET_MS, 44, self.price)
+        restarted.feed.backfilled_through_ms = self.now
+        restarted.feed.connected = True
+        self.force(restarted, "Direction45")
+        late = restarted.run_checkpoint(VALID_TARGET_MS, 45, VALID_TARGET_MS + 45_300)
+        self.assertTrue(late["eligible"])
+        self.assertEqual(late["sleeve"], "v2-direction45-r1")
+        keys = [b["checkpoint"] for _, b in restarted.journal.pending()]
+        self.assertEqual(keys, ["T8", "T45"])  # early record still durable and undelivered
+
+    def test_t45_delivery_waits_for_its_t8_record(self):
+        """Finding 2: T+45 never reaches the site before its own candle's T+8."""
+        sent: list[str] = []
+
+        class Resp:
+            def __init__(self, ok):
+                self.is_success = ok
+                self.status_code = 200 if ok else 503
+
+        class FakeSender(service.Sender):
+            def __init__(self, engine, fail_t8):
+                self.engine = engine
+                self.fail_t8 = fail_t8
+
+            def signed_post(self, op, **payload):
+                cp = payload["checkpoint"]
+                sent.append(f'{cp["checkpoint"]}')
+                return Resp(not (cp["checkpoint"] == "T8" and self.fail_t8))
+
+        j = self.eng.journal
+        base = {"candle_open": service.iso_ms(VALID_TARGET_MS), "side": 0, "probability": None,
+                "eligible": False, "features_ready": True, "reason": None, "payload": {}}
+        j.record({**base, "checkpoint": "T8", "sleeve": "v2-direction8-r1",
+                  "decision_at": service.iso_ms(VALID_TARGET_MS + 8_100)})
+        j.record({**base, "checkpoint": "T45", "sleeve": "v2-direction45-r1", "side": 1,
+                  "eligible": True, "decision_at": service.iso_ms(VALID_TARGET_MS + 45_100)})
+
+        FakeSender(self.eng, fail_t8=True).deliver_once()
+        self.assertEqual(sent, ["T8"])  # T45 held back while T8 is undelivered
+        self.assertEqual(j.pending_count(), 2)
+
+        sent.clear()
+        FakeSender(self.eng, fail_t8=False).deliver_once()
+        self.assertEqual(sent, ["T8", "T45"])
+        self.assertEqual(j.pending_count(), 0)
+
+    def test_partial_rest_bar_is_not_appended(self):
+        """Finding 3: a still-forming 15m bar is rejected even if the local clock runs ahead."""
+        open_ms = VALID_TARGET_MS
+        closed = {"open_ms": open_ms, "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10.0,
+                  "close_ms": open_ms + marketdata.INTERVAL_MS - 1, "quote_volume": 15.0,
+                  "trade_count": 100, "taker_buy_volume": 5.0}
+        forming = {**closed, "open_ms": open_ms + marketdata.INTERVAL_MS,
+                   "close_ms": open_ms + 2 * marketdata.INTERVAL_MS - 1}
+
+        class PartialRest(FakeRest):
+            def klines(self, interval, start_ms, end_ms, limit=1000):
+                return [b for b in (closed, forming) if b["open_ms"] >= start_ms]
+
+        with tempfile.TemporaryDirectory() as d:
+            h = marketdata.BarHistory(ROOT / "seed", Path(d), PartialRest(0))
+            h.df = extend_history(h.load_seed(), open_ms)
+            through = open_ms + 2 * marketdata.INTERVAL_MS
+            # exchange clock: the second bar has not closed yet, local target is ahead
+            added = h.backfill(through, server_time_ms=open_ms + marketdata.INTERVAL_MS + 1_000)
+            self.assertEqual(added, 1)
+            self.assertEqual(h.last_open_ms, open_ms)
+            # a malformed close stamp is rejected as well
+            h2 = marketdata.BarHistory(ROOT / "seed", Path(d) , PartialRest(0))
+            h2.df = extend_history(h2.load_seed(), open_ms)
+            bad = dict(closed, close_ms=closed["close_ms"] - 1)
+            h2.rest.klines = lambda *a, **k: [bad]
+            self.assertEqual(h2.backfill(through, server_time_ms=through + 10_000), 0)
+            self.assertEqual(h2.last_open_ms, open_ms - marketdata.INTERVAL_MS)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

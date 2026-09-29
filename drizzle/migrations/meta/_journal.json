@@ -36,6 +36,13 @@
       "when": 1790660000000,
       "tag": "0004_v2_t45_requires_scored_t8",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790661000000,
+      "tag": "0005_v2_intent_eventual_completion",
+      "breakpoints": true
     }
   ]
 }
