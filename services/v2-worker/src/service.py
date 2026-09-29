@@ -473,8 +473,15 @@ class Sender:
     def deliver_once(self) -> None:
         eng = self.engine
         for key, body in eng.journal.pending():
+            # A T+45 row must never land before its own candle's T+8 record: the
+            # receiver would store it with no qualifying abstention. Hold it while
+            # the T+8 delivery is still pending; it is retried on the next pass and
+            # is never acked or dropped as delivered.
+            if body.get("checkpoint") == "T45" and eng.journal.has_pending(body["candle_open"], "T8"):
+                continue
             try:
                 r = self.signed_post("record", checkpoint=body)
+
             except httpx.HTTPError as e:
                 eng.err(f"deliver transport {type(e).__name__}")
                 continue
