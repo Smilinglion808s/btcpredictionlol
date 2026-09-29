@@ -31,20 +31,29 @@ export function V2Card({ data, error }: Props) {
   const yn = (v: unknown, y: string, n: string) => (v == null ? "not reported" : v ? y : n);
   const errors: string[] = Array.isArray(st.errors) ? st.errors.slice(0, 3) : [];
 
-  return (
-    <Card className="p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Version 2 Final</h3>
-          <p className="text-xs text-muted-foreground">Recording only · betting off</p>
-        </div>
-        <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-          <span className={`mr-1 inline-block h-2 w-2 rounded-full ${connected ? "bg-primary" : "bg-destructive"}`} />
-          {error ? "Status unavailable" : connected ? (ready ? "Ready to predict" : "Connected · not ready") : rt ? `Worker silent ${ago(rt.updated_at, now)}` : "Worker not started"}
-        </span>
-      </div>
+  const badge = error ? "Status unavailable" : connected ? (ready ? "Ready to predict" : "Connected · not ready") : rt ? `Worker silent ${ago(rt.updated_at, now)}` : "Worker not started";
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
+  return (
+    <section className="v2-shell self-start rounded-2xl p-5 sm:p-6 space-y-5">
+      <span className="v2-orbit-ring" aria-hidden />
+
+      <header className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-crimson-foreground/80">
+            Recording only · betting off
+          </div>
+          <h3 className="v2-title text-4xl font-heading font-bold tracking-tight leading-none">Version 2 Final</h3>
+          <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-crimson/50 bg-crimson/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-crimson-foreground">
+            <span className={`size-1.5 rounded-full ${connected && !error ? (ready ? "bg-crimson-foreground" : "bg-crimson") : "bg-muted-foreground"}`} />
+            {badge}
+          </div>
+        </div>
+        <span className="shrink-0 rounded-full border border-crimson-foreground/30 bg-crimson-foreground/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-crimson-foreground/90">
+          Execution off
+        </span>
+      </header>
+
+      <div className="grid grid-cols-2 gap-2.5">
         <Stat k="Prediction ready" v={!connected ? "no heartbeat" : yn(st.prediction_ready, "yes", "no")} />
         <Stat k="Price feed" v={st.feed_age_ms != null ? `${yn(st.feed_ready, "fresh", "stale")} · ${(st.feed_age_ms / 1000).toFixed(1)}s` : yn(st.feed_ready, "fresh", "stale")} />
         <Stat k="History" v={yn(st.history_ready, `ready${st.history_bars ? ` · ${st.history_bars} bars` : ""}`, "not ready")} />
@@ -53,37 +62,51 @@ export function V2Card({ data, error }: Props) {
         <Stat k="Betting" v="off (recording only)" />
       </div>
 
-      <div className="space-y-1">
-        <p className="text-xs font-medium text-muted-foreground">Current 15-minute interval</p>
-        {V2_SLEEVES.map((s) => {
-          const r = current.find((c) => c.sleeve === s);
-          const v = status[s];
-          return (
-            <div key={s} className="flex justify-between text-sm">
-              <span>{SLEEVE_LABEL[s]}</span>
-              <span className={v.tone === "bad" ? "text-destructive" : v.tone === "call" ? "font-medium" : "text-muted-foreground"}>
-                {v.text}
-                {r?.receipt_latency_ms != null ? ` · ${r.receipt_latency_ms} ms` : ""}
-              </span>
-            </div>
-          );
-        })}
-        <p className="pt-1 text-sm">
-          {intent ? `Chosen: ${SLEEVE_LABEL[intent.sleeve]} ${sideLabel(intent.side)} (not bet)` : "No chosen call yet"}
-        </p>
-      </div>
+      <section className="v2-chip relative p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Current 15-minute interval</div>
+          <span className="text-[10px] text-muted-foreground tabular-nums">{open.slice(5, 16).replace("T", " ")} UTC</span>
+        </div>
+        <div className="mt-1.5 text-lg font-semibold">
+          {intent ? (
+            <span className="text-crimson-foreground">
+              Chosen: {SLEEVE_LABEL[intent.sleeve]}{" "}
+              <span className="rounded-md border border-crimson/60 bg-crimson/20 px-1.5 py-0.5 text-xs">{sideLabel(intent.side)}</span>{" "}
+              <span className="text-xs font-normal text-muted-foreground">(not bet)</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">No chosen call yet</span>
+          )}
+        </div>
+        <div className="mt-2.5 space-y-1">
+          {V2_SLEEVES.map((s) => {
+            const r = current.find((c) => c.sleeve === s);
+            const v = status[s];
+            return (
+              <div key={s} className="flex items-center gap-2 text-[11px] tabular-nums">
+                <span className={`size-1.5 shrink-0 rounded-full ${v.tone === "call" ? "bg-crimson-foreground" : v.tone === "bad" ? "bg-crimson" : "bg-muted-foreground/50"}`} />
+                <span className="w-24 shrink-0 font-semibold uppercase tracking-wide text-foreground/80">{SLEEVE_LABEL[s]}</span>
+                <span className={v.tone === "bad" ? "text-crimson" : v.tone === "call" ? "font-medium text-crimson-foreground" : "text-muted-foreground"}>
+                  {v.text}
+                  {r?.receipt_latency_ms != null ? ` · ${r.receipt_latency_ms} ms` : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {errors.length > 0 && (
-        <div className="text-xs text-destructive space-y-0.5">
+        <div className="text-xs text-crimson space-y-0.5">
           {errors.map((e, i) => <p key={i}>{e}</p>)}
         </div>
       )}
 
       <details className="text-xs">
-        <summary className="cursor-pointer text-muted-foreground">Recent log</summary>
+        <summary className="cursor-pointer text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Recent log</summary>
         <div className="mt-1 max-h-48 overflow-auto space-y-0.5">
           {cps.slice(0, 20).map((c, i) => (
-            <p key={i} className="text-muted-foreground">
+            <p key={i} className="text-muted-foreground tabular-nums">
               {new Date(c.candle_open).toISOString().slice(11, 16)} {SLEEVE_LABEL[c.sleeve]} ·{" "}
               {c.eligible ? sideLabel(c.side) : "no call"} · {c.receipt_latency_ms ?? "?"} ms
             </p>
@@ -91,21 +114,19 @@ export function V2Card({ data, error }: Props) {
           {cps.length === 0 && <p className="text-muted-foreground">Nothing recorded yet.</p>}
         </div>
       </details>
-      <p className="text-[11px] text-muted-foreground">
-        Sizing policy (not a live stake): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        Inputs: Binance spot. Lab grading used Binance index direction, not spot candles or Kalshi results.
-      </p>
-    </Card>
+      <div className="space-y-1 text-[9px] text-muted-foreground/80">
+        <p>Sizing policy (not a live stake): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.</p>
+        <p>Inputs: Binance spot. Lab grading used Binance index direction, not spot candles or Kalshi results.</p>
+      </div>
+    </section>
   );
 }
 
 function Stat({ k, v }: { k: string; v: string }) {
   return (
-    <div className="rounded-md border border-border p-2">
-      <p className="text-muted-foreground">{k}</p>
-      <p className="font-medium">{v}</p>
+    <div className="v2-chip px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{k}</div>
+      <div className="mt-1 text-sm font-medium tabular-nums truncate">{v}</div>
     </div>
   );
 }

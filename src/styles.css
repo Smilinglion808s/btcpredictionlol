@@ -111,6 +111,9 @@
   /* Version 1.1: same hues as Version 1, reversed roles and more vibrant. */
   --steel-vivid: oklch(0.82 0.11 232);
   --signal-orange-vivid: oklch(0.80 0.24 52);
+  /* Version 2: crimson and white. */
+  --crimson: oklch(0.58 0.23 20);
+  --crimson-foreground: oklch(0.99 0 0);
 
   --grid: oklch(0.28 0.02 250);
 
