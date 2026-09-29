@@ -89,7 +89,8 @@ class BarHistory:
     @staticmethod
     def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
-        out["bar_open"] = pd.to_datetime(out["bar_open"], utc=True)
+        # Frozen package requires nanosecond datetimes (pandas 2.x default).
+        out["bar_open"] = pd.to_datetime(out["bar_open"], utc=True).astype("datetime64[ns, UTC]")
         out["complete"] = out["complete"].astype(bool)
         out["trade_count"] = out["trade_count"].astype("int64")
         for c in ["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_volume"]:
@@ -116,7 +117,7 @@ class BarHistory:
     def backfill(self, through_open_ms: int) -> int:
         """Append every closed 15m bar after the last stored bar, up to (not incl.) through_open_ms."""
         added: list[dict] = []
-        cursor = int(self.df.bar_open.iloc[-1].value // 1_000_000) + INTERVAL_MS
+        cursor = self.last_open_ms + INTERVAL_MS
         while cursor < through_open_ms:
             batch = self.rest.klines("15m", cursor, min(cursor + 1000 * INTERVAL_MS, through_open_ms))
             batch = [b for b in batch if b["open_ms"] < through_open_ms]
@@ -136,8 +137,8 @@ class BarHistory:
         return len(added)
 
     def assert_continuous(self) -> None:
-        gaps = np.diff(self.df.bar_open.astype("int64").to_numpy())
-        if len(gaps) and not np.all(gaps == INTERVAL_MS * 1_000_000):
+        gaps = self.df.bar_open.diff().dropna()
+        if len(gaps) and not (gaps == pd.Timedelta(milliseconds=INTERVAL_MS)).all():
             raise ValueError("15m history has a gap; refusing to predict on a truncated warmup")
 
     def persist(self) -> None:
@@ -152,7 +153,7 @@ class BarHistory:
 
     @property
     def last_open_ms(self) -> int:
-        return int(self.df.bar_open.iloc[-1].value // 1_000_000)
+        return int(self.df.bar_open.iloc[-1].timestamp() * 1000)
 
 
 # --------------------------------------------------------------------------- 1s feed

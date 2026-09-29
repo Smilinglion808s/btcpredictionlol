@@ -57,7 +57,7 @@ def extend_history(df: pd.DataFrame, through_open_ms: int) -> pd.DataFrame:
     """Continue the seed with deterministic bars so no warmup is truncated."""
     last = df.iloc[-1]
     rows = []
-    ts = int(df.bar_open.iloc[-1].value // 1_000_000) + marketdata.INTERVAL_MS
+    ts = int(df.bar_open.iloc[-1].timestamp() * 1000) + marketdata.INTERVAL_MS
     price = float(last.close)
     i = 0
     while ts <= through_open_ms - marketdata.INTERVAL_MS:
@@ -104,8 +104,8 @@ class PackageIntegrity(unittest.TestCase):
         self.assertEqual(len(df), meta["rows"])
         self.assertEqual(len(df), 80_160)
         self.assertTrue(df.complete.all())
-        gaps = np.diff(df.bar_open.astype("int64").to_numpy())
-        self.assertTrue(np.all(gaps == marketdata.INTERVAL_MS * 1_000_000))
+        gaps = df.bar_open.diff().dropna()
+        self.assertTrue((gaps == pd.Timedelta(minutes=15)).all())
 
     def test_corrupt_seed_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
