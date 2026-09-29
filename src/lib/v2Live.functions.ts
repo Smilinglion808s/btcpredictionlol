@@ -15,11 +15,13 @@ export const getV2Live = createServerFn({ method: "POST" }).handler(async () => 
     sb.from("v2_candle_intents").select("candle_open,sleeve,side,execution,created_at")
       .gte("candle_open", since).order("candle_open", { ascending: false }).limit(24),
   ]);
+  const record = await buildRecord(sb).catch(() => null);
   return {
     serverNow: Date.now(),
     runtime: (rt.data ?? []).map((r: any) => ({ worker_id: r.worker_id, updated_at: r.updated_at, status: sanitizeStatus(r.status) as Record<string, any> })),
     checkpoints: (cps.data ?? []) as any[],
     intents: (intents.data ?? []) as any[],
+    record,
     error: rt.error || cps.error || intents.error ? "READ_FAILED" : null,
   };
 });
