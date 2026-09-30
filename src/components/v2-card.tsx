@@ -139,19 +139,6 @@ export function V2Card({ data, error }: Props) {
           {cps.length === 0 && <p className="text-muted-foreground">Nothing recorded yet.</p>}
         </div>
       </details>
-      {(data?.forward?.recent?.length ?? 0) > 0 && (
-        <section className="v2-chip p-3">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Sent to betting app</div>
-          <ul className="mt-1.5 space-y-1 text-[11px] tabular-nums">
-            {data!.forward.recent.map((f: any) => (
-              <li key={f.candle_open} className="flex justify-between gap-2">
-                <span>{new Date(f.candle_open).toISOString().slice(11, 16)} UTC · {f.side}</span>
-                <span className="text-muted-foreground">{f.status}{f.response_ms != null ? ` · ${f.response_ms}ms` : ""}{f.last_error && f.status !== "sent" ? ` · ${String(f.last_error).slice(0, 24)}` : ""}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       <div className="space-y-1 text-[9px] text-muted-foreground/80">
         <p>Sizing policy (applied by the betting app): 4% of the day's starting balance, reset daily at Boise midnight, capped at $200. No account balances are read.</p>
         <p>Inputs: Binance spot. Lab grading used Binance index direction, not spot candles or Kalshi results.</p>
