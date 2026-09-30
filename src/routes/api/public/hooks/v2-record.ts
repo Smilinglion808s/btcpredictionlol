@@ -62,7 +62,7 @@ export const Route = createFileRoute("/api/public/hooks/v2-record")({
           if (error) throw new Error("record_rpc");
           const r = data as any;
           if (!r?.ok) return bad(r?.error ?? "RECORD_REJECTED", 409);
-          if (r.intent) await flushV2Forward(sb).catch(() => console.error("v2-forward failed"));
+          if (r.intent) await flushV2Forward(sb, c.candle_open).catch(() => console.error("v2-forward failed"));
           return Response.json({
             ok: true, id: r.id, duplicate: !!r.duplicate, intent: r.intent ?? null, intent_note: r.intent_note ?? null,
             receipt_latency_ms: r.receipt_latency_ms, execution: V2_EXECUTION,
