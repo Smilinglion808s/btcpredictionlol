@@ -29,7 +29,6 @@ export function V2Card({ data, error }: Props) {
   const ready = st.prediction_ready === true;
   const targetMatch = st.preopen_target ? new Date(st.preopen_target).toISOString() === open : null;
   const yn = (v: unknown, y: string, n: string) => (v == null ? "not reported" : v ? y : n);
-  const errors: string[] = Array.isArray(st.errors) ? st.errors.slice(0, 3) : [];
 
   const rec = data?.record;
   const dayNet = Number(rec?.today?.net ?? 0);
@@ -121,11 +120,6 @@ export function V2Card({ data, error }: Props) {
         </div>
       </section>
 
-      {errors.length > 0 && (
-        <div className="text-xs text-crimson space-y-0.5">
-          {errors.map((e, i) => <p key={i}>{e}</p>)}
-        </div>
-      )}
 
       <details className="text-xs">
         <summary className="cursor-pointer text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Recent log</summary>
