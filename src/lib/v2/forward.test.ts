@@ -80,4 +80,32 @@ describe("v2 forward", () => {
     await flushV2Forward(fakeSb(b).sb);
     expect(b.rows[0].status).toBe("rejected");
   });
+
+  it("uses redirect: manual and blocks 3xx as REDIRECT_BLOCKED", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://evil.test" } }));
+    vi.stubGlobal("fetch", f);
+    const st = { enabled: true, rows: [row(1000)] };
+    await flushV2Forward(fakeSb(st).sb);
+    expect(f).toHaveBeenCalledTimes(1);
+    expect((f.mock.calls[0] as any)[1].redirect).toBe("manual");
+    expect(st.rows[0].status).toBe("rejected");
+    expect((st.rows[0] as any).last_error).toBe("REDIRECT_BLOCKED");
+    expect((st.rows[0] as any).response_status).toBe(302);
+  });
+
+  it("concurrent flushes deliver only once", async () => {
+    const f = vi.fn(async () => new Response("{}", { status: 200 })); vi.stubGlobal("fetch", f);
+    const st = { enabled: true, rows: [row(1000)] };
+    await Promise.all([flushV2Forward(fakeSb(st).sb), flushV2Forward(fakeSb(st).sb)]);
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(st.rows[0].status).toBe("sent");
+  });
+
+  it("request construction is valid in the runtime (real Request)", () => {
+    const req = new Request("https://receiver.test/hook", {
+      method: "POST", redirect: "manual", body: "{}",
+      headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(2500),
+    });
+    expect(req.redirect).toBe("manual");
+  });
 });

@@ -56,7 +56,7 @@ export async function flushV2Forward(sb: any, candleOpen?: string): Promise<void
     try {
       const res = await fetch(url, {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         headers: {
           "x-region": V2_RECEIVER_REGION,
           "content-type": "application/json",
@@ -69,7 +69,11 @@ export async function flushV2Forward(sb: any, candleOpen?: string): Promise<void
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       code = res.status;
-      if (res.ok) status = "sent";
+      // Never follow redirects: the signed payload must only reach the configured receiver.
+      if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+        status = "rejected";
+        err = "REDIRECT_BLOCKED";
+      } else if (res.ok) status = "sent";
       else if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
         status = "rejected";
         err = (await res.text().catch(() => "")).slice(0, 200) || `HTTP_${res.status}`;
