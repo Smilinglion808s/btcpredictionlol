@@ -31,7 +31,7 @@ export function V3Card({ data, error }: Props) {
   const decisions: any[] = data?.decisions ?? [];
   const cur = decisions.find((d) => new Date(d.candle_open).toISOString() === open);
   const elapsed = Math.floor((now - openMs) / 1000);
-  const badge = error ? "Status unavailable" : !rt ? "Worker not started" : !connected ? `Worker silent ${ago(rt.updated_at, now)}` : ready ? "Ready to predict" : "Connected · not ready";
+  const badge = error ? "Status unavailable" : !rt ? "Not reporting to dashboard yet" : !connected ? `Worker silent ${ago(rt.updated_at, now)}` : ready ? "Ready to predict" : "Connected · not ready";
   const sending = st.delivery_enabled === true;
 
   return (
