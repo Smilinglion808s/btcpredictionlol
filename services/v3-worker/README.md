@@ -66,9 +66,15 @@ signed with the existing shared secret. Informational headers are
 - `prediction` is `YES` for up and `NO` for down.
 - `interval_key` is byte-identical to the V1.2 `intervalKey(ticker, open)`, so
   the bettor's existing per-interval exposure claim covers V3.
-- The `market` name is computed from the candle close in New York time. The
-  tests check it against stored V1.2 tickers. The bettor must still confirm the
-  market exists before trading.
+- `market` is never guessed. A separate background loop reads public Kalshi
+  metadata (series `KXBTC15M`) off the scoring thread. A market is accepted only
+  if its series matches, its close is the candle close, and its ticker matches
+  that close. With no verified market there is no send (`NO_VERIFIED_MARKET`).
+  This checks market identity only. It is not a price filter and never changes
+  which call the model makes.
+- The sender re-checks expiry immediately before each POST and caps the network
+  timeout to the time left before `expires_at`. Anything listed before T49 is
+  not sent after T49.
 - `confidence_rank` is a rank, not a win probability.
 - There are no stake, price, maker/taker or odds fields. The bettor owns all of
   them.
@@ -78,7 +84,15 @@ signed with the existing shared secret. Informational headers are
    a new engine.
 2. Verify the raw-body HMAC before parsing.
 3. Check that `expires_at` hasn't passed and that `market` matches the
-   interval.
+   interval. Validate timing in two separate checks:
+   - `decision_at` is early by design (about T15 or T30). It must fall inside
+     the candle and be at or before `entry_at`.
+   - Admission is based on `entry_at` (T48) and `expires_at` (T49) against the
+     receiver's clock.
+   Do **not** reuse V1.2's "now minus decision under 10 seconds" age check. It
+   would reject every valid V3 call. Also don't reuse V1.2's route policy or its
+   three-identity allowlist directly. V3 needs its own allowlist entry. Only the
+   raw-body HMAC and the shared risk/exposure engine conventions carry over.
 4. Deduplicate on `event_id` and the body hash, and apply the shared
    `interval_key` exposure claim.
 5. Apply its own size, price cap, kill switch and fees.

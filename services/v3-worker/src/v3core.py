@@ -67,9 +67,12 @@ def kalshi_ticker(candle_s: int) -> str:
     return f"KXBTC15M-{t:%y}{t.strftime('%b').upper()}{t:%d%H%M}-{t:%M}"
 
 
-def interval_key(candle_s: int) -> str:
-    """Byte-for-byte the repository's intervalKey(ticker, open)."""
-    return f"v12:{kalshi_ticker(candle_s)}:{iso_ms(candle_s * 1000)}"
+def interval_key(candle_s: int, ticker: str | None = None) -> str:
+    """Byte-for-byte the repository's intervalKey(ticker, open). Outbound bodies pass the VERIFIED ticker."""
+    return f"v12:{ticker or kalshi_ticker(candle_s)}:{iso_ms(candle_s * 1000)}"
+
+
+KALSHI_SERIES = "KXBTC15M"
 
 
 def sign(secret: bytes, raw: bytes) -> str:
@@ -81,9 +84,18 @@ def url_allowed(url: str) -> bool:
 
 
 def verify_package(package: Path = PACKAGE) -> dict:
-    manifest = json.loads((package / "SHA256.json").read_text())
+    try:
+        manifest = json.loads((package / "SHA256.json").read_text())
+        if not isinstance(manifest, dict) or not manifest:
+            raise ValueError("empty")
+    except Exception as e:  # noqa: BLE001 - missing/malformed manifest fails closed, never crashes
+        raise FailClosed("PACKAGE_MANIFEST_INVALID") from e
     for name, digest in manifest.items():
-        if hashlib.sha256((package / name).read_bytes()).hexdigest() != digest:
+        try:
+            got = hashlib.sha256((package / name).read_bytes()).hexdigest()
+        except OSError as e:
+            raise FailClosed(f"PACKAGE_FILE_MISSING:{name}") from e
+        if got != digest:
             raise FailClosed(f"PACKAGE_HASH_MISMATCH:{name}")
     return manifest
 
@@ -126,6 +138,8 @@ CREATE TABLE IF NOT EXISTS decisions(candle_s INTEGER PRIMARY KEY, status TEXT N
 CREATE TABLE IF NOT EXISTS outbox(event_id TEXT PRIMARY KEY, candle_s INTEGER UNIQUE NOT NULL, body BLOB NOT NULL,
   status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, prepared_ms INTEGER NOT NULL,
   expires_ms INTEGER NOT NULL, delivered_ms INTEGER);
+CREATE TABLE IF NOT EXISTS markets(candle_s INTEGER PRIMARY KEY, ticker TEXT NOT NULL, series TEXT NOT NULL,
+  close_ms INTEGER NOT NULL, fetched_ms INTEGER NOT NULL);
 """
 
 
@@ -136,6 +150,7 @@ class Store:
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript(SCHEMA)
         self.lock = threading.RLock()
+        self.depth = 0  # re-entrant transaction depth (same thread, guarded by lock)
 
     def q(self, sql: str, args=()):
         with self.lock:
@@ -156,14 +171,25 @@ class _Tx:
     def __init__(self, s: Store) -> None:
         self.s = s
 
+    """Re-entrant: nested tx() joins the outer transaction; only the outermost commits/rolls back.
+    Holding it serialises compound state transitions across threads, not just single statements."""
+
     def __enter__(self):
         self.s.lock.acquire()
-        self.s.db.execute("BEGIN IMMEDIATE")
+        try:
+            if self.s.depth == 0:
+                self.s.db.execute("BEGIN IMMEDIATE")
+            self.s.depth += 1
+        except BaseException:
+            self.s.lock.release()
+            raise
         return self.s.db
 
     def __exit__(self, et, ev, tb):
         try:
-            self.s.db.execute("ROLLBACK" if et else "COMMIT")
+            self.s.depth -= 1
+            if self.s.depth == 0:
+                self.s.db.execute("ROLLBACK" if et else "COMMIT")
         finally:
             self.s.lock.release()
         return False
@@ -222,7 +248,10 @@ class Engine:
 
     @property
     def seed_end(self) -> int:
-        return int(self.s.meta("seed_end_s"))
+        v = self.s.meta("seed_end_s")
+        if v is None:
+            raise FailClosed("SEED_NOT_LOADED")
+        return int(v)
 
     # ------------------------------------------------------------------ heads
     def head(self, cp: int, day_s: int) -> dict | None:
@@ -236,17 +265,19 @@ class Engine:
         return f"{MODEL_VERSION}:t{head['checkpoint']}:{day}:{h}"
 
     def labels_complete_through(self, last_candle_s: int) -> bool:
-        """Every scheduled slot after the seed up to last_candle_s has a row and a closed OKX label."""
+        """Every scheduled post-seed slot up to last_candle_s has a confirmed OKX label AND a terminal
+        feature status for BOTH heads ('valid' or finalised 'invalid:*'). 'pending' is never missingness."""
         lo = self.seed_end
         if last_candle_s < lo:
             return True
         need = (last_candle_s - lo) // SLOT + 1
-        got = self.s.q("SELECT COUNT(*) FROM rows WHERE candle_s BETWEEN ? AND ? AND label IS NOT NULL",
-                       (lo, last_candle_s))[0][0]
+        got = self.s.q("SELECT COUNT(*) FROM rows WHERE candle_s BETWEEN ? AND ? AND label IS NOT NULL "
+                       "AND s15<>'pending' AND s30<>'pending'", (lo, last_candle_s))[0][0]
         return got == need
 
     def ensure_fit(self, day_s: int) -> bool:
-        """Fit both heads for UTC day_s if all inputs closed before day_s are present."""
+        """Fit both heads for UTC day_s if every input closed before day_s is terminal. Cutoff = day_s only
+        (never the live clock). Both heads are fitted outside locks, then persisted in ONE transaction."""
         if all(self.head(cp, day_s) for cp in CHECKPOINTS):
             return True
         if not self.labels_complete_through(day_s - SLOT):
@@ -256,6 +287,7 @@ class Engine:
                         "ORDER BY candle_s", (lo, day_s))
         stamps = [r[0] for r in rows]
         labels = [0 if r[2] is None else r[2] for r in rows]
+        new = {}
         for cp in CHECKPOINTS:
             if self.head(cp, day_s):
                 continue
@@ -263,8 +295,21 @@ class Engine:
             head = M.fit_head(stamps, x, labels, day_s, cp)
             head["fit_cutoff_s"] = day_s
             head["training_source"] = "seed+binance_spot_1s_rest/ws+okx_15m_confirmed"
-            self.s.q("INSERT OR IGNORE INTO heads VALUES(?,?,?,?)", (cp, day_s, json.dumps(head), "refit"))
+            new[cp] = head
+        with self.s.tx() as db:
+            for cp, head in new.items():
+                db.execute("INSERT OR IGNORE INTO heads VALUES(?,?,?,?)", (cp, day_s, json.dumps(head), "refit"))
         return True
+
+    def first_unfitted_day(self) -> int:
+        """Earliest UTC day (after the seed) where EITHER head is missing; partial days are retried."""
+        have: dict[int, int] = {}
+        for (d,) in self.s.q("SELECT day_s FROM heads"):
+            have[d] = have.get(d, 0) + 1
+        day = self.seed_end
+        while have.get(day, 0) >= len(CHECKPOINTS):
+            day += DAY
+        return day
 
     # ---------------------------------------------------------------- history
     def advance_history(self, cp: int, upto_candle_s: int | None = None) -> int:
@@ -272,28 +317,28 @@ class Engine:
         n = 0
         wm_key = f"hist_wm_{cp}"
         while True:
-            wm = int(self.s.meta(wm_key))
-            c = wm + SLOT
-            if upto_candle_s is not None and c > upto_candle_s:
-                return n
-            r = self.s.q(f"SELECT feats,s{cp} FROM rows WHERE candle_s=?", (c,))
-            if not r or r[0][1] == "pending":
-                return n
-            if r[0][1] == "valid":
-                head = self.head(cp, c - c % DAY)
-                if head is None:
+            # One row per transaction: watermark read, scoring and append are a single serialised step,
+            # so concurrent callers (catch-up vs live) can never score the same row twice.
+            with self.s.tx() as db:
+                wm = int(self.s.meta(wm_key))
+                c = wm + SLOT
+                if upto_candle_s is not None and c > upto_candle_s:
                     return n
-                x = feature_row(json.loads(r[0][0]), cp)
-                p = predict_exact(head, x, c)
-                prior = [v for (v,) in self.s.q(
-                    "SELECT confidence FROM hist WHERE checkpoint=? AND candle_s<? ORDER BY candle_s DESC LIMIT 768",
-                    (cp, c))][::-1]
-                rank = M.rank_before_append(p, prior)
-                with self.s.tx() as db:
+                r = self.s.q(f"SELECT feats,s{cp} FROM rows WHERE candle_s=?", (c,))
+                if not r or r[0][1] == "pending":
+                    return n
+                if r[0][1] == "valid":
+                    head = self.head(cp, c - c % DAY)
+                    if head is None:
+                        return n
+                    x = feature_row(json.loads(r[0][0]), cp)
+                    p = predict_exact(head, x, c)
+                    prior = [v for (v,) in self.s.q(
+                        "SELECT confidence FROM hist WHERE checkpoint=? AND candle_s<? ORDER BY candle_s DESC LIMIT 768",
+                        (cp, c))][::-1]
+                    rank = M.rank_before_append(p, prior)
                     db.execute("INSERT INTO hist VALUES(?,?,?,?,?,?)", (cp, c, p, abs(p - .5), rank, head["valid_from_s"]))
-                    db.execute("UPDATE meta SET v=? WHERE k=?", (json.dumps(c), wm_key))
-            else:
-                self.s.set_meta(wm_key, c)
+                db.execute("UPDATE meta SET v=? WHERE k=?", (json.dumps(c), wm_key))
             n += 1
 
     def hist_entry(self, cp: int, c: int) -> dict | None:
@@ -310,7 +355,10 @@ class Engine:
             return "FEED_STALE"
         if self.head(cp, c - c % DAY) is None:
             return "FIT_EXPIRED"
-        if int(self.s.meta(f"hist_wm_{cp}")) != c - SLOT:
+        wm = self.s.meta(f"hist_wm_{cp}")
+        if wm is None:
+            return "PACKAGE_INVALID"
+        if int(wm) != c - SLOT:
             return "CATCHUP_GAP"
         return None
 
@@ -333,6 +381,12 @@ class Engine:
 
     def checkpoint(self, c: int, cp: int, bars: list[dict], feed_ok: bool = True, clock_ok: bool = True) -> dict:
         """Score head cp for candle c exactly once. bars = final 1s bars received before the deadline."""
+        # Whole transition (row -> history -> decision) is one serialised transaction: catch-up cannot
+        # consume the live row in between, and a crash leaves either everything or nothing.
+        with self.s.tx():
+            return self._checkpoint(c, cp, bars, feed_ok, clock_ok)
+
+    def _checkpoint(self, c: int, cp: int, bars: list[dict], feed_ok: bool, clock_ok: bool) -> dict:
         now = self.now_ms()
         start, deadline = (c + cp) * 1000, (c + cp) * 1000 + GRACE_MS
         prior = self._decision(c)
@@ -426,7 +480,7 @@ class Engine:
     def catchup_step(self, now_s: int) -> dict:
         """Fits and history in order; call after feeding backfill/labels. Off the scoring thread."""
         today = now_s - now_s % DAY
-        day = max(d for (d,) in self.s.q("SELECT MAX(day_s) FROM heads")) + DAY
+        day = self.first_unfitted_day()
         fitted = []
         while day <= today:
             for cp in CHECKPOINTS:
@@ -435,20 +489,53 @@ class Engine:
                 if not self.ensure_fit(day):
                     break
             except ValueError as e:
-                self.faults["fit"] = str(e)
+                self.faults["fit"] = f"{iso_ms(day * 1000)[:10]}:{e}"
                 break
+            self.faults.pop("fit", None)
             fitted.append(day)
             day += DAY
         moved = {cp: self.advance_history(cp) for cp in CHECKPOINTS}
         return {"fitted": fitted, "history": moved}
 
+    # ---------------------------------------------------------------- markets
+    def record_markets(self, markets: list[dict], series: str) -> int:
+        """Store public Kalshi metadata fetched OFF the scoring thread. A market is accepted only when the
+        series is KXBTC15M, its close is a 15m boundary, and its ticker is the one for that close. This is
+        market identity only; it never filters on price and never affects model selection."""
+        n = 0
+        if series != KALSHI_SERIES:
+            return 0
+        for m in markets:
+            try:
+                ticker = str(m["ticker"])
+                close_ms = int(datetime.fromisoformat(str(m["close_time"]).replace("Z", "+00:00")).timestamp() * 1000)
+            except Exception:  # noqa: BLE001
+                continue
+            ev = str(m.get("event_ticker") or "")
+            if close_ms % (SLOT * 1000) or not ticker.startswith(KALSHI_SERIES + "-") or \
+                    (ev and not ev.startswith(KALSHI_SERIES + "-")):
+                continue
+            c = close_ms // 1000 - SLOT
+            if ticker != kalshi_ticker(c):
+                self.faults["market"] = f"TICKER_MISMATCH:{ticker}"
+                continue
+            self.s.q("INSERT INTO markets VALUES(?,?,?,?,?) ON CONFLICT(candle_s) DO NOTHING",
+                     (c, ticker, series, close_ms, self.now_ms()))
+            n += 1
+        return n
+
+    def verified_market(self, c: int) -> str | None:
+        r = self.s.q("SELECT ticker FROM markets WHERE candle_s=? AND series=? AND close_ms=?",
+                     (c, KALSHI_SERIES, (c + SLOT) * 1000))
+        return r[0][0] if r else None
+
     # ----------------------------------------------------------------- outbox
-    def body_for(self, c: int, prepared_ms: int) -> bytes:
+    def body_for(self, c: int, prepared_ms: int, ticker: str) -> bytes:
         d = self.s.q("SELECT checkpoint,direction,rank,decision_ms,fit_version FROM decisions WHERE candle_s=?", (c,))[0]
-        key = interval_key(c)
+        key = interval_key(c, ticker)
         body = {
             "schema_version": SCHEMA_VERSION, "model_version": MODEL_VERSION, "leg": LEG,
-            "event_id": f"{key}:{LEG}", "interval_key": key, "market": kalshi_ticker(c),
+            "event_id": f"{key}:{LEG}", "interval_key": key, "market": ticker,
             "prediction": "YES" if d[1] == 1 else "NO",
             "candle_starts_at": iso_ms(c * 1000), "decision_at": iso_ms(d[3]), "checkpoint_seconds": d[0],
             "entry_at": iso_ms(c * 1000 + ENTRY_MS), "expires_at": iso_ms(c * 1000 + EXPIRY_MS),
@@ -462,10 +549,15 @@ class Engine:
         for (c,) in self.s.q("SELECT d.candle_s FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s "
                              "WHERE d.status='SELECTED' AND o.event_id IS NULL"):
             entry, expiry = c * 1000 + ENTRY_MS, c * 1000 + EXPIRY_MS
+            ticker = self.verified_market(c)
             if now >= expiry:
                 self._set_decision_status(c, "EXPIRED_UNSENT")
+                if ticker is None:
+                    self._audit(c, {"no_send": "NO_VERIFIED_MARKET"})
+            elif now >= entry and ticker is None:
+                continue  # explicit no-send until a verified market exists; never invent a ticker
             elif now >= entry:
-                raw = self.body_for(c, now)
+                raw = self.body_for(c, now, ticker)
                 eid = json.loads(raw)["event_id"]
                 status = "PENDING" if self.delivery_enabled else "DISABLED"
                 self.s.q("INSERT OR IGNORE INTO outbox(event_id,candle_s,body,status,prepared_ms,expires_ms) VALUES(?,?,?,?,?,?)",
@@ -484,7 +576,15 @@ class Engine:
             "SELECT event_id,body FROM outbox WHERE status IN ('PENDING','RETRY') AND expires_ms>? ORDER BY candle_s",
             (self.now_ms(),))]
 
+    def expires_ms(self, event_id: str) -> int | None:
+        r = self.s.q("SELECT expires_ms FROM outbox WHERE event_id=?", (event_id,))
+        return r[0][0] if r else None
+
     def record_attempt(self, event_id: str, status_code: int | None, error: str | None) -> str:
+        if error == "EXPIRED_BEFORE_SEND":
+            self.s.q("UPDATE outbox SET status='EXPIRED', last_error=? WHERE event_id=? AND status IN ('PENDING','RETRY')",
+                     (error, event_id))
+            return "EXPIRED"
         if status_code is not None and 200 <= status_code < 300:
             st = "DELIVERED"
         elif status_code is not None and 400 <= status_code < 500 and status_code not in (408, 429):
@@ -502,7 +602,13 @@ class Engine:
         now = self.now_ms()
         c = (now // 1000) - (now // 1000) % SLOT
         heads = {cp: self.head(cp, c - c % DAY) is not None for cp in CHECKPOINTS}
-        wms = {cp: int(self.s.meta(f"hist_wm_{cp}")) for cp in CHECKPOINTS}
+        raw_wm = {cp: self.s.meta(f"hist_wm_{cp}") for cp in CHECKPOINTS}
+        if any(v is None for v in raw_wm.values()):  # uninitialised / invalid seed: report, never crash
+            return {"model_version": MODEL_VERSION, "fit_today": heads, "latest_fit_day": None,
+                    "history_watermark": None, "caught_up": False, "faults": dict(self.faults),
+                    "delivery_enabled": self.delivery_enabled, "mode": self.mode, "outbox": {},
+                    "recent_decisions": []}
+        wms = {cp: int(v) for cp, v in raw_wm.items()}
         latest = self.s.q("SELECT MAX(day_s) FROM heads")[0][0]
         counts = dict(self.s.q("SELECT status,COUNT(*) FROM outbox GROUP BY status"))
         last = self.s.q("SELECT candle_s,status,reason,checkpoint,direction FROM decisions ORDER BY candle_s DESC LIMIT 5")
