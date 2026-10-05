@@ -68,7 +68,7 @@ class Runtime:
         start = int(time.time())
         first = start - start % SLOT
         fired = {(first, cp) for cp in CHECKPOINTS if start >= first + cp}  # never replay a missed checkpoint
-        if fired:
+        if fired and self.engine._decision(first) is None:
             self.engine._set_decision(first, "FAIL_CLOSED", "STARTED_LATE")
         while True:
             now = int(time.time() * 1000)
@@ -125,7 +125,7 @@ class Runtime:
     def health(self) -> dict:
         now = int(time.time() * 1000)
         st = self.engine.status()
-        reasons = [k for k, v in st["fit_today"].items() if not v and (k := f"FIT_MISSING_T{k}")]
+        reasons = [f"FIT_MISSING_T{k}" for k, v in st["fit_today"].items() if not v]
         if not st["caught_up"]:
             reasons.append("CATCHUP_GAP")
         if not self.feed.fresh(now):
