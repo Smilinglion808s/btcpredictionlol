@@ -11,3 +11,4 @@
 
 ## Architecture rules
 - V2 Final R1 records via `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables, and forwards each candle intent through `v2_forward_outbox` (trigger-enqueued, gated by `v2_forward_settings.enabled`) to the betting app's own V2 receiver only; never to V1.2 receivers/executors. V1.2 sending (v12-shadow-adapter + site route) is restored and V2 forwarding is switched off. Why: user switched live betting back from V2 to V1.2 on 2026-10-05.
+- V3 PF-E008 runs as isolated `services/v3-worker` (frozen `package/`, SQLite on `/data/v3`), posting one raw-body-HMAC webhook per candle at T48 to `V3_WEBHOOK_URL` only when `V3_DELIVERY_ENABLED=true`; no site tables/routes, V1.2/V2 receiver URLs refused. Why: user asked for the simplest V3 hookup that reuses the bettor's controls (2026-10-05).
