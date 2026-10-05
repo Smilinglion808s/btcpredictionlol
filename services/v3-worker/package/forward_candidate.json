@@ -1,0 +1,17 @@
+{
+  "name": "PF-E008: early-selected, delayed-entry, no T45 fallback",
+  "status": "FROZEN FOR FORWARD PAPER VALIDATION ONLY; not deployed; not a proven profit strategy",
+  "selection_disclosure": "Selected retrospectively from the Sep14-Oct4 price results after inspecting the early scanner's losing fallback component. The positive nominal day-bootstrap interval is not adjusted for model selection. No untouched holdout remains.",
+  "source_model_family": "New first15s/first30s learners built from standalone PriceFlow prefix features; NOT V1/V2 and NOT the original full28-feature T45 head",
+  "training": {"solver":"logistic regression lbfgs", "C":0.001, "scaler":"RobustScaler(10,90)", "refit":"once per UTC day", "window_scheduled_candles":8640, "minimum_resolved_rows":2688, "training_weights":"equal total per UTC day, normalized to mean1"},
+  "T15_features": ["ret_5s_bps","ret_15s_bps","range_15s_bps","quote_flow_5s","quote_flow_15s"],
+  "T30_additional_features": ["ret_30s_bps","range_30s_bps","quote_flow_30s"],
+  "decision": "At T15, if model confidence rank >=0.70, freeze its direction. Otherwise check the separate T30 model at T30 with the same rank gate. Rank absolute probability distance from0.5 against that learner's previous768 predictions; min192. If neither qualifies, skip. At most one call per candle.",
+  "entry": "At T48, use the direction frozen at T15 or T30. Do not recompute membership using T45 prediction or a future price. No fallback to standalone T45-only calls. Fail closed on missing or late prefix data. No stale quote carryforward.",
+  "research_risk_case": "Evaluate 1% of Boise day-opening paper bankroll per call, no loss-based increases. This is a simulation parameter, not advice to risk real money. Test actual minimum quantities and fee rounding.",
+  "execution_caveat": "Backtest uses latest same-direction taker print in the preceding1second, not an executable ask or guaranteed fill. Last prints can be tiny. Forward validation must record timestamped ask, depth, requested size, fill, actual fee and official settlement.",
+  "historical_prices_available": "Sep14-Oct4,2026 only; older signal history does not prove older profitability",
+  "forward_acceptance": "Keep rules unchanged. Record all scheduled opportunities, missing/late data and rejections, paper fills and costs. Reassess after at least1000 prospectively logged priced decisions and multiple complete weeks; a positive short sample alone is insufficient. No guarantee every week is positive.",
+  "automation_created": false,
+  "live_orders_authorized": false
+}
