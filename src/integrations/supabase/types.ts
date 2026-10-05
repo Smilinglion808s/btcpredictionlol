@@ -10742,6 +10742,75 @@ export type Database = {
         }
         Relationships: []
       }
+      v3_decisions: {
+        Row: {
+          candle_open: string
+          checkpoint: number | null
+          decision_at: string | null
+          delivery: string | null
+          direction: number | null
+          fit_version: string | null
+          rank: number | null
+          reason: string | null
+          received_at: string
+          status: string
+          t15_rank: number | null
+          t30_rank: number | null
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          candle_open: string
+          checkpoint?: number | null
+          decision_at?: string | null
+          delivery?: string | null
+          direction?: number | null
+          fit_version?: string | null
+          rank?: number | null
+          reason?: string | null
+          received_at?: string
+          status: string
+          t15_rank?: number | null
+          t30_rank?: number | null
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          candle_open?: string
+          checkpoint?: number | null
+          decision_at?: string | null
+          delivery?: string | null
+          direction?: number | null
+          fit_version?: string | null
+          rank?: number | null
+          reason?: string | null
+          received_at?: string
+          status?: string
+          t15_rank?: number | null
+          t30_rank?: number | null
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: []
+      }
+      v3_worker_runtime: {
+        Row: {
+          status: Json
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          status?: Json
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          status?: Json
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: []
+      }
       v6_broad_red_state: {
         Row: {
           broad_red_history_count: number

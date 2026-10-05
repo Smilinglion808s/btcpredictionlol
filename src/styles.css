@@ -49,6 +49,9 @@
   --color-signal-orange-vivid: var(--signal-orange-vivid);
   --color-crimson: var(--crimson);
   --color-crimson-foreground: var(--crimson-foreground);
+  --color-plasma: var(--plasma);
+  --color-ember: var(--ember);
+  --color-plasma-foreground: var(--plasma-foreground);
 
 
 
@@ -116,6 +119,10 @@
   /* Version 2: crimson and white. */
   --crimson: oklch(0.58 0.23 20);
   --crimson-foreground: oklch(0.99 0 0);
+  /* Version 3: electric plasma cyan with molten ember gold. */
+  --plasma: oklch(0.84 0.15 200);
+  --ember: oklch(0.80 0.17 70);
+  --plasma-foreground: oklch(0.98 0.02 200);
 
   --grid: oklch(0.28 0.02 250);
 
@@ -892,4 +899,95 @@
     transform: translateY(-1px);
     border-color: color-mix(in oklab, var(--crimson) 55%, var(--crimson-foreground));
   }
+}
+
+
+/* ---------------------------------------------------------------- Version 3 */
+@property --v3-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes v3-spin { to { --v3-angle: 360deg; } }
+@keyframes v3-scan { 0% { transform: translateY(-120%); } 100% { transform: translateY(420%); } }
+@keyframes v3-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes v3-shimmer { to { background-position: 200% center; } }
+
+@utility v3-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(90% 70% at 0% 0%, color-mix(in oklab, var(--plasma) 26%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 70% at 100% 100%, color-mix(in oklab, var(--ember) 22%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 86%, var(--plasma)) 0%, var(--card) 70%);
+  box-shadow:
+    0 30px 80px -30px color-mix(in oklab, var(--plasma) 55%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--plasma) 35%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, var(--plasma-foreground) 20%, transparent);
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--plasma) 14%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--plasma) 14%, transparent) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(110% 80% at 50% 0%, black 0%, transparent 75%);
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 30%;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--plasma) 12%, transparent), transparent);
+    animation: v3-scan 6s linear infinite;
+  }
+}
+
+@utility v3-border {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(from var(--v3-angle), var(--plasma), transparent 25%, var(--ember) 50%, transparent 75%, var(--plasma));
+  -webkit-mask: linear-gradient(black 0 0) content-box, linear-gradient(black 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.9;
+  animation: v3-spin 8s linear infinite;
+}
+
+@utility v3-title {
+  background: linear-gradient(100deg, var(--plasma-foreground) 0%, var(--plasma) 40%, var(--ember) 70%, var(--plasma-foreground) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: v3-shimmer 6s linear infinite;
+  filter: drop-shadow(0 0 18px color-mix(in oklab, var(--plasma) 45%, transparent));
+}
+
+@utility v3-chip {
+  position: relative;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in oklab, var(--plasma) 22%, var(--border));
+  background: linear-gradient(160deg, color-mix(in oklab, var(--plasma) 9%, transparent), color-mix(in oklab, var(--card) 92%, transparent));
+  backdrop-filter: blur(6px);
+  transition: border-color 220ms ease, transform 220ms ease, box-shadow 220ms ease;
+  &:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--plasma) 60%, transparent);
+    box-shadow: 0 0 24px -8px color-mix(in oklab, var(--plasma) 70%, transparent);
+  }
+}
+
+@utility v3-live { animation: v3-flicker 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v3-shell::after, .v3-title, .v3-live, .v3-border { animation: none; }
 }

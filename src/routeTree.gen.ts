@@ -31,6 +31,7 @@ import { Route as ApiPublicHooksT45BoundaryRunRouteImport } from './routes/api/p
 import { Route as ApiPublicHooksT45IngestRouteImport } from './routes/api/public/hooks/t45-ingest'
 import { Route as ApiPublicHooksV12ShadowRouteImport } from './routes/api/public/hooks/v12-shadow'
 import { Route as ApiPublicHooksV2RecordRouteImport } from './routes/api/public/hooks/v2-record'
+import { Route as ApiPublicHooksV3RecordRouteImport } from './routes/api/public/hooks/v3-record'
 import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
 import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
 import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
@@ -153,6 +154,11 @@ const ApiPublicHooksV2RecordRoute = ApiPublicHooksV2RecordRouteImport.update({
   path: '/api/public/hooks/v2-record',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksV3RecordRoute = ApiPublicHooksV3RecordRouteImport.update({
+  id: '/api/public/hooks/v3-record',
+  path: '/api/public/hooks/v3-record',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicPredictionsLatestRoute =
   ApiPublicPredictionsLatestRouteImport.update({
     id: '/api/public/predictions/latest',
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
+  '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
+  '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -247,6 +255,7 @@ export interface FileRoutesById {
   '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
   '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
   '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
+  '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
   '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
   '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
   '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
@@ -275,6 +284,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/t45-ingest'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/hooks/v2-record'
+    | '/api/public/hooks/v3-record'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/t45-ingest'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/hooks/v2-record'
+    | '/api/public/hooks/v3-record'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/t45-ingest'
     | '/api/public/hooks/v12-shadow'
     | '/api/public/hooks/v2-record'
+    | '/api/public/hooks/v3-record'
     | '/api/public/predictions/latest'
     | '/api/public/predictions/upcoming'
     | '/api/public/timing/btc-15m'
@@ -351,6 +363,7 @@ export interface RootRouteChildren {
   ApiPublicHooksT45IngestRoute: typeof ApiPublicHooksT45IngestRoute
   ApiPublicHooksV12ShadowRoute: typeof ApiPublicHooksV12ShadowRoute
   ApiPublicHooksV2RecordRoute: typeof ApiPublicHooksV2RecordRoute
+  ApiPublicHooksV3RecordRoute: typeof ApiPublicHooksV3RecordRoute
   ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
   ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
   ApiPublicTimingBtc15mRoute: typeof ApiPublicTimingBtc15mRoute
@@ -512,6 +525,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksV2RecordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/v3-record': {
+      id: '/api/public/hooks/v3-record'
+      path: '/api/public/hooks/v3-record'
+      fullPath: '/api/public/hooks/v3-record'
+      preLoaderRoute: typeof ApiPublicHooksV3RecordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/predictions/latest': {
       id: '/api/public/predictions/latest'
       path: '/api/public/predictions/latest'
@@ -573,6 +593,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksT45IngestRoute: ApiPublicHooksT45IngestRoute,
   ApiPublicHooksV12ShadowRoute: ApiPublicHooksV12ShadowRoute,
   ApiPublicHooksV2RecordRoute: ApiPublicHooksV2RecordRoute,
+  ApiPublicHooksV3RecordRoute: ApiPublicHooksV3RecordRoute,
   ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
   ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
   ApiPublicTimingBtc15mRoute: ApiPublicTimingBtc15mRoute,
