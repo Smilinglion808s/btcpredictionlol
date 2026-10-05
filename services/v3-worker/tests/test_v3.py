@@ -565,5 +565,66 @@ class ReviewFixes(unittest.TestCase):
             self.assertEqual(len(calls), 1)
 
 
+class SenderClockGate(unittest.TestCase):
+    def rt(self, d, clock, posts):
+        import service
+        with mock.patch.dict("os.environ", {"V3_DATA_DIR": d}):
+            rt = service.Runtime()
+        e = seeded(d, clock, delivery_enabled=True)
+        clock.ms = (END + 15) * 1000 + 200
+        self.assertEqual(e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])["status"], "SELECTED")
+        e.record_markets([kalshi_meta(END)], V.KALSHI_SERIES)
+        rt.engine = e
+
+        def h(req):
+            posts.append(req.content)
+            return httpx.Response(200)
+        rt.sender = Sender("https://bettor.example/v3", b"k", httpx.Client(transport=httpx.MockTransport(h)), now_ms=clock)
+        return rt
+
+    def test_bad_or_unknown_clock_blocks_post_good_clock_posts_once_no_replay(self):
+        for bad in (None, 5000):
+            with tempfile.TemporaryDirectory() as d:
+                clock, posts = Clock(0), []
+                rt = self.rt(d, clock, posts)
+                rt.skew_ms = bad
+                clock.ms = END * 1000 + 48_010
+                self.assertEqual(rt.send_once(), {"posted": 0, "clock_blocked": 1})
+                self.assertEqual(posts, [])
+                self.assertIn("CLOCK_BLOCKED", rt.engine.faults["sender_clock"])
+                raw = bytes(rt.engine.s.q("SELECT body FROM outbox")[0][0])
+                clock.ms = END * 1000 + 49_000  # expires while blocked
+                rt.skew_ms = 0  # clock recovers
+                self.assertEqual(rt.send_once()["posted"], 0)
+                self.assertEqual(posts, [])
+                self.assertEqual(rt.engine.s.q("SELECT status,body FROM outbox")[0], ("EXPIRED", raw))
+                self.assertEqual(rt.engine._decision(END), ("SELECTED", 15, -1))  # selection frozen
+        with tempfile.TemporaryDirectory() as d:
+            clock, posts = Clock(0), []
+            rt = self.rt(d, clock, posts)
+            rt.skew_ms = 0
+            clock.ms = END * 1000 + 48_010
+            self.assertEqual(rt.send_once(), {"posted": 1, "clock_blocked": 0})
+            self.assertEqual(rt.send_once()["posted"], 0)
+            self.assertEqual(len(posts), 1)
+            self.assertNotIn("sender_clock", rt.engine.faults)
+
+    def test_clock_rechecked_after_list_retrieved(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock, posts = Clock(0), []
+            rt = self.rt(d, clock, posts)
+            rt.skew_ms = 0
+            clock.ms = END * 1000 + 48_010
+            real = rt.engine.deliverable
+
+            def listed_then_skew():
+                out = real()
+                rt.skew_ms = None  # clock lost after the list was fetched
+                return out
+            rt.engine.deliverable = listed_then_skew
+            self.assertEqual(rt.send_once(), {"posted": 0, "clock_blocked": 1})
+            self.assertEqual(posts, [])
+
+
 if __name__ == "__main__":
     unittest.main()
