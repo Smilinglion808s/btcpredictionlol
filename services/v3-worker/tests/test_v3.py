@@ -609,6 +609,17 @@ class SenderClockGate(unittest.TestCase):
             self.assertEqual(len(posts), 1)
             self.assertNotIn("sender_clock", rt.engine.faults)
 
+    def test_dashboard_record_payload(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock, posts = Clock(0), []
+            rt = self.rt(d, clock, posts)
+            p = rt.record_payload()
+            self.assertEqual(p["model_version"], "v3-pf-e008-r1")
+            self.assertEqual(p["decisions"][0]["status"], "SELECTED")
+            self.assertEqual(p["decisions"][0]["direction"], -1)
+            self.assertIsNotNone(p["decisions"][0]["t15_rank"])
+            self.assertEqual(posts, [])
+
     def test_clock_rechecked_after_list_retrieved(self):
         with tempfile.TemporaryDirectory() as d:
             clock, posts = Clock(0), []

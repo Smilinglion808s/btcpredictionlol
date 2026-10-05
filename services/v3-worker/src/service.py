@@ -7,6 +7,8 @@ Env:
   BTC15M_WEBHOOK_SECRET  existing shared HMAC secret (raw-body x-btc15m-signature)
   V3_MODE                body "mode": shadow (default) or live
   PORT                   health port (default 8080)
+  V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
+  C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
 """
 from __future__ import annotations
 
@@ -151,6 +153,43 @@ class Runtime:
                 self.err("sender", type(e).__name__)
             time.sleep(0.1)
 
+    def record_payload(self, limit: int = 8) -> dict:
+        """Status + recent decisions for the dashboard tile. Read-only view of local state."""
+        import uuid
+        from v3core import MODEL_VERSION, iso_ms
+        rows = self.engine.s.q(
+            "SELECT d.candle_s,d.status,d.reason,d.checkpoint,d.direction,d.rank,d.decision_ms,d.fit_version,d.audit,o.status "
+            "FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s ORDER BY d.candle_s DESC LIMIT ?", (limit,))
+        out = []
+        for c, stt, reason, cp, direction, rank, dms, fv, audit, delivery in rows:
+            a = json.loads(audit or "{}")
+            out.append({"candle_open": iso_ms(c * 1000), "status": stt, "reason": reason, "checkpoint": cp,
+                        "direction": direction, "rank": rank, "decision_at": iso_ms(dms) if dms else None,
+                        "fit_version": fv, "delivery": delivery,
+                        "t15_rank": (a.get("t15") or {}).get("rank"), "t30_rank": (a.get("t30") or {}).get("rank")})
+        return {"model_version": MODEL_VERSION, "worker_id": os.environ.get("RAILWAY_REPLICA_ID", "v3-worker")[:64],
+                "nonce": uuid.uuid4().hex + uuid.uuid4().hex[:8], "status": self.health(), "decisions": out}
+
+    def record_loop(self) -> None:  # pragma: no cover - dashboard only, never betting
+        import hashlib
+        import hmac
+        import httpx
+        url, secret = os.environ.get("V3_RECORD_URL", "").strip(), os.environ.get("C85_GATEWAY_SECRET", "").encode()
+        if not (url.startswith("https://") and url.endswith("/api/public/hooks/v3-record") and secret):
+            return
+        http = httpx.Client(timeout=5.0, follow_redirects=False)
+        while True:
+            try:
+                raw = json.dumps(self.record_payload(), separators=(",", ":"), default=str).encode()
+                ts = str(int(time.time() * 1000))
+                sig = hmac.new(secret, ts.encode() + b"." + raw, hashlib.sha256).hexdigest()
+                http.post(url, content=raw, headers={"content-type": "application/json",
+                                                     "x-c85-timestamp": ts, "x-c85-signature": sig})
+                self.engine.faults.pop("recorder", None)
+            except Exception as e:  # noqa: BLE001
+                self.err("recorder", type(e).__name__)
+            time.sleep(20)
+
     def health(self) -> dict:
         now = int(time.time() * 1000)
         try:
@@ -190,7 +229,7 @@ def serve(rt: Runtime) -> None:  # pragma: no cover
 
 def main() -> None:  # pragma: no cover
     rt = Runtime()
-    for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop,
+    for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop, rt.record_loop,
                rt.scheduler_loop, rt.sender_loop):
         threading.Thread(target=fn, daemon=True).start()
     serve(rt)
