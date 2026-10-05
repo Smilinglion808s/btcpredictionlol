@@ -235,8 +235,10 @@ class Live(unittest.TestCase):
 
     def test_rank_ties_and_minimum(self):
         self.assertIsNone(M.rank_before_append(.9, [.1] * 191))
-        self.assertEqual(M.rank_before_append(.6, [.1] * 192), 1.0)
-        self.assertEqual(M.rank_before_append(.6, [.2] * 384 + [.1] * 384), 0.5)
+        self.assertEqual(M.rank_before_append(.7, [.1] * 192), 1.0)
+        self.assertEqual(M.rank_before_append(.75, [.25] * 192), 1.0)  # ties count as <=
+        self.assertEqual(M.rank_before_append(.7, [.3] * 384 + [.1] * 384), 0.5)
+        self.assertEqual(M.rank_before_append(.7, [.3] * 1000 + [.1] * 768), 1.0)  # last 768 only
 
 
 class DailyRefit(unittest.TestCase):
@@ -260,7 +262,6 @@ class DailyRefit(unittest.TestCase):
                 h = e.head(cp, day)
                 self.assertEqual(h["valid_until_s"], day + V.DAY)
                 self.assertLessEqual(h["training_last_s"] + V.SLOT, day)
-                self.assertEqual(h["training_first_s"], day - V.WINDOW_SLOTS * V.SLOT + V.SLOT * 0 if False else h["training_first_s"])
                 self.assertGreaterEqual(h["training_first_s"], day - V.WINDOW_SLOTS * V.SLOT)
             self.assertEqual(int(e.s.meta("hist_wm_15")), END + 95 * V.SLOT)
             first = e.hist_entry(15, END)

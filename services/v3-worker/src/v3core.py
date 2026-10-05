@@ -96,6 +96,17 @@ def feature_row(values: dict, checkpoint: int) -> list[float]:
     return out
 
 
+def predict_exact(head: dict, x: list[float], candle_s: int) -> float:
+    """Frozen M.predict on a 96-row batch (one research day), row 0.
+
+    numpy's matmul result for a single row can differ by 1 ULP from the batched
+    path the research used; batches of >=4 identical rows reproduce the replay
+    fixture bit-for-bit (tests/test_v3.py::Parity).
+    """
+    import numpy as np
+    return float(M.predict(head, np.tile(np.asarray(x, dtype=float), (96, 1)), candle_s)[0])
+
+
 def finite(xs) -> bool:
     return all(math.isfinite(v) for v in xs)
 
@@ -273,7 +284,7 @@ class Engine:
                 if head is None:
                     return n
                 x = feature_row(json.loads(r[0][0]), cp)
-                p = float(M.predict(head, x, c))
+                p = predict_exact(head, x, c)
                 prior = [v for (v,) in self.s.q(
                     "SELECT confidence FROM hist WHERE checkpoint=? AND candle_s<? ORDER BY candle_s DESC LIMIT 768",
                     (cp, c))][::-1]
