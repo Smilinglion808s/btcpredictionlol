@@ -41,6 +41,8 @@ class Runtime:
             self.engine.load_seed()
         except FailClosed as e:
             self.engine.faults["package"] = str(e)
+        except Exception as e:  # noqa: BLE001 - any seed/manifest problem fails closed
+            self.engine.faults["package"] = f"PACKAGE_INVALID:{type(e).__name__}"
         self.sender = Sender(url, secret) if self.engine.delivery_enabled else None
         self.market, self.feed = Market(), SecondFeed()
         self.skew_ms: int | None = None
@@ -110,13 +112,25 @@ class Runtime:
                 self.err("catchup", type(e).__name__)
             time.sleep(1)
 
+    def market_loop(self) -> None:  # pragma: no cover - public Kalshi metadata, off the scoring thread
+        from v3core import KALSHI_SERIES
+        while True:
+            try:
+                now_s = int(time.time())
+                got = self.market.kalshi_markets(KALSHI_SERIES, now_s, now_s + 4 * SLOT)
+                self.engine.record_markets(got, KALSHI_SERIES)
+                self.engine.faults.pop("market_fetch", None)
+            except Exception as e:  # noqa: BLE001
+                self.err("market_fetch", type(e).__name__)
+            time.sleep(60)
+
     def sender_loop(self) -> None:  # pragma: no cover
         while True:
             try:
                 self.engine.prepare_due()
                 if self.sender:
                     for eid, raw in self.engine.deliverable():
-                        code, error = self.sender.post(eid, raw)
+                        code, error = self.sender.post(eid, raw, self.engine.expires_ms(eid))
                         self.engine.record_attempt(eid, code, error)
             except Exception as e:  # noqa: BLE001
                 self.err("sender", type(e).__name__)
@@ -124,7 +138,10 @@ class Runtime:
 
     def health(self) -> dict:
         now = int(time.time() * 1000)
-        st = self.engine.status()
+        try:
+            st = self.engine.status()
+        except Exception as e:  # noqa: BLE001
+            st = {"fit_today": {}, "caught_up": False, "status_error": type(e).__name__}
         reasons = [f"FIT_MISSING_T{k}" for k, v in st["fit_today"].items() if not v]
         if not st["caught_up"]:
             reasons.append("CATCHUP_GAP")
@@ -134,6 +151,8 @@ class Runtime:
             reasons.append("CLOCK_SKEW")
         if "package" in self.engine.faults:
             reasons.append("PACKAGE_INVALID")
+        if "status_error" in st:
+            reasons.append("STATUS_ERROR")
         return {"alive": True, "prediction_ready": not reasons, "not_ready_reasons": reasons,
                 "feed_age_ms": None if self.feed.last_rx_ms is None else now - self.feed.last_rx_ms,
                 "clock_skew_ms": self.skew_ms, "uptime_s": (now - self.started_ms) // 1000, **st}
@@ -156,7 +175,7 @@ def serve(rt: Runtime) -> None:  # pragma: no cover
 
 def main() -> None:  # pragma: no cover
     rt = Runtime()
-    for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop,
+    for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop,
                rt.scheduler_loop, rt.sender_loop):
         threading.Thread(target=fn, daemon=True).start()
     serve(rt)

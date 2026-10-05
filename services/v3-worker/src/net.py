@@ -15,6 +15,7 @@ import httpx
 BINANCE_REST = "https://api.binance.com"
 BINANCE_WS = "wss://stream.binance.com:9443/ws/btcusdt@kline_1s"
 OKX_REST = "https://www.okx.com"
+KALSHI_REST = "https://api.elections.kalshi.com/trade-api/v2"
 UA = "v3-predictor-worker/v3-pf-e008-r1 (+railway; read-only)"
 
 
@@ -62,6 +63,13 @@ class Market:
             o, c = float(k[1]), float(k[4])
             out[int(k[0]) // 1000] = (c > o) - (c < o)
         return out
+
+    def kalshi_markets(self, series: str, min_close_s: int, max_close_s: int) -> list[dict]:
+        """Public, unauthenticated Kalshi market metadata (identity only; no prices used)."""
+        r = self.http.get(f"{KALSHI_REST}/markets", params={
+            "series_ticker": series, "min_close_ts": min_close_s, "max_close_ts": max_close_s, "limit": 100})
+        r.raise_for_status()
+        return list(r.json().get("markets") or [])
 
 
 class SecondFeed:
@@ -119,17 +127,28 @@ class SecondFeed:
 class Sender:
     """Posts persisted bytes exactly. Cannot place orders; knows only one URL."""
 
-    def __init__(self, url: str, secret: bytes, client: httpx.Client | None = None) -> None:
+    MAX_TIMEOUT_S = 0.8
+
+    def __init__(self, url: str, secret: bytes, client: httpx.Client | None = None, now_ms=None) -> None:
         from v3core import url_allowed
         if url and not url_allowed(url):
             raise ValueError("V3_WEBHOOK_URL_FORBIDDEN")
         self.url, self.secret = url, secret
+        self.now_ms = now_ms or (lambda: int(time.time() * 1000))
         self.http = client or httpx.Client(timeout=0.8, follow_redirects=False, headers={"User-Agent": UA})
 
-    def post(self, event_id: str, raw: bytes) -> tuple[int | None, str | None]:
+    def post(self, event_id: str, raw: bytes, expires_ms: int | None = None) -> tuple[int | None, str | None]:
+        """Final expiry check immediately before the POST; transport deadline capped to the remaining window.
+        (The receiver still enforces expires_at itself.)"""
         from v3core import sign
+        timeout = self.MAX_TIMEOUT_S
+        if expires_ms is not None:
+            remaining = expires_ms - self.now_ms()
+            if remaining <= 0:
+                return None, "EXPIRED_BEFORE_SEND"
+            timeout = min(timeout, remaining / 1000)
         try:
-            r = self.http.post(self.url, content=raw, headers={
+            r = self.http.post(self.url, content=raw, timeout=timeout, headers={
                 "content-type": "application/json", "x-btc15m-signature": sign(self.secret, raw),
                 "x-v3-event-id": event_id, "x-v3-model": "v3-pf-e008-r1"})
         except httpx.HTTPError as e:
