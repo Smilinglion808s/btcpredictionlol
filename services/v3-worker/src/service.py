@@ -124,14 +124,29 @@ class Runtime:
                 self.err("market_fetch", type(e).__name__)
             time.sleep(60)
 
+    def send_once(self) -> dict:
+        """One sender pass. Capture/expiry always run; an actual POST requires a good clock checked
+        immediately before each send. Clock-blocked events stay queued (same bytes) and expire at T49."""
+        self.engine.prepare_due()
+        out = {"posted": 0, "clock_blocked": 0}
+        if not self.sender:
+            return out
+        for eid, raw in self.engine.deliverable():
+            if not self.clock_ok():
+                out["clock_blocked"] += 1
+                self.err("sender_clock", f"CLOCK_BLOCKED:{eid}")
+                continue
+            code, error = self.sender.post(eid, raw, self.engine.expires_ms(eid))
+            self.engine.record_attempt(eid, code, error)
+            out["posted"] += 1
+        if out["clock_blocked"] == 0:
+            self.engine.faults.pop("sender_clock", None)
+        return out
+
     def sender_loop(self) -> None:  # pragma: no cover
         while True:
             try:
-                self.engine.prepare_due()
-                if self.sender:
-                    for eid, raw in self.engine.deliverable():
-                        code, error = self.sender.post(eid, raw, self.engine.expires_ms(eid))
-                        self.engine.record_attempt(eid, code, error)
+                self.send_once()
             except Exception as e:  # noqa: BLE001
                 self.err("sender", type(e).__name__)
             time.sleep(0.1)
