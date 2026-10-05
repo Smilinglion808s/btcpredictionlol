@@ -38,6 +38,12 @@ def bars(c, n=30, drift=1.0, taker=0.75, quote=100.0):
     return out
 
 
+def kalshi_meta(c):
+    close = c + V.SLOT
+    return {"ticker": V.kalshi_ticker(c), "event_ticker": V.kalshi_ticker(c).rsplit("-", 1)[0],
+            "close_time": V.iso_ms(close * 1000).replace(".000Z", "Z")}
+
+
 def seeded(tmp, clock=None, **kw):
     e = V.Engine(V.Store(Path(tmp) / "v3.sqlite"), now_ms=clock, **kw)
     e.load_seed()
@@ -282,6 +288,7 @@ class Outbox(unittest.TestCase):
         e = seeded(d, clock, delivery_enabled=enabled)
         clock.ms = (END + 15) * 1000 + 200
         self.assertEqual(e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])["status"], "SELECTED")
+        e.record_markets([kalshi_meta(END)], V.KALSHI_SERIES)
         return e, clock
 
     def test_disabled_captures_but_never_delivers(self):
@@ -361,6 +368,201 @@ class Outbox(unittest.TestCase):
             raise httpx.ReadTimeout("t", request=req)
         s = Sender("https://bettor.example/v3", b"k", httpx.Client(transport=httpx.MockTransport(boom)))
         self.assertEqual(s.post("e", b"{}"), (None, "ReadTimeout"))
+
+
+# ------------------------------------------------------------- review regressions (ae7420a)
+import threading  # noqa: E402
+from unittest import mock  # noqa: E402
+
+
+def fill_day(e, rng, with_backfill=True, with_labels=True):
+    for i in range(96):
+        c = END + i * V.SLOT
+        if with_backfill:
+            e.apply_backfill(c, bars(c, drift=float(rng.normal(0, 3)), taker=float(rng.uniform(.2, .8))), final=True)
+    if with_labels:
+        e.apply_labels({END + i * V.SLOT: int(rng.choice([-1, 1])) for i in range(96)})
+
+
+class ReviewFixes(unittest.TestCase):
+    def test_1_labels_without_features_do_not_fit(self):
+        with tempfile.TemporaryDirectory() as d:
+            e = seeded(d, Clock(0))
+            fill_day(e, np.random.default_rng(2), with_backfill=False)
+            self.assertFalse(e.ensure_fit(END + V.DAY))
+            self.assertEqual(e.catchup_step(END + V.DAY + 60)["fitted"], [])
+            self.assertIsNone(e.head(15, END + V.DAY))
+            # a single pending head anywhere in the window still blocks
+            e.apply_backfill(END, bars(END)[:20], final=False)  # s15 valid, s30 pending
+            for i in range(1, 96):
+                c = END + i * V.SLOT
+                e.apply_backfill(c, bars(c), final=True)
+            self.assertFalse(e.ensure_fit(END + V.DAY))
+            e.apply_backfill(END, bars(END)[:20], final=True)  # finalised data-invalid is terminal
+            self.assertTrue(e.ensure_fit(END + V.DAY))
+
+    def test_2_partial_daily_fit_recovers_after_restart(self):
+        with tempfile.TemporaryDirectory() as d:
+            e = seeded(d, Clock(0))
+            fill_day(e, np.random.default_rng(3))
+            real = M.fit_head
+            day = END + V.DAY
+
+            def flaky(stamps, x, labels, day_s, cp):
+                if cp == 30:
+                    raise ValueError("injected_t30")
+                return real(stamps, x, labels, day_s, cp)
+            with mock.patch.object(M, "fit_head", flaky):
+                out = e.catchup_step(day + 60)
+            self.assertEqual(out["fitted"], [])
+            self.assertIsNone(e.head(15, day))  # atomic: no half-persisted day
+            self.assertIn("injected_t30", e.faults["fit"])
+            # legacy partial state (one head persisted) is retried too
+            e.s.q("INSERT INTO heads VALUES(15,?,?,'refit')", (day, json.dumps(e.head(15, END) | {"valid_from_s": day})))
+            e2 = V.Engine(e.s, now_ms=Clock(0))  # restart on same store
+            e2.faults = dict(e.faults)
+            out = e2.catchup_step(day + 120)
+            self.assertEqual(out["fitted"], [day])
+            self.assertIsNotNone(e2.head(30, day))
+            self.assertNotIn("fit", e2.faults)
+            self.assertEqual(e2.first_unfitted_day(), day + V.DAY)
+
+    def test_3_concurrent_history_advance_no_duplicate(self):
+        with tempfile.TemporaryDirectory() as d:
+            e = seeded(d, Clock(0))
+            e.apply_backfill(END, bars(END), True)
+            barrier, real, errs = threading.Barrier(2), V.predict_exact, []
+
+            def slow(head, x, c):
+                try:
+                    barrier.wait(timeout=0.5)  # would align both threads if they could both read the watermark
+                except threading.BrokenBarrierError:
+                    pass
+                return real(head, x, c)
+
+            def run():
+                try:
+                    e.advance_history(15, END)
+                except Exception as ex:  # noqa: BLE001
+                    errs.append(ex)
+            with mock.patch.object(V, "predict_exact", slow):
+                ts = [threading.Thread(target=run) for _ in range(2)]
+                [t.start() for t in ts]
+                [t.join() for t in ts]
+            self.assertEqual(errs, [])
+            self.assertEqual(e.s.q("SELECT COUNT(*) FROM hist WHERE checkpoint=15 AND candle_s=?", (END,))[0][0], 1)
+            self.assertEqual(int(e.s.meta("hist_wm_15")), END)
+
+    def test_3_concurrent_catchup_and_live_scoring_exactly_once(self):
+        for _ in range(5):
+            with tempfile.TemporaryDirectory() as d:
+                clock = Clock((END + 15) * 1000 + 200)
+                e = seeded(d, clock)
+                stop, errs = threading.Event(), []
+
+                def bg():
+                    while not stop.is_set():
+                        try:
+                            e.catchup_step(END + 60)
+                        except Exception as ex:  # noqa: BLE001
+                            errs.append(ex)
+                t = threading.Thread(target=bg)
+                t.start()
+                r = e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+                stop.set()
+                t.join()
+                self.assertEqual(errs, [])
+                self.assertEqual(r["status"], "SELECTED")
+                self.assertEqual(e._decision(END), ("SELECTED", 15, -1))
+                self.assertEqual(e.s.q("SELECT COUNT(*) FROM hist WHERE checkpoint=15 AND candle_s=?", (END,))[0][0], 1)
+
+    def test_3_crash_between_history_and_decision_rolls_back(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock = Clock((END + 15) * 1000 + 200)
+            e = seeded(d, clock)
+            with mock.patch.object(V.Engine, "_set_decision", side_effect=RuntimeError("crash")):
+                with self.assertRaises(RuntimeError):
+                    e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            self.assertIsNone(e.hist_entry(15, END))
+            self.assertEqual(int(e.s.meta("hist_wm_15")), END - V.SLOT)
+            self.assertEqual(e.s.q("SELECT COUNT(*) FROM rows WHERE candle_s=?", (END,))[0][0], 0)
+            e2 = V.Engine(e.s, now_ms=clock)  # restart
+            self.assertEqual(e2.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])["status"], "SELECTED")
+            self.assertEqual(e2.s.q("SELECT COUNT(*) FROM hist WHERE checkpoint=15")[0][0], 769)
+
+    def test_4_no_verified_market_means_no_send(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock = Clock((END + 15) * 1000 + 200)
+            e = seeded(d, clock, delivery_enabled=True)
+            self.assertEqual(e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])["status"], "SELECTED")
+            clock.ms = END * 1000 + 48_010
+            self.assertEqual(e.prepare_due(), [])
+            # wrong series / mismatched ticker / non-boundary close are all rejected
+            self.assertEqual(e.record_markets([kalshi_meta(END)], "KXBTCD"), 0)
+            bad = kalshi_meta(END) | {"ticker": "KXBTC15M-26OCT042030-30"}
+            self.assertEqual(e.record_markets([bad], V.KALSHI_SERIES), 0)
+            self.assertEqual(e.record_markets([kalshi_meta(END) | {"close_time": "2026-10-05T00:15:07Z"}],
+                                              V.KALSHI_SERIES), 0)
+            self.assertEqual(e.prepare_due(), [])
+            clock.ms = END * 1000 + 49_000
+            e.prepare_due()
+            self.assertEqual(e._decision(END)[0], "EXPIRED_UNSENT")
+            self.assertIn("NO_VERIFIED_MARKET", e.s.q("SELECT audit FROM decisions")[0][0])
+            self.assertEqual(e.s.q("SELECT COUNT(*) FROM outbox")[0][0], 0)
+
+    def test_4_verified_market_used_and_key_format_unchanged(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock = Clock((END + 15) * 1000 + 200)
+            e = seeded(d, clock)
+            e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            e.record_markets([kalshi_meta(END)], V.KALSHI_SERIES)
+            clock.ms = END * 1000 + 48_010
+            e.prepare_due()
+            body = json.loads(e.s.q("SELECT body FROM outbox")[0][0])
+            self.assertEqual(body["market"], V.kalshi_ticker(END))
+            self.assertEqual(body["interval_key"], f"v12:{V.kalshi_ticker(END)}:2026-10-05T00:00:00.000Z")
+
+    def test_5_health_with_invalid_package_and_no_seed(self):
+        import service
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d}), \
+                mock.patch.object(service, "verify_package", side_effect=V.FailClosed("PACKAGE_MANIFEST_INVALID")):
+            rt = service.Runtime()
+            h = rt.health()
+            self.assertFalse(h["prediction_ready"])
+            self.assertIn("PACKAGE_INVALID", h["not_ready_reasons"])
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "SHA256.json").write_text("{not json")
+            with self.assertRaises(V.FailClosed) as cm:
+                V.verify_package(Path(d))
+            self.assertEqual(str(cm.exception), "PACKAGE_MANIFEST_INVALID")
+            (Path(d) / "SHA256.json").unlink()
+            with self.assertRaises(V.FailClosed):
+                V.verify_package(Path(d))
+
+    def test_7_expiry_rechecked_before_post_and_timeout_capped(self):
+        calls = []
+
+        def handler(req):
+            calls.append(req.extensions.get("timeout"))
+            return httpx.Response(200)
+        clock = Clock(END * 1000 + 48_900)
+        s = Sender("https://bettor.example/v3", b"k", httpx.Client(transport=httpx.MockTransport(handler)), now_ms=clock)
+        exp = END * 1000 + 49_000
+        self.assertEqual(s.post("e", b"{}", exp), (200, None))
+        self.assertLessEqual(calls[0]["read"], 0.1 + 1e-9)
+        clock.ms = exp
+        self.assertEqual(s.post("e", b"{}", exp), (None, "EXPIRED_BEFORE_SEND"))
+        self.assertEqual(len(calls), 1)
+        with tempfile.TemporaryDirectory() as d:
+            e, c2 = Outbox().selected(d, True)
+            c2.ms = END * 1000 + 48_100
+            [eid] = e.prepare_due()
+            listed = e.deliverable()  # fetched before T49
+            c2.ms = exp + 5
+            s2 = Sender("https://bettor.example/v3", b"k", httpx.Client(transport=httpx.MockTransport(handler)), now_ms=c2)
+            for ev, raw in listed:
+                self.assertEqual(e.record_attempt(ev, *s2.post(ev, raw, e.expires_ms(ev))), "EXPIRED")
+            self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
