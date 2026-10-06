@@ -29,18 +29,22 @@ export const getV3Live = createServerFn({ method: "POST" }).handler(async () => 
   const today = boiseDay(Date.now());
   const tally = () => ({ calls: 0, wins: 0, losses: 0, pending: 0 });
   const tot = tally(), day = tally();
+  const byDay = new Map<string, ReturnType<typeof tally>>();
   const streak: ("W" | "L")[] = [];
   for (const p of picks) {
     const t = Date.parse(p.candle_open);
     const c = candles.get(t);
     const res = !c ? "P" : c.close === c.open ? "F" : (c.close > c.open ? 1 : -1) === p.direction ? "W" : "L";
     if ((res === "W" || res === "L") && streak.length < 20) streak.push(res);
-    for (const b of boiseDay(t) === today ? [tot, day] : [tot]) {
+    const dk = boiseDay(t);
+    if (!byDay.has(dk)) byDay.set(dk, tally());
+    for (const b of dk === today ? [tot, day, byDay.get(dk)!] : [tot, byDay.get(dk)!]) {
       b.calls++;
       if (res === "P") b.pending++;
       else if (res === "W") b.wins++;
       else if (res === "L") b.losses++;
     }
+  }
   }
   const rate = (b: ReturnType<typeof tally>) => (b.wins + b.losses ? b.wins / (b.wins + b.losses) : null);
   const dayIntervals = rows.filter((r) => boiseDay(Date.parse(r.candle_open)) === today).length;
