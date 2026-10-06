@@ -60,11 +60,17 @@ export function V3Card({ data, error }: Props) {
           <Ring value={rec?.today?.winRate ?? null} sub="today" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Net wins · today</div>
-          <div className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${dayNet > 0 ? "text-plasma" : dayNet < 0 ? "text-ember" : "text-foreground"}`}>
-            {signed(dayNet)}
+          <div className="flex gap-6">
+            {[["Net wins · today", dayNet], ["Net wins · total", totNet]].map(([label, n]) => (
+              <div key={label as string}>
+                <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+                <div className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${(n as number) > 0 ? "text-plasma" : (n as number) < 0 ? "text-ember" : "text-foreground"}`}>
+                  {signed(n as number)}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">total net {signed(totNet)} · predictions, not bets</div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground">predictions, not bets</div>
         </div>
       </section>
 
