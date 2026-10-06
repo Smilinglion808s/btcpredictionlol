@@ -61,11 +61,11 @@ export function V3Card({ data, error }: Props) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex gap-6">
-            {[["Net wins · today", dayNet], ["Net wins · total", totNet]].map(([label, n]) => (
-              <div key={label as string}>
+            {([["Net wins · today", dayNet, "text-5xl"], ["Net wins · total", totNet, "text-6xl"]] as const).map(([label, n, size]) => (
+              <div key={label}>
                 <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
-                <div className={`mt-1 font-mono text-5xl font-bold tracking-tighter tabular-nums leading-none ${(n as number) > 0 ? "text-plasma" : (n as number) < 0 ? "text-ember" : "text-foreground"}`}>
-                  {signed(n as number)}
+                <div className={`mt-1 font-mono ${size} font-bold tracking-tighter tabular-nums leading-none ${n > 0 ? "text-plasma" : n < 0 ? "text-ember" : "text-foreground"}`}>
+                  {signed(n)}
                 </div>
               </div>
             ))}
@@ -126,18 +126,28 @@ export function V3Card({ data, error }: Props) {
         <p className="text-[10px] text-ember">Not ready: {st.not_ready_reasons.join(", ").toLowerCase().replaceAll("_", " ")}</p>
       ) : null}
 
-      <details className="text-xs">
-        <summary className="cursor-pointer text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Recent log</summary>
-        <div className="mt-1 max-h-48 overflow-auto space-y-0.5">
-          {decisions.map((d, i) => (
-            <p key={i} className="text-muted-foreground tabular-nums">
-              {new Date(d.candle_open).toISOString().slice(5, 16).replace("T", " ")} · {STATUS_TEXT[d.status] ?? d.status}
-              {d.direction != null ? ` · ${side(d.direction)} @${d.checkpoint}s · rank ${pct(d.rank)}` : ""}
-            </p>
-          ))}
-          {decisions.length === 0 && <p className="text-muted-foreground">Nothing recorded yet.</p>}
-        </div>
-      </details>
+      {rec?.daily?.length ? (
+        <section className="v3-chip p-3">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground mb-1.5">Daily record (Boise)</div>
+          <div className="max-h-56 overflow-auto">
+            <table className="w-full text-xs tabular-nums">
+              <thead className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                <tr><th className="text-left font-normal">Day</th><th className="text-right font-normal">W-L</th><th className="text-right font-normal">Net</th><th className="text-right font-normal">Win %</th></tr>
+              </thead>
+              <tbody>
+                {rec.daily.map((d: any) => (
+                  <tr key={d.day} className="border-t border-border/40">
+                    <td className="py-1">{d.day.slice(5)}</td>
+                    <td className="text-right">{d.wins}-{d.losses}</td>
+                    <td className={`text-right font-semibold ${d.net > 0 ? "text-plasma" : d.net < 0 ? "text-ember" : ""}`}>{signed(d.net)}</td>
+                    <td className="text-right">{pct(d.winRate, 1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       <p className="text-[9px] text-muted-foreground/80">
         Results graded from confirmed 15-minute candles (close vs open); today = Boise day. Bet size, price and odds are set by the betting app.
       </p>
