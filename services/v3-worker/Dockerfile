@@ -7,10 +7,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY package ./package
+COPY risk_package ./risk_package
 COPY src ./src
 COPY tests ./tests
 
-# Capture-only by default: V3_DELIVERY_ENABLED is unset, so nothing is POSTed.
-ENV V3_DATA_DIR=/data/v3 V3_MODE=shadow PORT=8080
+# Filtering defaults on; this does not enable signal delivery or betting.
+ENV V3_DATA_DIR=/data/v3 V3_MODE=shadow V3_REVERSAL_MODE=enforce PORT=8080
 EXPOSE 8080
 CMD ["python", "src/service.py"]

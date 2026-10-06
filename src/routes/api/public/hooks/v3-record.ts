@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { verifyC85Signature } from "@/lib/c85/gateway.server";
 import { claimNonce, serviceClient } from "@/lib/c85/ops.server";
 import { readBounded } from "@/lib/v2/contract";
+import { allowV3RecordTransition } from "@/lib/v3/reversal-record";
 
 const MODEL = "v3-pf-e008-r1";
 const MAX_BODY = 32_768;
@@ -20,6 +21,9 @@ function cleanStatus(s: any) {
   for (const k of ["prediction_ready", "caught_up", "delivery_enabled"]) if (typeof s[k] === "boolean") out[k] = s[k];
   for (const k of ["feed_age_ms", "clock_skew_ms", "uptime_s"]) out[k] = num(s[k]);
   out.mode = str(s.mode, 16);
+  out.reversal_mode = str(s.reversal_mode, 16);
+  out.reversal_head_sha256 = str(s.reversal_head_sha256, 64);
+  out.reversal_valid_until_s = num(s.reversal_valid_until_s);
   out.latest_fit_day = str(s.latest_fit_day, 40);
   if (s.fit_today && typeof s.fit_today === "object")
     out.fit_today = { 15: s.fit_today["15"] === true, 30: s.fit_today["30"] === true };
@@ -54,10 +58,9 @@ export const Route = createFileRoute("/api/public/hooks/v3-record")({
             const open = iso(d?.candle_open);
             if (!open || Date.parse(open) % 900_000 || !STATUSES.has(d.status)) continue;
             const direction = d.direction === 1 || d.direction === -1 ? d.direction : null;
-            const { data: prev } = await sb.from("v3_decisions").select("status,direction,checkpoint").eq("candle_open", open).maybeSingle();
-            // A frozen selection can only move to EXPIRED_UNSENT; its side/checkpoint never change.
-            if (prev?.status === "SELECTED" && d.status !== "SELECTED" && d.status !== "EXPIRED_UNSENT") continue;
-            if (prev?.direction != null && direction !== null && prev.direction !== direction) continue;
+            const { data: prev } = await sb.from("v3_decisions").select("status,reason,direction,checkpoint").eq("candle_open", open).maybeSingle();
+            // A T45 risk veto may end a frozen selection, but cannot change its side/checkpoint.
+            if (!allowV3RecordTransition(prev, { ...d, direction }, Date.parse(open))) continue;
             const { error } = await sb.from("v3_decisions").upsert({
               candle_open: open, status: d.status, reason: str(d.reason), checkpoint: num(d.checkpoint),
               direction: direction ?? prev?.direction ?? null, rank: num(d.rank), t15_rank: num(d.t15_rank),

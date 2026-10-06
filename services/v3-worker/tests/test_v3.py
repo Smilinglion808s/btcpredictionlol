@@ -121,7 +121,7 @@ class FeedFields(unittest.TestCase):
     def test_ws_and_rest_keep_actual_quote_fields(self):
         rest = [1000, "1", "2", "0.5", "1.5", "9", 1999, "123.4", 7, "4", "56.7", "0"]
         ws = {"t": 1000, "T": 1999, "o": "1", "h": "2", "l": "0.5", "c": "1.5", "v": "9", "q": "123.4",
-              "Q": "56.7", "V": "4", "x": True}
+              "Q": "56.7", "V": "4", "n": 7, "x": True}
         self.assertEqual(parse_rest_kline(rest), parse_ws_kline(ws))
         self.assertEqual(parse_ws_kline(ws)["taker_buy_quote_volume"], 56.7)
         self.assertFalse(parse_ws_kline({**ws, "x": False})["is_final"])
@@ -652,7 +652,7 @@ class AsapPolicy(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d, "V3_DELIVERY_POLICY": "now"}):
             with self.assertRaises(SystemExit):
                 service.Runtime()
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d, "V3_DELIVERY_POLICY": "asap-r1"}):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d, "V3_DELIVERY_POLICY": "asap-r1", "V3_REVERSAL_MODE": "off"}):
             self.assertEqual(service.Runtime().health()["delivery_policy"], "asap-r1")
         with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d}):
             self.assertEqual(service.Runtime().health()["delivery_policy"], "t48-r1")

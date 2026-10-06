@@ -201,10 +201,15 @@ class _Tx:
 # --------------------------------------------------------------------- engine
 class Engine:
     def __init__(self, store: Store, now_ms=None, delivery_enabled: bool = False, mode: str = "shadow",
-                 delivery_policy: str = DEFAULT_DELIVERY_POLICY) -> None:
+                 delivery_policy: str = DEFAULT_DELIVERY_POLICY, risk_mode: str = "off") -> None:
         if delivery_policy not in DELIVERY_POLICIES:
             raise FailClosed(f"UNKNOWN_DELIVERY_POLICY:{delivery_policy}")
         self.delivery_policy = delivery_policy
+        if risk_mode not in ("off", "shadow", "enforce"):
+            raise FailClosed("UNKNOWN_REVERSAL_MODE")
+        if risk_mode == "enforce" and delivery_policy != "t48-r1":
+            raise FailClosed("REVERSAL_REQUIRES_T48_DELIVERY")
+        self.risk_mode = risk_mode
         import time
         self.s = store
         self.now_ms = now_ms or (lambda: int(time.time() * 1000))
@@ -552,6 +557,12 @@ class Engine:
         }
         if asap:
             body["delivery_policy"] = "asap-r1"
+        if self.risk_mode == "enforce":
+            audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
+            risk = audit.get("reversal_risk") or {}
+            if risk.get("status") != "PASS":
+                raise FailClosed("REVERSAL_NOT_PASSED")
+            body["risk_filter"] = risk
         return json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
 
     def prepare_due(self) -> list[str]:
@@ -570,6 +581,11 @@ class Engine:
             elif now >= entry and ticker is None:
                 continue  # explicit no-send until a verified market exists; never invent a ticker
             elif now >= entry:
+                if self.risk_mode == "enforce":
+                    audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
+                    risk = audit.get("reversal_risk") or {}
+                    if risk.get("status") != "PASS":
+                        continue
                 raw = self.body_for(c, now, ticker)
                 eid = json.loads(raw)["event_id"]
                 status = "PENDING" if self.delivery_enabled else "DISABLED"
@@ -585,6 +601,11 @@ class Engine:
     def deliverable(self) -> list[tuple[str, bytes]]:
         if not self.delivery_enabled:
             return []
+        if self.risk_mode == "enforce":
+            # Persisted pre-patch/unfiltered outbox entries must never bypass a newly enabled gate.
+            candidates = self.s.q("SELECT event_id,body FROM outbox WHERE status IN ('PENDING','RETRY') AND expires_ms>? ORDER BY candle_s", (self.now_ms(),))
+            return [(e,bytes(b)) for e,b in candidates
+                    if (json.loads(bytes(b)).get("risk_filter") or {}).get("status") == "PASS"]
         return [(e, bytes(b)) for e, b in self.s.q(
             "SELECT event_id,body FROM outbox WHERE status IN ('PENDING','RETRY') AND expires_ms>? ORDER BY candle_s",
             (self.now_ms(),))]
@@ -619,7 +640,7 @@ class Engine:
         if any(v is None for v in raw_wm.values()):  # uninitialised / invalid seed: report, never crash
             return {"model_version": MODEL_VERSION, "fit_today": heads, "latest_fit_day": None,
                     "history_watermark": None, "caught_up": False, "faults": dict(self.faults),
-                    "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy,
+                    "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy, "reversal_mode": self.risk_mode,
                     "mode": self.mode, "outbox": {},
                     "recent_decisions": []}
         wms = {cp: int(v) for cp, v in raw_wm.items()}
@@ -629,7 +650,7 @@ class Engine:
         return {"model_version": MODEL_VERSION, "fit_today": heads, "latest_fit_day": iso_ms(latest * 1000) if latest else None,
                 "history_watermark": {cp: iso_ms(w * 1000) for cp, w in wms.items()},
                 "caught_up": all(w >= c - SLOT for w in wms.values()), "faults": dict(self.faults),
-                "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy,
+                "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy, "reversal_mode": self.risk_mode,
                 "mode": self.mode, "outbox": counts,
                 "recent_decisions": [dict(zip(("candle", "status", "reason", "checkpoint", "direction"),
                                               (iso_ms(r[0] * 1000),) + tuple(r[1:]))) for r in last]}

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {allowV3RecordTransition as ok} from '../src/lib/v3/reversal-record.ts';
+const open=1791180000000;
+const prev={status:'SELECTED',direction:1,checkpoint:15};
+const risk={version:'v3-reversal-risk-t45-r1',feature_schema:'reversal50-v3-side-rank-t45-r1',status:'SKIP',evaluated_at_ms:open+45010};
+const skip={...prev,status:'NO_CALL',reason:'REVERSAL_RISK_SKIP',reversal_risk:risk};
+assert(ok(prev,skip,open));
+assert(!ok(prev,{...skip,direction:-1},open));
+assert(!ok(prev,{...skip,checkpoint:30},open));
+assert(!ok(prev,{...skip,reversal_risk:null},open));
+assert(!ok(prev,{...skip,reason:'OTHER'},open));
+assert(!ok(prev,{...skip,reversal_risk:{...risk,evaluated_at_ms:open+30000}},open));
+assert(!ok(prev,{...skip,reversal_risk:{...risk,version:'wrong'}},open));
+assert(!ok(skip,prev,open));
+assert(ok(skip,skip,open));
+assert(ok(prev,{...prev,status:'EXPIRED_UNSENT'},open));
+assert(ok(prev,{...skip,status:'FAIL_CLOSED',reason:'REVERSAL_RISK_UNAVAILABLE',reversal_risk:{...risk,status:'INVALID'}},open));
+console.log('11 V3 recording transition checks passed');
