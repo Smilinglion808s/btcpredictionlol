@@ -59,6 +59,7 @@ export const getV3Live = createServerFn({ method: "POST" }).handler(async () => 
       intervals: rows.length,
       dayIntervals,
       streak,
+      daily: [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([d, b]) => ({ day: d, ...b, net: b.wins - b.losses, winRate: rate(b) })),
     },
     error: rt.error || recent.error || all.error ? "READ_FAILED" : null,
   };
