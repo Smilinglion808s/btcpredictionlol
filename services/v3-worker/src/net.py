@@ -21,13 +21,16 @@ UA = "v3-predictor-worker/v3-pf-e008-r1 (+railway; read-only)"
 
 def parse_rest_kline(k: list) -> dict:
     return {"open_ms": int(k[0]), "open": float(k[1]), "high": float(k[2]), "low": float(k[3]), "close": float(k[4]),
-            "close_ms": int(k[6]), "quote_volume": float(k[7]), "taker_buy_quote_volume": float(k[10]), "is_final": True}
+            "close_ms": int(k[6]), "quote_volume": float(k[7]), "taker_buy_quote_volume": float(k[10]), "is_final": True,
+            "volume":float(k[5]), "count":int(k[8]), "taker_buy_volume":float(k[9])}
 
 
 def parse_ws_kline(k: dict) -> dict:
     return {"open_ms": int(k["t"]), "close_ms": int(k["T"]), "open": float(k["o"]), "high": float(k["h"]),
             "low": float(k["l"]), "close": float(k["c"]), "quote_volume": float(k["q"]),
-            "taker_buy_quote_volume": float(k["Q"]), "is_final": k.get("x") is True}
+            "taker_buy_quote_volume": float(k["Q"]), "is_final": k.get("x") is True,
+            "volume":float(k["v"]), "count":int(k["n"]) if k.get("n") is not None else None,
+            "taker_buy_volume":float(k["V"])}
 
 
 class Market:
@@ -63,6 +66,24 @@ class Market:
             o, c = float(k[1]), float(k[4])
             out[int(k[0]) // 1000] = (c > o) - (c < o)
         return out
+
+    def closed_bars(self, candle_s: int, interval: str, limit: int) -> list[dict]:
+        """Read-only pre-open context; source cutoff is explicit, never latest/in-progress."""
+        step = {"1m":60000, "15m":900000}[interval]
+        r = self.http.get(f"{BINANCE_REST}/api/v3/klines", params={
+            "symbol":"BTCUSDT", "interval":interval, "limit":limit,
+            "startTime":candle_s*1000-limit*step, "endTime":candle_s*1000-1})
+        r.raise_for_status()
+        return [parse_rest_kline(k) for k in r.json()]
+
+    def settled_market(self, ticker: str) -> dict:
+        if not ticker.startswith("KXBTC15M-"):
+            raise ValueError("RISK_MARKET_IDENTITY")
+        r = self.http.get(f"{KALSHI_REST}/markets/{ticker}")
+        if r.status_code == 404:
+            r = self.http.get(f"{KALSHI_REST}/historical/markets/{ticker}")
+        r.raise_for_status()
+        return r.json()["market"]
 
     def kalshi_markets(self, series: str, min_close_s: int, max_close_s: int) -> list[dict]:
         """Public, unauthenticated Kalshi market metadata (identity only; no prices used)."""

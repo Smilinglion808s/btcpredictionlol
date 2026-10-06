@@ -11,6 +11,7 @@ Env:
                          any other value refuses to start
   V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
   C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
+  V3_REVERSAL_MODE       enforce (default), shadow, or off. Enforce requires t48-r1.
 """
 from __future__ import annotations
 
@@ -37,11 +38,12 @@ class Runtime:
         url = os.environ.get("V3_WEBHOOK_URL", "").strip()
         secret = os.environ.get("BTC15M_WEBHOOK_SECRET", "").encode()
         policy = os.environ.get("V3_DELIVERY_POLICY", "").strip() or "t48-r1"
+        risk_mode = os.environ.get("V3_REVERSAL_MODE", "enforce").strip().lower()
         if policy not in DELIVERY_POLICIES:
             raise SystemExit(f"UNKNOWN_DELIVERY_POLICY:{policy}")
         self.wake = threading.Event()
         self.engine = Engine(Store(data / "v3.sqlite"), delivery_policy=policy, delivery_enabled=enabled and bool(url) and bool(secret),
-                             mode=os.environ.get("V3_MODE", "shadow"))
+                             mode=os.environ.get("V3_MODE", "shadow"), risk_mode=risk_mode)
         if enabled and not (url and secret):
             self.engine.faults["delivery"] = "ENABLED_WITHOUT_URL_OR_SECRET"
         try:
@@ -53,10 +55,19 @@ class Runtime:
             self.engine.faults["package"] = f"PACKAGE_INVALID:{type(e).__name__}"
         self.sender = Sender(url, secret) if self.engine.delivery_enabled else None
         self.market, self.feed = Market(), SecondFeed()
+        self.risk = None
+        if risk_mode != "off":
+            try:
+                from reversal_runtime import RiskRuntime
+                self.risk = RiskRuntime(self.engine, Market())
+            except Exception as e:
+                self.err("reversal_package", type(e).__name__ + ":" + str(e)[:160])
         self.skew_ms: int | None = None
         self.started_ms = int(time.time() * 1000)
 
     def err(self, k: str, v: str) -> None:
+        if k.startswith("reversal") and self.engine.faults.get(k) != v:
+            print(json.dumps({"event":"v3_reversal_fault","key":k,"reason":v}),flush=True)
         self.engine.faults[k] = v
 
     def clock_ok(self) -> bool:
@@ -78,6 +89,7 @@ class Runtime:
         start = int(time.time())
         first = start - start % SLOT
         fired = {(first, cp) for cp in CHECKPOINTS if start >= first + cp}  # never replay a missed checkpoint
+        risk_fired = {first} if start >= first + 46 else set()
         if fired and self.engine._decision(first) is None:
             self.engine._set_decision(first, "FAIL_CLOSED", "STARTED_LATE")
         while True:
@@ -96,8 +108,40 @@ class Runtime:
                             self.wake.set()  # sender prepares/sends off this thread
                     except Exception as e:  # noqa: BLE001
                         self.err("score", type(e).__name__)
+            if self.risk and c not in risk_fired and now >= (c+45)*1000:
+                deadline = (c+46)*1000
+                bars = self.feed.prefix(c,45,deadline)
+                if len(bars)==45 or now >= deadline-20:
+                    risk_fired.add(c)
+                    try:
+                        result=self.risk.score(c,bars,int(time.time()*1000),self.feed.fresh(now),self.clock_ok())
+                        if result.get("status") != "NOT_SELECTED":
+                            print(json.dumps({"event":"v3_reversal_decision","candle_s":c,**result}),flush=True)
+                        self.wake.set()
+                    except Exception as e:
+                        self.err("reversal_score",type(e).__name__)
             fired = {k for k in fired if k[0] >= c - SLOT}
+            risk_fired = {k for k in risk_fired if k >= c-SLOT}
             time.sleep(0.02)
+
+    def risk_context_loop(self) -> None:  # pragma: no cover - public reads, off scoring thread
+        while self.risk:
+            try:
+                now=int(time.time());c=now-now%SLOT
+                self.risk.prepare_context(c)
+                self.engine.faults.pop("reversal_context",None)
+            except Exception as e:
+                self.err("reversal_context",type(e).__name__+":"+str(e)[:120])
+            time.sleep(1)
+
+    def risk_refit_loop(self) -> None:  # pragma: no cover - public settlements and weekly fit only
+        while self.risk:
+            try:
+                self.risk.settle_and_refit(int(time.time()))
+                self.engine.faults.pop("reversal_refit",None)
+            except Exception as e:
+                self.err("reversal_refit",type(e).__name__+":"+str(e)[:120])
+            time.sleep(30)
 
     def catchup_loop(self) -> None:  # pragma: no cover - REST, off the scoring thread
         while True:
@@ -175,7 +219,8 @@ class Runtime:
             out.append({"candle_open": iso_ms(c * 1000), "status": stt, "reason": reason, "checkpoint": cp,
                         "direction": direction, "rank": rank, "decision_at": iso_ms(dms) if dms else None,
                         "fit_version": fv, "delivery": delivery,
-                        "t15_rank": (a.get("t15") or {}).get("rank"), "t30_rank": (a.get("t30") or {}).get("rank")})
+                        "t15_rank": (a.get("t15") or {}).get("rank"), "t30_rank": (a.get("t30") or {}).get("rank"),
+                        "reversal_risk": a.get("reversal_risk")})
         return {"model_version": MODEL_VERSION, "worker_id": os.environ.get("RAILWAY_REPLICA_ID", "v3-worker")[:64],
                 "nonce": uuid.uuid4().hex + uuid.uuid4().hex[:8], "status": self.health(), "decisions": out}
 
@@ -216,6 +261,18 @@ class Runtime:
             reasons.append("PACKAGE_INVALID")
         if "status_error" in st:
             reasons.append("STATUS_ERROR")
+        if self.engine.risk_mode == "enforce":
+            try:
+                if not self.risk:
+                    raise ValueError("RISK_PACKAGE_UNAVAILABLE")
+                c=(now//1000)//SLOT*SLOT
+                h=self.risk.head(c)
+                st["reversal_head_sha256"]=h["sha256"]
+                st["reversal_valid_until_s"]=h["valid_until_s"]
+                if not self.risk.context or self.risk.context['candle_s'] != c:
+                    reasons.append("REVERSAL_CONTEXT_NOT_READY")
+            except Exception:
+                reasons.append("REVERSAL_HEAD_NOT_READY")
         return {"alive": True, "prediction_ready": not reasons, "not_ready_reasons": reasons,
                 "feed_age_ms": None if self.feed.last_rx_ms is None else now - self.feed.last_rx_ms,
                 "clock_skew_ms": self.skew_ms, "uptime_s": (now - self.started_ms) // 1000, **st}
@@ -238,8 +295,18 @@ def serve(rt: Runtime) -> None:  # pragma: no cover
 
 def main() -> None:  # pragma: no cover
     rt = Runtime()
+    print(json.dumps({"event":"v3_reversal_start","revision":"v3-reversal-risk-t45-r1",
+                      "reversal_mode":rt.engine.risk_mode,"delivery_policy":rt.engine.delivery_policy,
+                      "risk_package_loaded":rt.risk is not None}),flush=True)
+    def health_log():
+        while True:
+            h=rt.health()
+            print(json.dumps({"event":"v3_reversal_health",**{k:h.get(k) for k in (
+                "prediction_ready","not_ready_reasons","reversal_mode","delivery_policy",
+                "reversal_head_sha256","reversal_valid_until_s","feed_age_ms","clock_skew_ms")}}),flush=True)
+            time.sleep(60)
     for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop, rt.record_loop,
-               rt.scheduler_loop, rt.sender_loop):
+               rt.risk_context_loop, rt.risk_refit_loop, rt.scheduler_loop, rt.sender_loop, health_log):
         threading.Thread(target=fn, daemon=True).start()
     serve(rt)
 

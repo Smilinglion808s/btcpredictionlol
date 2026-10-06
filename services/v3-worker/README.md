@@ -1,5 +1,50 @@
 # v3-predictor-worker: PF-E008 (`v3-pf-e008-r1`)
 
+## Reversal risk patch — 2026-10-06
+
+The frozen directional `package/` is unchanged. A separate, versioned
+`v3-reversal-risk-t45-r1` admission gate evaluates the selected direction at
+T45 using seconds 0–44 and completed pre-open bars. It preserves that direction,
+or skips; it never fades, exits, increases stake, or enables betting.
+
+`V3_REVERSAL_MODE=enforce` is the service default. `off` restores the prior V3
+behavior; `shadow` records scores without suppressing calls. Enforcement only
+works with `V3_DELIVERY_POLICY=t48-r1`; an ASAP/enforce combination refuses to
+start, rather than using future inputs or silently dropping the gate.
+
+The original T45 research recipe is kept: 50 features; weekly logistic C=.01;
+prior 8 weeks; one-day official-Kalshi-settlement embargo; at least 500 calls;
+training-only median imputation and standard scaling; skip at or above the
+training score's 75th percentile. No fixed probability cutoff or quota of live
+trades is substituted. V3's own selected side/rank and original selected calls
+(including subsequently skipped calls) train this explicitly separate adapter.
+Weeks follow the research's fixed Monday 06:00 UTC anchor, including across DST.
+
+Original T45 scorer replay: 3,875 rows, zero skip mismatches, maximum probability
+error 2.23e-16. Raw feature parity: 64 historical samples, maximum absolute error
+8.06e-9. Separately, on the priced V3 16-week replay: 3,734 base calls at 59.94%
+vs 2,765 retained calls at 63.62%. Estimated net ROI remained negative (-2.59%
+vs -2.26%); +1-cent stress remained negative. This is not the 67.84% original
+T45 strategy, not 104-week validation, and not evidence of executable fills.
+
+Context is fetched from public Binance APIs off the scoring thread. Weekly
+refits consume finalized public Kalshi outcomes, never OKX proxy outcomes.
+Missing/stale context, incomplete seconds, absent fields, stale/corrupt heads,
+or failed clocks block enforced calls. Explicit mathematical nulls alone use
+the training medians. The packaged head is valid through 2026-10-12 06:00 UTC;
+the worker maintains future weekly heads from its persisted risk rows. Missing
+refit data cannot extend that expiration.
+
+The outbound base model identity remains unchanged for receiver compatibility;
+the signed body adds `risk_filter` with policy version, head hash, probability,
+threshold, cutoff and pass status. T48 entry/T49 expiry, HMAC, deduplication,
+existing kill switches, and existing sizing are unchanged. Skips/invalid checks
+are durably audited, and pending pre-patch bodies cannot bypass enforcement.
+The V3 dashboard recorder accepts only matching-side/checkpoint risk vetoes and
+cannot resurrect a finalized skip through an older selected record.
+
+Tests: `python -m pytest -q tests package/test_model.py` (74 tests at patch build).
+
 This worker runs the frozen PF-E008 model, built from first-15s and first-30s
 price-flow learners. Each candle gets at most one direction. The worker can
 post that direction as one signed webhook to the external bettor.
