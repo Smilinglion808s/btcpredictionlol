@@ -8,8 +8,9 @@ post that direction as one signed webhook to the external bettor.
 - **Delivery is off by default.** Calls are captured locally until delivery is
   switched on.
 - **It never targets V1.2 or V2 receivers.** Their URLs are refused at startup.
-- **It doesn't touch the site.** It has no database tables, routes or dashboard
-  on the site, and makes no changes to V1.2, V2 or the collector.
+- **Its only site link is the dashboard.** It can optionally report status and
+  decisions to the dashboard-only `/api/public/hooks/v3-record` (`V3_RECORD_URL`).
+  It makes no changes to V1.2, V2 or the collector.
 
 ## Layout
 | Path | Contents |
@@ -40,8 +41,21 @@ post that direction as one signed webhook to the external bettor.
 - **Not ready.** A missing fit, an unresolved gap, a stale feed, clock skew
   over 1s, or a changed or corrupt package or seed pauses V3 and records the
   reason.
-- **Entry and expiry.** At T48 the exact body is persisted once; retries resend
-  those same bytes with the same `event_id`. Nothing is sent from T49 on.
+- **Delivery policy (`V3_DELIVERY_POLICY`).** Any other value refuses to start,
+  and `/healthz` reports the active policy.
+  - `t48-r1` (default, legacy): the body is persisted at T48, uses
+    `schema_version` `v3-signal/1`, and `entry_at` = candle + 48s.
+  - `asap-r1`: the body is persisted as soon as a T15 (or else T30) selection is
+    stored. The scoring thread wakes the sender, and networking stays off the
+    scoring path. The body uses `schema_version` `v3-signal/2`, adds
+    `"delivery_policy":"asap-r1"`, and sets `entry_at` exactly equal to
+    `decision_at`.
+
+  In both policies, `expires_at` stays candle + 49s. Each candle gets at most one
+  event. Retries and restarts resend the same bytes with the same `event_id`.
+  The verified-market check, the clock gate and the T49 hard stop all still
+  apply. T30 history still advances after a T15 selection, without a second
+  event.
 - **Responses.** 2xx counts as delivered. 4xx means rejected, and redirects are
   blocked as `REDIRECT_BLOCKED`. Timeouts, 5xx, 408 and 429 are retried until T49.
 - **Restarts.** A late restart never replays a missed checkpoint.
@@ -87,8 +101,11 @@ signed with the existing shared secret. Informational headers are
    interval. Validate timing in two separate checks:
    - `decision_at` is early by design (about T15 or T30). It must fall inside
      the candle and be at or before `entry_at`.
-   - Admission is based on `entry_at` (T48) and `expires_at` (T49) against the
-     receiver's clock.
+   - Admission is based on `entry_at` and `expires_at` (T49) against the
+     receiver's clock. For `v3-signal/1` (`t48-r1`), `entry_at` is T48. For
+     `v3-signal/2` (`asap-r1`), `entry_at` equals `decision_at`, so the call is
+     admissible as soon as it arrives.
+   - Accept `v3-signal/2` before switching the worker to `asap-r1`.
    Do **not** reuse V1.2's "now minus decision under 10 seconds" age check. It
    would reject every valid V3 call. Also don't reuse V1.2's route policy or its
    three-identity allowlist directly. V3 needs its own allowlist entry. Only the
