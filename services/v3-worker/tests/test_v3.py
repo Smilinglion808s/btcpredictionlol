@@ -681,10 +681,15 @@ class AsapPolicy(unittest.TestCase):
     def test_t30_ready_immediately(self):
         with tempfile.TemporaryDirectory() as d:
             e, clock = self.eng(d)
-            b = bars(END, drift=-60, taker=.02)
-            for i in range(5):
-                b[i]["quote_volume"] = 0.0
-                b[i]["taker_buy_quote_volume"] = 0.0
+            # quiet first 15s (T15 below the gate), then a strong sell-off by 30s
+            b = bars(END, drift=0.0, taker=.5)[:15]
+            late = bars(END, drift=-80, taker=.02)
+            p0 = b[-1]["close"]
+            for i in range(15, 30):
+                x = dict(late[i]); shift = p0 - late[14]["close"]
+                for k in ("open", "close", "high", "low"):
+                    x[k] += shift
+                b.append(x)
             clock.ms = (END + 15) * 1000 + 200
             self.assertEqual(e.checkpoint(END, 15, b[:15])["status"], "AWAIT_T30")
             self.assertEqual(e.prepare_due(), [])
