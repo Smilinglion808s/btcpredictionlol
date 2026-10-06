@@ -45,7 +45,6 @@ export const getV3Live = createServerFn({ method: "POST" }).handler(async () => 
       else if (res === "L") b.losses++;
     }
   }
-  }
   const rate = (b: ReturnType<typeof tally>) => (b.wins + b.losses ? b.wins / (b.wins + b.losses) : null);
   const dayIntervals = rows.filter((r) => boiseDay(Date.parse(r.candle_open)) === today).length;
   return {
