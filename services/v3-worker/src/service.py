@@ -159,7 +159,8 @@ class Runtime:
                 self.send_once()
             except Exception as e:  # noqa: BLE001
                 self.err("sender", type(e).__name__)
-            time.sleep(0.1)
+            self.wake.wait(0.1)  # woken immediately on a SELECTED checkpoint; else poll for retries/expiry
+            self.wake.clear()
 
     def record_payload(self, limit: int = 8) -> dict:
         """Status + recent decisions for the dashboard tile. Read-only view of local state."""
