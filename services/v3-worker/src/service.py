@@ -7,6 +7,8 @@ Env:
   BTC15M_WEBHOOK_SECRET  existing shared HMAC secret (raw-body x-btc15m-signature)
   V3_MODE                body "mode": shadow (default) or live
   PORT                   health port (default 8080)
+  V3_DELIVERY_POLICY     t48-r1 (default, legacy: send at T48) or asap-r1 (send right after selection);
+                         any other value refuses to start
   V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
   C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
 """
@@ -22,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from net import Market, SecondFeed, Sender  # noqa: E402
-from v3core import CHECKPOINTS, GRACE_MS, SLOT, Engine, FailClosed, Store, verify_package  # noqa: E402
+from v3core import DELIVERY_POLICIES, CHECKPOINTS, GRACE_MS, SLOT, Engine, FailClosed, Store, verify_package  # noqa: E402
 
 CLOCK_MAX_SKEW_MS = 1000
 
@@ -34,7 +36,11 @@ class Runtime:
         enabled = os.environ.get("V3_DELIVERY_ENABLED", "").strip().lower() == "true"
         url = os.environ.get("V3_WEBHOOK_URL", "").strip()
         secret = os.environ.get("BTC15M_WEBHOOK_SECRET", "").encode()
-        self.engine = Engine(Store(data / "v3.sqlite"), delivery_enabled=enabled and bool(url) and bool(secret),
+        policy = os.environ.get("V3_DELIVERY_POLICY", "").strip() or "t48-r1"
+        if policy not in DELIVERY_POLICIES:
+            raise SystemExit(f"UNKNOWN_DELIVERY_POLICY:{policy}")
+        self.wake = threading.Event()
+        self.engine = Engine(Store(data / "v3.sqlite"), delivery_policy=policy, delivery_enabled=enabled and bool(url) and bool(secret),
                              mode=os.environ.get("V3_MODE", "shadow"))
         if enabled and not (url and secret):
             self.engine.faults["delivery"] = "ENABLED_WITHOUT_URL_OR_SECRET"
@@ -85,7 +91,9 @@ class Runtime:
                 if len(bars) == cp or now >= deadline - 20:
                     fired.add((c, cp))
                     try:
-                        self.engine.checkpoint(c, cp, bars, self.feed.fresh(now), self.clock_ok())
+                        r = self.engine.checkpoint(c, cp, bars, self.feed.fresh(now), self.clock_ok())
+                        if r.get("status") == "SELECTED":
+                            self.wake.set()  # sender prepares/sends off this thread
                     except Exception as e:  # noqa: BLE001
                         self.err("score", type(e).__name__)
             fired = {k for k in fired if k[0] >= c - SLOT}
@@ -151,7 +159,8 @@ class Runtime:
                 self.send_once()
             except Exception as e:  # noqa: BLE001
                 self.err("sender", type(e).__name__)
-            time.sleep(0.1)
+            self.wake.wait(0.1)  # woken immediately on a SELECTED checkpoint; else poll for retries/expiry
+            self.wake.clear()
 
     def record_payload(self, limit: int = 8) -> dict:
         """Status + recent decisions for the dashboard tile. Read-only view of local state."""

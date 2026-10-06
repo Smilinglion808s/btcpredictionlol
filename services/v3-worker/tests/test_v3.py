@@ -637,5 +637,123 @@ class SenderClockGate(unittest.TestCase):
             self.assertEqual(posts, [])
 
 
+class AsapPolicy(unittest.TestCase):
+    def eng(self, d, policy="asap-r1", enabled=True):
+        clock = Clock(0)
+        e = seeded(d, clock, delivery_enabled=enabled, delivery_policy=policy)
+        e.record_markets([kalshi_meta(END)], V.KALSHI_SERIES)
+        return e, clock
+
+    def test_unknown_policy_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(V.FailClosed):
+                V.Engine(V.Store(Path(d) / "x.sqlite"), delivery_policy="t47")
+        import service
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d, "V3_DELIVERY_POLICY": "now"}):
+            with self.assertRaises(SystemExit):
+                service.Runtime()
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d, "V3_DELIVERY_POLICY": "asap-r1"}):
+            self.assertEqual(service.Runtime().health()["delivery_policy"], "asap-r1")
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"V3_DATA_DIR": d}):
+            self.assertEqual(service.Runtime().health()["delivery_policy"], "t48-r1")
+
+    def test_t15_ready_immediately_and_no_second_event_at_t30(self):
+        with tempfile.TemporaryDirectory() as d:
+            e, clock = self.eng(d)
+            clock.ms = (END + 15) * 1000 + 200
+            self.assertEqual(e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])["status"], "SELECTED")
+            [eid] = e.prepare_due()  # no T48 hold
+            (eid2, raw), = e.deliverable()
+            b = json.loads(raw)
+            self.assertEqual((eid, b["schema_version"], b["delivery_policy"], b["model_version"]),
+                             (eid2, "v3-signal/2", "asap-r1", "v3-pf-e008-r1"))
+            self.assertEqual(b["entry_at"], b["decision_at"])
+            self.assertEqual(b["decision_at"], V.iso_ms((END + 15) * 1000 + 200))
+            self.assertEqual(b["expires_at"], "2026-10-05T00:00:49.000Z")
+            clock.ms = (END + 30) * 1000 + 200
+            r30 = e.checkpoint(END, 30, bars(END, drift=60, taker=.98)[:30])
+            self.assertEqual(r30["status"], "HISTORY_ONLY")
+            self.assertIsNotNone(e.hist_entry(30, END))  # T30 history still advances
+            self.assertEqual(e.prepare_due(), [])
+            self.assertEqual(e.s.q("SELECT COUNT(*) FROM outbox")[0][0], 1)
+            self.assertEqual(bytes(e.s.q("SELECT body FROM outbox")[0][0]), raw)
+
+    def test_t30_ready_immediately(self):
+        with tempfile.TemporaryDirectory() as d:
+            e, clock = self.eng(d)
+            # quiet first 15s (T15 below the gate), then a strong sell-off by 30s
+            b = bars(END, drift=0.0, taker=.5)[:15]
+            late = bars(END, drift=-80, taker=.02)
+            p0 = b[-1]["close"]
+            for i in range(15, 30):
+                x = dict(late[i]); shift = p0 - late[14]["close"]
+                for k in ("open", "close", "high", "low"):
+                    x[k] += shift
+                b.append(x)
+            clock.ms = (END + 15) * 1000 + 200
+            self.assertEqual(e.checkpoint(END, 15, b[:15])["status"], "AWAIT_T30")
+            self.assertEqual(e.prepare_due(), [])
+            clock.ms = (END + 30) * 1000 + 300
+            self.assertEqual(e.checkpoint(END, 30, b[:30])["status"], "SELECTED")
+            [eid] = e.prepare_due()
+            body = json.loads(e.deliverable()[0][1])
+            self.assertEqual((body["checkpoint_seconds"], body["entry_at"]), (30, V.iso_ms((END + 30) * 1000 + 300)))
+
+    def test_same_bytes_on_retry_and_restart(self):
+        with tempfile.TemporaryDirectory() as d:
+            e, clock = self.eng(d)
+            clock.ms = (END + 15) * 1000 + 200
+            e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            [eid] = e.prepare_due()
+            (_, raw), = e.deliverable()
+            self.assertEqual(e.record_attempt(eid, 503, None), "RETRY")
+            clock.ms += 2000
+            e2 = V.Engine(e.s, now_ms=clock, delivery_enabled=True, delivery_policy="asap-r1")
+            self.assertEqual(e2.prepare_due(), [])
+            self.assertEqual(e2.deliverable(), [(eid, raw)])
+
+    def test_missing_market_clock_and_expiry(self):
+        with tempfile.TemporaryDirectory() as d:
+            clock = Clock((END + 15) * 1000 + 200)
+            e = seeded(d, clock, delivery_enabled=True, delivery_policy="asap-r1")
+            e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            self.assertEqual(e.prepare_due(), [])  # no verified market -> no send
+            clock.ms = END * 1000 + 49_000
+            e.prepare_due()
+            self.assertEqual(e._decision(END)[0], "EXPIRED_UNSENT")
+            self.assertEqual(e.s.q("SELECT COUNT(*) FROM outbox")[0][0], 0)
+        with tempfile.TemporaryDirectory() as d:
+            import service
+            with mock.patch.dict("os.environ", {"V3_DATA_DIR": d}):
+                rt = service.Runtime()
+            posts = []
+            Path(d, "e").mkdir()
+            rt.engine, clock = self.eng(str(Path(d, "e")))
+            clock.ms = (END + 15) * 1000 + 200
+            rt.engine.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            rt.sender = Sender("https://bettor.example/v3", b"k", httpx.Client(transport=httpx.MockTransport(
+                lambda r: (posts.append(r.content), httpx.Response(200))[1])), now_ms=clock)
+            rt.skew_ms = None
+            self.assertEqual(rt.send_once(), {"posted": 0, "clock_blocked": 1})  # clock gate still applies
+            rt.skew_ms = 0
+            self.assertEqual(rt.send_once()["posted"], 1)
+            self.assertEqual(len(posts), 1)
+            clock.ms = END * 1000 + 49_000
+            self.assertEqual(rt.send_once()["posted"], 0)
+
+    def test_legacy_t48_unchanged(self):
+        with tempfile.TemporaryDirectory() as d:
+            e, clock = self.eng(d, policy="t48-r1")
+            clock.ms = (END + 15) * 1000 + 200
+            e.checkpoint(END, 15, bars(END, drift=-60, taker=.02)[:15])
+            self.assertEqual(e.prepare_due(), [])
+            clock.ms = END * 1000 + 48_000
+            [eid] = e.prepare_due()
+            b = json.loads(e.s.q("SELECT body FROM outbox")[0][0])
+            self.assertEqual((b["schema_version"], b["entry_at"]), ("v3-signal/1", "2026-10-05T00:00:48.000Z"))
+            self.assertNotIn("delivery_policy", b)
+            self.assertEqual(V.Engine(V.Store(Path(d) / "y.sqlite")).delivery_policy, "t48-r1")
+
+
 if __name__ == "__main__":
     unittest.main()

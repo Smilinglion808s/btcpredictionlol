@@ -35,7 +35,10 @@ sys.path.insert(0, str(PACKAGE))
 import model as M  # noqa: E402  frozen reference, byte-identical to the handoff
 
 MODEL_VERSION = M.MODEL_VERSION
-SCHEMA_VERSION = "v3-signal/1"
+SCHEMA_VERSION = "v3-signal/1"          # legacy t48-r1 body (unchanged bytes)
+SCHEMA_VERSION_ASAP = "v3-signal/2"     # asap-r1 body
+DELIVERY_POLICIES = ("t48-r1", "asap-r1")
+DEFAULT_DELIVERY_POLICY = "t48-r1"
 LEG = "V3"
 SLOT = 900
 DAY = 86400
@@ -197,7 +200,11 @@ class _Tx:
 
 # --------------------------------------------------------------------- engine
 class Engine:
-    def __init__(self, store: Store, now_ms=None, delivery_enabled: bool = False, mode: str = "shadow") -> None:
+    def __init__(self, store: Store, now_ms=None, delivery_enabled: bool = False, mode: str = "shadow",
+                 delivery_policy: str = DEFAULT_DELIVERY_POLICY) -> None:
+        if delivery_policy not in DELIVERY_POLICIES:
+            raise FailClosed(f"UNKNOWN_DELIVERY_POLICY:{delivery_policy}")
+        self.delivery_policy = delivery_policy
         import time
         self.s = store
         self.now_ms = now_ms or (lambda: int(time.time() * 1000))
@@ -533,22 +540,28 @@ class Engine:
     def body_for(self, c: int, prepared_ms: int, ticker: str) -> bytes:
         d = self.s.q("SELECT checkpoint,direction,rank,decision_ms,fit_version FROM decisions WHERE candle_s=?", (c,))[0]
         key = interval_key(c, ticker)
+        asap = self.delivery_policy == "asap-r1"
+        entry_ms = d[3] if asap else c * 1000 + ENTRY_MS
         body = {
-            "schema_version": SCHEMA_VERSION, "model_version": MODEL_VERSION, "leg": LEG,
+            "schema_version": SCHEMA_VERSION_ASAP if asap else SCHEMA_VERSION, "model_version": MODEL_VERSION, "leg": LEG,
             "event_id": f"{key}:{LEG}", "interval_key": key, "market": ticker,
             "prediction": "YES" if d[1] == 1 else "NO",
             "candle_starts_at": iso_ms(c * 1000), "decision_at": iso_ms(d[3]), "checkpoint_seconds": d[0],
-            "entry_at": iso_ms(c * 1000 + ENTRY_MS), "expires_at": iso_ms(c * 1000 + EXPIRY_MS),
+            "entry_at": iso_ms(entry_ms), "expires_at": iso_ms(c * 1000 + EXPIRY_MS),
             "sent_at": iso_ms(prepared_ms), "confidence_rank": d[2], "fit_version": d[4], "mode": self.mode,
         }
+        if asap:
+            body["delivery_policy"] = "asap-r1"
         return json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
 
     def prepare_due(self) -> list[str]:
-        """At T48 persist the exact body once. Past T49 a selection is expired, never sent late."""
+        """Persist the exact body once when eligible: t48-r1 at T48; asap-r1 as soon as the selection
+        is stored (entry_at = decision_at). Past T49 a selection is expired, never sent late."""
         now, out = self.now_ms(), []
-        for (c,) in self.s.q("SELECT d.candle_s FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s "
-                             "WHERE d.status='SELECTED' AND o.event_id IS NULL"):
-            entry, expiry = c * 1000 + ENTRY_MS, c * 1000 + EXPIRY_MS
+        for (c, dms) in self.s.q("SELECT d.candle_s,d.decision_ms FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s "
+                                 "WHERE d.status='SELECTED' AND o.event_id IS NULL"):
+            expiry = c * 1000 + EXPIRY_MS
+            entry = dms if self.delivery_policy == "asap-r1" and dms is not None else c * 1000 + ENTRY_MS
             ticker = self.verified_market(c)
             if now >= expiry:
                 self._set_decision_status(c, "EXPIRED_UNSENT")
@@ -606,7 +619,8 @@ class Engine:
         if any(v is None for v in raw_wm.values()):  # uninitialised / invalid seed: report, never crash
             return {"model_version": MODEL_VERSION, "fit_today": heads, "latest_fit_day": None,
                     "history_watermark": None, "caught_up": False, "faults": dict(self.faults),
-                    "delivery_enabled": self.delivery_enabled, "mode": self.mode, "outbox": {},
+                    "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy,
+                    "mode": self.mode, "outbox": {},
                     "recent_decisions": []}
         wms = {cp: int(v) for cp, v in raw_wm.items()}
         latest = self.s.q("SELECT MAX(day_s) FROM heads")[0][0]
@@ -615,6 +629,7 @@ class Engine:
         return {"model_version": MODEL_VERSION, "fit_today": heads, "latest_fit_day": iso_ms(latest * 1000) if latest else None,
                 "history_watermark": {cp: iso_ms(w * 1000) for cp, w in wms.items()},
                 "caught_up": all(w >= c - SLOT for w in wms.values()), "faults": dict(self.faults),
-                "delivery_enabled": self.delivery_enabled, "mode": self.mode, "outbox": counts,
+                "delivery_enabled": self.delivery_enabled, "delivery_policy": self.delivery_policy,
+                "mode": self.mode, "outbox": counts,
                 "recent_decisions": [dict(zip(("candle", "status", "reason", "checkpoint", "direction"),
                                               (iso_ms(r[0] * 1000),) + tuple(r[1:]))) for r in last]}
