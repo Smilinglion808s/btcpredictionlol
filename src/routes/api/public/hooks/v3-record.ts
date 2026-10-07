@@ -29,7 +29,8 @@ function cleanStatus(s: any) {
   out.calibration_not_ready_reason = str(s.calibration_not_ready_reason, 80);
   out.calibration_lineage = str(s.calibration_lineage, 80);
   out.calibration_head_sha256 = str(s.calibration_head_sha256, 64);
-  for (const k of ["calibration_valid_until_s", "calibration_observations", "calibration_settled_candidates", "calibration_history_start_s"])
+  for (const k of ["calibration_valid_until_s", "calibration_observations", "calibration_settled_candidates", "calibration_history_start_s",
+    "calibration_backfilled_observations", "calibration_forward_observations", "calibration_training_rows"])
     out[k] = num(s[k]);
   const t = s.calibration_tracking;
   if (t && typeof t === "object") {

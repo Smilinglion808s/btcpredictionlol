@@ -199,7 +199,8 @@ class CalibrationRuntime:
           SELECT candle_s,label,json_extract(body,'$.result.status') st,
             json_extract(body,'$.result.reason') reason,
             json_extract(body,'$.result.direction') direction
-          FROM calibration_observations WHERE lineage=?)
+          FROM calibration_observations WHERE lineage=?
+            AND COALESCE(json_extract(body,'$.origin'),'forward')<>'historical_reconstruction')
           SELECT COUNT(*),COALESCE(SUM(st IN ('PASS','SKIP')),0),COALESCE(SUM(st='PASS'),0),
             COALESCE(SUM(st='PASS' AND reason='KEEP_BASELINE'),0),
             COALESCE(SUM(st='PASS' AND reason='ADD_LOWER60'),0),COALESCE(SUM(st='SKIP'),0),
@@ -213,6 +214,7 @@ class CalibrationRuntime:
             out.update(net=out["wins"]-out["losses"], win_rate=out["wins"]/n if n else None)
             return out
         recent = self.s.q("SELECT candle_s,body FROM calibration_observations WHERE lineage=? "
+                          "AND COALESCE(json_extract(body,'$.origin'),'forward')<>'historical_reconstruction' "
                           "ORDER BY candle_s DESC LIMIT 1", (C.LIVE_LINEAGE,))
         latest = None
         if recent:
@@ -223,15 +225,19 @@ class CalibrationRuntime:
                              today=tally(start, end), latest=latest)
 
     def health(self, c):
-        n, settled, start = self.s.q("SELECT COUNT(*),SUM(CASE WHEN label IS NOT NULL THEN 1 ELSE 0 END),MIN(candle_s) "
+        n, settled, start, backfilled = self.s.q("SELECT COUNT(*),SUM(CASE WHEN label IS NOT NULL THEN 1 ELSE 0 END),MIN(candle_s), "
+                                    "COALESCE(SUM(json_extract(body,'$.origin')='historical_reconstruction'),0) "
                                     "FROM calibration_observations WHERE lineage=?", (C.LIVE_LINEAGE,))[0]
         out = {"calibration_mode": self.engine.calibration_mode, "calibration_ready": False,
                "calibration_observations": n, "calibration_settled_candidates": settled or 0,
                "calibration_history_start_s": start, "calibration_lineage": C.LIVE_LINEAGE,
+               "calibration_backfilled_observations": backfilled,
+               "calibration_forward_observations": n-backfilled,
                "calibration_tracking": self.tracking}
         try:
             h = self.head(c)
             out.update(calibration_ready=True, calibration_head_sha256=h["sha256"],
+                       calibration_training_rows=h["training_rows"],
                        calibration_valid_until_s=h["valid_until_s"])
         except C.CalibrationInvalid as exc:
             out["calibration_not_ready_reason"] = str(exc)

@@ -246,3 +246,36 @@ pip install -r requirements.txt pytest
 python -m pytest -q tests/test_v3.py
 cd package && python -m pytest -q test_model.py
 ```
+
+## Official-history calibration bootstrap (2026-10-07)
+
+`calibration_package/` supplies the missing 26-week training span, April 6 through
+October 4, 2026 UTC. It contains 17,296 reconstructed intervals (176 archived
+source gaps preserved), 5,828 finalized Kalshi candidate outcomes, and the
+October 5 weekly head trained on 5,811 candidates after the existing 24-hour
+settlement embargo. The head expires October 12 at 00:00 UTC; normal weekly
+refitting then uses this history plus newly observed candidates.
+
+The reconstruction uses the frozen OKX-label-trained V3 T15/T30 core and official
+Kalshi risk/calibration outcomes. Both final core heads, both 768-value rank
+histories, all 768 replay fixtures per learner, all 1,902 original risk seed rows,
+and the current risk head reproduce exactly. Twenty-seven historical risk
+heads use only the prior eight weeks and a 24-hour settlement embargo. Independent
+raw-bar checks at 96 historical timestamps match the production risk feature
+function within 5.18e-9. Historical risk fits preserve the original archived
+technical inputs; replay evaluation recomputes production pre-open context.
+The audit includes the input hashes and limitations.
+
+Startup verifies all package hashes, candidate provenance, every stored risk
+score against its weekly head and 50-feature vector, and an exact calibration
+refit before one SQLite transaction. The import is idempotent, preserves real
+observations and existing heads, and never creates decisions or outbox items.
+With an overlap, the normal refitter derives the head from the merged population.
+Expired packaged heads are never activated.
+
+Reconstructed rows carry `origin=historical_reconstruction`, `replay_at_ms`, and
+`reconstructed_at_s`; they do not claim historical live receipt times. The BTC
+tile displays backfilled and forward intervals separately, and forward results
+exclude all reconstructed rows. Default calibration remains **shadow**. This
+bootstrap removes the history warm-up; it does not establish forward profitability
+or change the approved thresholds, the reversal filter, or webhook delivery.

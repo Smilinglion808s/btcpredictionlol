@@ -1,0 +1,40 @@
+{
+  "version": "v3-calibrated-risk-r3-r1",
+  "feature_schema": "risk-survival-logit-r1",
+  "lineage": "v3-okx-core-kalshi-official-r1",
+  "feature_order": [
+    "risk_survival_logit"
+  ],
+  "recipe": {
+    "C": 0.1,
+    "lookback_weeks": 26,
+    "embargo_s": 86400,
+    "min_rows": 500,
+    "keep_min": 0.55,
+    "add_min": 0.64,
+    "lower_rank": 0.6,
+    "baseline_rank": 0.7
+  },
+  "valid_from_s": 1791158400,
+  "valid_until_s": 1791763200,
+  "history_start_s": 1775433600,
+  "training_cutoff_s": 1791072000,
+  "training_first_s": 1775433600,
+  "training_last_s": 1791063900,
+  "max_settlement_s": 1791064807.212477,
+  "training_rows": 5811,
+  "median": [
+    0.5208095632215056
+  ],
+  "mean": [
+    0.5860964269227827
+  ],
+  "scale": [
+    0.40369885517539544
+  ],
+  "coef": [
+    0.3083749613479451
+  ],
+  "intercept": 0.5277608961627397,
+  "sha256": "9c746e1ba4bb73c830e95ba01096a1954bf6f9f35afbca33e143f7561e070759"
+}
