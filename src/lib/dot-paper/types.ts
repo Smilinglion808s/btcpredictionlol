@@ -200,3 +200,59 @@ export interface PaperError {
   code: string;
   message: string;
 }
+
+/** Browser-facing allowlist. Model rules, inputs and provenance hashes stay server-side. */
+export type DashboardFill = Pick<
+  PaperFill,
+  "price_micros" | "quantity_sats" | "fee_micros" | "fill_ms"
+>;
+export interface DashboardTrade {
+  id: number;
+  trade_id: string;
+  symbol?: "BTCUSD" | "BTCUSDT";
+  side: "LONG" | "SHORT";
+  entry: DashboardFill;
+  exit: DashboardFill;
+  risk_micros: string | null;
+  fees_micros: string;
+  carry_micros: string | null;
+  net_pnl_micros: string | null;
+  outcome: "WIN" | "LOSS" | "FLAT" | "PENDING";
+}
+export interface DashboardSnapshot {
+  schema_version: "dot-paper/v1";
+  run_id: string;
+  provenance: "FORWARD" | "TEST";
+  mode: "PAPER";
+  symbol: "BTCUSD" | "BTCUSDT";
+  server_ms: number;
+  state: PaperState;
+  trading_enabled: boolean;
+  observing: boolean;
+  model_version: string | null;
+  feed: Pick<PaperSnapshot["feed"], "health" | "quote_age_ms"> & {
+    max_quote_age_ms: number;
+  };
+  account: Pick<
+    PaperSnapshot["account"],
+    | "currency"
+    | "cash_micros"
+    | "equity_micros"
+    | "realized_net_micros"
+    | "unrealized_net_micros"
+    | "wins"
+    | "losses"
+    | "flats"
+    | "closed_trades"
+    | "win_rate_pct"
+  >;
+  position: {
+    position_id: string;
+    side: "LONG" | "SHORT";
+    opened_ms: number;
+    entry: DashboardFill;
+    risk_micros: string;
+  } | null;
+  pending: "ENTRY" | "EXIT" | null;
+  trades: Page<DashboardTrade>;
+}

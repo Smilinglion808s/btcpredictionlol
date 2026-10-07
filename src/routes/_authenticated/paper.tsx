@@ -5,11 +5,7 @@ import {
   getDotPaperSnapshot,
   getDotPaperPage,
 } from "../../lib/dot-paper.functions";
-import type {
-  PaperSnapshot,
-  PaperTrade,
-  PaperCall,
-} from "../../lib/dot-paper/types";
+import type { DashboardSnapshot } from "../../lib/dot-paper/types";
 
 import { mergeForwardPages } from "../../lib/dot-paper/presentation";
 
@@ -21,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/paper")({
       {
         name: "description",
         content:
-          "Read-only, BTC-only forward paper trading. Experimental rules, simulated fills, no real orders.",
+          "BTC forward paper trades, balance and win rate. Simulated trades, no real orders.",
       },
     ],
   }),
@@ -31,7 +27,7 @@ function DotPaperPage() {
   const [view, setView] = useState<"loading" | "locked" | "error" | "ready">(
     "loading",
   );
-  const [snapshot, setSnapshot] = useState<PaperSnapshot>();
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot>();
   const [message, setMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [pageBusy, setPageBusy] = useState(false);
@@ -40,7 +36,7 @@ function DotPaperPage() {
   const mounted = useRef(true),
     inflight = useRef(false),
     pageInFlight = useRef(false),
-    latest = useRef<PaperSnapshot | undefined>(undefined);
+    latest = useRef<DashboardSnapshot | undefined>(undefined);
   const refresh = useCallback(async () => {
     if (inflight.current) return;
     inflight.current = true;
@@ -50,9 +46,7 @@ function DotPaperPage() {
       if (!mounted.current) return;
       if (!response.ok) {
         if (latest.current) {
-          setMessage(
-            "The latest refresh failed. Previously received data is retained and will be marked stale.",
-          );
+          setMessage("Refresh failed. Showing the last received records.");
           return;
         }
         setView(
@@ -60,13 +54,13 @@ function DotPaperPage() {
         );
         setMessage(
           response.code === "SERVICE_NOT_CONFIGURED"
-            ? "The paper worker is not connected yet. This desk is read-only; no historical trades or placeholder performance will be shown."
-            : "A valid paper-service response could not be verified. Refresh to retry.",
+            ? "Paper data is not connected yet."
+            : "Paper data could not be verified. Refresh to retry.",
         );
         return;
       }
       // The public schema strips internal worker metadata before this boundary.
-      const data = response.data as unknown as PaperSnapshot;
+      const data = response.data;
       const merged = {
         ...data,
         trades: mergeForwardPages(
@@ -74,12 +68,6 @@ function DotPaperPage() {
             ? latest.current.trades
             : undefined,
           data.trades,
-        ),
-        calls: mergeForwardPages(
-          latest.current?.run_id === data.run_id
-            ? latest.current.calls
-            : undefined,
-          data.calls,
         ),
       };
       latest.current = merged;
@@ -90,9 +78,7 @@ function DotPaperPage() {
     } catch {
       if (!mounted.current) return;
       if (latest.current)
-        setMessage(
-          "The latest refresh failed. Previously received data is retained and will be marked stale.",
-        );
+        setMessage("Refresh failed. Showing the last received records.");
       else {
         setView("error");
         setMessage(
@@ -115,7 +101,7 @@ function DotPaperPage() {
             1000,
             Math.min(
               5000,
-              (latest.current?.assumptions.max_quote_age_ms ?? 10000) / 2,
+              (latest.current?.feed.max_quote_age_ms ?? 10000) / 2,
             ),
           )
         : 5000;
@@ -140,11 +126,11 @@ function DotPaperPage() {
       document.removeEventListener("visibilitychange", visible);
     };
   }, [refresh]);
-  const loadOlder = async (kind: "trades" | "calls" | "audit") => {
+  const loadOlder = async () => {
+    const kind = "trades";
     const previous = latest.current,
       cursor = previous?.[kind].next_cursor;
-    if (kind === "audit" || cursor == null || pageInFlight.current || !previous)
-      return;
+    if (cursor == null || pageInFlight.current || !previous) return;
     pageInFlight.current = true;
     setPageBusy(true);
     try {
@@ -165,8 +151,8 @@ function DotPaperPage() {
           response.data.run_id !== previous.run_id
         )
           return current;
-        const existing = current[kind].items as (PaperTrade | PaperCall)[];
-        const incoming = response.data.items as (PaperTrade | PaperCall)[];
+        const existing = current.trades.items;
+        const incoming = response.data.items;
         const unique = new Map(
           [...existing, ...incoming].map((row) => [row.id, row]),
         );
@@ -198,7 +184,7 @@ function DotPaperPage() {
       refreshing={refreshing}
       pageBusy={pageBusy}
       onRefresh={() => void refresh()}
-      onLoadOlder={(kind) => void loadOlder(kind)}
+      onLoadOlder={() => void loadOlder()}
     />
   );
 }
