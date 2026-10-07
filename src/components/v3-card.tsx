@@ -135,14 +135,20 @@ export function V3Card({ data, error }: Props) {
         </div>
         <p className="text-[11px] text-muted-foreground">
           {calibrationMode === "enforce" ? "Keeps base calls at 55% estimated correctness; admits extra candidates at 64%." :
+            st.calibration_ready ? "History ready. R3 scores new candidates in shadow while current V3 calls continue." :
             "Forward tracking only. Current V3 calls continue while calibration collects the required history."}
         </p>
         <div className="grid grid-cols-2 gap-2">
-          <Stat k="History collected" v={`${Math.min(historyWeeks, 26).toFixed(1)} / 26 weeks`} />
+          <Stat k="Training history" v={`${Math.min(historyWeeks, 26).toFixed(1)} / 26 weeks`} />
           <Stat k="Settled candidates" v={String(st.calibration_settled_candidates ?? 0)} />
-          <Stat k="Intervals observed" v={String(st.calibration_observations ?? 0)} />
+          <Stat k="Backfilled intervals" v={String(st.calibration_backfilled_observations ?? 0)} />
+          <Stat k="Forward intervals" v={String(st.calibration_forward_observations ?? ct?.observations ?? 0)} />
+          <Stat k="Current fit candidates" v={String(st.calibration_training_rows ?? 0)} />
           <Stat k="Calibrated decisions" v={String(ct?.scored ?? 0)} />
         </div>
+        {(st.calibration_backfilled_observations ?? 0) > 0 ? (
+          <p className="text-[10px] text-muted-foreground">Historical reconstruction trains R3. Forward wins and losses below count only newly observed candidates.</p>
+        ) : null}
         {st.calibration_ready === false && calibrationMode !== "off" ? (
           <p className="text-[10px] text-muted-foreground">{st.calibration_not_ready_reason === "CALIBRATION_26_WEEK_HISTORY_REQUIRED" ?
             "Needs 26 weeks of eligible candidate history and at least 500 settled candidates before scoring." :

@@ -16,6 +16,7 @@ VERSION = "v3-calibrated-risk-r3-r1"
 FEATURE_SCHEMA = "risk-survival-logit-r1"
 LIVE_LINEAGE = "v3-okx-core-kalshi-official-r1"
 PROXY_LINEAGE = "v3-binance-index-proxy-r3"
+BACKFILL_ORIGIN = "historical_reconstruction"
 DAY, WEEK, SLOT = 86400, 604800, 900
 ANCHOR = 345600  # Monday 1970-01-05 00Z; distinct from reversal's Monday06Z.
 KEEP_MIN, ADD_MIN, LOWER_RANK = .55, .64, .60
@@ -59,9 +60,17 @@ def fit(rows, boundary, history_start_s, lineage=LIVE_LINEAGE):
         raise CalibrationInvalid("CALIBRATION_INSUFFICIENT_OR_DUPLICATE_ROWS")
     for r in records:
         c = r["candle_s"]
+        # A replay cutoff is not evidence that a historical live deadline was met.
+        historical = r.get("origin") == BACKFILL_ORIGIN
+        timing_valid = ((r.get("replay_at_ms") == (c + 45) * 1000
+                         and r.get("feature_asof_ms") == (c + 45) * 1000 - 1
+                         and r.get("evaluated_at_ms") is None
+                         and r.get("reconstructed_at_s", 0) >= r["settlement_s"])
+                        if historical else
+                        (c + 45) * 1000 <= r.get("evaluated_at_ms", 0) < (c + 46) * 1000)
         if (c % SLOT or r.get("lineage") != lineage or r.get("side") not in (-1, 1)
                 or r.get("label") not in (-1, 1) or r["settlement_s"] < c + SLOT
-                or not (c + 45) * 1000 <= r.get("evaluated_at_ms", 0) < (c + 46) * 1000
+                or not timing_valid
                 or not r.get("risk_valid_from_s", c + 1) <= c < r.get("risk_valid_until_s", c)
                 or r.get("risk_max_settlement_s", c) >= r.get("risk_valid_from_s", c) - DAY
                 or len(r.get("risk_head_sha256", "")) != 64):

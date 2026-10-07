@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY package ./package
 COPY risk_package ./risk_package
+COPY calibration_package ./calibration_package
 COPY src ./src
 COPY tests ./tests
 

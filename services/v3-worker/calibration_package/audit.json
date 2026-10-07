@@ -1,0 +1,60 @@
+{
+  "version": "v3-calibration-backfill-r1",
+  "origin": "historical_reconstruction",
+  "lineage": "v3-okx-core-kalshi-official-r1",
+  "history_start_s": 1775433600,
+  "history_end_s": 1791158400,
+  "scheduled_intervals": 17472,
+  "reconstructed_intervals": 17296,
+  "source_gaps": 176,
+  "settled_union_candidates": 5828,
+  "baseline_candidates": 4634,
+  "lower60_candidates": 1194,
+  "fit_training_rows": 5811,
+  "head_sha256": "9c746e1ba4bb73c830e95ba01096a1954bf6f9f35afbca33e143f7561e070759",
+  "core": {
+    "15": {
+      "fits": 280,
+      "seed_head_exact": true,
+      "rank_seed_exact": true,
+      "fixture_rows_exact": 768
+    },
+    "30": {
+      "fits": 280,
+      "seed_head_exact": true,
+      "rank_seed_exact": true,
+      "fixture_rows_exact": 768
+    }
+  },
+  "risk": {
+    "risk_heads": 27,
+    "current_head_exact": true,
+    "seed_rows_verified": 1902,
+    "seed_max_feature_error": 0.0,
+    "seed_label_mismatches": 0,
+    "seed_side_mismatches": 0,
+    "window_start_s": 1775433600,
+    "window_end_s": 1791158400,
+    "source_rows": 29458,
+    "official_matches": 27721
+  },
+  "feature_validation": {
+    "raw_feature_checks": 96,
+    "max_absolute_error": 5.172416495113907e-09,
+    "tolerance": 1e-06,
+    "risk_probability_parity": true
+  },
+  "source_sha256": {
+    "v3_official_backfill/source/15min/t45-priceflow-q375-2026-10-05(1).csv": "47bbce6e91fb2421bb2fbcafe94653e0a69a5a1c0d01547d3d225be0c6557a01",
+    "v3_official_backfill/official_markets.json.gz": "9d2b47c9557fd7df42a8a98d1c4c230f64679bc4b63919d7dadb0e4bc232eae9",
+    "v3_official_backfill/official_manifest.json": "e9db288d029782232f1572510c4eae02015e0233054dbd0116f6fbf1f4c2d2fd",
+    "regime_analysis/reversal/outputs/panel.parquet": "ddc1b429e08964b16435b78d7567e4295b0b6ce3e61377a04c1778712ba0e93f",
+    "regime_analysis/reversal/inputs/minutes.parquet": "8753f7f12cbc575bfe90bb7015e741844f040ac6d665e7d25ffc4865c0b99f35"
+  },
+  "limitations": [
+    "Historical reconstruction, not observed live timing or trading results.",
+    "Archive gaps preserved; no synthesized missing V3 prefixes.",
+    "Historical risk fits preserve archived research technical inputs; scores use production-compatible recomputed pre-open inputs.",
+    "No optimization or out-of-sample performance claim; existing thresholds and lookbacks unchanged."
+  ]
+}

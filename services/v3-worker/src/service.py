@@ -72,6 +72,9 @@ class Runtime:
             try:
                 from calibration_runtime import CalibrationRuntime
                 self.calibration = CalibrationRuntime(self.engine, self.risk, Market())
+                from calibration_backfill import install
+                proof = install(self.engine.s, int(time.time()))
+                print(json.dumps({"event": "v3_calibration_backfill", **proof}), flush=True)
             except Exception as e:
                 self.err("calibration_package", type(e).__name__ + ":" + str(e)[:160])
         self.skew_ms: int | None = None
@@ -346,7 +349,9 @@ def main() -> None:  # pragma: no cover
                 "prediction_ready","not_ready_reasons","reversal_mode","delivery_policy",
                 "reversal_head_sha256","reversal_valid_until_s","feed_age_ms","clock_skew_ms",
                 "calibration_mode","calibration_ready","calibration_observations",
-                "calibration_settled_candidates","calibration_not_ready_reason")}}),flush=True)
+                "calibration_settled_candidates","calibration_not_ready_reason",
+                "calibration_backfilled_observations","calibration_forward_observations",
+                "calibration_training_rows","calibration_head_sha256")}}),flush=True)
             time.sleep(60)
     for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop, rt.record_loop,
                rt.risk_context_loop, rt.risk_refit_loop, rt.calibration_refit_loop, rt.scheduler_loop, rt.sender_loop, health_log):
