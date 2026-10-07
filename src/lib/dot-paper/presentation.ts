@@ -1,4 +1,4 @@
-import type { PaperSnapshot, PaperTrade } from "./types";
+import type { DashboardSnapshot, DashboardTrade } from "./types";
 
 export function money(
   value: string | null | undefined,
@@ -41,8 +41,6 @@ export const readable = (value?: string | null): string =>
   value
     ? value.replaceAll("_", " ").replaceAll("-", " ").toLowerCase()
     : "not available";
-export const shortHash = (value?: string): string =>
-  value ? `${value.slice(0, 8)}…${value.slice(-4)}` : "Not configured";
 export const tone = (value: string | null | undefined) =>
   value && /^-?\d+$/.test(value)
     ? BigInt(value) < 0n
@@ -51,28 +49,10 @@ export const tone = (value: string | null | undefined) =>
         ? "dot-positive"
         : ""
     : "";
-export function isSnapshot(value: unknown): value is PaperSnapshot {
-  if (!value || typeof value !== "object") return false;
-  const s = value as Partial<PaperSnapshot>;
-  return (
-    s.schema_version === "dot-paper/v1" &&
-    s.mode === "PAPER" &&
-    s.caller === "DOT" &&
-    (s.symbol === "BTCUSDT" || String(s.symbol) === "BTCUSD") &&
-    typeof s.server_ms === "number" &&
-    !!s.strategy &&
-    !!s.feed &&
-    !!s.simulator &&
-    !!s.account &&
-    !!s.risk &&
-    !!s.assumptions &&
-    Array.isArray(s.gates) &&
-    Array.isArray(s.calls?.items) &&
-    Array.isArray(s.trades?.items) &&
-    Array.isArray(s.audit?.items)
-  );
-}
-export function freshness(snapshot: PaperSnapshot | undefined, elapsedMs = 0) {
+export function freshness(
+  snapshot: DashboardSnapshot | undefined,
+  elapsedMs = 0,
+) {
   if (!snapshot) return { ageMs: null, isStale: false, snapshotStale: false };
   const ageMs =
     snapshot.feed.quote_age_ms == null
@@ -82,12 +62,13 @@ export function freshness(snapshot: PaperSnapshot | undefined, elapsedMs = 0) {
     ageMs,
     isStale:
       snapshot.feed.health === "STALE" ||
-      (ageMs != null && ageMs > snapshot.assumptions.max_quote_age_ms),
+      (ageMs != null && ageMs > snapshot.feed.max_quote_age_ms),
     snapshotStale: elapsedMs > 20_000,
   };
 }
+/** Only the displayed trade facts are exported; never model inputs or hashes. */
 export function tradeCsv(
-  trades: PaperTrade[],
+  trades: DashboardTrade[],
   symbol: string,
   currency = "USD",
 ): string {
@@ -102,21 +83,13 @@ export function tradeCsv(
     "entry_price_quote",
     "exit_price_quote",
     "quantity_btc",
-    "planned_risk_budget_quote",
-    "planned_stop_risk_quote",
-    "entry_notional_quote",
-    "gross_pnl_quote",
+    "risk_budget_quote",
     "fees_quote",
     "funding_quote",
     "net_pnl_quote",
-    "exit_reason",
-    "strategy_version",
-    "config_hash",
-    "artifact_hash",
   ];
   const cell = (value: unknown) =>
     `"${String(value ?? "").replaceAll('"', '""')}"`;
-
   const decimal = (value: string | null | undefined) => {
     if (value == null) return "";
     const n = BigInt(value),
@@ -125,13 +98,9 @@ export function tradeCsv(
   };
   return [
     fields.join(","),
-    ...trades.map((t) => {
-      const extended = t as PaperTrade & {
-        risk_micros?: string;
-        strategy_version?: string;
-      };
-      return [
-        t.trade_id,
+    ...trades.map((t) =>
+      [
+        /^[\s]*[=+@-]/.test(t.trade_id) ? `'${t.trade_id}` : t.trade_id,
         t.symbol ?? symbol,
         currency,
         t.side,
@@ -141,21 +110,14 @@ export function tradeCsv(
         decimal(t.entry.price_micros),
         decimal(t.exit.price_micros),
         quantity(t.entry.quantity_sats),
-        decimal(extended.risk_micros),
-        decimal(t.planned_stop_risk_micros),
-        decimal(t.entry_notional_micros ?? t.entry.notional_micros),
-        decimal(t.gross_pnl_micros),
+        decimal(t.risk_micros),
         decimal(t.fees_micros),
         decimal(t.carry_micros),
         decimal(t.net_pnl_micros),
-        t.exit_reason,
-        extended.strategy_version ?? "",
-        t.config_hash,
-        t.artifact_hash,
       ]
         .map(cell)
-        .join(",");
-    }),
+        .join(","),
+    ),
   ].join("\r\n");
 }
 

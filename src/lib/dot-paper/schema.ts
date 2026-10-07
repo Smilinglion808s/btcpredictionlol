@@ -1,4 +1,12 @@
 import { z } from "zod";
+import type { DashboardFill, DashboardSnapshot, DashboardTrade } from "./types";
+
+const publicFill = (fill: DashboardFill): DashboardFill => ({
+  price_micros: fill.price_micros,
+  quantity_sats: fill.quantity_sats,
+  fee_micros: fill.fee_micros,
+  fill_ms: fill.fill_ms,
+});
 const integer = z.string().regex(/^-?\d{1,30}$/);
 const ms = z.number().int().nonnegative().safe();
 const code = z.string().regex(/^[A-Za-z0-9 _.,:;/+()=-]{0,180}$/);
@@ -20,29 +28,44 @@ export const fillSchema = z.object({
   ask_micros: integer,
   slippage_bps: z.number(),
 });
-export const tradeSchema = z.object({
-  id: ms,
-  trade_id: id,
-  position_id: id,
-  symbol: z.enum(["BTCUSDT", "BTCUSD"]).optional(),
-  side: z.enum(["LONG", "SHORT"]),
-  entry: fillSchema,
-  exit: fillSchema,
-  closed_ms: ms,
-  exit_reason: code,
-  risk_micros: integer.optional(),
-  planned_stop_risk_micros: integer.optional(),
-  entry_notional_micros: integer.optional(),
-  strategy_version: id.optional(),
-  exposure_bps: z.number().optional(),
-  gross_pnl_micros: integer,
-  fees_micros: integer,
-  carry_micros: integer.nullable(),
-  net_pnl_micros: integer.nullable(),
-  outcome: z.enum(["WIN", "LOSS", "FLAT", "PENDING"]),
-  config_hash: hash,
-  artifact_hash: hash,
-});
+export const tradeSchema = z
+  .object({
+    id: ms,
+    trade_id: id,
+    position_id: id,
+    symbol: z.enum(["BTCUSDT", "BTCUSD"]).optional(),
+    side: z.enum(["LONG", "SHORT"]),
+    entry: fillSchema,
+    exit: fillSchema,
+    closed_ms: ms,
+    exit_reason: code,
+    risk_micros: integer.optional(),
+    planned_stop_risk_micros: integer.optional(),
+    entry_notional_micros: integer.optional(),
+    strategy_version: id.optional(),
+    exposure_bps: z.number().optional(),
+    gross_pnl_micros: integer,
+    fees_micros: integer,
+    carry_micros: integer.nullable(),
+    net_pnl_micros: integer.nullable(),
+    outcome: z.enum(["WIN", "LOSS", "FLAT", "PENDING"]),
+    config_hash: hash,
+    artifact_hash: hash,
+  })
+  .transform((trade): DashboardTrade => ({
+    id: trade.id,
+    trade_id: trade.trade_id,
+    symbol: trade.symbol,
+    side: trade.side,
+    entry: publicFill(trade.entry),
+    exit: publicFill(trade.exit),
+    risk_micros: trade.risk_micros ?? null,
+    fees_micros: trade.fees_micros,
+    carry_micros: trade.carry_micros,
+    net_pnl_micros: trade.net_pnl_micros,
+    outcome: trade.outcome,
+  }));
+// Raw calls are validated internally but never returned to the browser.
 // Only numeric, declared market features cross the public boundary. No arbitrary metadata.
 const signalSchema = z.object({
   imbalance: z.number().optional(),
@@ -207,6 +230,9 @@ export const snapshotSchema = z
         config_hash: hash,
       }),
     ),
+    observer: z
+      .object({ enabled: z.boolean(), paper_execution_enabled: z.boolean() })
+      .optional(),
     gates: z
       .array(z.object({ name: code, ok: z.boolean(), reason: code }))
       .max(30),
@@ -246,7 +272,52 @@ export const snapshotSchema = z
         : value.account.currency === "USDT",
     "Symbol and quote currency must match",
   )
-  .transform((value) => ({
-    ...value,
-    audit: { items: [], next_cursor: null },
-  }));
+  .transform((value): DashboardSnapshot => {
+    const tradingEnabled =
+      value.running_requested &&
+      (value.observer?.paper_execution_enabled ?? true);
+    const account = value.account;
+    return {
+      schema_version: value.schema_version,
+      run_id: value.run_id,
+      provenance: value.provenance,
+      mode: value.mode,
+      symbol: value.symbol,
+      server_ms: value.server_ms,
+      state: value.state,
+      trading_enabled: tradingEnabled,
+      observing: value.observer?.enabled ?? false,
+      model_version:
+        tradingEnabled && value.state === "RUNNING"
+          ? value.strategy.version
+          : null,
+      feed: {
+        health: value.feed.health,
+        quote_age_ms: value.feed.quote_age_ms,
+        max_quote_age_ms: value.assumptions.max_quote_age_ms,
+      },
+      account: {
+        currency: account.currency,
+        cash_micros: account.cash_micros,
+        equity_micros: account.equity_micros,
+        realized_net_micros: account.realized_net_micros,
+        unrealized_net_micros: account.unrealized_net_micros,
+        wins: account.wins,
+        losses: account.losses,
+        flats: account.flats,
+        closed_trades: account.closed_trades,
+        win_rate_pct: account.win_rate_pct,
+      },
+      position: value.position
+        ? {
+            position_id: value.position.position_id,
+            side: value.position.side,
+            opened_ms: value.position.opened_ms,
+            entry: publicFill(value.position.entry),
+            risk_micros: value.position.risk_micros,
+          }
+        : null,
+      pending: value.pending?.kind ?? null,
+      trades: value.trades,
+    };
+  });

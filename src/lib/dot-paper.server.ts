@@ -1,10 +1,5 @@
 /** Read-only, server-side adapter. Never forwards auth, cookies, worker errors, or arbitrary URLs. */
-import {
-  snapshotSchema,
-  pageSchema,
-  tradeSchema,
-  callSchema,
-} from "./dot-paper/schema";
+import { snapshotSchema, pageSchema, tradeSchema } from "./dot-paper/schema";
 import { z } from "zod";
 export type PaperReadResult<T> =
   | { ok: true; data: T }
@@ -17,9 +12,12 @@ export type PaperReadResult<T> =
     };
 async function read<T>(
   path: string,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
 ): Promise<PaperReadResult<T>> {
-  const configured = process.env.DOT_PAPER_SERVICE_URL;
+  // Public, non-secret observer origin. An explicit empty override disables reads.
+  const configured =
+    process.env.DOT_PAPER_SERVICE_URL ??
+    "https://dot-paper-worker-production.up.railway.app";
   if (!configured) return { ok: false, code: "SERVICE_NOT_CONFIGURED" };
   try {
     const base = new URL(configured);
@@ -48,21 +46,18 @@ async function read<T>(
   }
 }
 export const readPaperSnapshot = () => read("/api/v1/snapshot", snapshotSchema);
-export const readPaperPage = (kind: "trades" | "calls", before: number) => {
-  const path = `/api/v1/${kind}?limit=50&before=${before}`;
-  return kind === "trades"
-    ? read(
-        path,
-        pageSchema(tradeSchema).extend({
-          run_id: z.string().uuid(),
-          provenance: z.literal("FORWARD"),
-        }),
-      )
-    : read(
-        path,
-        pageSchema(callSchema).extend({
-          run_id: z.string().uuid(),
-          provenance: z.literal("FORWARD"),
-        }),
-      );
+export const readPaperPage = (kind: "trades", before: number) => {
+  // Defence in depth: this fixed read endpoint accepts no arbitrary URLs or collections.
+  if (kind !== "trades" || !Number.isSafeInteger(before) || before < 0)
+    return Promise.resolve({
+      ok: false as const,
+      code: "INVALID_PAPER_RESPONSE" as const,
+    });
+  return read(
+    `/api/v1/trades?limit=50&before=${before}`,
+    pageSchema(tradeSchema).extend({
+      run_id: z.string().uuid(),
+      provenance: z.literal("FORWARD"),
+    }),
+  );
 };

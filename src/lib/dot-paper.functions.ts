@@ -11,7 +11,7 @@ export const getDotPaperSnapshot = createServerFn({ method: "GET" }).handler(
 export const getDotPaperPage = createServerFn({ method: "GET" })
   .inputValidator(
     z.object({
-      kind: z.enum(["trades", "calls"]),
+      kind: z.literal("trades"),
       before: z.number().int().nonnegative().safe(),
     }),
   )
