@@ -32,11 +32,17 @@ async function read<T>(
     const url = new URL(path, base.origin);
     const response = await fetch(url, {
       method: "GET",
-      redirect: "error",
+      // workerd supports only "manual"/"follow"; redirects must never be followed.
+      redirect: "manual",
       signal: AbortSignal.timeout(5000),
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
+    if (
+      response.type === "opaqueredirect" ||
+      (response.status >= 300 && response.status < 400)
+    )
+      return { ok: false, code: "SERVICE_UNAVAILABLE" };
     if (!response.ok) return { ok: false, code: "SERVICE_UNAVAILABLE" };
     const parsed = schema.safeParse(await response.json());
     if (!parsed.success) return { ok: false, code: "INVALID_PAPER_RESPONSE" };
