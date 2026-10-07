@@ -24,6 +24,28 @@ function cleanStatus(s: any) {
   out.reversal_mode = str(s.reversal_mode, 16);
   out.reversal_head_sha256 = str(s.reversal_head_sha256, 64);
   out.reversal_valid_until_s = num(s.reversal_valid_until_s);
+  out.calibration_mode = str(s.calibration_mode, 16);
+  if (typeof s.calibration_ready === "boolean") out.calibration_ready = s.calibration_ready;
+  out.calibration_not_ready_reason = str(s.calibration_not_ready_reason, 80);
+  out.calibration_lineage = str(s.calibration_lineage, 80);
+  out.calibration_head_sha256 = str(s.calibration_head_sha256, 64);
+  for (const k of ["calibration_valid_until_s", "calibration_observations", "calibration_settled_candidates", "calibration_history_start_s"])
+    out[k] = num(s[k]);
+  const t = s.calibration_tracking;
+  if (t && typeof t === "object") {
+    const cleanTally = (b: any) => Object.fromEntries(
+      ["observations", "scored", "calls", "kept", "added", "skipped", "wins", "losses", "pending", "net", "win_rate"]
+        .map(k => [k, num(b?.[k])]));
+    out.calibration_tracking = {
+      asof_s: num(t.asof_s), boise_day: str(t.boise_day, 10),
+      total: cleanTally(t.total), today: cleanTally(t.today),
+      latest: t.latest ? {
+        candle_s: num(t.latest.candle_s), status: str(t.latest.status, 24), reason: str(t.latest.reason, 160),
+        p_correct: num(t.latest.p_correct), direction: num(t.latest.direction),
+        candidate_side: num(t.latest.candidate_side), candidate_checkpoint: num(t.latest.candidate_checkpoint),
+      } : null,
+    };
+  }
   out.latest_fit_day = str(s.latest_fit_day, 40);
   if (s.fit_today && typeof s.fit_today === "object")
     out.fit_today = { 15: s.fit_today["15"] === true, 30: s.fit_today["30"] === true };

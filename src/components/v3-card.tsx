@@ -33,6 +33,20 @@ export function V3Card({ data, error }: Props) {
   const elapsed = Math.floor((now - openMs) / 1000);
   const badge = error ? "Status unavailable" : !rt ? "Not reporting to dashboard yet" : !connected ? `Worker silent ${ago(rt.updated_at, now)}` : ready ? "Ready to predict" : "Connected · not ready";
   const sending = st.delivery_enabled === true;
+  const calibration = st.calibration_tracking;
+  const ct = calibration?.total;
+  const calibrationMode = st.calibration_mode;
+  const historyWeeks = st.calibration_history_start_s == null ? 0 :
+    Math.max(0, (now / 1000 - st.calibration_history_start_s) / 604800);
+  const calibrationLabel = !calibrationMode ? "Not reporting yet" : calibrationMode === "off" ? "Off" :
+    !connected ? "Status stale" : calibrationMode === "shadow" ?
+    (st.calibration_ready ? "Shadow · scoring" : "Shadow · collecting history") :
+    (st.calibration_ready ? "Active filter" : "Blocked · not ready");
+  const calibrationActions: Record<string, string> = {
+    KEEP_BASELINE: "Keep V3 call", SKIP_BASELINE: "Skip V3 call", ADD_LOWER60: "Add lower-threshold call",
+    DECLINE_LOWER60: "Decline extra call", NO_RISK_PASSED_CANDIDATE: "No eligible candidate",
+    CALIBRATION_HEAD_MISSING: "Collecting history · no calibrated score yet",
+  };
 
   return (
     <section className="v3-shell self-start p-5 sm:p-6 space-y-5">
@@ -111,7 +125,51 @@ export function V3Card({ data, error }: Props) {
           <Gate label="15s check" rank={cur?.t15_rank ?? null} />
           <Gate label="30s check" rank={cur?.t30_rank ?? null} />
         </div>
-        <p className="mt-2 text-[9px] text-muted-foreground">A call is made when a check's confidence rank reaches 70%. Message goes out at 48s, expires at 49s.</p>
+        <p className="mt-2 text-[9px] text-muted-foreground">Base selection requires 70% rank, then the reversal check at 45s. Eligible messages go out at 48s and expire at 49s.</p>
+      </section>
+
+      <section className="v3-chip p-4 space-y-3" aria-label="V3 risk calibration tracking">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Risk calibration · R3</h4>
+          <span className="text-xs font-semibold text-plasma-foreground">{calibrationLabel}</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {calibrationMode === "enforce" ? "Keeps base calls at 55% estimated correctness; admits extra candidates at 64%." :
+            "Forward tracking only. Current V3 calls continue while calibration collects the required history."}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Stat k="History collected" v={`${Math.min(historyWeeks, 26).toFixed(1)} / 26 weeks`} />
+          <Stat k="Settled candidates" v={String(st.calibration_settled_candidates ?? 0)} />
+          <Stat k="Intervals observed" v={String(st.calibration_observations ?? 0)} />
+          <Stat k="Calibrated decisions" v={String(ct?.scored ?? 0)} />
+        </div>
+        {st.calibration_ready === false && calibrationMode !== "off" ? (
+          <p className="text-[10px] text-muted-foreground">{st.calibration_not_ready_reason === "CALIBRATION_26_WEEK_HISTORY_REQUIRED" ?
+            "Needs 26 weeks of eligible candidate history and at least 500 settled candidates before scoring." :
+            `Not ready: ${String(st.calibration_not_ready_reason ?? "awaiting status").toLowerCase().replaceAll("_", " ")}`}</p>
+        ) : null}
+        {calibration?.latest ? (
+          <div className="border-t border-border/40 pt-2 text-xs">
+            <div className="text-[9px] text-muted-foreground">Latest check · {new Date(calibration.latest.candle_s * 1000).toISOString().slice(5,16).replace("T", " ")} UTC</div>
+            <div className="mt-1">{calibrationActions[calibration.latest.reason] ?? String(calibration.latest.reason ?? calibration.latest.status).toLowerCase().replaceAll("_", " ")}</div>
+            {calibration.latest.p_correct != null ? <div className="text-muted-foreground">Estimated correctness {pct(calibration.latest.p_correct)} · {side(calibration.latest.candidate_side)}</div> : null}
+          </div>
+        ) : null}
+        {ct?.scored > 0 ? (
+          <div className="space-y-2 border-t border-border/40 pt-2">
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Calibration forward record · finalized Kalshi outcomes</div>
+            <div className="grid grid-cols-3 gap-2">
+              <Stat k="Kept / added" v={`${ct.kept} / ${ct.added}`} />
+              <Stat k="Skipped" v={String(ct.skipped)} />
+              <Stat k="Pending" v={String(ct.pending)} />
+              <Stat k="Wins / losses" v={`${ct.wins} / ${ct.losses}`} />
+              <Stat k="Win rate" v={pct(ct.win_rate)} />
+              <Stat k="Net wins" v={signed(ct.net)} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">Boise {calibration.boise_day}: {calibration.today.wins}W / {calibration.today.losses}L · net {signed(calibration.today.net)}. {calibrationMode === "shadow" ? "Hypothetical calls; no extra webhooks sent." : "Prediction results, not fills or profit."}</p>
+          </div>
+        ) : <p className="text-[10px] text-muted-foreground">Forward win rate appears after calibrated calls settle. Historical lab results are not included.</p>}
+        {calibration?.asof_s ? <p className="text-[9px] text-muted-foreground">Tracking updated {ago(new Date(calibration.asof_s * 1000).toISOString(), now)}</p> : null}
       </section>
 
       <div className="grid grid-cols-2 gap-2.5">

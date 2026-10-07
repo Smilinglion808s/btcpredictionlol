@@ -1,5 +1,63 @@
 # v3-predictor-worker: PF-E008 (`v3-pf-e008-r1`)
 
+## R3 calibrated-risk integration — 2026-10-07
+
+Policy `v3-calibrated-risk-r3-r1` implements the simple calibration router
+selected in R3. At T45 it prefers an original risk-passed V3 call. Otherwise it
+selects T15 rank >= .60, else T30 rank >= .60, and recomputes all reversal
+features for that candidate's own side/rank with the existing historical risk
+head. A risk failure cannot be overridden. The correctness calibration keeps
+baseline calls at p >= .55 and adds otherwise uncalled candidates at p >= .64.
+It does not fade or change the side of a risk-passed baseline call.
+
+The two score streams and original reversal-training population stay intact.
+Every eligible virtual candidate is stored, including skipped/untraded ones.
+Official finalized Kalshi outcomes settle these rows; they are never replaced
+with OKX direction or lab-proxy labels. New weekly fits use the preceding 26
+weeks with a 24-hour settlement embargo and at least 500 candidates. Calibration
+weeks begin Monday 00Z, not the reversal head's Monday 06Z. Fitting is off the
+scoring thread. All state and head parameters are durable in the existing
+SQLite volume, without pickle/joblib deserialization.
+
+`V3_CALIBRATION_MODE` supports:
+
+- `shadow`: default when reversal enforcement and T48 are active. Capture and
+  score the new policy, preserving the current V3 decisions and webhook bytes.
+- `off`: disable the new collector/policy. This is the automatic default for
+  the older non-enforced-risk/ASAP configurations.
+- `enforce`: requires an in-date, verified official-lineage calibration head;
+  missing/corrupt/expired heads or inputs fail closed. T48 entry, T49 expiry,
+  HMAC, idempotency and existing delivery controls still apply. Enforced bodies
+  include `calibration_filter`; old/shadow bodies cannot bypass the new gate.
+
+**Rollout is shadow, not an active calibration trading change.** The existing
+risk seed contains about 8 weeks of original selections, not 26 weeks of the
+required union population. It cannot bootstrap this new learner without bias.
+No proxy or expired research head is installed and there is no automatic switch
+from shadow to enforcement. A separately audited historical reconstruction or
+prospective history is needed for a current official-lineage head. The worker
+reports `CALIBRATION_26_WEEK_HISTORY_REQUIRED` while that history is absent.
+
+Health/logs and the signed dashboard status expose calibration mode, readiness,
+observation counts, settled candidate counts, lineage and current head hash/expiry.
+The dashboard recorder accepts explicitly versioned calibration additions/skips,
+and prevents older baseline heartbeats from undoing a final calibration intent.
+Detailed candidate records remain in SQLite and `v3_calibration_decision` logs.
+The V3 BTC tile shows calibration mode, history progress and latest check. Once
+a current head exists, its separate forward record tracks kept/added/skipped
+calls, official wins/losses, pending outcomes and Boise-day net wins. Warm-up
+observations and proxy research results are excluded from that win rate. The
+summary is computed on the background thread and sent through the existing
+signed recorder, using its current JSON status column.
+No database migration or bettor-setting change is included here.
+
+Verification: `python -m pytest -q tests package/test_model.py`.
+Optional offline R3 parity (requires pandas/pyarrow and the recovered lab outputs):
+`python scripts/verify_calibration_r3.py /path/to/regime_104_r3/outputs`.
+The new scorer/refitter reproduced all 78 historical calibration fits exactly,
+with zero decision differences over 69,888 opportunities (first 26 weeks keep
+the archived baseline). That is proxy-replay parity, not official/live parity.
+
 ## Reversal risk patch — 2026-10-06
 
 The frozen directional `package/` is unchanged. A separate, versioned

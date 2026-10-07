@@ -12,6 +12,8 @@ Env:
   V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
   C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
   V3_REVERSAL_MODE       enforce (default), shadow, or off. Enforce requires t48-r1.
+  V3_CALIBRATION_MODE    shadow by default when reversal is enforced at T48; otherwise off.
+                         enforce requires a current official-lineage calibration head.
 """
 from __future__ import annotations
 
@@ -39,11 +41,14 @@ class Runtime:
         secret = os.environ.get("BTC15M_WEBHOOK_SECRET", "").encode()
         policy = os.environ.get("V3_DELIVERY_POLICY", "").strip() or "t48-r1"
         risk_mode = os.environ.get("V3_REVERSAL_MODE", "enforce").strip().lower()
+        calibration_default = "shadow" if risk_mode == "enforce" and policy == "t48-r1" else "off"
+        calibration_mode = os.environ.get("V3_CALIBRATION_MODE", calibration_default).strip().lower()
         if policy not in DELIVERY_POLICIES:
             raise SystemExit(f"UNKNOWN_DELIVERY_POLICY:{policy}")
         self.wake = threading.Event()
         self.engine = Engine(Store(data / "v3.sqlite"), delivery_policy=policy, delivery_enabled=enabled and bool(url) and bool(secret),
-                             mode=os.environ.get("V3_MODE", "shadow"), risk_mode=risk_mode)
+                             mode=os.environ.get("V3_MODE", "shadow"), risk_mode=risk_mode,
+                             calibration_mode=calibration_mode)
         if enabled and not (url and secret):
             self.engine.faults["delivery"] = "ENABLED_WITHOUT_URL_OR_SECRET"
         try:
@@ -62,12 +67,20 @@ class Runtime:
                 self.risk = RiskRuntime(self.engine, Market())
             except Exception as e:
                 self.err("reversal_package", type(e).__name__ + ":" + str(e)[:160])
+        self.calibration = None
+        if calibration_mode != "off":
+            try:
+                from calibration_runtime import CalibrationRuntime
+                self.calibration = CalibrationRuntime(self.engine, self.risk, Market())
+            except Exception as e:
+                self.err("calibration_package", type(e).__name__ + ":" + str(e)[:160])
         self.skew_ms: int | None = None
         self.started_ms = int(time.time() * 1000)
 
     def err(self, k: str, v: str) -> None:
-        if k.startswith("reversal") and self.engine.faults.get(k) != v:
-            print(json.dumps({"event":"v3_reversal_fault","key":k,"reason":v}),flush=True)
+        if k.startswith(("reversal", "calibration")) and self.engine.faults.get(k) != v:
+            event = "v3_reversal_fault" if k.startswith("reversal") else "v3_calibration_fault"
+            print(json.dumps({"event":event,"key":k,"reason":v}),flush=True)
         self.engine.faults[k] = v
 
     def clock_ok(self) -> bool:
@@ -108,18 +121,26 @@ class Runtime:
                             self.wake.set()  # sender prepares/sends off this thread
                     except Exception as e:  # noqa: BLE001
                         self.err("score", type(e).__name__)
-            if self.risk and c not in risk_fired and now >= (c+45)*1000:
+            if (self.risk or self.calibration) and c not in risk_fired and now >= (c+45)*1000:
                 deadline = (c+46)*1000
                 bars = self.feed.prefix(c,45,deadline)
                 if len(bars)==45 or now >= deadline-20:
                     risk_fired.add(c)
                     try:
-                        result=self.risk.score(c,bars,int(time.time()*1000),self.feed.fresh(now),self.clock_ok())
+                        result=(self.risk.score(c,bars,int(time.time()*1000),self.feed.fresh(now),self.clock_ok())
+                                if self.risk else {"status":"NOT_SELECTED"})
                         if result.get("status") != "NOT_SELECTED":
                             print(json.dumps({"event":"v3_reversal_decision","candle_s":c,**result}),flush=True)
                         self.wake.set()
                     except Exception as e:
                         self.err("reversal_score",type(e).__name__)
+                    if self.calibration:
+                        try:
+                            result=self.calibration.score(c,bars,int(time.time()*1000),self.feed.fresh(now),self.clock_ok())
+                            print(json.dumps({"event":"v3_calibration_decision","candle_s":c,**result}),flush=True)
+                            self.wake.set()
+                        except Exception as e:
+                            self.err("calibration_score",type(e).__name__+":"+str(e)[:120])
             fired = {k for k in fired if k[0] >= c - SLOT}
             risk_fired = {k for k in risk_fired if k >= c-SLOT}
             time.sleep(0.02)
@@ -141,6 +162,16 @@ class Runtime:
                 self.engine.faults.pop("reversal_refit",None)
             except Exception as e:
                 self.err("reversal_refit",type(e).__name__+":"+str(e)[:120])
+            time.sleep(30)
+
+    def calibration_refit_loop(self) -> None:  # pragma: no cover - public outcomes, isolated from score path
+        while self.calibration:
+            try:
+                self.calibration.refresh_tracking(int(time.time()))
+                self.calibration.settle_and_refit(int(time.time()))
+                self.engine.faults.pop("calibration_refit",None)
+            except Exception as e:
+                self.err("calibration_refit",type(e).__name__+":"+str(e)[:120])
             time.sleep(30)
 
     def catchup_loop(self) -> None:  # pragma: no cover - REST, off the scoring thread
@@ -220,7 +251,8 @@ class Runtime:
                         "direction": direction, "rank": rank, "decision_at": iso_ms(dms) if dms else None,
                         "fit_version": fv, "delivery": delivery,
                         "t15_rank": (a.get("t15") or {}).get("rank"), "t30_rank": (a.get("t30") or {}).get("rank"),
-                        "reversal_risk": a.get("reversal_risk")})
+                        "reversal_risk": a.get("reversal_risk"),
+                        "calibration_filter": a.get("calibration_filter")})
         return {"model_version": MODEL_VERSION, "worker_id": os.environ.get("RAILWAY_REPLICA_ID", "v3-worker")[:64],
                 "nonce": uuid.uuid4().hex + uuid.uuid4().hex[:8], "status": self.health(), "decisions": out}
 
@@ -273,6 +305,14 @@ class Runtime:
                     reasons.append("REVERSAL_CONTEXT_NOT_READY")
             except Exception:
                 reasons.append("REVERSAL_HEAD_NOT_READY")
+        st["calibration_mode"] = self.engine.calibration_mode
+        if self.calibration:
+            try:
+                st.update(self.calibration.health((now//1000)//SLOT*SLOT))
+            except Exception as e:
+                st.update(calibration_ready=False,calibration_not_ready_reason=type(e).__name__)
+        if self.engine.calibration_mode == "enforce" and not st.get("calibration_ready"):
+            reasons.append("CALIBRATION_HEAD_NOT_READY")
         return {"alive": True, "prediction_ready": not reasons, "not_ready_reasons": reasons,
                 "feed_age_ms": None if self.feed.last_rx_ms is None else now - self.feed.last_rx_ms,
                 "clock_skew_ms": self.skew_ms, "uptime_s": (now - self.started_ms) // 1000, **st}
@@ -297,16 +337,19 @@ def main() -> None:  # pragma: no cover
     rt = Runtime()
     print(json.dumps({"event":"v3_reversal_start","revision":"v3-reversal-risk-t45-r1",
                       "reversal_mode":rt.engine.risk_mode,"delivery_policy":rt.engine.delivery_policy,
+                      "calibration_mode":rt.engine.calibration_mode,
                       "risk_package_loaded":rt.risk is not None}),flush=True)
     def health_log():
         while True:
             h=rt.health()
             print(json.dumps({"event":"v3_reversal_health",**{k:h.get(k) for k in (
                 "prediction_ready","not_ready_reasons","reversal_mode","delivery_policy",
-                "reversal_head_sha256","reversal_valid_until_s","feed_age_ms","clock_skew_ms")}}),flush=True)
+                "reversal_head_sha256","reversal_valid_until_s","feed_age_ms","clock_skew_ms",
+                "calibration_mode","calibration_ready","calibration_observations",
+                "calibration_settled_candidates","calibration_not_ready_reason")}}),flush=True)
             time.sleep(60)
     for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop, rt.record_loop,
-               rt.risk_context_loop, rt.risk_refit_loop, rt.scheduler_loop, rt.sender_loop, health_log):
+               rt.risk_context_loop, rt.risk_refit_loop, rt.calibration_refit_loop, rt.scheduler_loop, rt.sender_loop, health_log):
         threading.Thread(target=fn, daemon=True).start()
     serve(rt)
 
