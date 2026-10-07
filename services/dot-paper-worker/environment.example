@@ -1,0 +1,13 @@
+# Nonsecret startup settings. Defaults do not contact any market feed.
+DOT_PAPER_MODE=PAPER
+DOT_PAPER_BIND=0.0.0.0
+DOT_PAPER_DATA_DIR=/data/dot-paper/ledger
+DOT_PAPER_FEED_ENABLED=false
+DOT_PAPER_FEED_RIGHTS_APPROVED=false
+DOT_PAPER_OBSERVER_SECONDS=3600
+DOT_PAPER_CONTROLS_ENABLED=false
+# Optional future controls only, after verifying the actual existing owner and issuer.
+# DOT_PAPER_AUTH_ISSUER=https://<verified-project>.supabase.co/auth/v1
+# DOT_PAPER_AUTH_AUDIENCE=authenticated
+# DOT_PAPER_OWNER_ID=<verified-existing-auth-user-id>
+# Never set exchange keys, secrets, signed hooks, admin DB keys, or real mode.

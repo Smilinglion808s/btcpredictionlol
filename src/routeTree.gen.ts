@@ -14,6 +14,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
+import { Route as AuthenticatedPaperRouteImport } from './routes/_authenticated/paper'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as ApiC85SelfcheckRouteImport } from './routes/api/c85-selfcheck'
 import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
@@ -58,6 +59,11 @@ const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
 const AuthenticatedModelsRoute = AuthenticatedModelsRouteImport.update({
   id: '/models',
   path: '/models',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPaperRoute = AuthenticatedPaperRouteImport.update({
+  id: '/paper',
+  path: '/paper',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
+  '/paper': typeof AuthenticatedPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByTo {
   '/daily': typeof AuthenticatedDailyRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
+  '/paper': typeof AuthenticatedPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/': typeof AuthenticatedIndexRoute
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/_authenticated/daily': typeof AuthenticatedDailyRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
+  '/_authenticated/paper': typeof AuthenticatedPaperRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/daily'
     | '/history'
     | '/models'
+    | '/paper'
     | '/stats'
     | '/api/c85-selfcheck'
     | '/api/export/c85-csv'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/daily'
     | '/history'
     | '/models'
+    | '/paper'
     | '/stats'
     | '/api/c85-selfcheck'
     | '/'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/_authenticated/daily'
     | '/_authenticated/history'
     | '/_authenticated/models'
+    | '/_authenticated/paper'
     | '/_authenticated/stats'
     | '/api/c85-selfcheck'
     | '/_authenticated/'
@@ -404,6 +416,13 @@ declare module '@tanstack/react-router' {
       path: '/models'
       fullPath: '/models'
       preLoaderRoute: typeof AuthenticatedModelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/paper': {
+      id: '/_authenticated/paper'
+      path: '/paper'
+      fullPath: '/paper'
+      preLoaderRoute: typeof AuthenticatedPaperRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/stats': {
@@ -560,6 +579,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDailyRoute: typeof AuthenticatedDailyRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
+  AuthenticatedPaperRoute: typeof AuthenticatedPaperRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
@@ -568,6 +588,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDailyRoute: AuthenticatedDailyRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedModelsRoute: AuthenticatedModelsRoute,
+  AuthenticatedPaperRoute: AuthenticatedPaperRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
