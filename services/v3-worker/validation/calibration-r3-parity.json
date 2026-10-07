@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-10-07",
+  "policy": "v3-calibrated-risk-r3-r1",
+  "opportunities": 69888,
+  "learned_opportunities": 52416,
+  "refits": 78,
+  "max_probability_error": 0.0,
+  "max_parameter_error": 0.0,
+  "decision_mismatches": 0,
+  "calls": 19653,
+  "wins": 12332,
+  "losses": 7321,
+  "raw": 5011,
+  "first26weeks": "unchanged baseline as in archived study",
+  "lineage": "v3-binance-index-proxy-r3",
+  "production_artifact_created": false,
+  "python_tests": {"passed": 107},
+  "recording_tests": {"legacy": "passed", "calibration": "passed"},
+  "rollout": "shadow; official-lineage 26-week history required before a valid calibration head"
+}

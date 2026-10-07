@@ -201,7 +201,8 @@ class _Tx:
 # --------------------------------------------------------------------- engine
 class Engine:
     def __init__(self, store: Store, now_ms=None, delivery_enabled: bool = False, mode: str = "shadow",
-                 delivery_policy: str = DEFAULT_DELIVERY_POLICY, risk_mode: str = "off") -> None:
+                 delivery_policy: str = DEFAULT_DELIVERY_POLICY, risk_mode: str = "off",
+                 calibration_mode: str = "off") -> None:
         if delivery_policy not in DELIVERY_POLICIES:
             raise FailClosed(f"UNKNOWN_DELIVERY_POLICY:{delivery_policy}")
         self.delivery_policy = delivery_policy
@@ -210,6 +211,11 @@ class Engine:
         if risk_mode == "enforce" and delivery_policy != "t48-r1":
             raise FailClosed("REVERSAL_REQUIRES_T48_DELIVERY")
         self.risk_mode = risk_mode
+        if calibration_mode not in ("off", "shadow", "enforce"):
+            raise FailClosed("UNKNOWN_CALIBRATION_MODE")
+        if calibration_mode != "off" and (risk_mode != "enforce" or delivery_policy != "t48-r1"):
+            raise FailClosed("CALIBRATION_REQUIRES_ENFORCED_RISK_AND_T48")
+        self.calibration_mode = calibration_mode
         import time
         self.s = store
         self.now_ms = now_ms or (lambda: int(time.time() * 1000))
@@ -563,7 +569,19 @@ class Engine:
             if risk.get("status") != "PASS":
                 raise FailClosed("REVERSAL_NOT_PASSED")
             body["risk_filter"] = risk
+        if self.calibration_mode == "enforce":
+            audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
+            calibration = audit.get("calibration_filter") or {}
+            if not self._calibration_passed(calibration):
+                raise FailClosed("CALIBRATION_NOT_PASSED")
+            body["calibration_filter"] = calibration
         return json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
+
+    @staticmethod
+    def _calibration_passed(audit):
+        from calibration import VERSION, LIVE_LINEAGE
+        return (audit.get("status") == "PASS" and audit.get("version") == VERSION
+                and audit.get("lineage") == LIVE_LINEAGE and audit.get("mode") == "enforce")
 
     def prepare_due(self) -> list[str]:
         """Persist the exact body once when eligible: t48-r1 at T48; asap-r1 as soon as the selection
@@ -581,6 +599,10 @@ class Engine:
             elif now >= entry and ticker is None:
                 continue  # explicit no-send until a verified market exists; never invent a ticker
             elif now >= entry:
+                if self.calibration_mode == "enforce":
+                    audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
+                    if not self._calibration_passed(audit.get("calibration_filter") or {}):
+                        continue
                 if self.risk_mode == "enforce":
                     audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
                     risk = audit.get("reversal_risk") or {}
@@ -605,7 +627,9 @@ class Engine:
             # Persisted pre-patch/unfiltered outbox entries must never bypass a newly enabled gate.
             candidates = self.s.q("SELECT event_id,body FROM outbox WHERE status IN ('PENDING','RETRY') AND expires_ms>? ORDER BY candle_s", (self.now_ms(),))
             return [(e,bytes(b)) for e,b in candidates
-                    if (json.loads(bytes(b)).get("risk_filter") or {}).get("status") == "PASS"]
+                    if (json.loads(bytes(b)).get("risk_filter") or {}).get("status") == "PASS"
+                    and (self.calibration_mode != "enforce" or
+                         self._calibration_passed(json.loads(bytes(b)).get("calibration_filter") or {}))]
         return [(e, bytes(b)) for e, b in self.s.q(
             "SELECT event_id,body FROM outbox WHERE status IN ('PENDING','RETRY') AND expires_ms>? ORDER BY candle_s",
             (self.now_ms(),))]
