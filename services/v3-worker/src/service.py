@@ -310,6 +310,8 @@ class Runtime:
             except Exception:
                 reasons.append("REVERSAL_HEAD_NOT_READY")
         st["calibration_mode"] = self.engine.calibration_mode
+        st["settlement_retries"] = {name: runtime.settlements.health() for name, runtime in
+                                    (("reversal", self.risk), ("calibration", self.calibration)) if runtime}
         if self.calibration:
             try:
                 st.update(self.calibration.health((now//1000)//SLOT*SLOT))
@@ -347,12 +349,12 @@ def main() -> None:  # pragma: no cover
         while True:
             h=rt.health()
             print(json.dumps({"event":"v3_reversal_health",**{k:h.get(k) for k in (
-                "prediction_ready","not_ready_reasons","reversal_mode","delivery_policy",
+                "prediction_ready","not_ready_reasons","reversal_mode","delivery_policy","delivery_enabled",
                 "reversal_head_sha256","reversal_valid_until_s","feed_age_ms","clock_skew_ms",
                 "calibration_mode","calibration_ready","calibration_observations",
                 "calibration_settled_candidates","calibration_not_ready_reason",
                 "calibration_backfilled_observations","calibration_forward_observations",
-                "calibration_training_rows","calibration_head_sha256")}}),flush=True)
+                "calibration_training_rows","calibration_head_sha256","settlement_retries")}}),flush=True)
             time.sleep(60)
     for fn in (lambda: rt.feed.run_forever(lambda m: rt.err("feed", m)), rt.clock_loop, rt.catchup_loop, rt.market_loop, rt.record_loop,
                rt.risk_context_loop, rt.risk_refit_loop, rt.calibration_refit_loop, rt.scheduler_loop, rt.sender_loop, health_log):

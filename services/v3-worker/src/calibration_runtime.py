@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import calibration as C
 import reversal as R
 import reversal_features as F
+from settlement_retry import SettlementQueue
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS calibration_observations(
@@ -22,6 +23,7 @@ class CalibrationRuntime:
     def __init__(self, engine, risk, market):
         self.engine, self.s, self.risk, self.market = engine, engine.s, risk, market
         self.s.db.executescript(SCHEMA)
+        self.settlements = SettlementQueue(self.s, "calibration", C.LIVE_LINEAGE)
         self.tracking = None
 
     def head(self, c):
@@ -153,20 +155,7 @@ class CalibrationRuntime:
                       result["reason"], now_ms, c))
 
     def settle_and_refit(self, now_s):
-        from v3core import kalshi_ticker
-        pending = self.s.q("SELECT candle_s FROM calibration_observations WHERE side<>0 AND label IS NULL "
-                           "AND candle_s+900<=? AND lineage=? ORDER BY candle_s LIMIT 20", (now_s, C.LIVE_LINEAGE))
-        for (c,) in pending:
-            ticker = kalshi_ticker(c); m = self.market.settled_market(ticker)
-            if m.get("ticker") != ticker:
-                raise C.CalibrationInvalid("CALIBRATION_SETTLEMENT_IDENTITY")
-            if m.get("status") != "finalized" or m.get("result") not in ("yes", "no") or not m.get("settlement_ts"):
-                continue
-            st = datetime.fromisoformat(m["settlement_ts"].replace("Z", "+00:00")).timestamp()
-            if not c + C.SLOT <= st <= now_s:
-                raise C.CalibrationInvalid("CALIBRATION_SETTLEMENT_TIME")
-            self.s.q("UPDATE calibration_observations SET label=?,settlement_s=? WHERE candle_s=? AND label IS NULL",
-                     (1 if m["result"] == "yes" else -1, st, c))
+        self.settlements.poll(self.market, now_s)
         start = self.s.q("SELECT MIN(candle_s) FROM calibration_observations WHERE lineage=?", (C.LIVE_LINEAGE,))[0][0]
         b = C.week_start(now_s)
         for boundary in (b, b + C.WEEK):
