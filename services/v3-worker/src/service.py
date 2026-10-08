@@ -7,7 +7,8 @@ Env:
   BTC15M_WEBHOOK_SECRET  existing shared HMAC secret (raw-body x-btc15m-signature)
   V3_MODE                body "mode": shadow (default) or live
   PORT                   health port (default 8080)
-  V3_DELIVERY_POLICY     t48-r1 (default, legacy: send at T48) or asap-r1 (send right after selection);
+  V3_DELIVERY_POLICY     t48-r1 (default: enter at T48; enforced risk sends after T45 gates)
+                         or asap-r1 (send right after selection);
                          any other value refuses to start
   V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
   C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
