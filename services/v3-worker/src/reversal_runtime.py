@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import gzip, json, hashlib, threading
-from datetime import datetime
 from pathlib import Path
 
 import reversal as R
 import reversal_features as F
+from settlement_retry import SettlementQueue
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reversal_rows(
@@ -24,6 +24,7 @@ class RiskRuntime:
         self.context = None
         self.lock = threading.RLock()
         self.s.db.executescript(SCHEMA)
+        self.settlements = SettlementQueue(self.s, "reversal")
         manifest = json.loads((package/'SHA256.json').read_text())
         for name in ('seed.json.gz','head.json'):
             if hashlib.sha256((package/name).read_bytes()).hexdigest()!=manifest.get(name):
@@ -82,18 +83,7 @@ class RiskRuntime:
             return audit
 
     def settle_and_refit(self,now_s):
-        from v3core import kalshi_ticker
-        pending=self.s.q('SELECT candle_s FROM reversal_rows WHERE label IS NULL AND candle_s+900<=? ORDER BY candle_s LIMIT 20',(now_s,))
-        for (c,) in pending:
-            ticker=kalshi_ticker(c);m=self.market.settled_market(ticker)
-            if m.get('ticker')!=ticker:raise R.RiskInvalid('RISK_SETTLEMENT_IDENTITY')
-            if m.get('status') != 'finalized' or m.get('result') not in ('yes','no'):continue
-            raw=m.get('settlement_ts')
-            if not raw:continue
-            st=datetime.fromisoformat(raw.replace('Z','+00:00')).timestamp()
-            if not c+900<=st<=now_s:raise R.RiskInvalid('RISK_SETTLEMENT_TIME')
-            self.s.q('UPDATE reversal_rows SET label=?,settlement_s=? WHERE candle_s=? AND label IS NULL',
-                     (1 if m['result']=='yes' else -1,st,c))
+        self.settlements.poll(self.market, now_s)
         b=R.week_start(now_s)
         for boundary in (b,b+R.WEEK):
             if now_s<boundary-R.DAY or self.s.q('SELECT 1 FROM reversal_heads WHERE week_s=?',(boundary,)):continue

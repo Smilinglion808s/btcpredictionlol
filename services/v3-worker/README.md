@@ -298,3 +298,23 @@ tile displays backfilled and forward intervals separately, and forward results
 exclude all reconstructed rows. Default calibration remains **shadow**. This
 bootstrap removes the history warm-up; it does not establish forward profitability
 or change the approved thresholds, the reversal filter, or webhook delivery.
+
+## Settlement retry repair (2026-10-08)
+
+Missing or temporarily unavailable Kalshi markets no longer abort an entire
+reversal/calibration settlement batch. Each consumer keeps durable SQLite retry
+state, processes up to 20 due rows per poll, and prioritizes unattempted rows
+before the least-recently attempted retries. Backoff starts at 60 seconds and
+caps at one hour. Successful official settlement clears the retry entry.
+
+Unfinalized, malformed, wrong-ticker, or invalid-time responses remain unlabeled.
+Both the current and historical Kalshi lookup paths remain in use. Weekly
+training windows, settlement embargoes, stale-training checks, model packages,
+thresholds, and calibration shadow mode are unchanged. `/healthz` and Railway
+health logs include `settlement_retries`; `v3_settlement_batch` logs report
+settled/deferred counts and bounded error codes without URLs or credentials.
+
+Rollout is performed with `V3_DELIVERY_ENABLED=false`. Validate the new deployment
+commit, delivery-disabled runtime status, increasing official settled counts,
+and healthy heads before any separate user-controlled activation. Run the
+offline suite with `python -m pytest -q tests`.
