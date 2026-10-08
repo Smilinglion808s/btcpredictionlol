@@ -131,11 +131,16 @@ def test_invalid_heads(issue):
 
 def test_keep_timing_and_one_frozen_outbox():
     e,rr,cr,c,clock,f=integrated()
+    assert e.prepare_due()==[]  # A risk PASS cannot race an enforced calibration gate.
     out=cr.score(c,f['bars'],clock[0]);assert out['reason']=='KEEP_BASELINE'
-    assert e.prepare_due()==[]
-    clock[0]=(c+48)*1000;assert len(e.prepare_due())==1
+    assert len(e.prepare_due())==1
     sent=e.deliverable();assert len(sent)==1
-    assert json.loads(sent[0][1])['calibration_filter']['version']==C.VERSION
+    body=json.loads(sent[0][1])
+    assert body['calibration_filter']['version']==C.VERSION
+    assert body['sent_at']==V.iso_ms(clock[0])
+    assert body['entry_at']==V.iso_ms((c+48)*1000)
+    assert body['expires_at']==V.iso_ms((c+49)*1000)
+    clock[0]=(c+48)*1000
     cr2=CalibrationRuntime(e,rr,None)
     assert cr2.score(c,[],clock[0])==out
     assert e.prepare_due()==[] and e.deliverable()==sent

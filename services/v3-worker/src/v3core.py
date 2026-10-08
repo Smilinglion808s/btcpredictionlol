@@ -46,6 +46,7 @@ WINDOW_SLOTS = 8640
 CHECKPOINTS = (15, 30)
 GRACE_MS = 1000           # operational tolerance after T15/T30, logged separately
 ENTRY_MS, EXPIRY_MS = 48_000, 49_000
+RISK_DISPATCH_MS = 45_000  # dispatch after the final gate; receiver still enters at T48
 RANK_GATE = 0.70
 # Feature failures that are data facts (research missingness): the other head may still qualify.
 DATA_INVALID = {"zero_quote_volume", "invalid_price", "invalid_ohlc", "invalid_quote_volume", "nonfinite_bar"}
@@ -584,21 +585,26 @@ class Engine:
                 and audit.get("lineage") == LIVE_LINEAGE and audit.get("mode") == "enforce")
 
     def prepare_due(self) -> list[str]:
-        """Persist the exact body once when eligible: t48-r1 at T48; asap-r1 as soon as the selection
-        is stored (entry_at = decision_at). Past T49 a selection is expired, never sent late."""
+        """Persist once after the final enforced gate, separately from order entry.
+
+        Enforced-risk t48-r1 dispatches from T45 after all active gates pass,
+        retaining entry_at=T48 and expires_at=T49. Other modes keep their
+        existing dispatch timing. Past T49, expire without sending.
+        """
         now, out = self.now_ms(), []
         for (c, dms) in self.s.q("SELECT d.candle_s,d.decision_ms FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s "
                                  "WHERE d.status='SELECTED' AND o.event_id IS NULL"):
             expiry = c * 1000 + EXPIRY_MS
             entry = dms if self.delivery_policy == "asap-r1" and dms is not None else c * 1000 + ENTRY_MS
+            dispatch = c * 1000 + RISK_DISPATCH_MS if self.risk_mode == "enforce" else entry
             ticker = self.verified_market(c)
             if now >= expiry:
                 self._set_decision_status(c, "EXPIRED_UNSENT")
                 if ticker is None:
                     self._audit(c, {"no_send": "NO_VERIFIED_MARKET"})
-            elif now >= entry and ticker is None:
+            elif now >= dispatch and ticker is None:
                 continue  # explicit no-send until a verified market exists; never invent a ticker
-            elif now >= entry:
+            elif now >= dispatch:
                 if self.calibration_mode == "enforce":
                     audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
                     if not self._calibration_passed(audit.get("calibration_filter") or {}):

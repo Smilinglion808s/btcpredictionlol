@@ -1,5 +1,22 @@
 # v3-predictor-worker: PF-E008 (`v3-pf-e008-r1`)
 
+## T45 dispatch / T48 entry timing repair — 2026-10-07
+
+With reversal enforcement, `t48-r1` now dispatches the signed signal as soon as
+the T45 risk gate and any enforced calibration gate pass. `entry_at` remains
+T48, `expires_at` remains T49, and the body remains `v3-signal/1`. Sending and
+order entry are separate: the receiver can prepare before T48, then use its
+existing wait-to-entry gate, refreshed quote, price/size checks and T49 stop.
+Risk-off/shadow and the opt-in unfiltered ASAP policy keep their existing timing.
+Retries retain the same event ID and exact body. No trade sizing, model features,
+thresholds, calibration mode or receiver code changes are part of this patch.
+
+This fixes the observed 2026-10-07 21:30 UTC path: send T48.064, receiver
+execution T48.705, database claim completed T49.309, `ENTRY_DEADLINE`, no order.
+The receiver's shared interval claim can occur earlier after this change, so
+competition with other legs for the same interval may resolve differently.
+There is still no guarantee of a fill or of meeting T49 under every latency.
+
 ## R3 calibrated-risk integration — 2026-10-07
 
 Policy `v3-calibrated-risk-r3-r1` implements the simple calibration router
@@ -146,8 +163,10 @@ post that direction as one signed webhook to the external bettor.
   reason.
 - **Delivery policy (`V3_DELIVERY_POLICY`).** Any other value refuses to start,
   and `/healthz` reports the active policy.
-  - `t48-r1` (default, legacy): the body is persisted at T48, uses
-    `schema_version` `v3-signal/1`, and `entry_at` = candle + 48s.
+  - `t48-r1` (default): uses `schema_version` `v3-signal/1`, and
+    `entry_at` = candle + 48s. With reversal enforcement, persistence/dispatch
+    occurs after all enforced T45 gates pass; otherwise it remains at T48.
+    Order entry and expiry stay at T48/T49.
   - `asap-r1`: the body is persisted as soon as a T15 (or else T30) selection is
     stored. The scoring thread wakes the sender, and networking stays off the
     scoring path. The body uses `schema_version` `v3-signal/2`, adds

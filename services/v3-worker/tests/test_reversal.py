@@ -108,16 +108,20 @@ def test_skip_suppresses_and_preserves_direction_and_training_row():
     assert e.prepare_due()==[] and e.deliverable()==[]
 
 
-def test_pass_has_no_early_send_and_exactly_one_immutable_event():
+def test_pass_dispatches_at_t45_with_t48_entry_and_one_immutable_event():
     e,rr,c,clock,f=runtime(threshold=1)
+    assert e.prepare_due()==[]  # T45 alone is insufficient: risk must pass.
     assert rr.score(c,f['bars'],clock[0])['status']=='PASS'
-    assert e.prepare_due()==[]
-    clock[0]=(c+48)*1000
     assert len(e.prepare_due())==1
     original=e.deliverable()
     assert len(original)==1
     body=json.loads(original[0][1]);assert body['risk_filter']['status']=='PASS'
     assert body['checkpoint_seconds']==15 and body['prediction']=='YES'
+    assert body['sent_at']==V.iso_ms(clock[0])
+    assert body['entry_at']==V.iso_ms((c+48)*1000)
+    assert body['expires_at']==V.iso_ms((c+49)*1000)
+    assert body['schema_version']=='v3-signal/1'
+    clock[0]=(c+48)*1000
     assert rr.score(c,[],clock[0])['status']=='PASS'
     assert e.prepare_due()==[] and e.deliverable()==original
     clock[0]=(c+49)*1000
@@ -150,6 +154,7 @@ def test_shadow_never_changes_original_selection():
     e,rr,c,clock,f=runtime(mode='shadow',threshold=0)
     assert rr.score(c,f['bars'],clock[0])['status']=='SKIP'
     assert e._decision(c)==('SELECTED',15,1)
+    assert e.prepare_due()==[]  # Without enforcement, retain legacy T48 dispatch.
     clock[0]=(c+48)*1000;assert len(e.prepare_due())==1
 
 
