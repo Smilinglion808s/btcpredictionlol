@@ -1,0 +1,242 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 50f5bba..8000359 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -11,4 +11,4 @@
+ 
+ ## Architecture rules
+ - V2 Final R1 records via `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables, and forwards each candle intent through `v2_forward_outbox` (trigger-enqueued, gated by `v2_forward_settings.enabled`) to the betting app's own V2 receiver only; never to V1.2 receivers/executors. V1.2 sending (v12-shadow-adapter + site route) is restored and V2 forwarding is switched off. Why: user switched live betting back from V2 to V1.2 on 2026-10-05.
+-- V3 PF-E008 runs as isolated `services/v3-worker` (frozen `package/`, SQLite on `/data/v3`), posting one raw-body-HMAC webhook per candle to `V3_WEBHOOK_URL` (`V3_DELIVERY_POLICY`: default `t48-r1` sends at T48 as `v3-signal/1`; opt-in `asap-r1` sends right after the T15/T30 selection as `v3-signal/2` with entry_at=decision_at; both expire at T49) only when `V3_DELIVERY_ENABLED=true`; separately and optionally it reports status/decisions to the signed dashboard-only `/api/public/hooks/v3-record` (`v3_*` tables, V3 tile) when `V3_RECORD_URL` is set; V1.2/V2 receiver URLs refused. Why: simplest V3 hookup reusing the bettor's controls, plus a dashboard tile (2026-10-05).
++- V3 PF-E008 runs as isolated `services/v3-worker` (frozen `package/`, SQLite on `/data/v3`), posting one raw-body-HMAC webhook per candle to `V3_WEBHOOK_URL` (`V3_DELIVERY_POLICY`: default `t48-r1` uses `v3-signal/1`, enters at T48, and dispatches immediately after all enforced T45 gates pass when reversal enforcement is active, otherwise at T48; opt-in `asap-r1` sends right after the T15/T30 selection as `v3-signal/2` with entry_at=decision_at; both expire at T49) only when `V3_DELIVERY_ENABLED=true`; separately and optionally it reports status/decisions to the signed dashboard-only `/api/public/hooks/v3-record` (`v3_*` tables, V3 tile) when `V3_RECORD_URL` is set; V1.2/V2 receiver URLs refused. Why: V3 hookup reuses bettor controls; T45 dispatch separates preparation from T48 order entry (2026-10-07).
+diff --git a/services/v3-worker/README.md b/services/v3-worker/README.md
+index 3262692..4f18c52 100644
+--- a/services/v3-worker/README.md
++++ b/services/v3-worker/README.md
+@@ -1,5 +1,22 @@
+ # v3-predictor-worker: PF-E008 (`v3-pf-e008-r1`)
+ 
++## T45 dispatch / T48 entry timing repair — 2026-10-07
++
++With reversal enforcement, `t48-r1` now dispatches the signed signal as soon as
++the T45 risk gate and any enforced calibration gate pass. `entry_at` remains
++T48, `expires_at` remains T49, and the body remains `v3-signal/1`. Sending and
++order entry are separate: the receiver can prepare before T48, then use its
++existing wait-to-entry gate, refreshed quote, price/size checks and T49 stop.
++Risk-off/shadow and the opt-in unfiltered ASAP policy keep their existing timing.
++Retries retain the same event ID and exact body. No trade sizing, model features,
++thresholds, calibration mode or receiver code changes are part of this patch.
++
++This fixes the observed 2026-10-07 21:30 UTC path: send T48.064, receiver
++execution T48.705, database claim completed T49.309, `ENTRY_DEADLINE`, no order.
++The receiver's shared interval claim can occur earlier after this change, so
++competition with other legs for the same interval may resolve differently.
++There is still no guarantee of a fill or of meeting T49 under every latency.
++
+ ## R3 calibrated-risk integration — 2026-10-07
+ 
+ Policy `v3-calibrated-risk-r3-r1` implements the simple calibration router
+@@ -146,8 +163,10 @@ post that direction as one signed webhook to the external bettor.
+   reason.
+ - **Delivery policy (`V3_DELIVERY_POLICY`).** Any other value refuses to start,
+   and `/healthz` reports the active policy.
+-  - `t48-r1` (default, legacy): the body is persisted at T48, uses
+-    `schema_version` `v3-signal/1`, and `entry_at` = candle + 48s.
++  - `t48-r1` (default): uses `schema_version` `v3-signal/1`, and
++    `entry_at` = candle + 48s. With reversal enforcement, persistence/dispatch
++    occurs after all enforced T45 gates pass; otherwise it remains at T48.
++    Order entry and expiry stay at T48/T49.
+   - `asap-r1`: the body is persisted as soon as a T15 (or else T30) selection is
+     stored. The scoring thread wakes the sender, and networking stays off the
+     scoring path. The body uses `schema_version` `v3-signal/2`, adds
+diff --git a/services/v3-worker/src/service.py b/services/v3-worker/src/service.py
+index 83b07e0..2f29fb4 100644
+--- a/services/v3-worker/src/service.py
++++ b/services/v3-worker/src/service.py
+@@ -7,7 +7,8 @@ Env:
+   BTC15M_WEBHOOK_SECRET  existing shared HMAC secret (raw-body x-btc15m-signature)
+   V3_MODE                body "mode": shadow (default) or live
+   PORT                   health port (default 8080)
+-  V3_DELIVERY_POLICY     t48-r1 (default, legacy: send at T48) or asap-r1 (send right after selection);
++  V3_DELIVERY_POLICY     t48-r1 (default: enter at T48; enforced risk sends after T45 gates)
++                         or asap-r1 (send right after selection);
+                          any other value refuses to start
+   V3_RECORD_URL          optional dashboard recorder (site /api/public/hooks/v3-record); off when unset
+   C85_GATEWAY_SECRET     HMAC for the dashboard recorder only (never used for betting delivery)
+diff --git a/services/v3-worker/src/v3core.py b/services/v3-worker/src/v3core.py
+index b2492bf..065dd05 100644
+--- a/services/v3-worker/src/v3core.py
++++ b/services/v3-worker/src/v3core.py
+@@ -46,6 +46,7 @@ WINDOW_SLOTS = 8640
+ CHECKPOINTS = (15, 30)
+ GRACE_MS = 1000           # operational tolerance after T15/T30, logged separately
+ ENTRY_MS, EXPIRY_MS = 48_000, 49_000
++RISK_DISPATCH_MS = 45_000  # dispatch after the final gate; receiver still enters at T48
+ RANK_GATE = 0.70
+ # Feature failures that are data facts (research missingness): the other head may still qualify.
+ DATA_INVALID = {"zero_quote_volume", "invalid_price", "invalid_ohlc", "invalid_quote_volume", "nonfinite_bar"}
+@@ -584,21 +585,26 @@ class Engine:
+                 and audit.get("lineage") == LIVE_LINEAGE and audit.get("mode") == "enforce")
+ 
+     def prepare_due(self) -> list[str]:
+-        """Persist the exact body once when eligible: t48-r1 at T48; asap-r1 as soon as the selection
+-        is stored (entry_at = decision_at). Past T49 a selection is expired, never sent late."""
++        """Persist once after the final enforced gate, separately from order entry.
++
++        Enforced-risk t48-r1 dispatches from T45 after all active gates pass,
++        retaining entry_at=T48 and expires_at=T49. Other modes keep their
++        existing dispatch timing. Past T49, expire without sending.
++        """
+         now, out = self.now_ms(), []
+         for (c, dms) in self.s.q("SELECT d.candle_s,d.decision_ms FROM decisions d LEFT JOIN outbox o ON o.candle_s=d.candle_s "
+                                  "WHERE d.status='SELECTED' AND o.event_id IS NULL"):
+             expiry = c * 1000 + EXPIRY_MS
+             entry = dms if self.delivery_policy == "asap-r1" and dms is not None else c * 1000 + ENTRY_MS
++            dispatch = c * 1000 + RISK_DISPATCH_MS if self.risk_mode == "enforce" else entry
+             ticker = self.verified_market(c)
+             if now >= expiry:
+                 self._set_decision_status(c, "EXPIRED_UNSENT")
+                 if ticker is None:
+                     self._audit(c, {"no_send": "NO_VERIFIED_MARKET"})
+-            elif now >= entry and ticker is None:
++            elif now >= dispatch and ticker is None:
+                 continue  # explicit no-send until a verified market exists; never invent a ticker
+-            elif now >= entry:
++            elif now >= dispatch:
+                 if self.calibration_mode == "enforce":
+                     audit = json.loads(self.s.q("SELECT audit FROM decisions WHERE candle_s=?", (c,))[0][0])
+                     if not self._calibration_passed(audit.get("calibration_filter") or {}):
+diff --git a/services/v3-worker/tests/test_calibration.py b/services/v3-worker/tests/test_calibration.py
+index dcfbff2..46f6218 100644
+--- a/services/v3-worker/tests/test_calibration.py
++++ b/services/v3-worker/tests/test_calibration.py
+@@ -131,11 +131,16 @@ def test_invalid_heads(issue):
+ 
+ def test_keep_timing_and_one_frozen_outbox():
+     e,rr,cr,c,clock,f=integrated()
++    assert e.prepare_due()==[]  # A risk PASS cannot race an enforced calibration gate.
+     out=cr.score(c,f['bars'],clock[0]);assert out['reason']=='KEEP_BASELINE'
+-    assert e.prepare_due()==[]
+-    clock[0]=(c+48)*1000;assert len(e.prepare_due())==1
++    assert len(e.prepare_due())==1
+     sent=e.deliverable();assert len(sent)==1
+-    assert json.loads(sent[0][1])['calibration_filter']['version']==C.VERSION
++    body=json.loads(sent[0][1])
++    assert body['calibration_filter']['version']==C.VERSION
++    assert body['sent_at']==V.iso_ms(clock[0])
++    assert body['entry_at']==V.iso_ms((c+48)*1000)
++    assert body['expires_at']==V.iso_ms((c+49)*1000)
++    clock[0]=(c+48)*1000
+     cr2=CalibrationRuntime(e,rr,None)
+     assert cr2.score(c,[],clock[0])==out
+     assert e.prepare_due()==[] and e.deliverable()==sent
+diff --git a/services/v3-worker/tests/test_reversal.py b/services/v3-worker/tests/test_reversal.py
+index 8fb5d3d..445e00c 100644
+--- a/services/v3-worker/tests/test_reversal.py
++++ b/services/v3-worker/tests/test_reversal.py
+@@ -108,16 +108,20 @@ def test_skip_suppresses_and_preserves_direction_and_training_row():
+     assert e.prepare_due()==[] and e.deliverable()==[]
+ 
+ 
+-def test_pass_has_no_early_send_and_exactly_one_immutable_event():
++def test_pass_dispatches_at_t45_with_t48_entry_and_one_immutable_event():
+     e,rr,c,clock,f=runtime(threshold=1)
++    assert e.prepare_due()==[]  # T45 alone is insufficient: risk must pass.
+     assert rr.score(c,f['bars'],clock[0])['status']=='PASS'
+-    assert e.prepare_due()==[]
+-    clock[0]=(c+48)*1000
+     assert len(e.prepare_due())==1
+     original=e.deliverable()
+     assert len(original)==1
+     body=json.loads(original[0][1]);assert body['risk_filter']['status']=='PASS'
+     assert body['checkpoint_seconds']==15 and body['prediction']=='YES'
++    assert body['sent_at']==V.iso_ms(clock[0])
++    assert body['entry_at']==V.iso_ms((c+48)*1000)
++    assert body['expires_at']==V.iso_ms((c+49)*1000)
++    assert body['schema_version']=='v3-signal/1'
++    clock[0]=(c+48)*1000
+     assert rr.score(c,[],clock[0])['status']=='PASS'
+     assert e.prepare_due()==[] and e.deliverable()==original
+     clock[0]=(c+49)*1000
+@@ -150,6 +154,7 @@ def test_shadow_never_changes_original_selection():
+     e,rr,c,clock,f=runtime(mode='shadow',threshold=0)
+     assert rr.score(c,f['bars'],clock[0])['status']=='SKIP'
+     assert e._decision(c)==('SELECTED',15,1)
++    assert e.prepare_due()==[]  # Without enforcement, retain legacy T48 dispatch.
+     clock[0]=(c+48)*1000;assert len(e.prepare_due())==1
+ 
+ 
+diff --git a/services/v3-worker/tests/test_risk_dispatch.py b/services/v3-worker/tests/test_risk_dispatch.py
+new file mode 100644
+index 0000000..5b0e7b5
+--- /dev/null
++++ b/services/v3-worker/tests/test_risk_dispatch.py
+@@ -0,0 +1,69 @@
++"""Dispatch regressions: production model/gates, mocked clock and transport."""
++import json
++from test_reversal import runtime
++from test_calibration import integrated
++import v3core as V
++
++
++def test_no_dispatch_before_t45_even_with_a_pass_record():
++    e, rr, c, clock, f = runtime(threshold=1)
++    rr.score(c, f['bars'], clock[0])
++    clock[0] = (c+45)*1000-1
++    assert e.prepare_due() == []
++    clock[0] += 1
++    assert len(e.prepare_due()) == 1
++
++
++def test_early_dispatch_still_requires_verified_market():
++    e, rr, c, clock, f = runtime(threshold=1)
++    rr.score(c, f['bars'], clock[0])
++    e.s.q('DELETE FROM markets')
++    assert e.prepare_due() == []
++    e.record_markets([{'ticker': V.kalshi_ticker(c),
++                      'close_time': V.iso_ms((c+900)*1000)}], V.KALSHI_SERIES)
++    assert len(e.prepare_due()) == 1
++
++
++def test_retry_and_restart_preserve_early_body_and_t49_expiry():
++    e, rr, c, clock, f = runtime(threshold=1)
++    rr.score(c, f['bars'], clock[0])
++    [eid] = e.prepare_due()
++    original = e.deliverable()
++    e.record_attempt(eid, 503, 'simulated retry')
++    restarted = V.Engine(e.s, now_ms=lambda: clock[0], risk_mode='enforce', delivery_enabled=True)
++    clock[0] = (c+47)*1000
++    assert restarted.prepare_due() == []
++    assert restarted.deliverable() == original
++    clock[0] = (c+49)*1000
++    restarted.prepare_due()
++    assert restarted.deliverable() == []
++
++
++def test_disabled_sender_only_captures():
++    e, rr, c, clock, f = runtime(threshold=1)
++    e.delivery_enabled = False
++    rr.score(c, f['bars'], clock[0])
++    assert len(e.prepare_due()) == 1
++    assert e.deliverable() == []
++
++
++def test_shadow_calibration_does_not_delay_or_gate_risk_pass():
++    e, rr, cr, c, clock, f = integrated(mode='shadow', p=None)
++    assert len(e.prepare_due()) == 1
++    body = json.loads(e.deliverable()[0][1])
++    assert body['risk_filter']['status'] == 'PASS'
++    assert 'calibration_filter' not in body
++
++
++def test_enforced_calibration_veto_cannot_race_sender():
++    e, rr, cr, c, clock, f = integrated(p=.54)
++    assert e.prepare_due() == []
++    assert cr.score(c, f['bars'], clock[0])['reason'] == 'SKIP_BASELINE'
++    assert e.prepare_due() == [] and e.deliverable() == []
++
++
++def test_risk_off_keeps_t48_dispatch():
++    e, rr, c, clock, f = runtime(mode='off', threshold=1)
++    assert e.prepare_due() == []
++    clock[0] = (c+48)*1000
++    assert len(e.prepare_due()) == 1
