@@ -26,6 +26,7 @@ export function V3Card({ data, error }: Props) {
   const connected = rt ? now - Date.parse(rt.updated_at) < 120_000 : false;
   const ready = connected && st.prediction_ready === true;
   const rec = data?.record;
+  const gradingDown = data?.error === "GRADING_UNAVAILABLE";
   const dayNet = Number(rec?.today?.net ?? 0);
   const totNet = Number(rec?.total?.net ?? 0);
   const decisions: any[] = data?.decisions ?? [];
@@ -79,11 +80,12 @@ export function V3Card({ data, error }: Props) {
               <div key={label}>
                 <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
                 <div className={`mt-1 font-mono ${size} font-bold tracking-tighter tabular-nums leading-none ${n > 0 ? "text-plasma" : n < 0 ? "text-ember" : "text-foreground"}`}>
-                  {signed(n)}
+                  {gradingDown ? "—" : signed(n)}
                 </div>
               </div>
             ))}
           </div>
+          {gradingDown ? <div className="mt-1.5 text-[10px] text-ember">Kalshi grading unavailable · results hidden until the outcome cache can be read</div> : null}
           <div className="mt-1.5 text-[10px] text-muted-foreground">Finalized Kalshi outcomes · prediction wins, not fills or dollar profit</div>
         </div>
       </section>
