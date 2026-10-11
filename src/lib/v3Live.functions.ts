@@ -1,6 +1,7 @@
-// V3 PF-E008 dashboard feed. Read-only, status only, no secrets.
-// Record = predictions (not bets): each SELECTED call graded against the confirmed
-// 15-minute dashboard candle (close vs open). "Today" is the Boise calendar day.
+// V3 PF-E008 dashboard feed. Status only, no secrets.
+// Record = predictions (not bets): each SELECTED/EXPIRED_UNSENT call graded only
+// against the official finalized Kalshi KXBTC15M outcome (cached server-side in
+// v3_kalshi_settlements); unresolved stays pending. "Today" = Boise calendar day.
 import { createServerFn } from "@tanstack/react-start";
 
 const boiseDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Boise" }).format(new Date(ms));
