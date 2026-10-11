@@ -1,15 +1,15 @@
-# V3 timing patch: review-branch capability check (no action)
+# V3 Kalshi grading — production verification (read-only)
 
-## Finding
-This session can't safely publish the patch on its own review branch. Nothing was edited or pushed.
+## What was verified (21:47 UTC)
+- Published site https://btcpredictionlol.lovable.app/stats returned HTTP 200.
+- The live stats bundle `assets/stats-BBPbq498.js` (loaded from the live `index-C7bhOXzV.js`) contains "Finalized Kalshi outcomes", "Kalshi grading unavailable" and `GRADING_UNAVAILABLE`. The old wording "confirmed 15-minute candles" is not in any live bundle checked.
+- Cache table: 137 final, 3 not final (Oct 8 07:00Z, 07:45Z, 08:45Z — HTTP_404, attempts=2, last tried 21:44:29Z, which is after the 21:43Z backfill). That shows a dashboard refresh ran the new server code against the shared backend. Preview and production share this backend, so this can't prove which one ran it.
+- Current tally: 142 recorded calls → 94W / 43L / 5 pending (3 unavailable markets, 21:30Z just closed, 21:45Z still open). The fixed Oct 11 pre-21:30Z cohort stays 8W/4L; 21:30Z and 21:45Z are separate and still ungraded.
 
-- Edits made here are saved to Lovable's internal repository, not straight to GitHub. The working branch is an internal edit branch (`edit/edt-...`), currently at `07d50caa`.
-- The two-way GitHub sync follows the project's connected branch, which is normally `main`. Anything committed here becomes part of that branch and syncs to it.
-- None of the tools I have here can create a separate GitHub branch, push only to it, or change the connected branch. Switching branches is done in the editor's GitHub settings, and it changes the branch for the whole project.
-- I can't see from here which branch is selected in GitHub settings, whether a preview service builds every branch, or how your Railway auto-deploy is set up.
+## Not verifiable here
+- No tool here reads the status of deployment cd860632. Live files show the new frontend was served, not that this specific deployment finished.
+- The server side of getV3Live in production wasn't called directly: the stats page is behind sign-in and calling the server function needs a session. Only an authenticated production load can confirm what production returns at runtime.
 
-## Recommendation
-Push the review branch using your own GitHub access (your separate plugin or a local clone): create a new branch from the current main and apply the exact patch there. Don't switch Lovable's connected branch, because this project's edits would then go to that branch. Railway services only redeploy for their watched branch and paths, so check that the V3 service doesn't watch the new branch.
-
-## If you still want it done through Lovable
-The only way is to switch the project's connected branch in the editor's GitHub settings. That affects everything, so it isn't recommended. Approving this plan does nothing on its own.
+## Optional next step (needs approval; still read-only)
+- Load the published /stats signed in, using a minted session in a headless browser. Check that the V3 tile shows "Finalized Kalshi outcomes" with totals matching 94W/43L (or later). Confirm a production-triggered `last_attempt_at` update for the 21:30Z market in the cache.
+- No code, model, worker, betting, secret or setting changes.
