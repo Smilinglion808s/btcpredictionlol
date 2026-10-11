@@ -10793,6 +10793,57 @@ export type Database = {
         }
         Relationships: []
       }
+      v3_kalshi_settlements: {
+        Row: {
+          attempts: number
+          candle_open: string
+          close_time: string | null
+          expiration_value: string | null
+          final: boolean
+          last_attempt_at: string | null
+          last_error: string | null
+          next_retry_at: string | null
+          raw: Json | null
+          result: string | null
+          settlement_ts: string | null
+          source_endpoint: string | null
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          candle_open: string
+          close_time?: string | null
+          expiration_value?: string | null
+          final?: boolean
+          last_attempt_at?: string | null
+          last_error?: string | null
+          next_retry_at?: string | null
+          raw?: Json | null
+          result?: string | null
+          settlement_ts?: string | null
+          source_endpoint?: string | null
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          candle_open?: string
+          close_time?: string | null
+          expiration_value?: string | null
+          final?: boolean
+          last_attempt_at?: string | null
+          last_error?: string | null
+          next_retry_at?: string | null
+          raw?: Json | null
+          result?: string | null
+          settlement_ts?: string | null
+          source_endpoint?: string | null
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       v3_worker_runtime: {
         Row: {
           status: Json

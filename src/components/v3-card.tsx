@@ -84,7 +84,7 @@ export function V3Card({ data, error }: Props) {
               </div>
             ))}
           </div>
-          <div className="mt-1.5 text-[10px] text-muted-foreground">predictions, not bets</div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground">Finalized Kalshi outcomes · prediction wins, not fills or dollar profit</div>
         </div>
       </section>
 
@@ -125,7 +125,7 @@ export function V3Card({ data, error }: Props) {
           <Gate label="15s check" rank={cur?.t15_rank ?? null} />
           <Gate label="30s check" rank={cur?.t30_rank ?? null} />
         </div>
-        <p className="mt-2 text-[9px] text-muted-foreground">Base selection requires 70% rank, then the reversal check at 45s. Eligible messages go out at 48s and expire at 49s.</p>
+        <p className="mt-2 text-[9px] text-muted-foreground">Base selection requires 70% rank. The enforced reversal gate runs at 45s; a call is sent once it passes, with entry at 48s and expiry at 49s.</p>
       </section>
 
       <section className="v3-chip p-4 space-y-3" aria-label="V3 risk calibration tracking">
@@ -213,7 +213,7 @@ export function V3Card({ data, error }: Props) {
         </section>
       ) : null}
       <p className="text-[9px] text-muted-foreground/80">
-        Results graded from confirmed 15-minute candles (close vs open); today = Boise day. Bet size, price and odds are set by the betting app.
+        Finalized Kalshi outcomes: UP wins on YES, DOWN wins on NO; unsettled markets stay pending. Wins and net wins count predictions, not fills or dollar profit. Today = Boise day. Bet size, price and odds are set by the betting app.
       </p>
     </section>
   );

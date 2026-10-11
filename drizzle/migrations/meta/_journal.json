@@ -57,6 +57,13 @@
       "when": 1791243488394,
       "tag": "0007_v3_dashboard_records",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791754723864,
+      "tag": "0008_v3_kalshi_settlements",
+      "breakpoints": true
     }
   ]
 }
