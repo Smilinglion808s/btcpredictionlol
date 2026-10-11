@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { fetchV3KalshiOutcome, gradeV3, pickRefreshBatch, v3KalshiTicker, validateKalshiMarket } from "./kalshi-grade";
+import { cachedOutcome, fetchV3KalshiOutcome, gradeV3, pickRefreshBatch, pool, refreshAndResolve, v3KalshiTicker, validateKalshiMarket, type GradeDeps } from "./kalshi-grade";
 
 const T = (iso: string) => Date.parse(iso);
-const mk = (open: number, o: any = {}) => ({ ticker: v3KalshiTicker(open), status: "finalized", result: "yes",
+const mk = (open: number, o: any = {}) => ({ ticker: v3KalshiTicker(open), market_type: "binary", status: "finalized", result: "yes",
   close_time: new Date(open + 900_000).toISOString(), ...o });
 const res = (status: number, body?: any) => new Response(body ? JSON.stringify(body) : null, { status });
 
@@ -35,7 +35,7 @@ describe("Oct 11 regression cohort", () => {
 describe("validation stays pending", () => {
   const o = T("2026-10-11T12:00:00Z");
   it.each([[{ status: "closed" }], [{ status: "settled" }], [{ status: "weird" }], [{ result: "" }],
-    [{ ticker: "KXBTC15M-26OCT110830-30" }], [{ close_time: "2026-10-11T12:30:00Z" }]])("%o", (c) => {
+    [{ ticker: "KXBTC15M-26OCT110830-30" }], [{ market_type: "scalar" }], [{ market_type: undefined }], [{ close_time: "2026-10-11T12:30:00Z" }]])("%o", (c) => {
     const v = validateKalshiMarket(mk(o, c), o);
     expect(typeof v).toBe("string");
     expect(gradeV3(1, null)).toBe("P");
@@ -70,3 +70,87 @@ describe("refresh batch", () => {
     expect(b).not.toContain(now);
   });
 });
+
+it("rejects non-quarter-hour candle timestamps", () => {
+  const o = T("2026-10-11T12:00:00Z");
+  expect(validateKalshiMarket(mk(o), o + 1000)).toBe("CANDLE_TIME_INVALID");
+  expect(validateKalshiMarket(mk(o), NaN)).toBe("CANDLE_TIME_INVALID");
+});
+
+// Fixed Oct 11 cohort (Boise 00:00–15:29; excludes 15:30 Boise = 21:30Z).
+const COHORT: [string, number, "yes" | "no"][] = [
+  ["08:00", 1, "yes"], ["09:30", -1, "yes"], ["09:45", -1, "yes"], ["10:45", 1, "yes"], ["12:00", 1, "yes"], ["12:15", -1, "no"],
+  ["14:00", -1, "yes"], ["16:45", -1, "yes"], ["17:00", -1, "no"], ["17:45", -1, "no"], ["21:00", -1, "no"], ["21:15", -1, "no"],
+];
+const copen = (h: string) => T(`2026-10-11T${h}:00Z`);
+
+function memoryDeps(results: Map<number, any>, opts: { readFail?: boolean; writeFail?: boolean } = {}) {
+  const db = new Map<number, any>();
+  const deps: GradeDeps & { db: Map<number, any>; calls: number; inFlight: number; maxInFlight: number } = {
+    db, calls: 0, inFlight: 0, maxInFlight: 0,
+    async readCache() { return opts.readFail ? { rows: [], error: true } : { rows: [...db.values()], error: false }; },
+    async record(row: any) {
+      if (opts.writeFail) return { error: true };
+      const t = Date.parse(row.candle_open); const prev = db.get(t);
+      if (!prev?.final) db.set(t, { ...row, attempts: (prev?.attempts ?? 0) + 1 }); // mirrors WHERE NOT final
+      return { error: false };
+    },
+    async fetchOutcome(t: number) {
+      deps.calls++; deps.inFlight++; deps.maxInFlight = Math.max(deps.maxInFlight, deps.inFlight);
+      await new Promise((r) => setTimeout(r, 2)); deps.inFlight--;
+      const m = results.get(t);
+      if (!m) return { ok: false, reason: "HTTP_404", endpoint: "historical" } as const;
+      const v = validateKalshiMarket(m, t);
+      return typeof v === "string" ? { ok: false, reason: v, endpoint: "markets" } as const : { ok: true, outcome: v, endpoint: "markets", raw: m } as const;
+    },
+  };
+  return deps;
+}
+
+describe("refreshAndResolve", () => {
+  const now = T("2026-10-11T22:00:00Z");
+  const opens = COHORT.map(([h]) => copen(h));
+  const markets = new Map(COHORT.map(([h, , r]) => [copen(h), mk(copen(h), { result: r })]));
+  it("12-call direction+result fixture grades 8W/4L with pool ≤3", async () => {
+    const deps = memoryDeps(markets);
+    const g = await refreshAndResolve(opens, now, deps);
+    expect(g.unavailable).toBe(false);
+    expect(deps.maxInFlight).toBeLessThanOrEqual(3);
+    const res = COHORT.map(([h, d]) => gradeV3(d, g.outcomes.get(copen(h)) ?? null));
+    expect(res.filter((x) => x === "W").length).toBe(8);
+    expect(res.filter((x) => x === "L").length).toBe(4);
+    expect(res[2]).toBe("L"); expect(res[7]).toBe("L");
+  });
+  it("a later failed lookup never downgrades a finalized row", async () => {
+    const deps = memoryDeps(markets);
+    await refreshAndResolve(opens, now, deps);
+    const t = opens[0];
+    await deps.record({ candle_open: new Date(t).toISOString(), final: false, result: null, last_error: "HTTP_503" });
+    expect(deps.db.get(t).final).toBe(true);
+    const g = await refreshAndResolve(opens, now + 3_600_000, memoryDepsFrom(deps));
+    expect(g.outcomes.get(t)?.result).toBe("yes");
+  });
+  it("cache read error ⇒ unavailable, no fetches", async () => {
+    const deps = memoryDeps(markets, { readFail: true });
+    const g = await refreshAndResolve(opens, now, deps);
+    expect(g.unavailable).toBe(true); expect(deps.calls).toBe(0);
+  });
+  it("cache write error ⇒ unavailable", async () => {
+    const g = await refreshAndResolve(opens, now, memoryDeps(markets, { writeFail: true }));
+    expect(g.unavailable).toBe(true);
+  });
+  it("cached rows with wrong identity are ignored", () => {
+    const t = opens[0];
+    expect(cachedOutcome({ final: true, ticker: "KXBTC15M-X", result: "yes", close_time: new Date(t + 900_000).toISOString() }, t)).toBeNull();
+    expect(cachedOutcome({ final: true, ticker: v3KalshiTicker(t), result: "yes", close_time: new Date(t).toISOString() }, t)).toBeNull();
+  });
+  it("pool bounds concurrency", async () => {
+    let n = 0, max = 0;
+    await pool([...Array(10).keys()], 3, async () => { n++; max = Math.max(max, n); await new Promise((r) => setTimeout(r, 1)); n--; });
+    expect(max).toBe(3);
+  });
+});
+
+function memoryDepsFrom(d: ReturnType<typeof memoryDeps>) {
+  return { ...d, fetchOutcome: async () => ({ ok: false, reason: "HTTP_503", endpoint: "markets" }) as const } as GradeDeps;
+}

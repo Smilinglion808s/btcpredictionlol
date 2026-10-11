@@ -13067,6 +13067,7 @@ export type Database = {
         Returns: Json
       }
       v2_record_checkpoint: { Args: { p: Json }; Returns: Json }
+      v3_kalshi_record: { Args: { p: Json }; Returns: boolean }
     }
     Enums: {
       binance_ob_capture_status:

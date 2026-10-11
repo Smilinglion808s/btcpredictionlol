@@ -24,7 +24,9 @@ export type FinalOutcome = { result: "yes" | "no"; ticker: string; closeTime: st
 
 /** Returns a verified final outcome, or a reason string why it is not gradeable. */
 export function validateKalshiMarket(m: any, candleOpenMs: number): FinalOutcome | string {
+  if (!Number.isInteger(candleOpenMs) || candleOpenMs % 900_000 !== 0) return "CANDLE_TIME_INVALID";
   if (!m || typeof m !== "object") return "MALFORMED";
+  if (m.market_type !== "binary") return "MARKET_TYPE_INVALID";
   if (m.ticker !== v3KalshiTicker(candleOpenMs)) return "IDENTITY_MISMATCH";
   const close = typeof m.close_time === "string" ? Date.parse(m.close_time) : NaN;
   if (close !== candleOpenMs + 900_000) return "CLOSE_TIME_MISMATCH";
@@ -83,3 +85,52 @@ export function pickRefreshBatch(opens: number[], cache: Map<number, CacheRow>, 
 }
 
 export const retryDelayMs = (attempts: number) => Math.min(KALSHI_RETRY_MAX_MS, KALSHI_RETRY_BASE_MS * 2 ** Math.min(attempts, 6));
+
+/** Run tasks with at most `size` in flight. */
+export async function pool<T, R>(items: T[], size: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (i < items.length) { const k = i++; out[k] = await fn(items[k]); }
+  }));
+  return out;
+}
+
+export type GradeDeps = {
+  readCache(opens: number[]): Promise<{ rows: any[]; error: boolean }>;
+  record(row: Record<string, unknown>): Promise<{ error: boolean }>;
+  fetchOutcome(t: number): Promise<FetchResult>;
+};
+
+/** Validated cached outcome only: identity, close time and result must all match. */
+export function cachedOutcome(row: any, t: number): { result: "yes" | "no" } | null {
+  if (!row?.final || row.ticker !== v3KalshiTicker(t) || (row.result !== "yes" && row.result !== "no")) return null;
+  if (Date.parse(row.close_time) !== t + 900_000) return null;
+  return { result: row.result };
+}
+
+/** Bounded refresh (pool of 3) then read back outcomes. Any cache error ⇒ unavailable. */
+export async function refreshAndResolve(opens: number[], nowMs: number, deps: GradeDeps, limit = KALSHI_BATCH, concurrency = 3) {
+  const first = await deps.readCache(opens);
+  if (first.error) return { unavailable: true as const, outcomes: new Map<number, { result: "yes" | "no" }>(), refreshed: 0 };
+  const cache = new Map<number, any>(first.rows.map((r) => [Date.parse(r.candle_open), r]));
+  const batch = pickRefreshBatch(opens, cache, nowMs, limit);
+  let writeError = false;
+  await pool(batch, concurrency, async (t) => {
+    const r = await deps.fetchOutcome(t);
+    const at = new Date(nowMs).toISOString();
+    const row = r.ok
+      ? { candle_open: new Date(t).toISOString(), ticker: r.outcome.ticker, final: true, result: r.outcome.result,
+          close_time: r.outcome.closeTime, settlement_ts: r.outcome.settlementTs, expiration_value: r.outcome.expirationValue,
+          source_endpoint: r.endpoint, raw: r.raw, last_attempt_at: at, next_retry_at: null, last_error: null }
+      : { candle_open: new Date(t).toISOString(), ticker: v3KalshiTicker(t), final: false, result: null, close_time: null,
+          source_endpoint: r.endpoint, raw: null, last_attempt_at: at,
+          next_retry_at: new Date(nowMs + retryDelayMs(cache.get(t)?.attempts ?? 0)).toISOString(), last_error: r.reason };
+    if ((await deps.record(row)).error) writeError = true;
+  });
+  const after = batch.length ? await deps.readCache(opens) : first;
+  if (after.error || writeError) return { unavailable: true as const, outcomes: new Map(), refreshed: batch.length };
+  const outcomes = new Map<number, { result: "yes" | "no" }>();
+  for (const r of after.rows) { const t = Date.parse(r.candle_open); const o = cachedOutcome(r, t); if (o) outcomes.set(t, o); }
+  return { unavailable: false as const, outcomes, refreshed: batch.length };
+}
