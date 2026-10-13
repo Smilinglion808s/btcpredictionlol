@@ -54,6 +54,9 @@ export const Route = createFileRoute("/api/public/hooks/t45-boundary-run")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Retired: only V1.2 and V3 are tracked. Return immediately so the
+        // remaining scheduled callers do no database or model work.
+        if (request) return Response.json({ ok: true, retired: true });
         const started = Date.now();
         const raw = await request.text();
         const signed = verifySigned(
