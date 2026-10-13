@@ -8,20 +8,10 @@ import {
 } from "@/lib/predictions.functions";
 
 
-import { T45Card } from "@/components/t45-card";
-import { T45PriceFlowCard } from "@/components/t45-priceflow-card";
-
-import { LiteACard } from "@/components/litea-card";
 import { V11Card } from "@/components/v11-card";
 
 
-/** Legacy R2-dependent T45 Balanced is retired; keep the code, hide the tile. */
-const SHOW_LEGACY_T45 = false as boolean;
 
-import { getT45Stats, getT45Pending, exportT45Csv, exportT45FeaturesCsv } from "@/lib/t45.functions";
-import { getPriceFlowStats, getPriceFlowPending } from "@/lib/t45pf.functions";
-
-import { getLiteAStats } from "@/lib/litea.functions";
 import { getV11Stats } from "@/lib/v11.functions";
 import { getV12Live } from "@/lib/v12Live.functions";
 import { getV3Live } from "@/lib/v3Live.functions";
@@ -67,28 +57,6 @@ function StatsPage() {
 
 
 
-  // T45 Balanced — shadow only. Its pending tile must flip as soon as the
-  // collector-triggered T+45s decision lands, so poll it at the same cadence.
-  const t45Fn = useServerFn(getT45Stats);
-  const t45Q = useQuery({ queryKey: ["t45-stats"], queryFn: () => t45Fn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000, enabled: SHOW_LEGACY_T45 });
-  const t45PendingFn = useServerFn(getT45Pending);
-  const t45PendingQ = useQuery({ queryKey: ["t45-pending"], queryFn: () => t45PendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000, enabled: SHOW_LEGACY_T45 });
-  const exportT45Fn = useServerFn(exportT45Csv);
-  const exportT45FeaturesFn = useServerFn(exportT45FeaturesCsv);
-  const [exportingT45, setExportingT45] = useState(false);
-
-  // T45 PriceFlow Q37.5 — independent shadow model (no R2 input).
-  const pfFn = useServerFn(getPriceFlowStats);
-  const pfQ = useQuery({ queryKey: ["t45pf-stats"], queryFn: () => pfFn(), refetchInterval: STATS_REFRESH_MS, staleTime: 10_000 });
-  const pfPendingFn = useServerFn(getPriceFlowPending);
-  const pfPendingQ = useQuery({ queryKey: ["t45pf-pending"], queryFn: () => pfPendingFn(), refetchInterval: 5_000, refetchIntervalInBackground: true, staleTime: 2_000 });
-
-  // T30/T10 tiles removed from the dashboard per user request; data still
-  // collected server-side, exports remain available via /api/export/*.
-
-  // Version 1 (lite-a-floor4-top10-r1) — shadow only, never dispatches.
-  const liteAFn = useServerFn(getLiteAStats);
-  const liteAQ = useQuery({ queryKey: ["litea-stats"], queryFn: () => liteAFn(), refetchInterval: 15_000, staleTime: 5_000 });
 
   // Version 1.1 — combined historical stream stats. Read-only and expensive,
   // so it stays on the slow cadence; the live V1.2 state below is what has to
@@ -98,7 +66,7 @@ function StatsPage() {
     queryKey: ["v11-stats"],
     queryFn: () => v11Fn(),
     refetchInterval: 10_000,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -125,7 +93,7 @@ function StatsPage() {
         Array.isArray(d.legs) && d.legs.some((l: any) => l.status === "ACKNOWLEDGED");
       return d.isCurrentInterval && accepted && !d.pending ? 5_000 : 1_000;
     },
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -158,34 +126,6 @@ function StatsPage() {
       window.removeEventListener("online", onVisible);
     };
   }, [qc]);
-
-  const [exportingPf, setExportingPf] = useState(false);
-
-  async function downloadT45Csv() {
-    try {
-      setExportingT45(true);
-      const res = await exportT45Fn();
-      if (!res || res.rows === 0) { alert("No T45 rows to export."); return; }
-      triggerDownload(res.csv, res.filename);
-    } finally {
-      setExportingT45(false);
-    }
-  }
-
-  async function downloadT45FeaturesCsv() {
-    try {
-      setExportingT45(true);
-      const res = await exportT45FeaturesFn();
-      if (!res || res.rows === 0) { alert("No T45 feature rows to export."); return; }
-      triggerDownload(res.csv, res.filename);
-    } finally {
-      setExportingT45(false);
-    }
-  }
-
-  function downloadPriceFlowCsv() {
-    window.location.href = "/api/export/t45pf-csv";
-  }
 
 
 
@@ -281,7 +221,7 @@ function StatsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         <V11Card
           stats={(v11Q.data as any) ?? {}}
@@ -307,30 +247,6 @@ function StatsPage() {
         {/* B4x4-ES1 retired — model stopped and CSV archived. */}
 
 
-        {/* Legacy R2-dependent T45 Balanced — retired from the dashboard. */}
-        {SHOW_LEGACY_T45 && (
-          <T45Card
-            stats={(t45Q.data as any) ?? {}}
-            pending={(t45PendingQ.data as any) ?? null}
-            onExport={downloadT45Csv}
-            onExportFeatures={downloadT45FeaturesCsv}
-            exporting={exportingT45}
-          />
-        )}
-
-
-        <T45PriceFlowCard
-          stats={(pfQ.data as any) ?? {}}
-          pending={(pfPendingQ.data as any) ?? null}
-          onExport={downloadPriceFlowCsv}
-          exporting={exportingPf}
-        />
-
-        <LiteACard
-          stats={(liteAQ.data as any) ?? {}}
-          loading={liteAQ.isLoading}
-          error={liteAQ.isError}
-        />
 
       </div>
 
