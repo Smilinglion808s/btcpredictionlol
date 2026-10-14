@@ -27,7 +27,7 @@ def test_handle_records_timestamps_and_latest(tmp_path):
     q = c.latest['SOLUSDT']['quote']
     assert (q['exchange_ms'], q['transaction_ms'], q['receipt_ms']) == (1000, 999, 1003)
     assert c.counters['events'] == 1 and c.counters['rejected'] == 1
-    assert (tmp_path / 'SOLUSDT.jsonl').exists()
+    assert (tmp_path / 'events' / 'SOLUSDT.jsonl').exists()
 
 
 def test_health_conservative_statuses_and_staleness(tmp_path):
@@ -58,7 +58,7 @@ def test_reconnect_backoff(tmp_path):
 def test_rotation_bounded(tmp_path):
     r = core.Recorder(tmp_path, max_bytes=300)
     for i in range(20): r.write(core.parse(bt(u=i), 1000))
-    assert sorted(p.name for p in tmp_path.iterdir()) == ['SOLUSDT.jsonl', 'SOLUSDT.jsonl.1']
+    assert sorted(p.name for p in (tmp_path / 'events').iterdir()) == ['SOLUSDT.jsonl', 'SOLUSDT.jsonl.1']
 
 
 def test_http_endpoints_read_only(tmp_path):
@@ -75,3 +75,20 @@ def test_http_endpoints_read_only(tmp_path):
     (h, hb), (e, eb), (p, _) = asyncio.run(go())
     assert (h, e, p) == (b'200', b'200', b'405')
     assert hb['mode'] == 'PAPER' and eb['symbols']['SOLUSDT']['quote']['update_id'] == 1
+
+
+def test_mount_root_metadata_ignored_but_events_dir_strict(tmp_path):
+    (tmp_path / 'lost+found').mkdir(); (tmp_path / '.railway-meta').write_text('x')
+    r = core.Recorder(tmp_path); r.write(core.parse(bt(), 1000))
+    assert (tmp_path / 'lost+found').is_dir() and (tmp_path / '.railway-meta').read_text() == 'x'
+    (tmp_path / 'events' / 'junk.txt').write_text('x')
+    with pytest.raises(ValueError, match='ALT_UNEXPECTED_FILE'): core.Recorder(tmp_path)
+
+
+def test_events_dir_symlink_and_hardlink_rejected(tmp_path):
+    import os
+    a = tmp_path / 'a'; a.mkdir(); (a / 'events').symlink_to(tmp_path)
+    with pytest.raises(ValueError, match='ALT_DIR_SYMLINK'): core.Recorder(a)
+    b = tmp_path / 'b'; (b / 'events').mkdir(parents=True)
+    (tmp_path / 'other').write_text(''); os.link(tmp_path / 'other', b / 'events' / 'SOLUSDT.jsonl')
+    with pytest.raises(ValueError, match='ALT_UNEXPECTED_FILE'): core.Recorder(b)
