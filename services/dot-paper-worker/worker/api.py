@@ -26,7 +26,7 @@ def public_snapshot(engine):
     return data
 
 
-def create_app(engine,auth,background=True,observer=None,on_observer_complete=None,allow_test_api=False):
+def create_app(engine,auth,background=True,observer=None,on_observer_complete=None,allow_test_api=False,alt=None):
     if engine.cfg.ledger_kind!='FORWARD' and not allow_test_api:raise ValueError('Test ledger cannot be publicly served')
     stop=asyncio.Event()
     async def maintenance():
@@ -48,8 +48,17 @@ def create_app(engine,auth,background=True,observer=None,on_observer_complete=No
                 app.state.failed=True;result='OBSERVER_FAILED_CLOSED'
             if on_observer_complete:on_observer_complete(result)
         observer_task=asyncio.create_task(observe()) if observer else None
+        async def alt_run():
+            try:await alt.run(stop)
+            except asyncio.CancelledError:raise
+            except Exception:pass  # altcoin failures never affect BTC health
+        alt_task=asyncio.create_task(alt_run()) if alt else None
         yield
         stop.set()
+        if alt_task:
+            alt_task.cancel()
+            try:await alt_task
+            except asyncio.CancelledError:pass
         if observer_task:
             observer_task.cancel()
             try:await observer_task
@@ -82,7 +91,7 @@ def create_app(engine,auth,background=True,observer=None,on_observer_complete=No
     @app.get('/health')
     def health():
         return JSONResponse({'service':'dot-paper-btc','mode':'PAPER','status':'ERROR' if app.state.failed else 'OK',
-                             'live_feed_enabled':engine.cfg.feed_enabled,'real_orders_supported':False},status_code=503 if app.state.failed else 200)
+                             'live_feed_enabled':engine.cfg.feed_enabled,'real_orders_supported':False,'altcoin':alt.health() if alt else {'enabled':False}},status_code=503 if app.state.failed else 200)
     @app.get('/api/v1/snapshot')
     def snapshot():return public_snapshot(engine)
     @app.get('/api/v1/status')

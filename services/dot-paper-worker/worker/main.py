@@ -18,7 +18,10 @@ def main():
     server=None
     def observer_complete(result):
         if result!='STOPPED' and server:server.should_exit=True
-    app=create_app(engine,OwnerAuth(auth_from_env()),observer=observer,on_observer_complete=observer_complete)
+    from .altcoin import AltSupervisor
+    # Ephemeral by default: the pinned volume bootstrap only allows ledger files.
+    alt=AltSupervisor(os.getenv('DOT_ALT_DATA_DIR','/tmp/dot-alt'))
+    app=create_app(engine,OwnerAuth(auth_from_env()),observer=observer,on_observer_complete=observer_complete,alt=alt)
     # One process only. No uvicorn reload, worker replication, auto-trading cron or webhooks.
     server=uvicorn.Server(uvicorn.Config(app,host=os.getenv('DOT_PAPER_BIND','127.0.0.1'),port=int(os.getenv('PORT','8080')),
                 workers=1,access_log=False,log_level='warning',server_header=False))
