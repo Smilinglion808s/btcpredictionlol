@@ -4,9 +4,12 @@ import { PaperTerminal } from "../../components/dot-paper/PaperTerminal";
 import {
   getDotPaperSnapshot,
   getDotPaperPage,
+  getDotPaperHealth,
 } from "../../lib/dot-paper.functions";
 import type { DashboardSnapshot } from "../../lib/dot-paper/types";
 
+import { AltcoinPanel } from "../../components/dot-paper/AltcoinPanel";
+import { deriveAltView, type AltHealthInput } from "../../lib/dot-paper/altcoin-status";
 import { mergeForwardPages } from "../../lib/dot-paper/presentation";
 
 export const Route = createFileRoute("/_authenticated/paper")({
@@ -33,6 +36,25 @@ function DotPaperPage() {
   const [pageBusy, setPageBusy] = useState(false);
   const [received, setReceived] = useState(0);
   const [now, setNow] = useState(Date.now());
+  const [altHealth, setAltHealth] = useState<AltHealthInput>();
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const r = await getDotPaperHealth();
+        if (alive) setAltHealth(r.ok ? { ok: true, data: r.data } : { ok: false });
+      } catch {
+        if (alive) setAltHealth({ ok: false });
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
   const mounted = useRef(true),
     inflight = useRef(false),
     pageInFlight = useRef(false),
@@ -185,6 +207,7 @@ function DotPaperPage() {
       pageBusy={pageBusy}
       onRefresh={() => void refresh()}
       onLoadOlder={() => void loadOlder()}
+      extra={<AltcoinPanel view={deriveAltView(altHealth, now)} />}
     />
   );
 }
