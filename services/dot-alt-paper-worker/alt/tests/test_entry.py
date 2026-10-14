@@ -32,5 +32,4 @@ def test_recorder_still_works_after_prepare(tmp_path):
 
 def test_no_world_writable_mode():
     src=open(entry.__file__).read()
-    assert '777' not in src.replace('chmod 777','')  or True
     assert '0o777' not in src and '0o7' not in src.replace('0o700','').replace('0o755','')
