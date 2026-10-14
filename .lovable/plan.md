@@ -1,15 +1,20 @@
-# V3 Kalshi grading — production verification (read-only)
+# DOT paper lab audit (read-only, no changes)
 
-## What was verified (21:47 UTC)
-- Published site https://btcpredictionlol.lovable.app/stats returned HTTP 200.
-- The live stats bundle `assets/stats-BBPbq498.js` (loaded from the live `index-C7bhOXzV.js`) contains "Finalized Kalshi outcomes", "Kalshi grading unavailable" and `GRADING_UNAVAILABLE`. The old wording "confirmed 15-minute candles" is not in any live bundle checked.
-- Cache table: 137 final, 3 not final (Oct 8 07:00Z, 07:45Z, 08:45Z — HTTP_404, attempts=2, last tried 21:44:29Z, which is after the 21:43Z backfill). That shows a dashboard refresh ran the new server code against the shared backend. Preview and production share this backend, so this can't prove which one ran it.
-- Current tally: 142 recorded calls → 94W / 43L / 5 pending (3 unavailable markets, 21:30Z just closed, 21:45Z still open). The fixed Oct 11 pre-21:30Z cohort stays 8W/4L; 21:30Z and 21:45Z are separate and still ungraded.
+## Finding
+This BTC Predictor Pro project does NOT contain an altcoin DOT paper lab. There is no SOL or DOGE feed, no SOL/DOGE perpetual order-book collector, and no maker/taker queue simulator. The only "DOT" here is a BTC-only paper observer.
 
-## Not verifiable here
-- No tool here reads the status of deployment cd860632. Live files show the new frontend was served, not that this specific deployment finished.
-- The server side of getV3Live in production wasn't called directly: the stats page is behind sign-in and calling the server function needs a session. Only an authenticated production load can confirm what production returns at runtime.
+## What exists here
+- `services/dot-paper-worker/` (Python, Railway): one paper account. `config.py` rejects anything except BTCUSD/BTCUSDT PAPER. Feed: Kraken Spot BTC/USD over `wss://ws.kraken.com/v2` (ticker BBO + trades), in `marketdata.py`. Fills are taker-only (fee + slippage + latency model in `engine.py`). State in local SQLite, not this app's database.
+- Strategies: `strategy.py` / `strategy_config.json`, `strategy_fast.py` / `strategy_fast_config.json` (BTC, unvalidated, research only).
+- Site: `/paper` page (`src/routes/_authenticated/paper.tsx`, `src/components/dot-paper/`), read-only via `src/lib/dot-paper.server.ts` (GET only).
+- Timestamps: quotes and trades keep exchange time, receipt time and processed time (`exchange_ms`, `receipt_ms`, `event_ms`), plus quote age and sequence.
+- Database: no DOT, paper, SOL, DOGE or perp tables.
+- Separate BTC Binance order-book collector (`services/binance-ob-collector`, Spot + USD-M perp, BTCUSDT only). Its health heartbeat was fresh at 22:08:59 UTC today for both markets.
 
-## Optional next step (needs approval; still read-only)
-- Load the published /stats signed in, using a minted session in a headless browser. Check that the V3 tile shows "Finalized Kalshi outcomes" with totals matching 94W/43L (or later). Confirm a production-triggered `last_attempt_at` update for the 21:30Z market in the cache.
-- No code, model, worker, betting, secret or setting changes.
+## Where paper-only strategies could go
+New strategy module + config next to `strategy_fast.py` inside `services/dot-paper-worker/worker/`. Adding SOL/DOGE would need changes to the symbol guard, the feed, and a new maker simulator.
+
+## Separate DOT app
+If DOT built a full altcoin lab, it is in a different Lovable project. With your permission I can search your workspace projects and look at it read-only.
+
+No files, settings, cron jobs, trading or deployments were changed.
