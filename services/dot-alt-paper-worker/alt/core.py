@@ -26,9 +26,6 @@ TAKER_FEE_BPS = Decimal('5')   # conservative USD-M taker
 MAKER_FEE_BPS = Decimal('2')
 
 
-def enabled() -> bool:
-    return os.getenv('DOT_ALT_ENABLED') == 'true'
-
 
 def stream_url(symbols=SYMBOLS) -> str:
     for s in symbols:
