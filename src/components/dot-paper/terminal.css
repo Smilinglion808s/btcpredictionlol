@@ -456,3 +456,10 @@
     animation: none;
   }
 }
+.dot-alt-badge { border: 1px solid currentColor; padding: 0 0.5em; font-weight: 700; }
+.dot-alt-red { color: var(--dot-red); }
+.dot-alt-amber { color: var(--dot-amber); }
+.dot-alt-mint { color: var(--dot-mint); }
+.dot-alt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem 1rem; margin: 0.5rem 0; }
+.dot-alt-grid dt { color: var(--dot-muted); font-size: 0.8em; }
+.dot-alt-grid dd { margin: 0; overflow-wrap: anywhere; }

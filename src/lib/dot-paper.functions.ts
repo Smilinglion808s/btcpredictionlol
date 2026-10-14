@@ -19,3 +19,9 @@ export const getDotPaperPage = createServerFn({ method: "GET" })
     const { readPaperPage } = await import("./dot-paper.server");
     return readPaperPage(data.kind, data.before);
   });
+export const getDotPaperHealth = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { readPaperHealth } = await import("./dot-paper.server");
+    return readPaperHealth();
+  },
+);

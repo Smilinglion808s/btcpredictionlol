@@ -67,3 +67,22 @@ export const readPaperPage = (kind: "trades", before: number) => {
     }),
   );
 };
+// Worker /health: a 503 (startup/ledger failure) is reported as unavailable, never as live.
+const altHealthSchema = z.object({
+  status: z.string().optional(),
+  mode: z.string().optional(),
+  altcoin: z
+    .object({
+      enabled: z.boolean(),
+      state: z.string().optional(),
+      symbols: z.array(z.string()).optional(),
+      last_error: z.string().nullable().optional(),
+      backoff_s: z.number().optional(),
+      connects: z.number().int().nonnegative().optional(),
+      failures: z.number().int().nonnegative().optional(),
+      last_event_ms: z.number().int().nonnegative().nullable().optional(),
+    })
+    .optional(),
+});
+export type PaperHealth = z.infer<typeof altHealthSchema>;
+export const readPaperHealth = () => read("/health", altHealthSchema);
