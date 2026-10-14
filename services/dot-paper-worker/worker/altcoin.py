@@ -210,3 +210,59 @@ async def collect(directory, stop: asyncio.Event, connect=None):
                 continue
             rec.write(ev, health.observe(ev))
     return 'STOPPED'
+
+
+class AltSupervisor:
+    """Separate reconnecting task for the altcoin collector. Never touches the BTC engine.
+
+    Failures are isolated: a crash here only increments counters and backs off; it
+    never marks the BTC service failed. Disabled unless DOT_ALT_ENABLED=true.
+    """
+    def __init__(self, directory, connect=None, base_backoff_s=1.0, max_backoff_s=60.0, sleep=None, log=print):
+        self.directory, self.connect = directory, connect
+        self.base, self.max = base_backoff_s, max_backoff_s
+        self.sleep = sleep
+        self.log = log
+        self.counters = {'connects': 0, 'failures': 0, 'clean_stops': 0}
+        self.state = 'DISABLED' if not enabled() else 'IDLE'
+        self.last_error: str | None = None
+        self.backoff_s = 0.0
+
+    def health(self) -> dict:
+        return {'enabled': enabled(), 'state': self.state, 'symbols': list(SYMBOLS),
+                'last_error': self.last_error, 'backoff_s': self.backoff_s, **self.counters}
+
+    async def _wait(self, stop, seconds):
+        if self.sleep:
+            await self.sleep(seconds); return
+        try: await asyncio.wait_for(stop.wait(), timeout=seconds)
+        except TimeoutError: pass
+
+    async def run(self, stop: asyncio.Event):
+        if not enabled():
+            self.log('DOT_ALT_DISABLED (set DOT_ALT_ENABLED=true to observe SOL/DOGE paper feed)', flush=True)
+            self.state = 'DISABLED'
+            return 'DISABLED'
+        self.log(f'DOT_ALT_START symbols={",".join(SYMBOLS)} dir={self.directory} paper_only=true', flush=True)
+        delay = self.base
+        while not stop.is_set():
+            self.state = 'CONNECTING'; self.counters['connects'] += 1
+            try:
+                result = await collect(self.directory, stop, connect=self.connect)
+                if result == 'STOPPED':
+                    self.counters['clean_stops'] += 1
+                delay = self.base
+            except asyncio.CancelledError:
+                self.state = 'STOPPED'; raise
+            except Exception as exc:  # isolated: never propagates to BTC observer
+                self.counters['failures'] += 1
+                self.last_error = type(exc).__name__
+                self.log(f'DOT_ALT_RECONNECT error={self.last_error} backoff_s={delay}', flush=True)
+            if stop.is_set():
+                break
+            self.state = 'BACKOFF'; self.backoff_s = delay
+            await self._wait(stop, delay)
+            delay = min(delay * 2, self.max)
+        self.state = 'STOPPED'
+        self.log('DOT_ALT_STOP', flush=True)
+        return 'STOPPED'

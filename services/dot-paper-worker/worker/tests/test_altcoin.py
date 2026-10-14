@@ -1,3 +1,4 @@
+import json
 import asyncio
 from decimal import Decimal
 import pytest
@@ -59,3 +60,63 @@ def test_recorder_bounded_and_replay_readonly(tmp_path):
     evs = list(a.replay(tmp_path / 'SOLUSDT.jsonl'))
     assert evs and all(isinstance(e, a.AltQuote) for e in evs)
     assert (tmp_path / 'SOLUSDT.jsonl').read_bytes() == before
+
+
+class _WS:
+    def __init__(self, msgs, stop): self.msgs, self.stop = list(msgs), stop
+    async def __aenter__(self): return self
+    async def __aexit__(self, *a): return False
+    async def recv(self):
+        if not self.msgs:
+            self.stop.set(); return '{}'
+        return json.dumps(self.msgs.pop(0))
+
+
+def test_supervisor_disabled_never_connects(monkeypatch, tmp_path):
+    monkeypatch.delenv('DOT_ALT_ENABLED', raising=False)
+    s = a.AltSupervisor(tmp_path, connect=lambda *x, **k: 1 / 0, log=lambda *x, **k: None)
+    assert asyncio.run(s.run(asyncio.Event())) == 'DISABLED'
+    assert s.counters['connects'] == 0 and s.health()['state'] == 'DISABLED'
+
+
+def test_supervisor_reconnects_with_backoff_then_records(monkeypatch, tmp_path):
+    monkeypatch.setenv('DOT_ALT_ENABLED', 'true')
+    stop, waits, calls = asyncio.Event(), [], {'n': 0}
+    def connect(*x, **k):
+        calls['n'] += 1
+        if calls['n'] <= 3: raise OSError('down')
+        return _WS([bt()], stop)
+    async def sleep(s): waits.append(s)
+    s = a.AltSupervisor(tmp_path, connect=connect, base_backoff_s=1, max_backoff_s=3, sleep=sleep, log=lambda *x, **k: None)
+    assert asyncio.run(s.run(stop)) == 'STOPPED'
+    assert waits == [1, 2, 3]
+    assert s.counters == {'connects': 4, 'failures': 3, 'clean_stops': 1}
+    assert s.last_error == 'OSError' and (tmp_path / 'SOLUSDT.jsonl').exists()
+
+
+def test_supervisor_cancel_is_clean(monkeypatch, tmp_path):
+    monkeypatch.setenv('DOT_ALT_ENABLED', 'true')
+    async def go():
+        s = a.AltSupervisor(tmp_path, connect=lambda *x, **k: (_ for _ in ()).throw(OSError()), base_backoff_s=30, log=lambda *x, **k: None)
+        t = asyncio.create_task(s.run(asyncio.Event())); await asyncio.sleep(0.05); t.cancel()
+        with pytest.raises(asyncio.CancelledError): await t
+        return s
+    assert asyncio.run(go()).counters['failures'] >= 1
+
+
+def test_alt_failure_does_not_break_btc_health(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from worker.api import create_app
+    from worker.engine import Engine
+    from worker.config import Config
+    from worker.auth import OwnerAuth
+    monkeypatch.setenv('DOT_ALT_ENABLED', 'true')
+    class Boom:
+        async def run(self, stop): raise RuntimeError('x')
+        def health(self): return {'enabled': True, 'state': 'FAILED'}
+    eng = Engine(tmp_path / 'p.sqlite3', Config())
+    from worker.auth import from_env as auth_env
+    auth = OwnerAuth(auth_env())
+    with TestClient(create_app(eng, auth, background=False, alt=Boom())) as c:
+        r = c.get('/health')
+        assert r.status_code == 200 and r.json()['status'] == 'OK' and r.json()['altcoin']['state'] == 'FAILED'
