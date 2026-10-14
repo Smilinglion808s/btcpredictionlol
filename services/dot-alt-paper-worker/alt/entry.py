@@ -31,7 +31,8 @@ def prepare_events_dir(data_dir, uid, gid):
         raise ValueError('ALT_DIR_UNSAFE')
     if st.st_uid != uid or st.st_gid != gid:
         os.chown(ev, uid, gid, follow_symlinks=False)
-    os.chmod(ev, 0o700, follow_symlinks=False) if os.chmod in os.supports_follow_symlinks else os.chmod(ev, 0o700)
+    if stat.S_IMODE(st.st_mode) != 0o700:
+        os.chmod(ev, 0o700)
     return ev
 
 
