@@ -125,18 +125,33 @@ class Health:
 ALT_FILES = {f'{s}.jsonl{x}' for s in SYMBOLS for x in ('', '.1')}
 
 
+EVENTS_SUBDIR = 'events'
+
+
 class Recorder:
-    """Append-only JSONL event log with bounded size (one rotation). Fails closed on a
-    symlinked directory/file, or any file outside the per-symbol allowlist."""
+    """Append-only JSONL event log with bounded size (one rotation). DATA_DIR is a mount
+    root (may hold volume metadata such as lost+found, which is never read or touched);
+    logs live in the isolated DATA_DIR/events subdirectory. Fails closed on a symlinked
+    root/subdir/file, hardlinked or foreign-owned files, or anything outside the allowlist."""
     def __init__(self, directory, max_bytes=MAX_LOG_BYTES):
-        self.dir = Path(directory)
+        root = Path(directory)
+        if root.is_symlink():
+            raise ValueError('ALT_DIR_SYMLINK')
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if root.is_symlink() or not root.is_dir():
+            raise ValueError('ALT_DIR_UNSAFE')
+        self.dir = root / EVENTS_SUBDIR
         if self.dir.is_symlink():
             raise ValueError('ALT_DIR_SYMLINK')
-        self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if self.dir.is_symlink() or not self.dir.is_dir():
+        self.dir.mkdir(mode=0o700, exist_ok=True)
+        st = self.dir.lstat()
+        if self.dir.is_symlink() or not self.dir.is_dir() or st.st_uid != os.geteuid():
             raise ValueError('ALT_DIR_UNSAFE')
         for p in self.dir.iterdir():
             if p.name not in ALT_FILES or p.is_symlink() or not p.is_file():
+                raise ValueError('ALT_UNEXPECTED_FILE')
+            fs = p.lstat()
+            if fs.st_nlink != 1 or fs.st_uid != os.geteuid():
                 raise ValueError('ALT_UNEXPECTED_FILE')
         self.max_bytes = max_bytes
 
