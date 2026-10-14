@@ -101,6 +101,8 @@ def prepare_volume(mount,root_uid=0,uid=UID,gid=GID,alt=False):
 def prepare_alt(fd,exists,uid,gid):
     """Isolated altcoin log child: same no-follow/owner/mode/allowlist rules as ledger."""
     flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+    if exists and not stat.S_ISDIR(os.stat(ALT_DIR,dir_fd=fd,follow_symlinks=False).st_mode):
+        raise BootstrapError('BOOTSTRAP_ALT_NOT_DIRECTORY')
     if not exists:os.mkdir(ALT_DIR,0o700,dir_fd=fd)
     child=os.open(ALT_DIR,flags,dir_fd=fd)
     try:

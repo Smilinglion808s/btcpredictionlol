@@ -19,7 +19,7 @@ class AltVolumeTest(unittest.TestCase):
         (d / 'SOLUSDT.jsonl').touch(mode=0o600); self.init(); self.init(alt=False)
     def test_hostile_dir_symlink_refused(self):
         self.init(alt=False); (self.p / b.ALT_DIR).symlink_to('/tmp', target_is_directory=True)
-        with self.assertRaises(OSError): self.init()
+        with self.assertRaises(b.BootstrapError): self.init()
     def test_hostile_file_symlink_refused(self):
         self.init(); (self.p / b.ALT_DIR / 'SOLUSDT.jsonl').symlink_to('/etc/passwd')
         with self.assertRaises(b.BootstrapError): self.init()
