@@ -115,8 +115,8 @@ def test_alt_failure_does_not_break_btc_health(monkeypatch, tmp_path):
         async def run(self, stop): raise RuntimeError('x')
         def health(self): return {'enabled': True, 'state': 'FAILED'}
     eng = Engine(tmp_path / 'p.sqlite3', Config())
-    try: auth = OwnerAuth(None)
-    except Exception: pytest.skip('auth ctor differs')
+    from worker.auth import from_env as auth_env
+    auth = OwnerAuth(auth_env())
     with TestClient(create_app(eng, auth, background=False, alt=Boom())) as c:
         r = c.get('/health')
         assert r.status_code == 200 and r.json()['status'] == 'OK' and r.json()['altcoin']['state'] == 'FAILED'
