@@ -125,22 +125,44 @@ class Health:
         return 'STALE' if now_ms - q.receipt_ms > MAX_QUOTE_AGE_MS else 'FRESH'
 
 
+ALT_FILES = {f'{s}.jsonl{x}' for s in SYMBOLS for x in ('', '.1')}
+VOLUME_ALT_DIR = '/data/dot-paper/altcoin-logs'
+
+
+def default_dir():
+    """Persistent isolated subdirectory only when enabled; never a default otherwise."""
+    return os.getenv('DOT_ALT_DATA_DIR') or (VOLUME_ALT_DIR if enabled() else None)
+
+
 class Recorder:
-    """Append-only JSONL event log with bounded size (one rotation)."""
+    """Append-only JSONL event log with bounded size (one rotation). Fails closed on a
+    symlinked directory/file, or any file outside the per-symbol allowlist."""
     def __init__(self, directory, max_bytes=MAX_LOG_BYTES):
         self.dir = Path(directory)
-        self.dir.mkdir(parents=True, exist_ok=True)
+        if self.dir.is_symlink():
+            raise ValueError('ALT_DIR_SYMLINK')
+        self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if self.dir.is_symlink() or not self.dir.is_dir():
+            raise ValueError('ALT_DIR_UNSAFE')
+        for p in self.dir.iterdir():
+            if p.name not in ALT_FILES or p.is_symlink() or not p.is_file():
+                raise ValueError('ALT_UNEXPECTED_FILE')
         self.max_bytes = max_bytes
 
     def _path(self, symbol):
+        if symbol not in SYMBOLS:
+            raise ValueError('SYMBOL_NOT_ALLOWED')
         return self.dir / f'{symbol}.jsonl'
 
     def write(self, ev, flags=()):
         p = self._path(ev.symbol)
+        if p.is_symlink() or p.with_suffix('.jsonl.1').is_symlink():
+            raise ValueError('ALT_FILE_SYMLINK')
         if p.exists() and p.stat().st_size >= self.max_bytes:
             p.replace(p.with_suffix('.jsonl.1'))  # older rotation is discarded
         kind = 'quote' if isinstance(ev, AltQuote) else 'trade'
-        with p.open('a') as f:
+        fd = os.open(p, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'a') as f:
             f.write(json.dumps({'kind': kind, 'flags': list(flags), **asdict(ev)}, sort_keys=True) + '\n')
 
 

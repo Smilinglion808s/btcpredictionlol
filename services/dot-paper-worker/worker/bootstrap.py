@@ -21,6 +21,8 @@ UID=10001
 GID=10001
 MARKER='.dot-paper-volume.json'
 IDENTITY={'schema':1,'project':PROJECT,'environment':ENVIRONMENT,'service':SERVICE,'volume':VOLUME,'child':'ledger'}
+ALT_DIR='altcoin-logs'
+ALT_FILES={f'{s}.jsonl{x}' for s in ('SOLUSDT','DOGEUSDT') for x in ('','.1')}
 FILES={'paper.sqlite3','paper.sqlite3-wal','paper.sqlite3-shm','paper.sqlite3.lock'}
 class BootstrapError(RuntimeError):pass
 
@@ -39,7 +41,7 @@ def verify_runtime(env):
         raise BootstrapError('BOOTSTRAP_MOUNT_NOT_VERIFIED')
 
 
-def prepare_volume(mount,root_uid=0,uid=UID,gid=GID):
+def prepare_volume(mount,root_uid=0,uid=UID,gid=GID,alt=False):
     """FD-relative initialization. Parameterized only for local unit tests;
     bootstrap() always calls this with pinned MOUNT and constant IDs.
     """
@@ -49,7 +51,7 @@ def prepare_volume(mount,root_uid=0,uid=UID,gid=GID):
         root=os.fstat(fd)
         if root.st_uid!=root_uid or stat.S_IMODE(root.st_mode)&0o022:raise BootstrapError('BOOTSTRAP_ROOT_OWNER_OR_MODE')
         names=set(os.listdir(fd))
-        if names-{'ledger','lost+found',MARKER}:raise BootstrapError('BOOTSTRAP_UNEXPECTED_MOUNT_CONTENT')
+        if names-{'ledger','lost+found',MARKER,ALT_DIR}:raise BootstrapError('BOOTSTRAP_UNEXPECTED_MOUNT_CONTENT')
         if 'lost+found' in names:
             info=os.stat('lost+found',dir_fd=fd,follow_symlinks=False)
             if not stat.S_ISDIR(info.st_mode) or info.st_uid!=root_uid:raise BootstrapError('BOOTSTRAP_UNSAFE_FILESYSTEM_DIR')
@@ -84,6 +86,7 @@ def prepare_volume(mount,root_uid=0,uid=UID,gid=GID):
                 if not stat.S_ISREG(st.st_mode) or st.st_uid!=uid or st.st_gid!=gid or st.st_nlink!=1 or stat.S_IMODE(st.st_mode)&0o077:
                     raise BootstrapError('BOOTSTRAP_UNSAFE_LEDGER_FILE')
         finally:os.close(child)
+        if alt or ALT_DIR in names:prepare_alt(fd,ALT_DIR in names,uid,gid)
         if not marker_exists:
             mfd=os.open(MARKER,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
             try:
@@ -93,6 +96,28 @@ def prepare_volume(mount,root_uid=0,uid=UID,gid=GID):
             finally:os.close(mfd)
             os.fsync(fd)
     finally:os.close(fd)
+
+
+def prepare_alt(fd,exists,uid,gid):
+    """Isolated altcoin log child: same no-follow/owner/mode/allowlist rules as ledger."""
+    flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+    if exists and not stat.S_ISDIR(os.stat(ALT_DIR,dir_fd=fd,follow_symlinks=False).st_mode):
+        raise BootstrapError('BOOTSTRAP_ALT_NOT_DIRECTORY')
+    if not exists:os.mkdir(ALT_DIR,0o700,dir_fd=fd)
+    child=os.open(ALT_DIR,flags,dir_fd=fd)
+    try:
+        if not exists:
+            if os.listdir(child):raise BootstrapError('BOOTSTRAP_NEW_ALT_NOT_EMPTY')
+            os.fchown(child,uid,gid)
+        st=os.fstat(child)
+        if st.st_uid!=uid or st.st_gid!=gid or stat.S_IMODE(st.st_mode)!=0o700:raise BootstrapError('BOOTSTRAP_ALT_OWNER_OR_MODE')
+        names=set(os.listdir(child))
+        if names-ALT_FILES:raise BootstrapError('BOOTSTRAP_UNEXPECTED_ALT_CONTENT')
+        for name in names:
+            st=os.stat(name,dir_fd=child,follow_symlinks=False)
+            if not stat.S_ISREG(st.st_mode) or st.st_uid!=uid or st.st_gid!=gid or st.st_nlink!=1 or stat.S_IMODE(st.st_mode)&0o077:
+                raise BootstrapError('BOOTSTRAP_UNSAFE_ALT_FILE')
+    finally:os.close(child)
 
 
 def no_new_privileges():
@@ -113,7 +138,7 @@ def bootstrap():
     if os.geteuid()!=0:raise BootstrapError('BOOTSTRAP_REQUIRES_INITIAL_ROOT')
     os.umask(0o077)
     verify_runtime(os.environ)
-    prepare_volume(MOUNT)
+    prepare_volume(MOUNT,alt=os.environ.get('DOT_ALT_ENABLED')=='true')
     drop_identity()
     # API/feed imports happen ONLY in the replacement unprivileged process.
     print('DOT_PAPER_BOOTSTRAP_UID=10001 GID=10001',flush=True)
