@@ -30,6 +30,7 @@ export interface PaperTerminalProps {
   preview?: boolean;
   onRefresh: () => void;
   onLoadOlder?: () => void;
+  extra?: ReactNode;
 }
 function Badge({
   children,
@@ -174,6 +175,7 @@ export function PaperTerminal({
   preview = false,
   onRefresh,
   onLoadOlder,
+  extra,
 }: PaperTerminalProps) {
   const s = view === "ready" ? snapshot : undefined;
   const currency = s?.account.currency ?? "USD";
@@ -441,6 +443,7 @@ export function PaperTerminal({
             </div>
           )}
         </section>
+        {extra}
         <footer className="dot-footer">
           <span>Simulated trades. No real orders.</span>
           <span>Win rate uses settled trades after costs.</span>
