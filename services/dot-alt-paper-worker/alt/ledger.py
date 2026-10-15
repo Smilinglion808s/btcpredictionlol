@@ -2,7 +2,7 @@
 
 No orders, keys, webhooks or network. Fills are simulated as taker at top of book plus
 slippage and fees; size is NOT checked against displayed quantity. Isolated margin per
-position, one position per symbol, max 8x leverage, liquidation at maintenance margin,
+position, one position per symbol, max 20x leverage, liquidation at maintenance margin,
 time exits at the configured horizon (5/15/30 min). SQLite lives in DATA_DIR/ledger and
 is never reset; identity/config mismatch fails closed.
 
@@ -19,7 +19,8 @@ LEDGER_SUBDIR = 'ledger'
 DB_NAME = 'paper.sqlite3'
 LEDGER_FILES = {DB_NAME, DB_NAME + '-wal', DB_NAME + '-shm', DB_NAME + '-journal'}
 START_BALANCE = D('1000')
-MAX_LEVERAGE = D('8')
+MAX_LEVERAGE = D('20')
+MARK_MAX_AGE_MS = 10_000  # equity sizing refuses marks older than this
 ALLOWED_HOLD_MIN = (5, 15, 30)
 MAINT_RATE = D('0.005')
 RULE = 'EXPLORATORY_MOMENTUM_V0'
@@ -30,20 +31,22 @@ class Config:
     def __init__(self, env=None):
         e = os.environ if env is None else env
         self.enabled = e.get('ALT_PAPER_STRATEGY_ENABLED', 'false') == 'true'
-        self.leverage = D(e.get('ALT_PAPER_LEVERAGE', '2'))
+        self.leverage = D(e.get('ALT_PAPER_LEVERAGE', '20'))
         self.hold_min = int(e.get('ALT_PAPER_HOLD_MIN', '15'))
-        self.margin_frac = D(e.get('ALT_PAPER_MARGIN_FRACTION', '0.10'))
+        self.margin_frac = D(e.get('ALT_PAPER_MARGIN_FRACTION', '0.20'))
+        self.margin_base = e.get('ALT_PAPER_MARGIN_BASE', 'equity')
         self.fee_bps = D(e.get('ALT_PAPER_FEE_BPS', '5'))
         self.slip_bps = D(e.get('ALT_PAPER_SLIPPAGE_BPS', '2'))
         self.signal_bps = D(e.get('ALT_PAPER_SIGNAL_BPS', '10'))
         if not (D('1') <= self.leverage <= MAX_LEVERAGE): raise ValueError('ALT_PAPER_LEVERAGE_INVALID')
         if self.hold_min not in ALLOWED_HOLD_MIN: raise ValueError('ALT_PAPER_HOLD_INVALID')
         if not (D('0') < self.margin_frac <= D('0.5')): raise ValueError('ALT_PAPER_MARGIN_INVALID')
+        if self.margin_base not in ('equity', 'cash'): raise ValueError('ALT_PAPER_MARGIN_BASE_INVALID')
         if self.fee_bps < 0 or self.slip_bps < 0 or self.signal_bps <= 0: raise ValueError('ALT_PAPER_COST_INVALID')
 
     def doc(self):
         return {'strategy_enabled': self.enabled, 'rule': RULE, 'leverage': str(self.leverage),
-                'hold_min': self.hold_min, 'margin_fraction': str(self.margin_frac),
+                'hold_min': self.hold_min, 'margin_fraction': str(self.margin_frac), 'margin_base': self.margin_base,
                 'fee_bps': str(self.fee_bps), 'slippage_bps': str(self.slip_bps), 'signal_bps': str(self.signal_bps)}
 
 
@@ -86,6 +89,7 @@ class Ledger:
         except Exception:
             self.db.execute('ROLLBACK'); self.db.close(); raise
         self.mids = {}
+        self.mark_ms = {}  # in-memory only: marks loaded from disk are never treated as fresh
 
     def _get(self, k):
         r = self.db.execute('SELECT value FROM meta WHERE key=?', (k,)).fetchone()
@@ -113,7 +117,9 @@ class Ledger:
         slip = c.slip_bps / D(10000)
         px = ask * (1 + slip) if side == 'LONG' else bid * (1 - slip)
         cash = self.cash()
-        margin = (cash * c.margin_frac).quantize(D('0.000001'))
+        base = cash if c.margin_base == 'cash' else self.marked_equity(now_ms)
+        if base is None: return None  # unknown/stale mark on an open position: fail closed
+        margin = (base * c.margin_frac).quantize(D('0.000001'))
         notional = margin * c.leverage
         fee = notional * c.fee_bps / D(10000)
         if margin <= 0 or margin + fee > cash: return None
@@ -127,6 +133,15 @@ class Ledger:
         except Exception:
             self.db.execute('ROLLBACK'); raise
         return tid
+
+    def marked_equity(self, now_ms):
+        """Cash + isolated-margin value of open positions at fresh marks; None if any mark is unknown/stale."""
+        eq = self.cash()
+        for p in (dict(r) for r in self.db.execute('SELECT * FROM positions')):
+            t = self.mark_ms.get(p['symbol'])
+            if t is None or now_ms - t > MARK_MAX_AGE_MS or now_ms < t: return None
+            eq += max(D('0'), D(p['margin']) + self.upnl(p, p['mark']))
+        return eq
 
     def close(self, sym, bid, ask, now_ms, reason):
         p = self.position(sym)
@@ -160,6 +175,8 @@ class Ledger:
     def on_quote(self, sym, bid, ask, now_ms, fresh):
         """Mark-to-market, liquidation and time exit; optional exploratory entry only on fresh data."""
         mid = (D(bid) + D(ask)) / 2
+        if fresh: self.mark_ms[sym] = now_ms
+        else: self.mark_ms.pop(sym, None)
         p = self.position(sym)
         if p:
             self.db.execute('UPDATE positions SET mark=? WHERE symbol=?', (str(mid), sym))
