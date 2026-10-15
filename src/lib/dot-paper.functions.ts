@@ -25,3 +25,9 @@ export const getDotPaperHealth = createServerFn({ method: "GET" }).handler(
     return readPaperHealth();
   },
 );
+export const getDotAltWorker = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { readAltWorker } = await import("./dot-paper/alt-worker.server");
+    return readAltWorker();
+  },
+);
