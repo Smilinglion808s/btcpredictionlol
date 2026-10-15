@@ -11,7 +11,7 @@ RUN_UID = int(os.getenv('ALT_RUN_UID', '10002'))
 RUN_GID = int(os.getenv('ALT_RUN_GID', '10002'))
 
 
-def prepare_events_dir(data_dir, uid, gid):
+def prepare_events_dir(data_dir, uid, gid, sub=EVENTS_SUBDIR):
     """Create/own only DATA_DIR/events (mode 0700). Fails closed on symlinks/non-dirs."""
     root = Path(data_dir)
     if root.is_symlink():
@@ -19,7 +19,7 @@ def prepare_events_dir(data_dir, uid, gid):
     root.mkdir(mode=0o755, parents=True, exist_ok=True)
     if root.is_symlink() or not root.is_dir():
         raise ValueError('ALT_DIR_UNSAFE')
-    ev = root / EVENTS_SUBDIR
+    ev = root / sub
     if ev.is_symlink():
         raise ValueError('ALT_DIR_SYMLINK')
     try:
@@ -52,6 +52,7 @@ def drop_privileges(uid, gid):
 def run():
     if os.geteuid() == 0:
         prepare_events_dir(os.getenv('DATA_DIR', './data/dot-alt'), RUN_UID, RUN_GID)
+        prepare_events_dir(os.getenv('DATA_DIR', './data/dot-alt'), RUN_UID, RUN_GID, 'ledger')
         drop_privileges(RUN_UID, RUN_GID)
     import asyncio
     from alt.main import amain

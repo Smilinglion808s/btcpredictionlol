@@ -9,6 +9,7 @@ import os
 import time
 from dataclasses import asdict
 from decimal import Decimal
+from .ledger import Config, Ledger
 from .core import SYMBOLS, AltQuote, Health, Recorder, decide, parse, stream_url
 
 STALE_MS = 10_000
@@ -26,6 +27,15 @@ class Collector:
         self.last_error: str | None = None
         self.latest: dict[str, dict] = {s: {} for s in SYMBOLS}
         self.last_event_ms: int | None = None
+        self.ledger = None
+        self.ledger_error: str | None = None
+
+    def attach_ledger(self, directory, cfg=None):
+        try:
+            self.ledger = Ledger(directory, cfg or Config(), self.clock())
+        except Exception as e:  # fail closed: no ledger, collector keeps running
+            self.ledger_error = f'{type(e).__name__}: {e}'
+            print(f'DOT_ALT_LEDGER_DISABLED {self.ledger_error}', flush=True)
 
     def handle(self, raw: str):
         now = self.clock()
@@ -40,6 +50,12 @@ class Collector:
         self.counters['events'] += 1
         self.last_event_ms = now
         self.latest[ev.symbol]['quote' if isinstance(ev, AltQuote) else 'trade'] = {**asdict(ev), 'flags': flags}
+        if self.ledger and isinstance(ev, AltQuote) and not flags:
+            fresh = self.state == 'RUNNING' and self.health.quote_state(ev.symbol, now) == 'FRESH' and now - ev.exchange_ms <= 2_000
+            try:
+                self.ledger.on_quote(ev.symbol, ev.bid, ev.ask, now, fresh)
+            except Exception as e:
+                self.ledger_error = f'{type(e).__name__}: {e}'; self.ledger = None
 
     async def run_once(self, stop):
         connect = self.connect
@@ -97,6 +113,8 @@ async def serve_http(col: Collector, host, port):
                 code, body = 405, {'code': 'METHOD_NOT_ALLOWED'}
             elif line[1] == '/health':
                 code, body = 200, col.health_doc()
+            elif line[1] == '/paper/status':
+                code, body = (200, col.ledger.status()) if col.ledger else (503, {'code': 'LEDGER_UNAVAILABLE', 'error': col.ledger_error})
             elif line[1] == '/events/latest':
                 code, body = 200, {'mode': 'PAPER', 'symbols': col.latest}
             else:
@@ -113,6 +131,7 @@ async def serve_http(col: Collector, host, port):
 
 async def amain():
     col = Collector(os.getenv('DATA_DIR', './data/dot-alt'))
+    col.attach_ledger(os.getenv('DATA_DIR', './data/dot-alt'))
     stop = asyncio.Event()
     server = await serve_http(col, os.getenv('BIND', '0.0.0.0'), int(os.getenv('PORT', '8080')))
     task = asyncio.create_task(col.run(stop))
