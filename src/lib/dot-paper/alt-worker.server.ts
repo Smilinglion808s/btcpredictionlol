@@ -9,18 +9,18 @@ const num = z.number().nullable().optional();
 export const altHealth = z.object({
   mode: str, state: str, last_event_ms: num, last_event_age_ms: num,
   connects: num, failures: num, last_error: str,
-  symbols: z.record(z.object({ quote_state: str }).passthrough()).optional(),
+  symbols: z.record(z.object({ quote_state: str })).optional(),
 });
-const quote = z.object({ bid: str, ask: str, exchange_ms: num, receipt_ms: num, flags: z.array(z.string()).optional() }).passthrough();
+const quote = z.object({ bid: str, ask: str, exchange_ms: num, receipt_ms: num, flags: z.array(z.string()).optional() });
 export const altEvents = z.object({
-  symbols: z.record(z.object({ quote: quote.optional() }).passthrough()),
+  symbols: z.record(z.object({ quote: quote.optional() })),
 });
-const pos = z.object({ symbol: z.string(), side: str, qty: str, entry: str, mark: str, margin: str, unrealized_pnl: str }).passthrough();
+const pos = z.object({ symbol: z.string(), side: str, qty: str, entry: str, mark: str, margin: str, unrealized_pnl: str });
 export const altPaper = z.object({
   starting_balance: str, cash: str, equity: str, used_margin: str,
   positions: z.array(pos), trade_count: num,
-  recent_trades: z.array(z.record(z.unknown())).max(50),
-  config: z.object({ strategy_enabled: z.boolean() }).passthrough(),
+  recent_trades: z.array(z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))).max(50),
+  config: z.object({ strategy_enabled: z.boolean() }),
 });
 
 async function get<T>(path: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<R<T>> {

@@ -9,7 +9,7 @@ export interface AltWorkerInput {
   events: Res<{ symbols: Record<string, { quote?: { bid?: Str; ask?: Str; receipt_ms?: Num; flags?: string[] } }> }>;
   paper: Res<{
     starting_balance?: Str; cash?: Str; equity?: Str; used_margin?: Str; trade_count?: Num;
-    positions: Array<Record<string, unknown> & { symbol: string }>;
+    positions: Array<Record<string, unknown>>;
     recent_trades: Array<Record<string, unknown>>;
     config: { strategy_enabled: boolean };
   }>;
