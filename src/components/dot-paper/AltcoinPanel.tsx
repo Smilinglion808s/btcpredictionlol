@@ -35,7 +35,7 @@ export function AltcoinPanel({ view }: { view: AltWorkerView }) {
             <div><dt>Strategy</dt><dd className={p.strategy === "ENABLED" ? "dot-alt-mint" : "dot-alt-amber"}>{p.strategy}</dd></div>
             <div><dt>Trades</dt><dd>{s(p.tradeCount)}</dd></div>
           </dl>
-          <p className="dot-muted">Open positions: {p.positions.length === 0 ? "none" : p.positions.map((x) => `${s(x.symbol)} ${s(x.side)} ${s(x.qty)} @ ${s(x.entry)} (uPnL ${s(x.unrealized_pnl)})`).join(" · ")}</p>
+          <p className="dot-muted">Open positions: {p.positions.length === 0 ? "none" : p.positions.map((x) => `${s(x.symbol)} ${s(x.side)} ${s(x.qty)} @ ${s(x.entry_price)} (uPnL ${s(x.unrealized_pnl)})`).join(" · ")}</p>
           <p className="dot-muted">Last trades: {p.trades.length === 0 ? "none" : p.trades.map((x) => `${s(x.symbol)} ${s(x.side ?? x.action)} ${s(x.price ?? x.exit_price)}`).join(" · ")}</p>
         </>
       )}

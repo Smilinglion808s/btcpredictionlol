@@ -15,7 +15,7 @@ const quote = z.object({ bid: str, ask: str, exchange_ms: num, receipt_ms: num, 
 export const altEvents = z.object({
   symbols: z.record(z.object({ quote: quote.optional() })),
 });
-const pos = z.object({ symbol: z.string(), side: str, qty: str, entry: str, mark: str, margin: str, unrealized_pnl: str });
+const pos = z.object({ symbol: z.string(), side: str, qty: str, entry_price: str, mark: str, margin: str, unrealized_pnl: str });
 export const altPaper = z.object({
   starting_balance: str, cash: str, equity: str, used_margin: str,
   positions: z.array(pos), trade_count: num,
