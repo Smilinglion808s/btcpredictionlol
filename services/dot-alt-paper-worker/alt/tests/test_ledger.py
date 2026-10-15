@@ -2,11 +2,11 @@ import pytest
 from decimal import Decimal as D
 from alt import ledger as L
 
-def cfg(**k): return L.Config({'ALT_PAPER_STRATEGY_ENABLED':'true', **k})
+def cfg(**k): return L.Config({'ALT_PAPER_STRATEGY_ENABLED':'true','ALT_PAPER_MARGIN_BASE':'cash','ALT_PAPER_LEVERAGE':'2','ALT_PAPER_MARGIN_FRACTION':'0.10', **k})
 
 def test_config_limits():
     assert L.Config({}).enabled is False
-    with pytest.raises(ValueError): L.Config({'ALT_PAPER_LEVERAGE':'9'})
+    with pytest.raises(ValueError): L.Config({'ALT_PAPER_LEVERAGE':'21'})
     with pytest.raises(ValueError): L.Config({'ALT_PAPER_HOLD_MIN':'10'})
 
 def test_open_close_fees_idempotent_one_position(tmp_path):
