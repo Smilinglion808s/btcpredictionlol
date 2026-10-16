@@ -36,7 +36,6 @@ describe("solana paper adapter", () => {
     expect(lamportsToSol("-1", true)).toBe("−<0.0001");
     expect(rawToDecimal("123456789", 6, 2)).toBe("123.46");
   });
-  });
   it("rejects missing, future and over-age observation timestamps", () => {
     expect(pnlView(base({}, { observed_at: null }), NOW).mark).toBe("missing");
     expect(pnlView(base({}, { observed_at: "bad" }), NOW).lamports).toBeNull();
