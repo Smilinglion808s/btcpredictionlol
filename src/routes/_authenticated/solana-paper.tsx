@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import type { SolanaPaperLoad as Load } from "@/lib/solana-paper";
 import {
   ageLabel, lamportsToSol, loadSolanaPaperFeed, pnlView, rawToDecimal, toneOf, tradeKey, walletTail,
   type SolanaPaperLoad, type SolanaPaperTrade,
@@ -22,8 +23,8 @@ export const Route = createFileRoute("/_authenticated/solana-paper")({
 const token = (t: SolanaPaperTrade) => t.symbol ?? t.name ?? walletTail(t.mint);
 const qty = (t: SolanaPaperTrade) => rawToDecimal(t.acquired_tokens_raw, t.decimals, 4);
 
-function Pnl({ t }: { t: SolanaPaperTrade }) {
-  const p = pnlView(t);
+function Pnl({ t, now }: { t: SolanaPaperTrade; now: number }) {
+  const p = pnlView(t, now);
   return (
     <span className={`font-mono ${toneOf(p.lamports)}`}>
       {p.lamports == null ? "—" : `${lamportsToSol(p.lamports, true)} SOL`}
@@ -32,17 +33,25 @@ function Pnl({ t }: { t: SolanaPaperTrade }) {
   );
 }
 function Mark({ t, now }: { t: SolanaPaperTrade; now: number }) {
-  const v = t.valuation, p = pnlView(t);
-  const cls = v.mark_status === "fresh" && v.pricing_mode !== "unavailable" ? "text-muted-foreground" : "text-warn";
-  return <span className={`text-xs ${cls}`}>{v.pricing_mode === "unavailable" ? "unavailable" : v.mark_status} · {ageLabel(v.observed_at, now)} · {p.note}</span>;
+  const p = pnlView(t, now);
+  const cls = p.mark === "fresh" ? "text-muted-foreground" : "text-warn";
+  const status = t.position_status === "closed" ? "closed" : p.mark;
+  return <span className={`text-xs ${cls}`}>{status} · {ageLabel(t.valuation.observed_at, now)} · {p.note}</span>;
 }
 
 function SolanaPaperPage() {
+  return <SolanaPaperView loader={loadSolanaPaperFeed} />;
+}
+
+export function SolanaPaperView({ loader }: { loader: () => Promise<Load> }) {
   const [load, setLoad] = useState<SolanaPaperLoad | null>(null);
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    loadSolanaPaperFeed().then(setLoad).catch((e) => setLoad({ state: "error", message: String(e?.message ?? e) }));
-  }, []);
+    let alive = true;
+    loader().then((l) => alive && setLoad(l)).catch((e) => alive && setLoad({ state: "error", message: String(e?.message ?? e) }));
+    const id = setInterval(() => setNow(Date.now()), 5_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [loader]);
   const feed = load?.state === "ready" ? load.feed : null;
 
   return (
@@ -55,7 +64,7 @@ function SolanaPaperPage() {
       <p className="mt-2 text-sm text-muted-foreground">Simulated trades only. No real orders or funds.</p>
       {feed && (
         <p className="mt-1 text-xs text-muted-foreground">
-          {feed.evidence_kind === "offline_synthetic" ? "Synthetic test data — not observed results." : "Fills and costs are modeled; PnL is an estimate, not the source wallet's result."}
+          {feed.evidence_kind === "offline_synthetic" ? "" : "Fills and costs are modeled; PnL is an estimate, not the source wallet's result."}
           {" "}Status: {feed.status} · data {ageLabel(feed.data_as_of, now)}{feed.coverage.gap_count != null ? ` · ${feed.coverage.gap_count} gaps` : ""}
         </p>
       )}
@@ -72,6 +81,11 @@ function SolanaPaperPage() {
           <div className="px-6 py-14 text-center">
             <p className="font-mono text-lg font-semibold text-bear">Feed unavailable</p>
             <p className="mt-2 break-words text-muted-foreground">{load.message}</p>
+          </div>
+        ) : load.feed.evidence_kind === "offline_synthetic" ? (
+          <div className="px-6 py-14 text-center">
+            <p className="font-mono text-lg font-semibold text-warn">Synthetic test feed</p>
+            <p className="mt-2 text-muted-foreground">This feed contains offline synthetic data, not observed tracking. Rows are not shown.</p>
           </div>
         ) : load.feed.trades.length === 0 ? (
           <p className="px-6 py-14 text-center text-muted-foreground">No paper trades recorded yet.</p>
@@ -90,7 +104,7 @@ function SolanaPaperPage() {
                     <td className="px-5 py-4">{token(t)}</td>
                     <td className="px-5 py-4 font-mono">{lamportsToSol(t.entry_input_lamports)}</td>
                     <td className="px-5 py-4 font-mono">{qty(t)}</td>
-                    <td className="px-5 py-4"><div><Pnl t={t} /></div><Mark t={t} now={now} /></td>
+                    <td className="px-5 py-4"><div><Pnl t={t} now={now} /></div><Mark t={t} now={now} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -102,7 +116,7 @@ function SolanaPaperPage() {
                   <span className="text-muted-foreground">Token</span><span className="text-right">{token(t)}</span>
                   <span className="text-muted-foreground">Bought</span><span className="text-right font-mono">{lamportsToSol(t.entry_input_lamports)} SOL</span>
                   <span className="text-muted-foreground">Qty</span><span className="text-right font-mono">{qty(t)}</span>
-                  <span className="text-muted-foreground">Est. paper PnL</span><span className="text-right"><Pnl t={t} /></span>
+                  <span className="text-muted-foreground">Est. paper PnL</span><span className="text-right"><Pnl t={t} now={now} /></span>
                   <span className="col-span-2 text-right"><Mark t={t} now={now} /></span>
                 </li>
               ))}
