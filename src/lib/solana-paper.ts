@@ -831,7 +831,7 @@ export const getSolanaPaperSnapshot = createServerFn({ method: "GET" }).handler(
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   };
-  setResponseHeaders(headers);
+  setResponseHeaders(new Headers(headers));
   const json = (body: unknown, status: number): Response => new Response(JSON.stringify(body), { status, headers });
   if (VERIFIED_BACKEND_ORIGIN === null) return json({ status: "not_started", owner: "awaiting_verified_backend" }, 200);
   const controller = new AbortController();
