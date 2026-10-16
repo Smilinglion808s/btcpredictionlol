@@ -15,6 +15,7 @@ import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedPaperRouteImport } from './routes/_authenticated/paper'
+import { Route as AuthenticatedSolanaPaperRouteImport } from './routes/_authenticated/solana-paper'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as ApiC85SelfcheckRouteImport } from './routes/api/c85-selfcheck'
 import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
@@ -66,6 +67,12 @@ const AuthenticatedPaperRoute = AuthenticatedPaperRouteImport.update({
   path: '/paper',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSolanaPaperRoute =
+  AuthenticatedSolanaPaperRouteImport.update({
+    id: '/solana-paper',
+    path: '/solana-paper',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: '/stats',
   path: '/stats',
@@ -189,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/paper': typeof AuthenticatedPaperRoute
+  '/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/api/export/c85-csv': typeof ApiExportC85CsvRoute
@@ -216,6 +224,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/paper': typeof AuthenticatedPaperRoute
+  '/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/': typeof AuthenticatedIndexRoute
@@ -246,6 +255,7 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/paper': typeof AuthenticatedPaperRoute
+  '/_authenticated/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/paper'
+    | '/solana-paper'
     | '/stats'
     | '/api/c85-selfcheck'
     | '/api/export/c85-csv'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/models'
     | '/paper'
+    | '/solana-paper'
     | '/stats'
     | '/api/c85-selfcheck'
     | '/'
@@ -333,6 +345,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/models'
     | '/_authenticated/paper'
+    | '/_authenticated/solana-paper'
     | '/_authenticated/stats'
     | '/api/c85-selfcheck'
     | '/_authenticated/'
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/paper'
       fullPath: '/paper'
       preLoaderRoute: typeof AuthenticatedPaperRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/solana-paper': {
+      id: '/_authenticated/solana-paper'
+      path: '/solana-paper'
+      fullPath: '/solana-paper'
+      preLoaderRoute: typeof AuthenticatedSolanaPaperRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/stats': {
@@ -580,6 +600,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
   AuthenticatedPaperRoute: typeof AuthenticatedPaperRoute
+  AuthenticatedSolanaPaperRoute: typeof AuthenticatedSolanaPaperRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
@@ -589,6 +610,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedModelsRoute: AuthenticatedModelsRoute,
   AuthenticatedPaperRoute: AuthenticatedPaperRoute,
+  AuthenticatedSolanaPaperRoute: AuthenticatedSolanaPaperRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }

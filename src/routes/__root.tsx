@@ -153,6 +153,7 @@ function TopNav() {
           <Link to="/stats" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Stats</Link>
           <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>CSV Data</Link>
           <Link to="/paper" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>DOT Paper</Link>
+          <Link to="/solana-paper" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>SOL Paper</Link>
         </nav>
 
       </div>
