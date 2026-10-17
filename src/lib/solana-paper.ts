@@ -1316,7 +1316,8 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
           method: "GET",
           signal: controller.signal,
           credentials: "omit",
-          redirect: "error",
+          // workerd accepts manual/follow only; never follow an upstream redirect.
+          redirect: "manual",
           cache: "no-store",
           headers: { Accept: "application/json" },
         });
@@ -1327,6 +1328,8 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
             : null;
         const mime = response.headers.get("content-type") || "";
         content_type = /^application\/json(?:\s*;|$)/i.test(mime) ? "json" : mime ? "other" : "missing";
+        if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+          throw Error("redirect");
         if (path === "/solana-paper-history" && response.status === 404) return { state: "waiting" };
         if (!response.ok || content_type !== "json") throw Error("response");
         phase = "body";
