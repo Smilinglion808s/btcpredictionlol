@@ -896,6 +896,14 @@ export const loadSolanaPaperServerFeed: SolanaPaperLoader = createServerLoader(g
 // ---------- Historical paper monitor (separate from legacy current-quote adapter) ----------
 export const PAPER_HISTORY_VERSION = "normalized-historical-copy-pnl/1";
 export const PAPER_MONITOR_VERSION = "solana-paper-monitor/1";
+export const EXPLORATORY_POLICY = "helius-prospective-epochs-exploratory-v1";
+export const CONDITIONAL_RETURNS_SCOPE = "observed_path_conditional_not_real_money_performance";
+export type CoverageClass = "clean_observed_path" | "gap_affected_observed_path";
+export type ExploratoryInfo = {
+  exploratory_mode: true | null;
+  returns_scope: typeof CONDITIONAL_RETURNS_SCOPE | null;
+  source_observation_policy: typeof EXPLORATORY_POLICY | null;
+};
 export type ScannerSource = {
   provider: string;
   stream_state: string;
@@ -916,8 +924,16 @@ export type ScannerSource = {
   coverage_complete: false;
   source_time_basis: string;
   history_population_equivalent: false;
+  active_epoch_id: number | null;
+  connection_count: number | null;
+  disconnect_count: number | null;
+  epoch_count: number | null;
+  eligible_wallet_count: number | null;
+  partially_paused: boolean | null;
+  gap_reason_counts: Record<string, number> | null;
+  gap_count_basis: "per_wallet_gap_records" | null;
 };
-export type ScannerHealth = {
+export type ScannerHealth = ExploratoryInfo & {
   hosting_version: string;
   status: string;
   run_id: string | null;
@@ -959,11 +975,50 @@ export type HistoricalTrade = {
   open_net_pnl_lamports_at_cutoff: string | null;
   unresolved_reason: string | null;
   source_coverage_gap_latched: boolean;
+  source_epoch_id: number | null;
+  coverage_class: CoverageClass | null;
   historical_only: true;
   current: false;
   executable: false;
 };
-export type PaperHistory = {
+export type HistoricalOpenMark = {
+  position_id: string;
+  source_wallet: string;
+  mint: string;
+  mark_status_at_cutoff: "known_at_cutoff" | "unresolved_at_cutoff";
+  open_net_pnl_lamports_at_cutoff: string | null;
+  quote_received_at: string | null;
+  quote_source_generated_at: null;
+  source_event_age_known: false;
+  unresolved_reason: string | null;
+  source_epoch_id: number | null;
+  coverage_class: CoverageClass | null;
+  executable: false;
+  current: false;
+};
+export type SourceEpochPnl = {
+  source_wallet: string;
+  source_epoch_id: number;
+  coverage_class: CoverageClass;
+  realized_net_pnl_lamports: string;
+  open_net_pnl_lamports_at_cutoff: string | null;
+  total_net_pnl_lamports_at_cutoff: string | null;
+  closed_count: number;
+  open_count: number;
+  unresolved_count: number;
+  failed_entry_count: number;
+  first_source_sale_exhaustiveness_verified: false;
+  historical_only: true;
+  current: false;
+  executable: false;
+};
+export type SourceEpoch = {
+  source_epoch_id: number;
+  opened_at: string;
+  barrier_slot: number;
+  history_coverage_known: false;
+};
+export type PaperHistory = ExploratoryInfo & {
   schema_version: string;
   run_id: string;
   evidence_kind: EvidenceKind;
@@ -977,6 +1032,9 @@ export type PaperHistory = {
   report_min_interval_seconds: number;
   trader_pnl_as_of: HistoricalTrader[];
   copied_trades_as_of: HistoricalTrade[] | null;
+  open_marks_as_of: HistoricalOpenMark[] | null;
+  source_epoch_pnl_as_of: SourceEpochPnl[] | null;
+  source_epochs: SourceEpoch[] | null;
   accounting_mode: string;
   account: null;
   executable: false;
@@ -1024,6 +1082,62 @@ const observedKind = (v: unknown): EvidenceKind => {
   one(v, ["observed_estimated_paper", "observed_protocol_paper"]);
   return v as EvidenceKind;
 };
+const exploratoryInfo = (h: Record<string, unknown>): ExploratoryInfo => {
+  if (h.exploratory_mode == null && h.returns_scope == null && h.source_observation_policy == null)
+    return { exploratory_mode: null, returns_scope: null, source_observation_policy: null };
+  if (
+    h.exploratory_mode !== true ||
+    h.returns_scope !== CONDITIONAL_RETURNS_SCOPE ||
+    h.source_observation_policy !== EXPLORATORY_POLICY
+  )
+    throw Error("exploratory mode contract");
+  return {
+    exploratory_mode: true,
+    returns_scope: CONDITIONAL_RETURNS_SCOPE,
+    source_observation_policy: EXPLORATORY_POLICY,
+  };
+};
+const coverageClass = (v: unknown): CoverageClass => {
+  one(v, ["clean_observed_path", "gap_affected_observed_path"]);
+  return v as CoverageClass;
+};
+export const coverageLabel = (v: CoverageClass | null): string =>
+  v === "clean_observed_path"
+    ? "Clean-observed path · no known gap"
+    : v === "gap_affected_observed_path"
+      ? "Gap-affected path · conditional result"
+      : "Coverage cohort not supplied";
+export const historicalPositionLabel = (t: HistoricalTrade): string =>
+  t.position_status_at_cutoff === "unresolved" &&
+  t.exit_at === null &&
+  t.acquired_tokens_raw !== null &&
+  BigInt(t.acquired_tokens_raw) > 0n
+    ? "Copied · valuation unresolved"
+    : t.position_status_at_cutoff;
+const optionalCount = (v: unknown): number | null => (v == null ? null : requiredCount(v));
+const gapReasons = (value: unknown): Record<string, number> | null => {
+  if (value == null) return null;
+  const v = objectValue(value);
+  const allowed = [
+    "stream_disconnect_no_exhaustive_replay",
+    "history_pagination_incomplete",
+    "initial_baseline_incomplete",
+    "conflicting_transaction_payload",
+    "transaction_unavailable",
+    "transaction_unavailable_after_bounded_null_retries",
+    "unsupported_transaction_shape",
+    "stream_ending_for_bounded_final_reconciliation",
+    "other_reason_redacted",
+  ];
+  if (Object.keys(v).length > allowed.length) throw Error("gap reasons");
+  return Object.fromEntries(
+    Object.entries(v).map(([key, n]) => {
+      one(key, allowed);
+      return [key, requiredCount(n)];
+    }),
+  );
+};
+
 /** Reconstruct public objects, never forward arbitrary upstream nested fields. */
 export function publicScannerHealth(value: unknown): ScannerHealth {
   const h = objectValue(value),
@@ -1065,9 +1179,21 @@ export function publicScannerHealth(value: unknown): ScannerHealth {
       coverage_complete: false,
       source_time_basis: publicCode(s.source_time_basis),
       history_population_equivalent: false,
+      active_epoch_id: optionalCount(s.active_epoch_id),
+      connection_count: optionalCount(s.connection_count),
+      disconnect_count: optionalCount(s.disconnect_count),
+      epoch_count: optionalCount(s.epoch_count),
+      eligible_wallet_count: optionalCount(s.eligible_wallet_count),
+      partially_paused: s.partially_paused == null ? null : requiredBool(s.partially_paused),
+      gap_reason_counts: gapReasons(s.gap_reason_counts),
+      gap_count_basis:
+        s.gap_count_basis == null
+          ? null
+          : (one(s.gap_count_basis, ["per_wallet_gap_records"]), "per_wallet_gap_records"),
     };
   }
   return {
+    ...exploratoryInfo(h),
     hosting_version: PAPER_HISTORY_VERSION,
     status: publicCode(h.status),
     run_id: h.run_id == null ? null : publicIdentity(h.run_id),
@@ -1108,6 +1234,7 @@ export function publicPaperHistory(value: unknown): PaperHistory {
   )
     throw Error("historical contract");
   const evidence = observedKind(h.evidence_kind);
+  const mode = exploratoryInfo(h);
   const cutoff = requiredStamp(fence.evidence_cutoff_utc),
     deadline = requiredStamp(fence.fixed_deadline_utc);
   const generated = requiredStamp(h.report_generated_at_utc);
@@ -1189,6 +1316,8 @@ export function publicPaperHistory(value: unknown): PaperHistory {
         open_net_pnl_lamports_at_cutoff: opened,
         unresolved_reason: t.unresolved_reason === null ? null : publicCode(t.unresolved_reason),
         source_coverage_gap_latched: requiredBool(t.source_coverage_gap_latched),
+        source_epoch_id: mode.exploratory_mode ? requiredCount(t.source_epoch_id) : null,
+        coverage_class: mode.exploratory_mode ? coverageClass(t.coverage_class) : null,
         historical_only: true,
         current: false,
         executable: false,
@@ -1200,7 +1329,129 @@ export function publicPaperHistory(value: unknown): PaperHistory {
     )
       throw Error("trade identity");
   }
+  let marks: HistoricalOpenMark[] | null = null;
+  if (h.open_marks_as_of != null) {
+    if (!Array.isArray(h.open_marks_as_of) || h.open_marks_as_of.length > 10000) throw Error("open marks");
+    marks = h.open_marks_as_of.map((value): HistoricalOpenMark => {
+      const m = objectValue(value),
+        wallet = publicIdentity(m.source_wallet);
+      one(m.mark_status_at_cutoff, ["known_at_cutoff", "unresolved_at_cutoff"]);
+      const opened = signedAmount(m.open_net_pnl_lamports_at_cutoff);
+      if (
+        m.executable !== false ||
+        m.current !== false ||
+        m.quote_source_generated_at !== null ||
+        m.source_event_age_known !== false ||
+        !traders.some((t) => t.source_wallet === wallet) ||
+        (m.mark_status_at_cutoff === "known_at_cutoff") !== (opened !== null)
+      )
+        throw Error("open mark contract");
+      return {
+        position_id: publicIdentity(m.position_id),
+        source_wallet: wallet,
+        mint: publicIdentity(m.mint),
+        mark_status_at_cutoff: m.mark_status_at_cutoff as HistoricalOpenMark["mark_status_at_cutoff"],
+        open_net_pnl_lamports_at_cutoff: opened,
+        quote_received_at: nullableStamp(m.quote_received_at),
+        quote_source_generated_at: null,
+        source_event_age_known: false,
+        unresolved_reason: m.unresolved_reason === null ? null : publicCode(m.unresolved_reason),
+        source_epoch_id: mode.exploratory_mode ? requiredCount(m.source_epoch_id) : null,
+        coverage_class: mode.exploratory_mode ? coverageClass(m.coverage_class) : null,
+        executable: false,
+        current: false,
+      };
+    });
+    if (new Set(marks.map((m) => m.position_id)).size !== marks.length) throw Error("duplicate open mark");
+  }
+  let epochRows: SourceEpochPnl[] | null = null;
+  let epochs: SourceEpoch[] | null = null;
+  if (mode.exploratory_mode) {
+    if (
+      !Array.isArray(h.source_epochs) ||
+      h.source_epochs.length > 1000 ||
+      !Array.isArray(h.source_epoch_pnl_as_of) ||
+      h.source_epoch_pnl_as_of.length > 10000
+    )
+      throw Error("source epochs");
+    epochs = h.source_epochs.map((value): SourceEpoch => {
+      const e = objectValue(value),
+        opened = requiredStamp(e.opened_at);
+      if (e.history_coverage_known !== false || Date.parse(opened) > Date.parse(cutoff)) throw Error("epoch coverage");
+      return {
+        source_epoch_id: requiredCount(e.source_epoch_id),
+        opened_at: opened,
+        barrier_slot: requiredCount(e.barrier_slot),
+        history_coverage_known: false,
+      };
+    });
+    const ids = new Set(epochs.map((e) => e.source_epoch_id));
+    if (ids.size !== epochs.length) throw Error("duplicate epoch");
+    if (marks?.some((m) => !ids.has(m.source_epoch_id!))) throw Error("open mark epoch");
+    epochRows = h.source_epoch_pnl_as_of.map((value): SourceEpochPnl => {
+      const t = objectValue(value),
+        epoch = requiredCount(t.source_epoch_id),
+        wallet = publicIdentity(t.source_wallet);
+      const realized = signedAmount(t.realized_net_pnl_lamports, false) as string,
+        opened = signedAmount(t.open_net_pnl_lamports_at_cutoff),
+        total = signedAmount(t.total_net_pnl_lamports_at_cutoff),
+        unresolved = requiredCount(t.unresolved_count);
+      if (
+        !ids.has(epoch) ||
+        !traders.some((w) => w.source_wallet === wallet) ||
+        t.first_source_sale_exhaustiveness_verified !== false ||
+        t.historical_only !== true ||
+        t.current !== false ||
+        t.executable !== false
+      )
+        throw Error("cohort contract");
+      if (unresolved > 0 && (opened !== null || total !== null)) throw Error("partial cohort total");
+      if (total !== null && (opened === null || BigInt(total) !== BigInt(realized) + BigInt(opened)))
+        throw Error("cohort total mismatch");
+      return {
+        source_wallet: wallet,
+        source_epoch_id: epoch,
+        coverage_class: coverageClass(t.coverage_class),
+        realized_net_pnl_lamports: realized,
+        open_net_pnl_lamports_at_cutoff: opened,
+        total_net_pnl_lamports_at_cutoff: total,
+        closed_count: requiredCount(t.closed_count),
+        open_count: requiredCount(t.open_count),
+        unresolved_count: unresolved,
+        failed_entry_count: requiredCount(t.failed_entry_count),
+        first_source_sale_exhaustiveness_verified: false,
+        historical_only: true,
+        current: false,
+        executable: false,
+      };
+    });
+    if (
+      new Set(epochRows.map((t) => `${t.source_wallet}:${t.source_epoch_id}:${t.coverage_class}`)).size !==
+      epochRows.length
+    )
+      throw Error("duplicate cohort");
+    if (
+      trades?.some(
+        (t) =>
+          !ids.has(t.source_epoch_id!) ||
+          t.source_coverage_gap_latched !== (t.coverage_class === "gap_affected_observed_path"),
+      )
+    )
+      throw Error("trade cohort mismatch");
+  } else if (
+    h.source_epoch_pnl_as_of != null ||
+    h.source_epochs != null ||
+    trades?.some((_, i) => {
+      const t = (h.copied_trades_as_of as Record<string, unknown>[])[i];
+      return t.source_epoch_id != null || t.coverage_class != null;
+    })
+  )
+    throw Error("cohort mode missing");
   return {
+    ...mode,
+    open_marks_as_of: marks,
+    source_epoch_pnl_as_of: epochRows,
+    source_epochs: epochs,
     schema_version: PAPER_HISTORY_VERSION,
     run_id: publicIdentity(h.run_id),
     evidence_kind: evidence,
@@ -1251,7 +1502,8 @@ export function parsePaperMonitor(value: unknown, fetchedAt: number): PaperMonit
     if (
       health.state === "available" &&
       history.state === "available" &&
-      (health.data.fixed_deadline_utc !== history.data.evidence_fence.fixed_deadline_utc ||
+      (health.data.exploratory_mode !== history.data.exploratory_mode ||
+        health.data.fixed_deadline_utc !== history.data.evidence_fence.fixed_deadline_utc ||
         (health.data.run_id !== null && health.data.run_id !== history.data.run_id))
     )
       throw Error("session mismatch");

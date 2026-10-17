@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ageLabel,
+  coverageLabel,
+  historicalPositionLabel,
   lamportsToSol,
   loadSolanaPaperMonitor,
   loadSolanaPaperTokenSymbols,
@@ -46,9 +48,14 @@ function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symb
           Trader {walletTail(t.source_wallet)}
         </span>
         <span className="rounded border border-border px-2 py-0.5 text-xs uppercase">
-          {t.position_status_at_cutoff} at cutoff
+          {historicalPositionLabel(t)} at cutoff
         </span>
       </div>
+      {t.coverage_class !== null && (
+        <p className="text-xs text-amber-500">
+          Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Observed path only, not exhaustive coverage.
+        </p>
+      )}
       <p className="break-all font-semibold">Ticker: {symbol ?? "Unknown"}</p>
       <p className="text-xs text-muted-foreground">
         Source asset label from DEX Screener, not a verified token identity or profit claim. Mint identifies the asset.
@@ -184,6 +191,12 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
         </h2>
         {health ? (
           <>
+            {health.exploratory_mode && (
+              <p className="mt-2 text-sm text-amber-500">
+                Exploratory mode · gaps stay recorded. Fresh post-reconnect entries may be eligible; results are
+                conditional on the path observed, not real-money performance.
+              </p>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
               Owner heartbeat: <span className="font-mono">{health.heartbeat_utc}</span> (
               {ageLabel(health.heartbeat_utc, now)}). Run ends:{" "}
@@ -217,11 +230,35 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">
                   New entries:{" "}
-                  {source.new_entries_paused ? "paused" : "not operator-paused; eligibility checks still apply"}.
-                  Source-sale tracking reported {source.source_sale_tracking_active ? "active" : "inactive"}.{" "}
+                  {source.new_entries_paused
+                    ? "paused"
+                    : source.partially_paused
+                      ? "partially paused; only eligible wallets may enter"
+                      : "not operator-paused; eligibility checks still apply"}
+                  . Source-sale tracking reported {source.source_sale_tracking_active ? "active" : "inactive"}.{" "}
                   {source.stream_notification_count} stream notifications · {source.raw_lookup_parsed_count} parsed
                   lookups · {source.handoff_pending} queued.
                 </p>
+                {source.epoch_count !== null && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Active epoch: {source.active_epoch_id ?? "Unavailable"} · Eligible wallets:{" "}
+                    {source.eligible_wallet_count ?? "Unavailable"} / {source.selected_wallet_count} · Connections:{" "}
+                    {source.connection_count ?? "Unavailable"} · Disconnects: {source.disconnect_count ?? "Unavailable"}
+                    . Gap count is per-wallet records, not outage count.
+                  </p>
+                )}
+                {source.gap_reason_counts && Object.keys(source.gap_reason_counts).length > 0 && (
+                  <details className="mt-2 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">Retained gap reasons</summary>
+                    <ul>
+                      {Object.entries(source.gap_reason_counts).map(([reason, n]) => (
+                        <li key={reason}>
+                          {label(reason)}: {n}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
                 <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                   <div>
                     <dt>Last stream receipt</dt>
@@ -242,8 +279,8 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
                 </dl>
                 {source.gap_latched && (
                   <p className="mt-3 text-xs text-amber-500">
-                    A source gap is latched. New entries are paused; first-sale coverage is not exhaustive. Historical
-                    results are only from the events observed.
+                    A source gap is latched and remains recorded. Entry eligibility is shown above; first-sale coverage
+                    is not exhaustive. Historical results are only from the events observed.
                   </p>
                 )}
               </>
@@ -300,6 +337,13 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
                 </p>
               )}
             </div>
+            {history.exploratory_mode && (
+              <p className="mt-3 rounded border border-amber-500/40 p-3 text-sm text-amber-500">
+                Exploratory historical results · conditional on observed paths, not verified real-money returns. Trader
+                totals below may mix clean-observed and gap-affected cohorts. A clean-observed label means no known gap
+                during that position, not complete source-trade coverage.
+              </p>
+            )}
             {history.trader_pnl_as_of.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">No trader summary rows exported at this cutoff.</p>
             ) : (
@@ -324,7 +368,9 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-muted-foreground">Total at cutoff</dt>
+                        <dt className="text-xs text-muted-foreground">
+                          {history.exploratory_mode ? "Conditional total at cutoff" : "Total at cutoff"}
+                        </dt>
                         <dd className="mt-1">
                           <Money value={t.total_net_pnl_lamports_at_cutoff} />
                         </dd>
@@ -365,6 +411,74 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
               — means unresolved or unavailable, not zero. Totals come from the copy ledger, including failed-attempt
               costs, not a sum of the visible trade rows.
             </p>
+            {history.source_epoch_pnl_as_of !== null && (
+              <section className="mt-6" aria-label="Observed-path cohorts">
+                <h3 className="font-semibold">Epoch and coverage cohorts · at cutoff</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Separate authoritative ledger groups, including failed-attempt costs. Unresolved counts may include
+                  pending inventory, not a completed copy. Not a new fully verified total.
+                </p>
+                {history.source_epoch_pnl_as_of.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">No copy economics recorded in a cohort yet.</p>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {history.source_epoch_pnl_as_of.map((t) => (
+                      <article
+                        key={`${t.source_wallet}:${t.source_epoch_id}:${t.coverage_class}`}
+                        className="rounded border border-border p-3 text-sm"
+                      >
+                        <h4 className="font-mono" title={t.source_wallet}>
+                          Trader {walletTail(t.source_wallet)} · Epoch {t.source_epoch_id}
+                        </h4>
+                        <p className="mt-1 text-xs text-amber-500">{coverageLabel(t.coverage_class)}</p>
+                        <dl className="mt-3 grid grid-cols-2 gap-2">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Realized at cutoff</dt>
+                            <dd>
+                              <Money value={t.realized_net_pnl_lamports} />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Open estimate at cutoff</dt>
+                            <dd>
+                              <Money value={t.open_net_pnl_lamports_at_cutoff} />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Conditional total at cutoff</dt>
+                            <dd>
+                              <Money value={t.total_net_pnl_lamports_at_cutoff} />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Closed / open / unresolved</dt>
+                            <dd>
+                              {t.closed_count} / {t.open_count} / {t.unresolved_count}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {t.failed_entry_count} failed entries. First source-sale coverage is not verified.
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                <details className="mt-3 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">
+                    Recorded observation epochs ({history.source_epochs?.length ?? 0})
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {history.source_epochs?.map((e) => (
+                      <li key={e.source_epoch_id}>
+                        Epoch {e.source_epoch_id}: {e.opened_at}, slot barrier {e.barrier_slot}. Earlier history
+                        coverage unknown.
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </section>
+            )}
             <h3 className="mt-7 font-semibold">Copied positions and exits at cutoff</h3>
             <div className="mt-3 rounded-lg border border-border bg-card/40">
               {history.copied_trades_as_of === null ? (
