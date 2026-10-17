@@ -1047,7 +1047,13 @@ type MonitorPart<T> = { state: "available"; data: T } | { state: "waiting" | "un
 export type PaperMonitorLoad =
   | { state: "not_started" }
   | { state: "error"; message: string }
-  | { state: "ready"; fetchedAt: number; health: MonitorPart<ScannerHealth>; history: MonitorPart<PaperHistory> };
+  | {
+      state: "ready";
+      fetchedAt: number;
+      historyCheckedAt?: number;
+      health: MonitorPart<ScannerHealth>;
+      history: MonitorPart<PaperHistory>;
+    };
 export type PaperMonitorLoader = (signal?: AbortSignal) => Promise<PaperMonitorLoad>;
 const publicCode = (v: unknown): string => {
   if (typeof v !== "string" || !/^[A-Za-z0-9_.,:-]{1,256}$/.test(v)) throw Error("public code");
@@ -1519,8 +1525,8 @@ export function scannerHeartbeatFresh(health: ScannerHealth, now: number): boole
   const age = ageMs(health.heartbeat_utc, now);
   return age !== null && age <= 2000 && now < Date.parse(health.fixed_deadline_utc) && health.status !== "stopped";
 }
-/** Fixed-target monitor RPC; it never reads the legacy /solana-paper financial route. */
-export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(async (): Promise<Response> => {
+/** One fixed upstream per RPC; callers cannot choose a URL or cadence. */
+async function readSolanaPaperMonitorPart(part: "health" | "history"): Promise<Response> {
   const VERIFIED_MONITOR_ORIGIN: string | null = "https://solana-paper-pilot-production.up.railway.app";
   const headers = new Headers({
     "Content-Type": "application/json; charset=utf-8",
@@ -1572,10 +1578,10 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
         return { state: "unavailable" };
       }
     };
-    const [health, history] = await Promise.all([
-      read("/health", publicScannerHealth),
-      read("/solana-paper-history", publicPaperHistory),
-    ]);
+    const health: MonitorPart<ScannerHealth> =
+      part === "health" ? await read("/health", publicScannerHealth) : { state: "waiting" };
+    const history: MonitorPart<PaperHistory> =
+      part === "history" ? await read("/solana-paper-history", publicPaperHistory) : { state: "waiting" };
     if (controller.signal.aborted) throw Error("aborted");
     const payload = { schema_version: PAPER_MONITOR_VERSION, health, history };
     if (new TextEncoder().encode(JSON.stringify(payload)).byteLength > MAX_BODY_BYTES) throw Error("body");
@@ -1586,7 +1592,14 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
     clearTimeout(timeout);
     signal.removeEventListener("abort", abort);
   }
-});
+}
+/** Health remains frequent and never downloads historical financial rows. */
+export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(async (): Promise<Response> =>
+  readSolanaPaperMonitorPart("health"),
+);
+export const getSolanaPaperHistoryMonitor = createServerFn({ method: "GET" }).handler(async (): Promise<Response> =>
+  readSolanaPaperMonitorPart("history"),
+);
 export function createMonitorLoader(
   serverFn: ServerSnapshotTransport,
   now: () => number = Date.now,
@@ -1606,6 +1619,8 @@ export function createMonitorLoader(
 /** Read-only monitor; stopped or unavailable hosting never becomes a running claim. */
 export const loadSolanaPaperMonitor: PaperMonitorLoader = (signal) => loadSolanaPaperServerMonitor(signal);
 export const loadSolanaPaperServerMonitor: PaperMonitorLoader = createMonitorLoader(getSolanaPaperMonitor);
+export const loadSolanaPaperHistoryMonitor: PaperMonitorLoader = createMonitorLoader(getSolanaPaperHistoryMonitor);
+export const PAPER_HISTORY_REFRESH_MS = 600_000;
 export function startMonitorRefresh(
   loader: PaperMonitorLoader,
   emit: (load: PaperMonitorLoad) => void,
@@ -1652,11 +1667,84 @@ export function startMonitorRefresh(
     active?.abort();
   };
 }
+/** Independent serial loops: heartbeat retries never refetch the large report.
+ * One history read on mount, then >=600s after completion even on errors/run changes.
+ * This bounds a normal open page, not arbitrary clients or multiple tabs.
+ */
+export function startIndependentMonitorRefresh(
+  healthLoader: PaperMonitorLoader,
+  historyLoader: PaperMonitorLoader,
+  emit: (load: PaperMonitorLoad) => void,
+  options: RefreshOptions = {},
+): () => void {
+  let healthLoad: PaperMonitorLoad | null = null;
+  let historyLoad: PaperMonitorLoad | null = null;
+  let verifiedSession: ScannerHealth | null = null;
+  const publish = () => {
+    if (healthLoad?.state === "not_started" && historyLoad?.state === "not_started") {
+      emit({ state: "not_started" });
+      return;
+    }
+    const health: MonitorPart<ScannerHealth> =
+      healthLoad?.state === "ready" ? healthLoad.health : { state: "unavailable" };
+    if (health.state === "available") verifiedSession = health.data;
+    let history: MonitorPart<PaperHistory> =
+      historyLoad?.state === "ready" ? historyLoad.history : { state: "unavailable" };
+    if (
+      history.state === "available" &&
+      verifiedSession &&
+      ((verifiedSession.run_id !== null && verifiedSession.run_id !== history.data.run_id) ||
+        verifiedSession.fixed_deadline_utc !== history.data.evidence_fence.fixed_deadline_utc ||
+        verifiedSession.exploratory_mode !== history.data.exploratory_mode)
+    )
+      history = { state: "unavailable" };
+    emit({
+      state: "ready",
+      // A history response can never refresh the scanner transport timestamp.
+      fetchedAt: healthLoad?.state === "ready" ? healthLoad.fetchedAt : 0,
+      ...(historyLoad?.state === "ready" && history.state === "available"
+        ? { historyCheckedAt: historyLoad.fetchedAt }
+        : {}),
+      health,
+      history,
+    });
+  };
+  const stopHealth = startMonitorRefresh(
+    healthLoader,
+    (value) => {
+      healthLoad = value;
+      publish();
+    },
+    options,
+  );
+  const stopHistory = startMonitorRefresh(
+    historyLoader,
+    (value) => {
+      historyLoad = value;
+      publish();
+    },
+    {
+      ...options,
+      intervalMs: PAPER_HISTORY_REFRESH_MS,
+    },
+  );
+  return () => {
+    stopHealth();
+    stopHistory();
+  };
+}
 /** Only historical evidence may survive a failed request, always with its original cutoff. */
 export function retainPaperHistory(previous: PaperHistory | null, load: PaperMonitorLoad): PaperHistory | null {
   if (load.state !== "ready") return previous;
   const currentRun = load.health.state === "available" ? load.health.data.run_id : null;
-  if (previous && currentRun && currentRun !== previous.run_id) previous = null;
+  if (
+    previous &&
+    load.health.state === "available" &&
+    ((currentRun && currentRun !== previous.run_id) ||
+      load.health.data.fixed_deadline_utc !== previous.evidence_fence.fixed_deadline_utc ||
+      load.health.data.exploratory_mode !== previous.exploratory_mode)
+  )
+    previous = null;
   if (load.history.state !== "available") return previous;
   const next = load.history.data;
   if (

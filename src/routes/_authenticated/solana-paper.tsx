@@ -6,11 +6,12 @@ import {
   historicalPositionLabel,
   lamportsToSol,
   loadSolanaPaperMonitor,
+  loadSolanaPaperHistoryMonitor,
   loadSolanaPaperTokenSymbols,
   monitorTransportFresh,
   retainPaperHistory,
   scannerHeartbeatFresh,
-  startMonitorRefresh,
+  startIndependentMonitorRefresh,
   tokenQuantity,
   toneOf,
   walletTail,
@@ -103,9 +104,15 @@ function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symb
   );
 }
 function SolanaPaperPage() {
-  return <SolanaPaperView loader={loadSolanaPaperMonitor} />;
+  return <SolanaPaperView loader={loadSolanaPaperMonitor} historyLoader={loadSolanaPaperHistoryMonitor} />;
 }
-export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
+export function SolanaPaperView({
+  loader,
+  historyLoader = loader,
+}: {
+  loader: PaperMonitorLoader;
+  historyLoader?: PaperMonitorLoader;
+}) {
   const [load, setLoad] = useState<PaperMonitorLoad | null>(null);
   const [history, setHistory] = useState<PaperHistory | null>(null);
   const [tokenSymbols, setTokenSymbols] = useState<PaperTokenSymbols | null>(null);
@@ -113,7 +120,7 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
   useEffect(() => {
     setLoad(null);
     setHistory(null);
-    const stop = startMonitorRefresh(loader, (value) => {
+    const stop = startIndependentMonitorRefresh(loader, historyLoader, (value) => {
       setLoad(value);
       setHistory((previous) => retainPaperHistory(previous, value));
     });
@@ -122,7 +129,7 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
       stop();
       clearInterval(timer);
     };
-  }, [loader]);
+  }, [loader, historyLoader]);
   // Metadata is independent of the five-second monitor loop. Retry on the next committed report.
   const symbolReportKey =
     history && (history.copied_trades_as_of?.length ?? 0) > 0
@@ -314,8 +321,10 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
       <section className="mt-7" aria-label="Historical copy PnL">
         <h2 className="text-lg font-semibold">Our copy PnL · Historical snapshot</h2>
         <p className="mt-1 text-xs text-muted-foreground">
+          History is checked on opening this page, then at least 10 minutes apart, separately from scanner status.
           Reports are generated no more often than every 10 minutes. Open estimates are valid only at the snapshot
-          cutoff, not current or executable quotes. Fetching this page does not refresh their value.
+          cutoff, not current or executable quotes. A new report may take up to 10 more minutes to appear here. Fetching
+          this page does not refresh its valuation.
         </p>
         {history ? (
           <>
@@ -330,6 +339,13 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
                 <span className="break-all font-mono">{time(history.report_received_at_utc)}</span>.
               </p>
               <p className="mt-1 break-all font-mono">Run: {history.run_id}</p>
+              {load?.state === "ready" && load.historyCheckedAt !== undefined && (
+                <p className="mt-1">
+                  Report last checked:{" "}
+                  <span className="font-mono">{new Date(load.historyCheckedAt).toISOString()}</span>. This does not
+                  change its cutoff.
+                </p>
+              )}
               {retained && (
                 <p className="mt-2 text-amber-500">
                   Retained historical snapshot. The latest request did not confirm a newer report. The scanner may have
