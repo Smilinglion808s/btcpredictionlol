@@ -3,19 +3,18 @@ import { useEffect, useState } from "react";
 import {
   ageLabel,
   lamportsToSol,
-  loadSolanaPaperFeed,
-  pnlView,
-  startRefresh,
+  loadSolanaPaperMonitor,
+  monitorTransportFresh,
+  retainPaperHistory,
+  scannerHeartbeatFresh,
+  startMonitorRefresh,
   tokenQuantity,
   toneOf,
-  tradeKey,
-  traderSummaries,
-  transportFresh,
-  walletRows,
   walletTail,
-  type SolanaPaperLoad,
-  type SolanaPaperLoader,
-  type SolanaPaperTrade,
+  type HistoricalTrade,
+  type PaperHistory,
+  type PaperMonitorLoad,
+  type PaperMonitorLoader,
 } from "@/lib/solana-paper";
 
 export const Route = createFileRoute("/_authenticated/solana-paper")({
@@ -24,140 +23,116 @@ export const Route = createFileRoute("/_authenticated/solana-paper")({
       { title: "Solana Copy PnL | BTC 15m" },
       {
         name: "description",
-        content: "Read-only paper PnL from our copied Solana entries and exits, grouped by trader.",
+        content: "Read-only scanner status and historical PnL from our fixed-1-SOL paper copies.",
       },
-      { property: "og:title", content: "Solana Copy PnL" },
-      { property: "og:description", content: "Observed-only paper copies. No real orders or funds." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SolanaPaperPage,
 });
-
-const token = (t: SolanaPaperTrade) => t.symbol ?? t.name ?? "Unknown token";
-const solText = (value: string | null, signed = false) => (value == null ? "—" : `${lamportsToSol(value, signed)} SOL`);
-const timestamp = (value: string | null) => (value == null ? "Unavailable" : value);
-const modeLabel = (mode: string) => mode.replaceAll("_", " ");
-
+const label = (v: string) => v.replaceAll("_", " ");
+const time = (value: string | null) => value ?? "Unavailable";
 function Money({ value }: { value: string | null }) {
-  return <span className={`font-mono ${toneOf(value)}`}>{solText(value, true)}</span>;
+  return (
+    <span className={`font-mono ${toneOf(value)}`}>{value == null ? "—" : `${lamportsToSol(value, true)} SOL`}</span>
+  );
 }
-
-function Trade({ trade: t, load, now }: { trade: SolanaPaperTrade; load: SolanaPaperLoad; now: number }) {
-  const p = pnlView(t, now, load);
-  const sourceAgeUnknown =
-    (load.state === "ready" && load.feed.upstream_age_unknown === true) ||
-    t.valuation.source_event_age_known === false ||
-    t.valuation.observed_at == null;
+function HistoricalPosition({ trade: t }: { trade: HistoricalTrade }) {
   return (
     <li className="space-y-3 p-4 text-sm sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-semibold">
-          {token(t)}{" "}
-          <span className="ml-2 font-mono text-muted-foreground" title={t.source_wallet}>
-            {walletTail(t.source_wallet)}
-          </span>
+        <span className="font-mono font-semibold" title={t.source_wallet}>
+          Trader {walletTail(t.source_wallet)}
         </span>
-        <span className="rounded border border-border px-2 py-0.5 text-xs uppercase">{t.position_status}</span>
+        <span className="rounded border border-border px-2 py-0.5 text-xs uppercase">
+          {t.position_status_at_cutoff} at cutoff
+        </span>
       </div>
-      <p className="break-all font-mono text-xs text-muted-foreground">
-        <span className="font-sans">Mint: </span>
-        {t.mint}
-      </p>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+      <p className="break-all font-mono text-xs text-muted-foreground">Mint: {t.mint}</p>
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
-          <dt className="text-xs text-muted-foreground">Acquired token quantity</dt>
+          <dt className="text-xs text-muted-foreground">Entry notional</dt>
+          <dd className="mt-1 font-mono">1 SOL</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Recorded entry tokens</dt>
           <dd className="mt-1 break-all font-mono">{tokenQuantity(t)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">All-in copied entry</dt>
-          <dd className="mt-1 font-mono">{solText(t.entry_input_lamports)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Realized copy PnL</dt>
+          <dt className="text-xs text-muted-foreground">Realized at cutoff</dt>
           <dd className="mt-1">
-            <Money value={t.position_status === "closed" ? p.lamports : null} />
+            <Money value={t.realized_net_pnl_lamports} />
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Open estimated PnL</dt>
+          <dt className="text-xs text-muted-foreground">Open estimate at cutoff</dt>
           <dd className="mt-1">
-            <Money value={t.position_status === "open" ? p.lamports : null} />
+            <Money value={t.open_net_pnl_lamports_at_cutoff} />
           </dd>
         </div>
       </dl>
-      <p className="text-xs text-muted-foreground">
-        {p.note}
-        {p.lamports != null ? ` · ${p.pctText}` : ""}. Acquired amount is the recorded entry quantity, not a current
-        holdings balance.
-      </p>
-      <dl className="grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2">
+      <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
         <div>
-          <dt className="inline">Entry: </dt>
-          <dd className="inline break-all font-mono">{timestamp(t.entry_at)}</dd>
+          <dt className="inline">Paper entry: </dt>
+          <dd className="inline break-all font-mono">{time(t.entry_at)}</dd>
         </div>
         <div>
-          <dt className="inline">Exit: </dt>
-          <dd className="inline break-all font-mono">{timestamp(t.exit_at)}</dd>
+          <dt className="inline">Paper exit: </dt>
+          <dd className="inline break-all font-mono">{time(t.exit_at)}</dd>
         </div>
       </dl>
-      <p className="text-xs text-muted-foreground">
-        Mark: {t.position_status === "closed" ? "historical realized result" : p.mark} · Source event age:{" "}
-        {sourceAgeUnknown ? "unknown" : ageLabel(t.valuation.observed_at, now)}
-        {t.valuation.quote_received_at != null
-          ? ` · Quote received ${ageLabel(t.valuation.quote_received_at, now)} (1s maximum)`
-          : ""}
-      </p>
+      {t.unresolved_reason && <p className="text-xs text-muted-foreground">Unresolved: {label(t.unresolved_reason)}</p>}
+      {t.source_coverage_gap_latched && (
+        <p className="text-xs text-amber-500">
+          Source coverage gap. The first source sale may have been missed; this is only the observed copy model.
+        </p>
+      )}
     </li>
   );
 }
-
 function SolanaPaperPage() {
-  return <SolanaPaperView loader={loadSolanaPaperFeed} />;
+  return <SolanaPaperView loader={loadSolanaPaperMonitor} />;
 }
-
-export function SolanaPaperView({ loader }: { loader: SolanaPaperLoader }) {
-  const [load, setLoad] = useState<SolanaPaperLoad | null>(null);
+export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
+  const [load, setLoad] = useState<PaperMonitorLoad | null>(null);
+  const [history, setHistory] = useState<PaperHistory | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setLoad(null);
-    const stop = startRefresh(loader, setLoad);
-    // Update the 1-second quote guard even between transport polls.
-    const clock = setInterval(() => setNow(Date.now()), 250);
+    setHistory(null);
+    const stop = startMonitorRefresh(loader, (value) => {
+      setLoad(value);
+      setHistory((previous) => retainPaperHistory(previous, value));
+    });
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       stop();
-      clearInterval(clock);
+      clearInterval(timer);
     };
   }, [loader]);
-
-  const stale = load?.state === "ready" && !transportFresh(load, now);
-  const fixedModel =
-    load?.state === "ready" &&
-    load.feed.accounting_mode === "fixed_notional_copy_pnl_v1" &&
-    load.feed.entry_notional_lamports === "1000000000" &&
-    load.feed.account === null;
-  const feed =
-    load?.state === "ready" && !stale && fixedModel && load.feed.evidence_kind !== "offline_synthetic"
-      ? load.feed
-      : null;
-  const rows = feed && load ? traderSummaries(load, now) : [];
-  const wallets = feed && load ? walletRows(load) : null;
-  const heading =
+  const freshTransport = monitorTransportFresh(load, now);
+  const health =
+    load?.state === "ready" && freshTransport && load.health.state === "available" ? load.health.data : null;
+  const source = health?.source_status;
+  const heartbeatFresh = health ? scannerHeartbeatFresh(health, now) : false;
+  const latestHistory =
+    load?.state === "ready" && freshTransport && load.history.state === "available" ? load.history.data : null;
+  const retained =
+    history !== null &&
+    (!latestHistory ||
+      latestHistory.run_id !== history.run_id ||
+      latestHistory.evidence_fence.evidence_cutoff_utc !== history.evidence_fence.evidence_cutoff_utc);
+  const scannerHeading =
     load == null
-      ? "Loading…"
-      : stale
-        ? "Feed stale"
-        : load.state === "error"
-          ? "Feed offline or unavailable"
-          : load.state === "not_started" || feed?.status === "not_started"
-            ? "Pilot not running"
-            : load.state === "ready" && load.feed.evidence_kind === "offline_synthetic"
-              ? "Synthetic feed rejected"
-              : !fixedModel
-                ? "Copy model unavailable"
-                : "No paper copies recorded yet";
-
+      ? "Loading scanner status…"
+      : load.state === "not_started"
+        ? "Pilot not running"
+        : !freshTransport || !health
+          ? "Scanner status unavailable"
+          : health.status === "stopped"
+            ? "Scanner stopped"
+            : heartbeatFresh
+              ? `Owner heartbeat received · ${label(health.status)}`
+              : "Owner heartbeat stale or run ended";
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <Link to="/stats" className="text-sm text-muted-foreground hover:text-foreground">
@@ -165,124 +140,231 @@ export function SolanaPaperView({ loader }: { loader: SolanaPaperLoader }) {
       </Link>
       <header className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Solana Copy PnL</h1>
-        <span className="rounded-full border border-bull/40 bg-bull/10 px-3 py-1 font-mono text-xs uppercase tracking-wider text-bull">
+        <span className="rounded-full border border-border px-3 py-1 font-mono text-xs uppercase tracking-wider">
           Paper only · Read only
         </span>
       </header>
-      <p className="mt-3 text-sm">
-        Tracking plan: 1 SOL per copied entry, with modeled costs. No shared balance or compounding.
-      </p>
+      <p className="mt-3 text-sm">1 SOL per copied entry, with modeled costs. No balance or compounding.</p>
       <p className="mt-1 text-sm text-muted-foreground">
-        PnL is from our copied entries and exits, never the source trader’s reported returns. No real orders or funds.
-      </p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Observed-only coverage, not exhaustive. Finality is not verified. Source event age may be unknown; quote receipt
-        time does not establish source freshness.
+        Results come from our simulated copies, never the source trader’s reported returns. No real orders or funds.
       </p>
 
-      {feed && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Status: {feed.status} · Snapshot {ageLabel(feed.data_as_of, now)} ·{" "}
-          {feed.coverage.summary ?? "Coverage details unavailable"}
-          {feed.coverage.gap_count != null ? ` · ${feed.coverage.gap_count} known gaps` : ""}
-        </p>
-      )}
-
-      {rows.length > 0 && (
-        <section className="mt-7" aria-label="Our copied PnL by trader">
-          <h2 className="text-lg font-semibold">Our copy PnL by trader</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {rows.map((row) => (
-              <article key={row.wallet} className="rounded-lg border border-border bg-card/40 p-4">
-                <h3 className="font-mono font-semibold" title={row.wallet}>
-                  {walletTail(row.wallet)}
-                </h3>
-                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{row.wallet}</p>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+      <section className="mt-6 rounded-lg border border-border bg-card/40 p-4 sm:p-5" aria-label="Scanner status">
+        <h2 className="font-semibold" role="status">
+          {scannerHeading}
+        </h2>
+        {health ? (
+          <>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Owner heartbeat: <span className="font-mono">{health.heartbeat_utc}</span> (
+              {ageLabel(health.heartbeat_utc, now)}). Run ends:{" "}
+              <span className="font-mono">{health.fixed_deadline_utc}</span>.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reporter: {label(health.reporter_status)}. An owner heartbeat does not prove a fresh source event or
+              current PnL.
+            </p>
+            {source ? (
+              <>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div>
-                    <dt className="text-xs text-muted-foreground">Realized</dt>
-                    <dd className="mt-1">
-                      <Money value={row.realizedLamports} />
+                    <dt className="text-xs text-muted-foreground">Stream state reported</dt>
+                    <dd>{label(source.stream_state)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Selected / acknowledged</dt>
+                    <dd className="font-mono">
+                      {source.selected_wallet_count} / {source.acknowledged_wallet_count}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Open estimate</dt>
-                    <dd className="mt-1">
-                      <Money value={row.openLamports} />
-                    </dd>
+                    <dt className="text-xs text-muted-foreground">Baselines recorded</dt>
+                    <dd className="font-mono">{source.baseline_complete_count}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Total copy PnL</dt>
-                    <dd className="mt-1">
-                      <Money value={row.totalLamports} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Copied trades</dt>
-                    <dd className="mt-1 font-mono">{row.tradeCount}</dd>
+                    <dt className="text-xs text-muted-foreground">Known source gaps</dt>
+                    <dd className="font-mono">{source.gap_count}</dd>
                   </div>
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  {row.closedCount} closed · {row.openCount} open · {row.unresolvedCount} unresolved ·{" "}
-                  {row.failedEntryCount} failed entries
+                  New entries:{" "}
+                  {source.new_entries_paused ? "paused" : "not operator-paused; eligibility checks still apply"}.
+                  Source-sale tracking reported {source.source_sale_tracking_active ? "active" : "inactive"}.{" "}
+                  {source.stream_notification_count} stream notifications · {source.raw_lookup_parsed_count} parsed
+                  lookups · {source.handoff_pending} queued.
                 </p>
-              </article>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            — means unavailable or not yet established, not zero. Stale or unresolved positions prevent a complete
-            total.
-          </p>
-        </section>
-      )}
-
-      {wallets != null && (
-        <section className="mt-6" aria-label="Read-only trader roster">
-          <h2 className="text-sm font-semibold">Trader roster</h2>
-          {wallets.length === 0 ? (
-            <p className="mt-2 text-xs text-muted-foreground">No traders exported.</p>
-          ) : (
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {wallets.map((w) => (
-                <li key={w.wallet} className="rounded border border-border px-3 py-2 text-xs" title={w.wallet}>
-                  <span className="font-mono">{walletTail(w.wallet)}</span> · {w.label || "Unlabelled"} ·{" "}
-                  {modeLabel(w.mode)}
-                  {w.polling_configured === false ? " · polling not configured" : ""}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      <section className="mt-7 rounded-lg border border-border bg-card/40" aria-label="Copied entry and exit history">
-        {!feed || feed.trades.length === 0 ? (
-          <div className="px-6 py-12 text-center" role="status">
-            <p className="font-mono text-lg font-semibold">{heading}</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {stale
-                ? "The feed has not refreshed in time. Current values are unavailable, not zero."
-                : load?.state === "error"
-                  ? "The last request failed. Current values have been cleared."
-                  : feed
-                    ? "No copied entries are present in this observed snapshot. An empty snapshot can be a valid observation."
-                    : "Copied trades will appear after a verified read-only feed is connected. No balance or results are invented."}
-            </p>
-          </div>
-        ) : (
-          <>
-            <h2 className="border-b border-border px-5 py-3 text-sm font-semibold">Copied entries and exits</h2>
-            <ul className="divide-y divide-border">
-              {feed.trades.map((t) => (
-                <Trade key={tradeKey(t)} trade={t} load={load!} now={now} />
-              ))}
-            </ul>
+                <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div>
+                    <dt>Last stream receipt</dt>
+                    <dd className="break-all font-mono">{time(source.last_stream_receipt_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Last enrichment ready</dt>
+                    <dd className="break-all font-mono">{time(source.last_enrichment_ready_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Last raw source block time (not receipt time)</dt>
+                    <dd className="break-all font-mono">{time(source.last_source_block_time_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Transport</dt>
+                    <dd>Stream, not polling. No source timestamp is inferred from receipts.</dd>
+                  </div>
+                </dl>
+                {source.gap_latched && (
+                  <p className="mt-3 text-xs text-amber-500">
+                    A source gap is latched. New entries are paused; first-sale coverage is not exhaustive. Historical
+                    results are only from the events observed.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Source details unavailable. No stream health is inferred.
+              </p>
+            )}
+            {health.selected_wallets && (
+              <details className="mt-4 text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Selected source wallets ({health.selected_wallets.length})</summary>
+                <ul className="mt-2 space-y-1">
+                  {health.selected_wallets.map((w) => (
+                    <li key={w} className="break-all font-mono">
+                      {w}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {load?.state === "not_started"
+              ? "The verified paper feed is not connected yet."
+              : "No current scanner state is established. Unavailable does not mean zero activity."}
+          </p>
         )}
       </section>
-      <p className="mt-4 text-xs text-muted-foreground">
-        All-in entry includes modeled fees and slippage. Exit values are net of modeled costs. Fees are not subtracted
-        twice; refundable rent is not a loss.
+
+      <section className="mt-7" aria-label="Historical copy PnL">
+        <h2 className="text-lg font-semibold">Our copy PnL · Historical snapshot</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Reports are generated no more often than every 10 minutes. Open estimates are valid only at the snapshot
+          cutoff, not current or executable quotes. Fetching this page does not refresh their value.
+        </p>
+        {history ? (
+          <>
+            <div className="mt-3 rounded border border-border p-3 text-xs text-muted-foreground">
+              <p>
+                As of <span className="break-all font-mono">{history.evidence_fence.evidence_cutoff_utc}</span> (
+                {ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}). State at cutoff:{" "}
+                {label(history.status_at_cutoff)}.
+              </p>
+              <p className="mt-1">
+                Generated: <span className="break-all font-mono">{history.report_generated_at_utc}</span>. Published:{" "}
+                <span className="break-all font-mono">{time(history.report_received_at_utc)}</span>.
+              </p>
+              <p className="mt-1 break-all font-mono">Run: {history.run_id}</p>
+              {retained && (
+                <p className="mt-2 text-amber-500">
+                  Retained historical snapshot. The latest request did not confirm a newer report. The scanner may have
+                  ended or become unavailable.
+                </p>
+              )}
+            </div>
+            {history.trader_pnl_as_of.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">No trader summary rows exported at this cutoff.</p>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {history.trader_pnl_as_of.map((t) => (
+                  <article key={t.source_wallet} className="rounded-lg border border-border bg-card/40 p-4">
+                    <h3 className="font-mono font-semibold" title={t.source_wallet}>
+                      Trader {walletTail(t.source_wallet)}
+                    </h3>
+                    <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{t.source_wallet}</p>
+                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Realized at cutoff</dt>
+                        <dd className="mt-1">
+                          <Money value={t.realized_net_pnl_lamports} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Open estimate at cutoff</dt>
+                        <dd className="mt-1">
+                          <Money value={t.open_net_pnl_lamports_at_cutoff} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Total at cutoff</dt>
+                        <dd className="mt-1">
+                          <Money value={t.total_net_pnl_lamports_at_cutoff} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Closed / open / unresolved</dt>
+                        <dd className="mt-1 font-mono">
+                          {t.closed_count} / {t.open_count} / {t.unresolved_count}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {t.failed_entry_count} failed entries · {t.skipped_opportunity_count} skipped opportunities.
+                      Modeled costs are already included.
+                    </p>
+                    {t.source_coverage_gap_latched && (
+                      <p className="mt-2 text-xs text-amber-500">
+                        Coverage gap: observed model only, first source sale may be missing.
+                      </p>
+                    )}
+                    {Object.keys(t.skipped_reasons).length > 0 && (
+                      <details className="mt-2 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">Skipped reasons</summary>
+                        <ul className="mt-1 space-y-1">
+                          {Object.entries(t.skipped_reasons).map(([reason, n]) => (
+                            <li key={reason}>
+                              {label(reason)}: {n}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">
+              — means unresolved or unavailable, not zero. Totals come from the copy ledger, including failed-attempt
+              costs, not a sum of the visible trade rows.
+            </p>
+            <h3 className="mt-7 font-semibold">Copied positions and exits at cutoff</h3>
+            <div className="mt-3 rounded-lg border border-border bg-card/40">
+              {history.copied_trades_as_of === null ? (
+                <p className="p-5 text-sm text-muted-foreground">Trade details were not exported.</p>
+              ) : history.copied_trades_as_of.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground">
+                  No copied entries committed by this cutoff. An empty report is a valid result, not a sample trade.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {history.copied_trades_as_of.map((t) => (
+                    <HistoricalPosition key={`${t.position_id}:${t.source_wallet}:${t.mint}`} trade={t} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 rounded-lg border border-border p-6 text-sm text-muted-foreground">
+            {load?.state === "ready" && load.history.state === "waiting"
+              ? "Waiting for the first committed historical report."
+              : "No verified historical copy report is available yet."}{" "}
+            No balance, trades, or PnL have been invented.
+          </p>
+        )}
+      </section>
+      <p className="mt-7 text-xs text-muted-foreground">
+        Observed-only coverage, not every source trade. Finality is not verified. Source event age may be unknown.
+        Read-only dashboard: no wallet connection, orders, or operator controls.
       </p>
     </div>
   );

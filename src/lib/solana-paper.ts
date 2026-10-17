@@ -892,3 +892,523 @@ export function createServerLoader(serverFn: ServerSnapshotTransport, now: () =>
 }
 /** Callable alternative transport; startRefresh supplies the 10s deadline/single flight. */
 export const loadSolanaPaperServerFeed: SolanaPaperLoader = createServerLoader(getSolanaPaperSnapshot);
+
+// ---------- Historical paper monitor (separate from legacy current-quote adapter) ----------
+export const PAPER_HISTORY_VERSION = "normalized-historical-copy-pnl/1";
+export const PAPER_MONITOR_VERSION = "solana-paper-monitor/1";
+export type ScannerSource = {
+  provider: string;
+  stream_state: string;
+  selected_wallet_count: number;
+  acknowledged_wallet_count: number;
+  baseline_complete_count: number;
+  last_poll_at: string | null;
+  last_stream_receipt_at: string | null;
+  last_enrichment_ready_at: string | null;
+  last_source_block_time_at: string | null;
+  stream_notification_count: number;
+  raw_lookup_parsed_count: number;
+  gap_count: number;
+  gap_latched: boolean;
+  new_entries_paused: boolean;
+  source_sale_tracking_active: boolean;
+  handoff_pending: number;
+  coverage_complete: false;
+  source_time_basis: string;
+  history_population_equivalent: false;
+};
+export type ScannerHealth = {
+  hosting_version: string;
+  status: string;
+  run_id: string | null;
+  heartbeat_utc: string;
+  fixed_deadline_utc: string;
+  reporter_status: string;
+  read_only: true;
+  live_trading_enabled: false;
+  financial_data_is_current: false;
+  evidence_kind: EvidenceKind;
+  source_status: ScannerSource | null;
+  selected_wallets: string[] | null;
+};
+export type HistoricalTrader = {
+  source_wallet: string;
+  realized_net_pnl_lamports: string;
+  open_net_pnl_lamports_at_cutoff: string | null;
+  total_net_pnl_lamports_at_cutoff: string | null;
+  closed_count: number;
+  open_count: number;
+  unresolved_count: number;
+  failed_entry_count: number;
+  skipped_opportunity_count: number;
+  skipped_reasons: Record<string, number>;
+  source_coverage_gap_latched: boolean | null;
+  pnl_scope: "our_modeled_copies_not_source_wallet_returns";
+};
+export type HistoricalTrade = {
+  position_id: string;
+  source_wallet: string;
+  mint: string;
+  entry_notional_lamports: string;
+  acquired_tokens_raw: string | null;
+  decimals: number | null;
+  entry_at: string;
+  exit_at: string | null;
+  position_status_at_cutoff: PositionStatus;
+  realized_net_pnl_lamports: string | null;
+  open_net_pnl_lamports_at_cutoff: string | null;
+  unresolved_reason: string | null;
+  source_coverage_gap_latched: boolean;
+  historical_only: true;
+  current: false;
+  executable: false;
+};
+export type PaperHistory = {
+  schema_version: string;
+  run_id: string;
+  evidence_kind: EvidenceKind;
+  evidence_fence: { evidence_cutoff_utc: string; fixed_deadline_utc: string; journal_sequence: number };
+  report_generated_at_utc: string;
+  report_received_at_utc: string | null;
+  status_at_cutoff: string;
+  historical_only: true;
+  financial_data_is_current: false;
+  entry_notional_lamports: string;
+  report_min_interval_seconds: number;
+  trader_pnl_as_of: HistoricalTrader[];
+  copied_trades_as_of: HistoricalTrade[] | null;
+  accounting_mode: string;
+  account: null;
+  executable: false;
+  funded_balance_exists: false;
+  compounding_enabled: false;
+  finality_verified: false;
+  exhaustive_coverage: false;
+};
+type MonitorPart<T> = { state: "available"; data: T } | { state: "waiting" | "unavailable" };
+export type PaperMonitorLoad =
+  | { state: "not_started" }
+  | { state: "error"; message: string }
+  | { state: "ready"; fetchedAt: number; health: MonitorPart<ScannerHealth>; history: MonitorPart<PaperHistory> };
+export type PaperMonitorLoader = (signal?: AbortSignal) => Promise<PaperMonitorLoad>;
+const publicCode = (v: unknown): string => {
+  if (typeof v !== "string" || !/^[A-Za-z0-9_.,:-]{1,256}$/.test(v)) throw Error("public code");
+  return v;
+};
+const publicIdentity = (v: unknown): string => {
+  if (typeof v !== "string" || !/^[A-Za-z0-9_.:-]{1,160}$/.test(v)) throw Error("public identity");
+  return v;
+};
+const requiredCount = (v: unknown): number => {
+  count(v);
+  if (v === null) throw Error("missing count");
+  return v as number;
+};
+const requiredBool = (v: unknown): boolean => {
+  if (typeof v !== "boolean") throw Error("flag");
+  return v;
+};
+const requiredStamp = (v: unknown): string => {
+  stamp(v, false);
+  return v as string;
+};
+const nullableStamp = (v: unknown): string | null => {
+  stamp(v);
+  return v as string | null;
+};
+const signedAmount = (v: unknown, nullable = true): string | null => {
+  raw(v, nullable, true);
+  return v as string | null;
+};
+const observedKind = (v: unknown): EvidenceKind => {
+  one(v, ["observed_estimated_paper", "observed_protocol_paper"]);
+  return v as EvidenceKind;
+};
+/** Reconstruct public objects, never forward arbitrary upstream nested fields. */
+export function publicScannerHealth(value: unknown): ScannerHealth {
+  const h = objectValue(value),
+    owner = objectValue(h.owner ?? {});
+  if (
+    h.hosting_version !== PAPER_HISTORY_VERSION ||
+    h.read_only !== true ||
+    h.live_trading_enabled !== false ||
+    h.financial_data_is_current !== false
+  )
+    throw Error("health contract");
+  const evidence = observedKind(h.evidence_kind ?? owner.evidence_kind);
+  let source: ScannerSource | null = null;
+  if (h.source_status != null) {
+    const s = objectValue(h.source_status);
+    if (
+      s.provider !== "helius_parsed_streams" ||
+      s.coverage_complete !== false ||
+      s.history_population_equivalent !== false
+    )
+      throw Error("source contract");
+    source = {
+      provider: s.provider,
+      stream_state: publicCode(s.stream_state),
+      selected_wallet_count: requiredCount(s.selected_wallet_count),
+      acknowledged_wallet_count: requiredCount(s.acknowledged_wallet_count),
+      baseline_complete_count: requiredCount(s.baseline_complete_count),
+      last_poll_at: nullableStamp(s.last_poll_at),
+      last_stream_receipt_at: nullableStamp(s.last_stream_receipt_at),
+      last_enrichment_ready_at: nullableStamp(s.last_enrichment_ready_at),
+      last_source_block_time_at: nullableStamp(s.last_source_block_time_at),
+      stream_notification_count: requiredCount(s.stream_notification_count),
+      raw_lookup_parsed_count: requiredCount(s.raw_lookup_parsed_count),
+      gap_count: requiredCount(s.gap_count),
+      gap_latched: requiredBool(s.gap_latched),
+      new_entries_paused: requiredBool(s.new_entries_paused),
+      source_sale_tracking_active: requiredBool(s.source_sale_tracking_active),
+      handoff_pending: requiredCount(s.handoff_pending),
+      coverage_complete: false,
+      source_time_basis: publicCode(s.source_time_basis),
+      history_population_equivalent: false,
+    };
+  }
+  return {
+    hosting_version: PAPER_HISTORY_VERSION,
+    status: publicCode(h.status),
+    run_id: h.run_id == null ? null : publicIdentity(h.run_id),
+    heartbeat_utc: requiredStamp(h.heartbeat_utc),
+    fixed_deadline_utc: requiredStamp(h.fixed_deadline_utc),
+    reporter_status: publicCode(h.reporter_status),
+    read_only: true,
+    live_trading_enabled: false,
+    financial_data_is_current: false,
+    evidence_kind: evidence,
+    source_status: source,
+    selected_wallets:
+      h.selected_wallets == null
+        ? null
+        : (() => {
+            if (!Array.isArray(h.selected_wallets) || h.selected_wallets.length > 1000) throw Error("selected wallets");
+            const wallets = h.selected_wallets.map(publicIdentity);
+            if (new Set(wallets).size !== wallets.length) throw Error("duplicate wallet");
+            return wallets;
+          })(),
+  };
+}
+export function publicPaperHistory(value: unknown): PaperHistory {
+  const h = objectValue(value),
+    fence = objectValue(h.evidence_fence);
+  if (
+    h.schema_version !== PAPER_HISTORY_VERSION ||
+    h.accounting_mode !== FIXED_COPY_ACCOUNTING_MODE ||
+    h.entry_notional_lamports !== COPY_ENTRY_NOTIONAL_LAMPORTS ||
+    h.account !== null ||
+    h.historical_only !== true ||
+    h.financial_data_is_current !== false ||
+    h.executable !== false ||
+    h.funded_balance_exists !== false ||
+    h.compounding_enabled !== false ||
+    h.finality_verified !== false ||
+    h.exhaustive_coverage !== false
+  )
+    throw Error("historical contract");
+  const evidence = observedKind(h.evidence_kind);
+  const cutoff = requiredStamp(fence.evidence_cutoff_utc),
+    deadline = requiredStamp(fence.fixed_deadline_utc);
+  const generated = requiredStamp(h.report_generated_at_utc);
+  if (Date.parse(generated) < Date.parse(cutoff)) throw Error("report before cutoff");
+  const cadence = requiredCount(h.report_min_interval_seconds);
+  if (cadence < 600) throw Error("historical cadence");
+  if (!Array.isArray(h.trader_pnl_as_of) || h.trader_pnl_as_of.length > 1000) throw Error("traders");
+  const traders = h.trader_pnl_as_of.map((value): HistoricalTrader => {
+    const t = objectValue(value);
+    if (t.pnl_scope !== "our_modeled_copies_not_source_wallet_returns") throw Error("PnL scope");
+    const realized = signedAmount(t.realized_net_pnl_lamports, false) as string;
+    const opened = signedAmount(t.open_net_pnl_lamports_at_cutoff);
+    const total = signedAmount(t.total_net_pnl_lamports_at_cutoff);
+    const unresolved = requiredCount(t.unresolved_count);
+    if (unresolved > 0 && (opened !== null || total !== null)) throw Error("partial total");
+    if (total !== null && (opened === null || BigInt(total) !== BigInt(realized) + BigInt(opened)))
+      throw Error("total mismatch");
+    const reasons = objectValue(t.skipped_reasons);
+    if (Object.keys(reasons).length > 200) throw Error("reasons");
+    const safeReasons = Object.fromEntries(Object.entries(reasons).map(([k, v]) => [publicCode(k), requiredCount(v)]));
+    return {
+      source_wallet: publicIdentity(t.source_wallet),
+      realized_net_pnl_lamports: realized,
+      open_net_pnl_lamports_at_cutoff: opened,
+      total_net_pnl_lamports_at_cutoff: total,
+      closed_count: requiredCount(t.closed_count),
+      open_count: requiredCount(t.open_count),
+      unresolved_count: unresolved,
+      failed_entry_count: requiredCount(t.failed_entry_count),
+      skipped_opportunity_count: requiredCount(t.skipped_opportunity_count),
+      pnl_scope: "our_modeled_copies_not_source_wallet_returns",
+      skipped_reasons: safeReasons,
+      source_coverage_gap_latched:
+        t.source_coverage_gap_latched == null ? null : requiredBool(t.source_coverage_gap_latched),
+    };
+  });
+  if (new Set(traders.map((t) => t.source_wallet)).size !== traders.length) throw Error("duplicate trader");
+  let trades: HistoricalTrade[] | null = null;
+  if (h.copied_trades_as_of != null) {
+    if (!Array.isArray(h.copied_trades_as_of) || h.copied_trades_as_of.length > 10000) throw Error("trades");
+    trades = h.copied_trades_as_of.map((value): HistoricalTrade => {
+      const t = objectValue(value);
+      if (
+        t.entry_notional_lamports !== COPY_ENTRY_NOTIONAL_LAMPORTS ||
+        t.historical_only !== true ||
+        t.current !== false ||
+        t.executable !== false
+      )
+        throw Error("trade contract");
+      one(t.position_status_at_cutoff, ["open", "closed", "unresolved"]);
+      raw(t.acquired_tokens_raw);
+      count(t.decimals, 18);
+      const entry = requiredStamp(t.entry_at),
+        exit = nullableStamp(t.exit_at);
+      if (
+        Date.parse(entry) > Date.parse(cutoff) ||
+        (exit && (Date.parse(exit) < Date.parse(entry) || Date.parse(exit) > Date.parse(cutoff)))
+      )
+        throw Error("trade after cutoff");
+      const realized = signedAmount(t.realized_net_pnl_lamports),
+        opened = signedAmount(t.open_net_pnl_lamports_at_cutoff);
+      if (
+        (t.position_status_at_cutoff === "closed" && (realized === null || opened !== null)) ||
+        (t.position_status_at_cutoff !== "closed" && realized !== null) ||
+        (t.position_status_at_cutoff === "unresolved" && opened !== null)
+      )
+        throw Error("trade PnL state");
+      return {
+        position_id: publicIdentity(t.position_id),
+        source_wallet: publicIdentity(t.source_wallet),
+        mint: publicIdentity(t.mint),
+        entry_notional_lamports: COPY_ENTRY_NOTIONAL_LAMPORTS,
+        acquired_tokens_raw: t.acquired_tokens_raw as string | null,
+        decimals: t.decimals as number | null,
+        entry_at: entry,
+        exit_at: exit,
+        position_status_at_cutoff: t.position_status_at_cutoff as PositionStatus,
+        realized_net_pnl_lamports: realized,
+        open_net_pnl_lamports_at_cutoff: opened,
+        unresolved_reason: t.unresolved_reason === null ? null : publicCode(t.unresolved_reason),
+        source_coverage_gap_latched: requiredBool(t.source_coverage_gap_latched),
+        historical_only: true,
+        current: false,
+        executable: false,
+      };
+    });
+    if (
+      new Set(trades.map((t) => t.position_id)).size !== trades.length ||
+      trades.some((t) => !traders.some((w) => w.source_wallet === t.source_wallet))
+    )
+      throw Error("trade identity");
+  }
+  return {
+    schema_version: PAPER_HISTORY_VERSION,
+    run_id: publicIdentity(h.run_id),
+    evidence_kind: evidence,
+    evidence_fence: {
+      evidence_cutoff_utc: cutoff,
+      fixed_deadline_utc: deadline,
+      journal_sequence: requiredCount(fence.journal_sequence),
+    },
+    report_generated_at_utc: generated,
+    report_received_at_utc: nullableStamp(h.report_received_at_utc ?? null),
+    status_at_cutoff: publicCode(h.status_at_cutoff),
+    historical_only: true,
+    financial_data_is_current: false,
+    entry_notional_lamports: COPY_ENTRY_NOTIONAL_LAMPORTS,
+    report_min_interval_seconds: cadence,
+    trader_pnl_as_of: traders,
+    copied_trades_as_of: trades,
+    accounting_mode: FIXED_COPY_ACCOUNTING_MODE,
+    account: null,
+    executable: false,
+    funded_balance_exists: false,
+    compounding_enabled: false,
+    finality_verified: false,
+    exhaustive_coverage: false,
+  };
+}
+/** Already-sanitized RPC payload is still validated in the client. */
+export function parsePaperMonitor(value: unknown, fetchedAt: number): PaperMonitorLoad {
+  try {
+    const m = objectValue(value);
+    if (m.status === "not_started" && m.schema_version === undefined) return { state: "not_started" };
+    if (m.schema_version !== PAPER_MONITOR_VERSION || !Number.isFinite(fetchedAt) || fetchedAt < 0)
+      throw Error("monitor");
+    const part = <T,>(input: unknown, validate: (v: unknown) => T): MonitorPart<T> => {
+      const p = objectValue(input);
+      if (p.state === "waiting" || p.state === "unavailable") return { state: p.state };
+      if (p.state !== "available") throw Error("part state");
+      return { state: "available", data: validate(p.data) };
+    };
+    const health = part(m.health, publicScannerHealth);
+    const history = part(m.history, publicPaperHistory);
+    if (
+      history.state === "available" &&
+      (Date.parse(history.data.evidence_fence.evidence_cutoff_utc) > fetchedAt + 2000 ||
+        Date.parse(history.data.report_generated_at_utc) > fetchedAt + 2000)
+    )
+      throw Error("future history");
+    if (
+      health.state === "available" &&
+      history.state === "available" &&
+      (health.data.fixed_deadline_utc !== history.data.evidence_fence.fixed_deadline_utc ||
+        (health.data.run_id !== null && health.data.run_id !== history.data.run_id))
+    )
+      throw Error("session mismatch");
+    return { state: "ready", fetchedAt, health, history };
+  } catch {
+    return { state: "error", message: "Paper monitor unavailable: historical/source contract validation failed." };
+  }
+}
+export function monitorTransportFresh(load: PaperMonitorLoad | null, now: number): boolean {
+  return load?.state === "ready" && now >= load.fetchedAt && now - load.fetchedAt <= MAX_SILENCE_MS;
+}
+export function scannerHeartbeatFresh(health: ScannerHealth, now: number): boolean {
+  const age = ageMs(health.heartbeat_utc, now);
+  return age !== null && age <= 2000 && now < Date.parse(health.fixed_deadline_utc) && health.status !== "stopped";
+}
+/** Fixed-target monitor RPC; it never reads the legacy /solana-paper financial route. */
+export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(async (): Promise<Response> => {
+  const VERIFIED_MONITOR_ORIGIN: string | null = "https://solana-paper-pilot-production.up.railway.app";
+  const headers = new Headers({
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  setResponseHeaders(headers);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+  if (VERIFIED_MONITOR_ORIGIN === null) return json({ status: "not_started" });
+  const controller = new AbortController(),
+    signal = getRequest().signal;
+  const abort = () => controller.abort();
+  if (signal.aborted) abort();
+  else signal.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(abort, 8000);
+  try {
+    const origin = new URL(VERIFIED_MONITOR_ORIGIN);
+    if (
+      origin.protocol !== "https:" ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== "/" ||
+      origin.search ||
+      origin.hash
+    )
+      throw Error("origin");
+    const read = async <T,>(
+      path: "/health" | "/solana-paper-history",
+      project: (v: unknown) => T,
+    ): Promise<MonitorPart<T>> => {
+      try {
+        if (controller.signal.aborted) throw Error("aborted");
+        const response = await fetch(new URL(path, origin), {
+          method: "GET",
+          signal: controller.signal,
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (path === "/solana-paper-history" && response.status === 404) return { state: "waiting" };
+        if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") || ""))
+          throw Error("response");
+        return { state: "available", data: project(await boundedJson(response, controller.signal)) };
+      } catch {
+        return { state: "unavailable" };
+      }
+    };
+    const [health, history] = await Promise.all([
+      read("/health", publicScannerHealth),
+      read("/solana-paper-history", publicPaperHistory),
+    ]);
+    if (controller.signal.aborted) throw Error("aborted");
+    const payload = { schema_version: PAPER_MONITOR_VERSION, health, history };
+    if (new TextEncoder().encode(JSON.stringify(payload)).byteLength > MAX_BODY_BYTES) throw Error("body");
+    return json(payload);
+  } catch {
+    return json({ status: "unavailable" }, 503);
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", abort);
+  }
+});
+export function createMonitorLoader(
+  serverFn: ServerSnapshotTransport,
+  now: () => number = Date.now,
+): PaperMonitorLoader {
+  return async (signal = new AbortController().signal) => {
+    try {
+      if (signal.aborted) throw Error("aborted");
+      const response = await serverFn({ signal });
+      if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") || ""))
+        throw Error("response");
+      return parsePaperMonitor(await boundedJson(response, signal), now());
+    } catch {
+      return { state: "error", message: "Paper monitor offline or unavailable. Values cleared, not zero." };
+    }
+  };
+}
+/** Read-only monitor; stopped or unavailable hosting never becomes a running claim. */
+export const loadSolanaPaperMonitor: PaperMonitorLoader = (signal) => loadSolanaPaperServerMonitor(signal);
+export const loadSolanaPaperServerMonitor: PaperMonitorLoader = createMonitorLoader(getSolanaPaperMonitor);
+export function startMonitorRefresh(
+  loader: PaperMonitorLoader,
+  emit: (load: PaperMonitorLoad) => void,
+  options: RefreshOptions = {},
+): () => void {
+  const scheduler = options.scheduler ?? {
+    set: (fn: () => void, ms: number) => setTimeout(fn, ms),
+    clear: (id: ReturnType<typeof setTimeout> | undefined) => {
+      if (id !== undefined) clearTimeout(id);
+    },
+  };
+  let stopped = false,
+    next: ReturnType<typeof setTimeout> | undefined,
+    deadline: ReturnType<typeof setTimeout> | undefined,
+    active: AbortController | undefined;
+  const run = async () => {
+    if (stopped) return;
+    active = new AbortController();
+    let timedOut = false;
+    deadline = scheduler.set(() => {
+      timedOut = true;
+      active?.abort();
+      if (!stopped) emit({ state: "error", message: "Paper monitor timed out. Values cleared, not zero." });
+    }, options.timeoutMs ?? 10000);
+    try {
+      const value = await loader(active.signal);
+      if (!stopped && !timedOut) emit(value);
+    } catch {
+      if (!stopped && !timedOut)
+        emit({ state: "error", message: "Paper monitor unavailable. Values cleared, not zero." });
+    } finally {
+      scheduler.clear(deadline);
+      if (!stopped)
+        next = scheduler.set(() => {
+          void run();
+        }, options.intervalMs ?? 5000);
+    }
+  };
+  void run();
+  return () => {
+    stopped = true;
+    scheduler.clear(next);
+    scheduler.clear(deadline);
+    active?.abort();
+  };
+}
+/** Only historical evidence may survive a failed request, always with its original cutoff. */
+export function retainPaperHistory(previous: PaperHistory | null, load: PaperMonitorLoad): PaperHistory | null {
+  if (load.state !== "ready") return previous;
+  const currentRun = load.health.state === "available" ? load.health.data.run_id : null;
+  if (previous && currentRun && currentRun !== previous.run_id) previous = null;
+  if (load.history.state !== "available") return previous;
+  const next = load.history.data;
+  if (
+    previous &&
+    next.run_id === previous.run_id &&
+    Date.parse(next.evidence_fence.evidence_cutoff_utc) < Date.parse(previous.evidence_fence.evidence_cutoff_utc)
+  )
+    return previous;
+  return next;
+}
