@@ -1,3 +1,4 @@
+import { SolanaLiveControls } from "@/components/solana-live-controls";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -257,6 +258,7 @@ export function SolanaPaperView({
       <p className="mt-1 text-sm text-muted-foreground">
         Results come from our simulated copies, never the source trader’s reported returns. No real orders or funds.
       </p>
+      <SolanaLiveControls />
 
       <section className="mt-6 rounded-lg border border-border bg-card/40 p-4 sm:p-5" aria-label="Scanner status">
         <h2 className="font-semibold" role="status">
@@ -601,7 +603,7 @@ export function SolanaPaperView({
       </section>
       <p className="mt-7 text-xs text-muted-foreground">
         Observed-only coverage, not every source trade. Finality is not verified. Source event age may be unknown.
-        Read-only dashboard: no wallet connection, orders, or operator controls.
+        Paper data is read-only. The separate live-control panel does not enable execution in this preparation build.
       </p>
     </div>
   );
