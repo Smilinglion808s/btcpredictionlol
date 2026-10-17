@@ -4,6 +4,7 @@ import {
   ageLabel,
   lamportsToSol,
   loadSolanaPaperMonitor,
+  loadSolanaPaperTokenSymbols,
   monitorTransportFresh,
   retainPaperHistory,
   scannerHeartbeatFresh,
@@ -13,6 +14,7 @@ import {
   walletTail,
   type HistoricalTrade,
   type PaperHistory,
+  type PaperTokenSymbols,
   type PaperMonitorLoad,
   type PaperMonitorLoader,
 } from "@/lib/solana-paper";
@@ -36,7 +38,7 @@ function Money({ value }: { value: string | null }) {
     <span className={`font-mono ${toneOf(value)}`}>{value == null ? "—" : `${lamportsToSol(value, true)} SOL`}</span>
   );
 }
-function HistoricalPosition({ trade: t }: { trade: HistoricalTrade }) {
+function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: string | null }) {
   return (
     <li className="space-y-3 p-4 text-sm sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -47,6 +49,10 @@ function HistoricalPosition({ trade: t }: { trade: HistoricalTrade }) {
           {t.position_status_at_cutoff} at cutoff
         </span>
       </div>
+      <p className="break-all font-semibold">Ticker: {symbol ?? "Unknown"}</p>
+      <p className="text-xs text-muted-foreground">
+        Source asset label from DEX Screener, not a verified token identity or profit claim. Mint identifies the asset.
+      </p>
       <p className="break-all font-mono text-xs text-muted-foreground">Mint: {t.mint}</p>
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
@@ -95,6 +101,7 @@ function SolanaPaperPage() {
 export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
   const [load, setLoad] = useState<PaperMonitorLoad | null>(null);
   const [history, setHistory] = useState<PaperHistory | null>(null);
+  const [tokenSymbols, setTokenSymbols] = useState<PaperTokenSymbols | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setLoad(null);
@@ -109,6 +116,26 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
       clearInterval(timer);
     };
   }, [loader]);
+  // Metadata is independent of the five-second monitor loop. Retry on the next committed report.
+  const symbolReportKey =
+    history && (history.copied_trades_as_of?.length ?? 0) > 0
+      ? `${history.run_id}:${history.evidence_fence.evidence_cutoff_utc}`
+      : null;
+  useEffect(() => {
+    if (!symbolReportKey) {
+      setTokenSymbols(null);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    void loadSolanaPaperTokenSymbols(controller.signal).then((value) => {
+      if (!cancelled) setTokenSymbols(value);
+    });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [symbolReportKey]);
   const freshTransport = monitorTransportFresh(load, now);
   const health =
     load?.state === "ready" && freshTransport && load.health.state === "available" ? load.health.data : null;
@@ -130,9 +157,11 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
           ? "Scanner status unavailable"
           : health.status === "stopped"
             ? "Scanner stopped"
-            : heartbeatFresh
-              ? `Owner heartbeat received · ${label(health.status)}`
-              : "Owner heartbeat stale or run ended";
+            : now >= Date.parse(health.fixed_deadline_utc)
+              ? "Test ended · deadline reached"
+              : heartbeatFresh
+                ? `Owner heartbeat received · ${label(health.status)}`
+                : "Awaiting fresh heartbeat";
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <Link to="/stats" className="text-sm text-muted-foreground hover:text-foreground">
@@ -347,7 +376,11 @@ export function SolanaPaperView({ loader }: { loader: PaperMonitorLoader }) {
               ) : (
                 <ul className="divide-y divide-border">
                   {history.copied_trades_as_of.map((t) => (
-                    <HistoricalPosition key={`${t.position_id}:${t.source_wallet}:${t.mint}`} trade={t} />
+                    <HistoricalPosition
+                      key={`${t.position_id}:${t.source_wallet}:${t.mint}`}
+                      trade={t}
+                      symbol={tokenSymbols?.run_id === history.run_id ? (tokenSymbols.symbols[t.mint] ?? null) : null}
+                    />
                   ))}
                 </ul>
               )}

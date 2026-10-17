@@ -1415,3 +1415,173 @@ export function retainPaperHistory(previous: PaperHistory | null, load: PaperMon
     return previous;
   return next;
 }
+
+// Display metadata only. This service is independent of scanner/PnL reads and never supplies prices.
+export type PaperTokenSymbols = {
+  schema_version: "solana-paper-token-symbols/1";
+  run_id: string | null;
+  source: "DEX Screener";
+  metadata_only: true;
+  symbols: Record<string, string | null>;
+};
+const isSolanaMint = (v: unknown): v is string => typeof v === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v);
+const safeTokenSymbol = (v: unknown): string | null =>
+  typeof v === "string" &&
+  v.trim().length > 0 &&
+  v.trim().length <= 40 &&
+  !/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/.test(v)
+    ? v.trim()
+    : null;
+const emptyTokenSymbols = (): PaperTokenSymbols => ({
+  schema_version: "solana-paper-token-symbols/1",
+  run_id: null,
+  source: "DEX Screener",
+  metadata_only: true,
+  symbols: {},
+});
+/** Exact Solana chain + mint match only. Conflicting symbols remain Unknown. */
+export function symbolsFromDexPairs(value: unknown, mints: string[]): Record<string, string | null> {
+  if (!Array.isArray(value) || value.length > 5000 || mints.length > 30 || mints.some((m) => !isSolanaMint(m)))
+    throw Error("metadata");
+  const found = new Map(mints.map((m) => [m, new Set<string | null>()]));
+  for (const item of value) {
+    if (!item || typeof item !== "object" || item.chainId !== "solana") continue;
+    for (const token of [item.baseToken, item.quoteToken]) {
+      if (!token || typeof token !== "object" || !found.has(token.address)) continue;
+      found.get(token.address)!.add(safeTokenSymbol(token.symbol));
+    }
+  }
+  return Object.fromEntries([...found].map(([mint, values]) => [mint, values.size === 1 ? [...values][0] : null]));
+}
+export function publicPaperTokenSymbols(value: unknown): PaperTokenSymbols {
+  if (!value || typeof value !== "object") throw Error("metadata");
+  const v = value as PaperTokenSymbols;
+  if (
+    v.schema_version !== "solana-paper-token-symbols/1" ||
+    v.source !== "DEX Screener" ||
+    v.metadata_only !== true ||
+    (v.run_id !== null && (typeof v.run_id !== "string" || v.run_id.length > 200)) ||
+    !v.symbols ||
+    typeof v.symbols !== "object" ||
+    Array.isArray(v.symbols)
+  )
+    throw Error("metadata");
+  const entries = Object.entries(v.symbols);
+  if (
+    entries.length > 1000 ||
+    entries.some(([mint, symbol]) => !isSolanaMint(mint) || (symbol !== null && safeTokenSymbol(symbol) !== symbol))
+  )
+    throw Error("metadata");
+  return { ...emptyTokenSymbols(), run_id: v.run_id, symbols: Object.fromEntries(entries) };
+}
+/** Warm-instance bounded cache. No shared in-flight promises, keys, caller URLs or caller mint lists. */
+export function createPaperSymbolService(fetchFn: typeof fetch = (input, init) => fetch(input, init), now = Date.now) {
+  const cache = new Map<string, { symbol: string | null; at: number }>();
+  let nextReadAt = 0,
+    busy = false,
+    snapshot = emptyTokenSymbols();
+  return async (signal: AbortSignal): Promise<PaperTokenSymbols> => {
+    const at = now();
+    if (signal.aborted) return emptyTokenSymbols();
+    if (busy || at < nextReadAt) return snapshot;
+    busy = true;
+    nextReadAt = at + 60_000;
+    const read = async (url: string) => {
+      const response = await fetchFn(url, {
+        method: "GET",
+        signal,
+        credentials: "omit",
+        redirect: "manual",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (
+        response.type === "opaqueredirect" ||
+        (response.status >= 300 && response.status < 400) ||
+        !response.ok ||
+        !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") || "")
+      )
+        throw Error("metadata");
+      return boundedJson(response, signal);
+    };
+    try {
+      const history = publicPaperHistory(
+        await read("https://solana-paper-pilot-production.up.railway.app/solana-paper-history"),
+      );
+      const mints = [...new Set((history.copied_trades_as_of ?? []).map((t) => t.mint).filter(isSolanaMint))].slice(
+        0,
+        1000,
+      );
+      const missing = mints
+        .filter((m) => {
+          const c = cache.get(m);
+          return !c || at < c.at || at - c.at >= 600_000;
+        })
+        .slice(0, 30);
+      if (missing.length) {
+        let symbols: Record<string, string | null> = Object.fromEntries(missing.map((m) => [m, null]));
+        try {
+          symbols = symbolsFromDexPairs(
+            await read(`https://api.dexscreener.com/tokens/v1/solana/${missing.join(",")}`),
+            missing,
+          );
+        } catch {
+          /* Unknown is display-only and never affects the monitor. */
+        }
+        if (signal.aborted) return emptyTokenSymbols();
+        for (const mint of missing) {
+          cache.delete(mint);
+          cache.set(mint, { symbol: symbols[mint] ?? null, at });
+        }
+        while (cache.size > 1000) cache.delete(cache.keys().next().value!);
+      }
+      if (signal.aborted) return emptyTokenSymbols();
+      snapshot = {
+        ...emptyTokenSymbols(),
+        run_id: history.run_id,
+        symbols: Object.fromEntries(
+          mints.map((m) => {
+            const c = cache.get(m);
+            return [m, c && at >= c.at && at - c.at < 600_000 ? c.symbol : null];
+          }),
+        ),
+      };
+      return snapshot;
+    } catch {
+      return emptyTokenSymbols();
+    } finally {
+      busy = false;
+    }
+  };
+}
+const readPaperSymbols = createPaperSymbolService();
+export const getSolanaPaperTokenSymbols = createServerFn({ method: "GET" }).handler(async (): Promise<Response> => {
+  const headers = new Headers({
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  setResponseHeaders(headers);
+  const controller = new AbortController(),
+    signal = getRequest().signal;
+  const abort = () => controller.abort();
+  if (signal.aborted) abort();
+  else signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(abort, 8000);
+  try {
+    return new Response(JSON.stringify(await readPaperSymbols(controller.signal)), { headers });
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
+  }
+});
+export async function loadSolanaPaperTokenSymbols(signal: AbortSignal): Promise<PaperTokenSymbols> {
+  try {
+    const response = await getSolanaPaperTokenSymbols({ signal });
+    if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") || ""))
+      throw Error("metadata");
+    return publicPaperTokenSymbols(await boundedJson(response, signal));
+  } catch {
+    return emptyTokenSymbols();
+  }
+}
