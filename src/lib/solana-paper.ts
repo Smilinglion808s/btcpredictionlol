@@ -904,7 +904,31 @@ export type ExploratoryInfo = {
   returns_scope: typeof CONDITIONAL_RETURNS_SCOPE | null;
   source_observation_policy: typeof EXPLORATORY_POLICY | null;
 };
-export type ScannerSource = {
+export const CAPACITY_POLICY = "exploratory_reject_new_per_wallet_pending_v1";
+export const CAPACITY_COUNTER_BASIS = "feed_reported_unique_unenriched_source_matches_not_trades";
+export type CapacityPauseReason =
+  | "none"
+  | "operator_paused"
+  | "owner_stopped"
+  | "fresh_epoch_missing"
+  | "initial_baseline_incomplete"
+  | "current_epoch_gap";
+export type CapacityWallet = {
+  source_wallet: string;
+  unenriched_source_count: number;
+  entry_paused: boolean;
+  pause_reason: CapacityPauseReason;
+};
+export type CapacityInfo = {
+  capacity_policy: typeof CAPACITY_POLICY | null;
+  capacity_unenriched_sources: number | null;
+  capacity_wallets: CapacityWallet[] | null;
+};
+export type HistoricalPressure = CapacityInfo & {
+  counter_basis: typeof CAPACITY_COUNTER_BASIS;
+  observed_at_utc: string;
+};
+export type ScannerSource = CapacityInfo & {
   provider: string;
   stream_state: string;
   selected_wallet_count: number;
@@ -1035,6 +1059,7 @@ export type PaperHistory = ExploratoryInfo & {
   open_marks_as_of: HistoricalOpenMark[] | null;
   source_epoch_pnl_as_of: SourceEpochPnl[] | null;
   source_epochs: SourceEpoch[] | null;
+  pressure_snapshot_as_of: HistoricalPressure | null;
   accounting_mode: string;
   account: null;
   executable: false;
@@ -1134,6 +1159,7 @@ const gapReasons = (value: unknown): Record<string, number> | null => {
     "unsupported_transaction_shape",
     "stream_ending_for_bounded_final_reconciliation",
     "other_reason_redacted",
+    "capacity_unenriched_source",
   ];
   if (Object.keys(v).length > allowed.length) throw Error("gap reasons");
   return Object.fromEntries(
@@ -1142,6 +1168,67 @@ const gapReasons = (value: unknown): Record<string, number> | null => {
       return [key, requiredCount(n)];
     }),
   );
+};
+
+/** Optional for old runs; a supplied group must contain all ten selected wallets. */
+const capacityInfo = (
+  value: Record<string, unknown>,
+  wallets: string[] | null,
+  exploratory: true | null,
+): CapacityInfo => {
+  if (value.capacity_policy == null && value.capacity_unenriched_sources == null && value.capacity_wallets == null)
+    return { capacity_policy: null, capacity_unenriched_sources: null, capacity_wallets: null };
+  if (
+    exploratory !== true ||
+    value.capacity_policy !== CAPACITY_POLICY ||
+    wallets === null ||
+    wallets.length !== 10 ||
+    !Array.isArray(value.capacity_wallets) ||
+    value.capacity_wallets.length !== 10
+  )
+    throw Error("capacity contract");
+  const total = requiredCount(value.capacity_unenriched_sources);
+  const rows = value.capacity_wallets.map((value): CapacityWallet => {
+    const row = objectValue(value),
+      wallet = publicIdentity(row.source_wallet);
+    const paused = requiredBool(row.entry_paused);
+    one(row.pause_reason, [
+      "none",
+      "operator_paused",
+      "owner_stopped",
+      "fresh_epoch_missing",
+      "initial_baseline_incomplete",
+      "current_epoch_gap",
+    ]);
+    if (!wallets.includes(wallet) || paused !== (row.pause_reason !== "none")) throw Error("capacity wallet state");
+    return {
+      source_wallet: wallet,
+      unenriched_source_count: requiredCount(row.unenriched_source_count),
+      entry_paused: paused,
+      pause_reason: row.pause_reason as CapacityPauseReason,
+    };
+  });
+  if (new Set(rows.map((row) => row.source_wallet)).size !== rows.length) throw Error("duplicate capacity wallet");
+  // Per-wallet matches can overlap; never derive the global unique count by summing rows.
+  return { capacity_policy: CAPACITY_POLICY, capacity_unenriched_sources: total, capacity_wallets: rows };
+};
+const historicalPressure = (
+  value: unknown,
+  wallets: string[],
+  exploratory: true | null,
+  cutoff: string,
+): HistoricalPressure | null => {
+  if (value == null) return null;
+  const snapshot = objectValue(value);
+  const capacity = capacityInfo(snapshot, wallets, exploratory);
+  const observed = requiredStamp(snapshot.observed_at_utc);
+  if (
+    capacity.capacity_policy === null ||
+    snapshot.counter_basis !== CAPACITY_COUNTER_BASIS ||
+    Date.parse(observed) > Date.parse(cutoff)
+  )
+    throw Error("historical pressure contract");
+  return { ...capacity, counter_basis: CAPACITY_COUNTER_BASIS, observed_at_utc: observed };
 };
 
 /** Reconstruct public objects, never forward arbitrary upstream nested fields. */
@@ -1156,6 +1243,13 @@ export function publicScannerHealth(value: unknown): ScannerHealth {
   )
     throw Error("health contract");
   const evidence = observedKind(h.evidence_kind ?? owner.evidence_kind);
+  const mode = exploratoryInfo(h);
+  let selectedWallets: string[] | null = null;
+  if (h.selected_wallets != null) {
+    if (!Array.isArray(h.selected_wallets) || h.selected_wallets.length > 1000) throw Error("selected wallets");
+    selectedWallets = h.selected_wallets.map(publicIdentity);
+    if (new Set(selectedWallets).size !== selectedWallets.length) throw Error("duplicate wallet");
+  }
   let source: ScannerSource | null = null;
   if (h.source_status != null) {
     const s = objectValue(h.source_status);
@@ -1166,6 +1260,7 @@ export function publicScannerHealth(value: unknown): ScannerHealth {
     )
       throw Error("source contract");
     source = {
+      ...capacityInfo(s, selectedWallets, mode.exploratory_mode),
       provider: s.provider,
       stream_state: publicCode(s.stream_state),
       selected_wallet_count: requiredCount(s.selected_wallet_count),
@@ -1199,7 +1294,7 @@ export function publicScannerHealth(value: unknown): ScannerHealth {
     };
   }
   return {
-    ...exploratoryInfo(h),
+    ...mode,
     hosting_version: PAPER_HISTORY_VERSION,
     status: publicCode(h.status),
     run_id: h.run_id == null ? null : publicIdentity(h.run_id),
@@ -1211,15 +1306,7 @@ export function publicScannerHealth(value: unknown): ScannerHealth {
     financial_data_is_current: false,
     evidence_kind: evidence,
     source_status: source,
-    selected_wallets:
-      h.selected_wallets == null
-        ? null
-        : (() => {
-            if (!Array.isArray(h.selected_wallets) || h.selected_wallets.length > 1000) throw Error("selected wallets");
-            const wallets = h.selected_wallets.map(publicIdentity);
-            if (new Set(wallets).size !== wallets.length) throw Error("duplicate wallet");
-            return wallets;
-          })(),
+    selected_wallets: selectedWallets,
   };
 }
 export function publicPaperHistory(value: unknown): PaperHistory {
@@ -1458,6 +1545,12 @@ export function publicPaperHistory(value: unknown): PaperHistory {
     open_marks_as_of: marks,
     source_epoch_pnl_as_of: epochRows,
     source_epochs: epochs,
+    pressure_snapshot_as_of: historicalPressure(
+      h.pressure_snapshot_as_of,
+      traders.map((t) => t.source_wallet),
+      mode.exploratory_mode,
+      cutoff,
+    ),
     schema_version: PAPER_HISTORY_VERSION,
     run_id: publicIdentity(h.run_id),
     evidence_kind: evidence,

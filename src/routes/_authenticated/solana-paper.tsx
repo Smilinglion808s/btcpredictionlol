@@ -15,6 +15,7 @@ import {
   tokenQuantity,
   toneOf,
   walletTail,
+  type CapacityInfo,
   type HistoricalTrade,
   type PaperHistory,
   type PaperTokenSymbols,
@@ -39,6 +40,71 @@ const time = (value: string | null) => value ?? "Unavailable";
 function Money({ value }: { value: string | null }) {
   return (
     <span className={`font-mono ${toneOf(value)}`}>{value == null ? "—" : `${lamportsToSol(value, true)} SOL`}</span>
+  );
+}
+function PressureSummary({
+  pressure,
+  observedAt,
+  historical = false,
+}: {
+  pressure: CapacityInfo | null;
+  observedAt: string;
+  historical?: boolean;
+}) {
+  return (
+    <section
+      className="mt-3 rounded border border-border p-3 text-xs"
+      aria-label={historical ? "Historical source pressure" : "Scanner source pressure"}
+    >
+      <h3 className="font-semibold">
+        {historical ? "Source pressure at historical cutoff" : "Source pressure · scanner sample"}
+      </h3>
+      {pressure?.capacity_policy && pressure.capacity_wallets ? (
+        <>
+          <p className="mt-1 text-muted-foreground">
+            {historical ? "Recorded as of" : "Scanner report at"}{" "}
+            <span className="break-all font-mono">{observedAt}</span>.
+            {historical
+              ? " Historical only, not current entry eligibility."
+              : " Reported state only; heartbeat and eligibility checks still apply."}
+          </p>
+          <p className="mt-2">
+            Unenriched source signatures: <span className="font-mono">{pressure.capacity_unenriched_sources}</span>{" "}
+            (global unique count).
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            These source outcomes are unknown, not proven non-trades. Raw receipts stay retained. Per-wallet matches may
+            overlap and must not be added together.
+          </p>
+          <p className="mt-1 text-amber-500">
+            Capacity rejects new enrichment work for an affected wallet. Its fresh entries require a real reconnect and
+            fresh observation barrier; waiting alone does not clear the gap. Existing gap and conditional-result labels
+            remain.
+          </p>
+          <details className="mt-3">
+            <summary className="cursor-pointer">
+              Per-wallet unenriched matches and entry state ({pressure.capacity_wallets.length})
+            </summary>
+            <ul className="mt-2 space-y-2">
+              {pressure.capacity_wallets.map((row) => (
+                <li key={row.source_wallet} className="rounded border border-border p-2">
+                  <p className="break-all font-mono">{row.source_wallet}</p>
+                  <p className="mt-1">
+                    Unenriched matches: <span className="font-mono">{row.unenriched_source_count}</span> · Entries:{" "}
+                    {row.entry_paused ? "paused" : "not paused; other eligibility checks apply"} · Reason:{" "}
+                    {label(row.pause_reason)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      ) : (
+        <p className="mt-1 text-muted-foreground">
+          Pressure counts and per-wallet pause details were not supplied for this run. Unavailable does not mean zero.
+        </p>
+      )}
+    </section>
   );
 }
 function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: string | null }) {
@@ -254,6 +320,7 @@ export function SolanaPaperView({
                     . Gap count is per-wallet records, not outage count.
                   </p>
                 )}
+                <PressureSummary pressure={source} observedAt={health.heartbeat_utc} />
                 {source.gap_reason_counts && Object.keys(source.gap_reason_counts).length > 0 && (
                   <details className="mt-2 text-xs text-muted-foreground">
                     <summary className="cursor-pointer">Retained gap reasons</summary>
@@ -360,6 +427,13 @@ export function SolanaPaperView({
                 during that position, not complete source-trade coverage.
               </p>
             )}
+            <PressureSummary
+              pressure={history.pressure_snapshot_as_of}
+              observedAt={
+                history.pressure_snapshot_as_of?.observed_at_utc ?? history.evidence_fence.evidence_cutoff_utc
+              }
+              historical
+            />
             {history.trader_pnl_as_of.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">No trader summary rows exported at this cutoff.</p>
             ) : (
