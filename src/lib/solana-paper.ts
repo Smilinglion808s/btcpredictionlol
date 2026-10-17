@@ -985,14 +985,7 @@ export type PaperHistory = {
   finality_verified: false;
   exhaustive_coverage: false;
 };
-type MonitorDiagnostic = {
-  phase: "fetch" | "headers" | "body" | "projection";
-  http_status: number | null;
-  content_type: "json" | "other" | "missing";
-  error_class: "TypeError" | "SyntaxError" | "AbortError" | "Error" | "other";
-};
-type MonitorPart<T> =
-  { state: "available"; data: T } | { state: "waiting" | "unavailable"; diagnostic?: MonitorDiagnostic };
+type MonitorPart<T> = { state: "available"; data: T } | { state: "waiting" | "unavailable" };
 export type PaperMonitorLoad =
   | { state: "not_started" }
   | { state: "error"; message: string }
@@ -1306,10 +1299,6 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
       path: "/health" | "/solana-paper-history",
       project: (v: unknown) => T,
     ): Promise<MonitorPart<T>> => {
-      // Temporary transport diagnostics: categorical metadata only, never error text or upstream data.
-      let phase: MonitorDiagnostic["phase"] = "fetch";
-      let http_status: number | null = null;
-      let content_type: MonitorDiagnostic["content_type"] = "missing";
       try {
         if (controller.signal.aborted) throw Error("aborted");
         const response = await fetch(new URL(path, origin), {
@@ -1321,26 +1310,14 @@ export const getSolanaPaperMonitor = createServerFn({ method: "GET" }).handler(a
           cache: "no-store",
           headers: { Accept: "application/json" },
         });
-        phase = "headers";
-        http_status =
-          Number.isInteger(response.status) && response.status >= 100 && response.status <= 599
-            ? response.status
-            : null;
-        const mime = response.headers.get("content-type") || "";
-        content_type = /^application\/json(?:\s*;|$)/i.test(mime) ? "json" : mime ? "other" : "missing";
         if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
           throw Error("redirect");
         if (path === "/solana-paper-history" && response.status === 404) return { state: "waiting" };
-        if (!response.ok || content_type !== "json") throw Error("response");
-        phase = "body";
-        const body = await boundedJson(response, controller.signal);
-        phase = "projection";
-        return { state: "available", data: project(body) };
-      } catch (error) {
-        const name = error instanceof Error ? error.name : "other";
-        const error_class: MonitorDiagnostic["error_class"] =
-          name === "TypeError" || name === "SyntaxError" || name === "AbortError" || name === "Error" ? name : "other";
-        return { state: "unavailable", diagnostic: { phase, http_status, content_type, error_class } };
+        if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") || ""))
+          throw Error("response");
+        return { state: "available", data: project(await boundedJson(response, controller.signal)) };
+      } catch {
+        return { state: "unavailable" };
       }
     };
     const [health, history] = await Promise.all([
