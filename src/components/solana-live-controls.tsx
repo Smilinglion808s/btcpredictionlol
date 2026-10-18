@@ -19,6 +19,7 @@ import { createOwnerControlRuntime } from "../lib/owner-control-runtime";
 import { createBrowserOwnerControlAdapter, createBrowserOwnerLoginAdapter } from "../lib/owner-control-browser";
 import { createControlPoller, type ControlPoller } from "../lib/owner-control-polling";
 import { AUTH_STORAGE_KEY } from "../lib/owner-auth/pinned-supabase-adapter";
+import { emitOwnerSessionInvalidation } from "../lib/owner-session-invalidation";
 
 function localControls() {
   const auth = createOwnerControlRuntime(createBrowserOwnerControlAdapter);
@@ -135,8 +136,8 @@ export function LiveControlPanel({
         </span>
       </div>
       <p className="mt-3 text-sm">
-        Preparation only. No wallet, signer or live execution adapter is connected. These controls do not start, stop or
-        alter the paper session.
+        Preparation only. No wallet signer or live execution adapter is connected. Sharing a public account does not
+        enable trading. These controls do not start, stop or alter the paper session.
       </p>
       <OwnerSessionStatus />
       <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Real-money on and off controls">
@@ -311,7 +312,48 @@ export function OwnerSessionStatus() {
       createBrowserOwnerLoginAdapter(),
       "https://btcpredictionlol.lovable.app",
     );
-    const update = () => setCurrent({ controller, state: controller.snapshot() });
+    let previous: LoginState | null = null;
+    // Display comparison only, never cached owner authority. A focus recheck
+    // temporarily clears the controller's display while checking the same user.
+    let verifiedDisplay: Pick<LoginState, "email"> | null = null;
+    let enrollmentCheckPending = false;
+    const update = () => {
+      const state = controller.snapshot();
+      const checking = ["waiting", "checking", "changed"].includes(state.phase);
+      if (["requesting", "checking"].includes(state.enrollment.phase))
+        enrollmentCheckPending = true;
+      if (previous !== null && state !== previous) {
+        const unsafeOutcome = [
+          "signing_out",
+          "signed_out",
+          "signout_partial",
+          "unavailable",
+          "uncertain",
+          "error",
+          "invalid_callback",
+          "check_email",
+        ].includes(state.phase);
+        const identityChanged =
+          state.phase === "signed_in" &&
+          (!state.emailVerified ||
+            (verifiedDisplay !== null && verifiedDisplay.email !== state.email));
+        // A focus hint can mark old enrollment metadata unknown. Only a completed
+        // operation's uncertain or not-enrolled result is a new outcome to relay.
+        const enrollmentFailed =
+          !checking &&
+          (state.enrollment.phase === "rejected" ||
+            (enrollmentCheckPending &&
+              ["unknown", "not_requested"].includes(state.enrollment.phase)));
+        if (unsafeOutcome || identityChanged || enrollmentFailed) emitOwnerSessionInvalidation();
+      }
+      if (!checking) {
+        verifiedDisplay =
+          state.phase === "signed_in" && state.emailVerified ? { email: state.email } : null;
+        enrollmentCheckPending = false;
+      }
+      previous = state;
+      setCurrent({ controller, state });
+    };
     const unsubscribe = controller.subscribe(update);
     update();
     void controller.initialize().then(() => controller.checkCurrentSignIn());
@@ -346,6 +388,8 @@ export function OwnerSessionStatus() {
         void current?.controller.checkCurrentSignIn();
       }}
       signOut={() => {
+        // Fence visible/pending wallet facts before auth starts, even if it fails.
+        emitOwnerSessionInvalidation();
         void current?.controller.signOut();
       }}
       enroll={() => {
