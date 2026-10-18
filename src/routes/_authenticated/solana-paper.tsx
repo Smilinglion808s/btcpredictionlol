@@ -1,5 +1,8 @@
-import { SolanaLiveControls } from "@/components/solana-live-controls";
-import { OwnerWalletConnection } from "@/components/owner-wallet-connection";
+import {
+  SolanaWalletSessionProvider,
+  SolanaWalletHeader,
+  WalletSolanaControls,
+} from "@/components/solana-wallet-session";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -41,7 +44,9 @@ const label = (v: string) => v.replaceAll("_", " ");
 const time = (value: string | null) => value ?? "Unavailable";
 function Money({ value }: { value: string | null }) {
   return (
-    <span className={`font-mono ${toneOf(value)}`}>{value == null ? "—" : `${lamportsToSol(value, true)} SOL`}</span>
+    <span className={`font-mono ${toneOf(value)}`}>
+      {value == null ? "—" : `${lamportsToSol(value, true)} SOL`}
+    </span>
   );
 }
 function PressureSummary({
@@ -71,17 +76,18 @@ function PressureSummary({
               : " Reported state only; heartbeat and eligibility checks still apply."}
           </p>
           <p className="mt-2">
-            Unenriched source signatures: <span className="font-mono">{pressure.capacity_unenriched_sources}</span>{" "}
-            (global unique count).
+            Unenriched source signatures:{" "}
+            <span className="font-mono">{pressure.capacity_unenriched_sources}</span> (global unique
+            count).
           </p>
           <p className="mt-1 text-muted-foreground">
-            These source outcomes are unknown, not proven non-trades. Raw receipts stay retained. Per-wallet matches may
-            overlap and must not be added together.
+            These source outcomes are unknown, not proven non-trades. Raw receipts stay retained.
+            Per-wallet matches may overlap and must not be added together.
           </p>
           <p className="mt-1 text-amber-500">
-            Capacity rejects new enrichment work for an affected wallet. Its fresh entries require a real reconnect and
-            fresh observation barrier; waiting alone does not clear the gap. Existing gap and conditional-result labels
-            remain.
+            Capacity rejects new enrichment work for an affected wallet. Its fresh entries require a
+            real reconnect and fresh observation barrier; waiting alone does not clear the gap.
+            Existing gap and conditional-result labels remain.
           </p>
           <details className="mt-3">
             <summary className="cursor-pointer">
@@ -92,9 +98,10 @@ function PressureSummary({
                 <li key={row.source_wallet} className="rounded border border-border p-2">
                   <p className="break-all font-mono">{row.source_wallet}</p>
                   <p className="mt-1">
-                    Unenriched matches: <span className="font-mono">{row.unenriched_source_count}</span> · Entries:{" "}
-                    {row.entry_paused ? "paused" : "not paused; other eligibility checks apply"} · Reason:{" "}
-                    {label(row.pause_reason)}
+                    Unenriched matches:{" "}
+                    <span className="font-mono">{row.unenriched_source_count}</span> · Entries:{" "}
+                    {row.entry_paused ? "paused" : "not paused; other eligibility checks apply"} ·
+                    Reason: {label(row.pause_reason)}
                   </p>
                 </li>
               ))}
@@ -103,13 +110,20 @@ function PressureSummary({
         </>
       ) : (
         <p className="mt-1 text-muted-foreground">
-          Pressure counts and per-wallet pause details were not supplied for this run. Unavailable does not mean zero.
+          Pressure counts and per-wallet pause details were not supplied for this run. Unavailable
+          does not mean zero.
         </p>
       )}
     </section>
   );
 }
-function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: string | null }) {
+function HistoricalPosition({
+  trade: t,
+  symbol,
+}: {
+  trade: HistoricalTrade;
+  symbol: string | null;
+}) {
   return (
     <li className="space-y-3 p-4 text-sm sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -122,12 +136,14 @@ function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symb
       </div>
       {t.coverage_class !== null && (
         <p className="text-xs text-amber-500">
-          Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Observed path only, not exhaustive coverage.
+          Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Observed path only, not
+          exhaustive coverage.
         </p>
       )}
       <p className="break-all font-semibold">Ticker: {symbol ?? "Unknown"}</p>
       <p className="text-xs text-muted-foreground">
-        Source asset label from DEX Screener, not a verified token identity or profit claim. Mint identifies the asset.
+        Source asset label from DEX Screener, not a verified token identity or profit claim. Mint
+        identifies the asset.
       </p>
       <p className="break-all font-mono text-xs text-muted-foreground">Mint: {t.mint}</p>
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -162,10 +178,13 @@ function HistoricalPosition({ trade: t, symbol }: { trade: HistoricalTrade; symb
           <dd className="inline break-all font-mono">{time(t.exit_at)}</dd>
         </div>
       </dl>
-      {t.unresolved_reason && <p className="text-xs text-muted-foreground">Unresolved: {label(t.unresolved_reason)}</p>}
+      {t.unresolved_reason && (
+        <p className="text-xs text-muted-foreground">Unresolved: {label(t.unresolved_reason)}</p>
+      )}
       {t.source_coverage_gap_latched && (
         <p className="text-xs text-amber-500">
-          Source coverage gap. The first source sale may have been missed; this is only the observed copy model.
+          Source coverage gap. The first source sale may have been missed; this is only the observed
+          copy model.
         </p>
       )}
     </li>
@@ -190,7 +209,9 @@ function BriefPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: s
             </span>
           </span>
           <span className="sr-trade-value">
-            <Money value={closed ? t.realized_net_pnl_lamports : t.open_net_pnl_lamports_at_cutoff} />
+            <Money
+              value={closed ? t.realized_net_pnl_lamports : t.open_net_pnl_lamports_at_cutoff}
+            />
             <small>{closed ? "Realized" : "Open estimate"}</small>
             <span className="sr-open-label">Details ↗</span>
           </span>
@@ -226,12 +247,17 @@ function BriefPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: s
           </dl>
           {t.coverage_class !== null && (
             <p>
-              Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive coverage.
+              Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive
+              coverage.
             </p>
           )}
-          {t.unresolved_reason && <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>}
+          {t.unresolved_reason && (
+            <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>
+          )}
           {t.source_coverage_gap_latched && (
-            <p className="sr-warning">First source sale may be missing. Observed copy model only.</p>
+            <p className="sr-warning">
+              First source sale may be missing. Observed copy model only.
+            </p>
           )}
         </div>
       </details>
@@ -240,7 +266,19 @@ function BriefPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: s
 }
 
 function SolanaPaperPage() {
-  return <SolanaPaperView loader={loadSolanaPaperMonitor} historyLoader={loadSolanaPaperHistoryMonitor} />;
+  return (
+    <SolanaWalletSessionProvider>
+      <SolanaPaperBody />
+    </SolanaWalletSessionProvider>
+  );
+}
+function SolanaPaperBody() {
+  return (
+    <SolanaPaperView
+      loader={loadSolanaPaperMonitor}
+      historyLoader={loadSolanaPaperHistoryMonitor}
+    />
+  );
 }
 export function SolanaPaperView({
   loader,
@@ -288,16 +326,21 @@ export function SolanaPaperView({
   }, [symbolReportKey]);
   const freshTransport = monitorTransportFresh(load, now);
   const health =
-    load?.state === "ready" && freshTransport && load.health.state === "available" ? load.health.data : null;
+    load?.state === "ready" && freshTransport && load.health.state === "available"
+      ? load.health.data
+      : null;
   const source = health?.source_status;
   const heartbeatFresh = health ? scannerHeartbeatFresh(health, now) : false;
   const latestHistory =
-    load?.state === "ready" && freshTransport && load.history.state === "available" ? load.history.data : null;
+    load?.state === "ready" && freshTransport && load.history.state === "available"
+      ? load.history.data
+      : null;
   const retained =
     history !== null &&
     (!latestHistory ||
       latestHistory.run_id !== history.run_id ||
-      latestHistory.evidence_fence.evidence_cutoff_utc !== history.evidence_fence.evidence_cutoff_utc);
+      latestHistory.evidence_fence.evidence_cutoff_utc !==
+        history.evidence_fence.evidence_cutoff_utc);
   const scannerHeading =
     load == null
       ? "Loading scanner status…"
@@ -318,7 +361,9 @@ export function SolanaPaperView({
     return rows.reduce((sum, row) => sum + BigInt(row[key]!), 0n).toString();
   };
   const sumCount = (key: "closed_count" | "open_count" | "unresolved_count") =>
-    !history || rows.length === 0 ? null : rows.reduce((sum, row) => sum + BigInt(row[key]), 0n).toString();
+    !history || rows.length === 0
+      ? null
+      : rows.reduce((sum, row) => sum + BigInt(row[key]), 0n).toString();
   const closedCount = sumCount("closed_count");
   const unresolvedCount = sumCount("unresolved_count");
   const openCount = sumCount("open_count");
@@ -338,7 +383,7 @@ export function SolanaPaperView({
             ← Dashboard
           </Link>
           <span className="sr-eyebrow">SOLANA / COPY DESK</span>
-          <OwnerWalletConnection />
+          <SolanaWalletHeader />
         </div>
         <header className="sr-hero">
           <div className="sr-hero-copy">
@@ -357,7 +402,11 @@ export function SolanaPaperView({
           <div className="sr-scene" aria-hidden="true">
             <svg viewBox="0 0 500 340" fill="none">
               <circle cx="298" cy="137" r="91" fill="#ff8c87" />
-              <path d="M206 151H389M210 165H387M218 179H380M228 194H371M246 208H351" stroke="#172238" strokeWidth="5" />
+              <path
+                d="M206 151H389M210 165H387M218 179H380M228 194H371M246 208H351"
+                stroke="#172238"
+                strokeWidth="5"
+              />
               <ellipse
                 cx="296"
                 cy="144"
@@ -367,7 +416,12 @@ export function SolanaPaperView({
                 stroke="#8de8dc"
                 strokeWidth="2"
               />
-              <path d="M43 283 154 185 230 270 294 224 421 315H43Z" fill="#26364f" stroke="#93d3cc" strokeWidth="1.5" />
+              <path
+                d="M43 283 154 185 230 270 294 224 421 315H43Z"
+                fill="#26364f"
+                stroke="#93d3cc"
+                strokeWidth="1.5"
+              />
               <path d="m77 314 84-75 61 73 37-34 53 37H77Z" fill="#101a2c" />
               <path d="m148 193-15 51 23-13 19 9 8-21" stroke="#f8dfc0" strokeWidth="2" />
               <path d="M43 315H449M82 327H429M111 339H408" stroke="#8de8dc" strokeOpacity=".3" />
@@ -393,9 +447,13 @@ export function SolanaPaperView({
           <span>{entriesLabel}</span>
           <span>LIVE unavailable · default OFF</span>
         </section>
-        {source?.gap_latched && <p className="sr-notice">Source gaps recorded. Results cover observed events only.</p>}
+        {source?.gap_latched && (
+          <p className="sr-notice">Source gaps recorded. Results cover observed events only.</p>
+        )}
         {!health && (
-          <p className="sr-note">Current scanner state is unknown. Historical results below are not a live status.</p>
+          <p className="sr-note">
+            Current scanner state is unknown. Historical results below are not a live status.
+          </p>
         )}
 
         <section className="sr-results" aria-labelledby="sr-results-title">
@@ -439,7 +497,8 @@ export function SolanaPaperView({
                 <Money value={sumMoney("open_net_pnl_lamports_at_cutoff")} />
               </strong>
               <small>
-                {openCount === null ? "Open count unavailable" : `${openCount} open at cutoff`} · Not a live quote
+                {openCount === null ? "Open count unavailable" : `${openCount} open at cutoff`} ·
+                Not a live quote
               </small>
             </article>
             <article className="sr-metric">
@@ -449,7 +508,11 @@ export function SolanaPaperView({
             </article>
             <article className="sr-metric">
               <span className="sr-eyebrow">Unresolved</span>
-              <strong className={unresolvedCount !== null && unresolvedCount !== "0" ? "sr-warning" : undefined}>
+              <strong
+                className={
+                  unresolvedCount !== null && unresolvedCount !== "0" ? "sr-warning" : undefined
+                }
+              >
                 {unresolvedCount ?? "—"}
               </strong>
               <small>Unknown is never zero</small>
@@ -459,8 +522,8 @@ export function SolanaPaperView({
             {history?.exploratory_mode || gapAffected
               ? "Conditional, observed-path results. "
               : "Simulated copy results. "}
-            No real funds. No funded balance. — means unavailable or unresolved. Observed events only. Finality is not
-            verified; source event age may be unknown.
+            No real funds. No funded balance. — means unavailable or unresolved. Observed events
+            only. Finality is not verified; source event age may be unknown.
           </p>
         </section>
 
@@ -473,7 +536,9 @@ export function SolanaPaperView({
               </div>
               <span className="sr-chip">AT CUTOFF</span>
             </div>
-            <p className="sr-panel-note">Open each trade for identity, timing and coverage details.</p>
+            <p className="sr-panel-note">
+              Open each trade for identity, timing and coverage details.
+            </p>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
                 <span aria-hidden="true">↗</span>
@@ -492,7 +557,11 @@ export function SolanaPaperView({
                   <BriefPosition
                     key={`${trade.position_id}:${trade.source_wallet}:${trade.mint}`}
                     trade={trade}
-                    symbol={tokenSymbols?.run_id === history.run_id ? (tokenSymbols.symbols[trade.mint] ?? null) : null}
+                    symbol={
+                      tokenSymbols?.run_id === history.run_id
+                        ? (tokenSymbols.symbols[trade.mint] ?? null)
+                        : null
+                    }
                   />
                 ))}
               </ul>
@@ -523,10 +592,14 @@ export function SolanaPaperView({
                           {String(index + 1).padStart(2, "0")}
                         </span>
                         <span className="sr-wallet-name">
-                          <strong title={row.source_wallet}>Wallet {walletTail(row.source_wallet)}</strong>
+                          <strong title={row.source_wallet}>
+                            Wallet {walletTail(row.source_wallet)}
+                          </strong>
                           <small>
                             {row.closed_count} closed · {row.open_count} open
-                            {row.unresolved_count > 0 ? ` · ${row.unresolved_count} unresolved` : ""}
+                            {row.unresolved_count > 0
+                              ? ` · ${row.unresolved_count} unresolved`
+                              : ""}
                             {row.source_coverage_gap_latched ? " · Coverage gap" : ""}
                           </small>
                         </span>
@@ -552,11 +625,13 @@ export function SolanaPaperView({
                           </div>
                         </dl>
                         <p>
-                          {row.failed_entry_count} failed entries · {row.skipped_opportunity_count} skipped. Modeled
-                          costs included.
+                          {row.failed_entry_count} failed entries · {row.skipped_opportunity_count}{" "}
+                          skipped. Modeled costs included.
                         </p>
                         {row.source_coverage_gap_latched && (
-                          <p className="sr-warning">Observed path only. The first source sale may be missing.</p>
+                          <p className="sr-warning">
+                            Observed path only. The first source sale may be missing.
+                          </p>
                         )}
                       </div>
                     </details>
@@ -576,7 +651,7 @@ export function SolanaPaperView({
             <span className="sr-chip">LIVE unavailable · default OFF</span>
           </summary>
           <div className="sr-disclosure-body">
-            <SolanaLiveControls />
+            <WalletSolanaControls />
           </div>
         </details>
         <details className="sr-disclosure sr-diagnostics">
@@ -588,7 +663,10 @@ export function SolanaPaperView({
             <span className="sr-summary-hint">Scanner · coverage · methodology</span>
           </summary>
           <div className="sr-disclosure-body">
-            <section className="mt-6 rounded-lg border border-border bg-card/40 p-4 sm:p-5" aria-label="Scanner status">
+            <section
+              className="mt-6 rounded-lg border border-border bg-card/40 p-4 sm:p-5"
+              aria-label="Scanner status"
+            >
               <h2 className="font-semibold" role="status">
                 {scannerHeading}
               </h2>
@@ -596,8 +674,9 @@ export function SolanaPaperView({
                 <>
                   {health.exploratory_mode && (
                     <p className="mt-2 text-sm text-amber-500">
-                      Exploratory mode · gaps stay recorded. Fresh post-reconnect entries may be eligible; results are
-                      conditional on the path observed, not real-money performance.
+                      Exploratory mode · gaps stay recorded. Fresh post-reconnect entries may be
+                      eligible; results are conditional on the path observed, not real-money
+                      performance.
                     </p>
                   )}
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -606,8 +685,8 @@ export function SolanaPaperView({
                     <span className="font-mono">{health.fixed_deadline_utc}</span>.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Reporter: {label(health.reporter_status)}. An owner heartbeat does not prove a fresh source event or
-                    current PnL.
+                    Reporter: {label(health.reporter_status)}. An owner heartbeat does not prove a
+                    fresh source event or current PnL.
                   </p>
                   {source ? (
                     <>
@@ -638,53 +717,67 @@ export function SolanaPaperView({
                           : source.partially_paused
                             ? "partially paused; only eligible wallets may enter"
                             : "not operator-paused; eligibility checks still apply"}
-                        . Source-sale tracking reported {source.source_sale_tracking_active ? "active" : "inactive"}.{" "}
-                        {source.stream_notification_count} stream notifications · {source.raw_lookup_parsed_count}{" "}
-                        parsed lookups · {source.handoff_pending} queued.
+                        . Source-sale tracking reported{" "}
+                        {source.source_sale_tracking_active ? "active" : "inactive"}.{" "}
+                        {source.stream_notification_count} stream notifications ·{" "}
+                        {source.raw_lookup_parsed_count} parsed lookups · {source.handoff_pending}{" "}
+                        queued.
                       </p>
                       {source.epoch_count !== null && (
                         <p className="mt-2 text-xs text-muted-foreground">
-                          Active epoch: {source.active_epoch_id ?? "Unavailable"} · Eligible wallets:{" "}
-                          {source.eligible_wallet_count ?? "Unavailable"} / {source.selected_wallet_count} ·
-                          Connections: {source.connection_count ?? "Unavailable"} · Disconnects:{" "}
-                          {source.disconnect_count ?? "Unavailable"}. Gap count is per-wallet records, not outage count.
+                          Active epoch: {source.active_epoch_id ?? "Unavailable"} · Eligible
+                          wallets: {source.eligible_wallet_count ?? "Unavailable"} /{" "}
+                          {source.selected_wallet_count} · Connections:{" "}
+                          {source.connection_count ?? "Unavailable"} · Disconnects:{" "}
+                          {source.disconnect_count ?? "Unavailable"}. Gap count is per-wallet
+                          records, not outage count.
                         </p>
                       )}
                       <PressureSummary pressure={source} observedAt={health.heartbeat_utc} />
-                      {source.gap_reason_counts && Object.keys(source.gap_reason_counts).length > 0 && (
-                        <details className="mt-2 text-xs text-muted-foreground">
-                          <summary className="cursor-pointer">Retained gap reasons</summary>
-                          <ul>
-                            {Object.entries(source.gap_reason_counts).map(([reason, n]) => (
-                              <li key={reason}>
-                                {label(reason)}: {n}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
+                      {source.gap_reason_counts &&
+                        Object.keys(source.gap_reason_counts).length > 0 && (
+                          <details className="mt-2 text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">Retained gap reasons</summary>
+                            <ul>
+                              {Object.entries(source.gap_reason_counts).map(([reason, n]) => (
+                                <li key={reason}>
+                                  {label(reason)}: {n}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
                       <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                         <div>
                           <dt>Last stream receipt</dt>
-                          <dd className="break-all font-mono">{time(source.last_stream_receipt_at)}</dd>
+                          <dd className="break-all font-mono">
+                            {time(source.last_stream_receipt_at)}
+                          </dd>
                         </div>
                         <div>
                           <dt>Last enrichment ready</dt>
-                          <dd className="break-all font-mono">{time(source.last_enrichment_ready_at)}</dd>
+                          <dd className="break-all font-mono">
+                            {time(source.last_enrichment_ready_at)}
+                          </dd>
                         </div>
                         <div>
                           <dt>Last raw source block time (not receipt time)</dt>
-                          <dd className="break-all font-mono">{time(source.last_source_block_time_at)}</dd>
+                          <dd className="break-all font-mono">
+                            {time(source.last_source_block_time_at)}
+                          </dd>
                         </div>
                         <div>
                           <dt>Transport</dt>
-                          <dd>Stream, not polling. No source timestamp is inferred from receipts.</dd>
+                          <dd>
+                            Stream, not polling. No source timestamp is inferred from receipts.
+                          </dd>
                         </div>
                       </dl>
                       {source.gap_latched && (
                         <p className="mt-3 text-xs text-amber-500">
-                          A source gap is latched and remains recorded. Entry eligibility is shown above; first-sale
-                          coverage is not exhaustive. Historical results are only from the events observed.
+                          A source gap is latched and remains recorded. Entry eligibility is shown
+                          above; first-sale coverage is not exhaustive. Historical results are only
+                          from the events observed.
                         </p>
                       )}
                     </>
@@ -720,49 +813,62 @@ export function SolanaPaperView({
             <section className="mt-7" aria-label="Historical copy PnL">
               <h2 className="text-lg font-semibold">Our copy PnL · Historical snapshot</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                History is checked on opening this page, then at least 10 minutes apart, separately from scanner status.
-                Reports are generated no more often than every 10 minutes. Open estimates are valid only at the snapshot
-                cutoff, not current or executable quotes. A new report may take up to 10 more minutes to appear here.
-                Fetching this page does not refresh its valuation.
+                History is checked on opening this page, then at least 10 minutes apart, separately
+                from scanner status. Reports are generated no more often than every 10 minutes. Open
+                estimates are valid only at the snapshot cutoff, not current or executable quotes. A
+                new report may take up to 10 more minutes to appear here. Fetching this page does
+                not refresh its valuation.
               </p>
               {history ? (
                 <>
                   <div className="mt-3 rounded border border-border p-3 text-xs text-muted-foreground">
                     <p>
-                      As of <span className="break-all font-mono">{history.evidence_fence.evidence_cutoff_utc}</span> (
-                      {ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}
+                      As of{" "}
+                      <span className="break-all font-mono">
+                        {history.evidence_fence.evidence_cutoff_utc}
+                      </span>{" "}
+                      ({ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}
                       ). State at cutoff: {label(history.status_at_cutoff)}.
                     </p>
                     <p className="mt-1">
-                      Generated: <span className="break-all font-mono">{history.report_generated_at_utc}</span>.
-                      Published: <span className="break-all font-mono">{time(history.report_received_at_utc)}</span>.
+                      Generated:{" "}
+                      <span className="break-all font-mono">{history.report_generated_at_utc}</span>
+                      . Published:{" "}
+                      <span className="break-all font-mono">
+                        {time(history.report_received_at_utc)}
+                      </span>
+                      .
                     </p>
                     <p className="mt-1 break-all font-mono">Run: {history.run_id}</p>
                     {load?.state === "ready" && load.historyCheckedAt !== undefined && (
                       <p className="mt-1">
                         Report last checked:{" "}
-                        <span className="font-mono">{new Date(load.historyCheckedAt).toISOString()}</span>. This does
-                        not change its cutoff.
+                        <span className="font-mono">
+                          {new Date(load.historyCheckedAt).toISOString()}
+                        </span>
+                        . This does not change its cutoff.
                       </p>
                     )}
                     {retained && (
                       <p className="mt-2 text-amber-500">
-                        Retained historical snapshot. The latest request did not confirm a newer report. The scanner may
-                        have ended or become unavailable.
+                        Retained historical snapshot. The latest request did not confirm a newer
+                        report. The scanner may have ended or become unavailable.
                       </p>
                     )}
                   </div>
                   {history.exploratory_mode && (
                     <p className="mt-3 rounded border border-amber-500/40 p-3 text-sm text-amber-500">
-                      Exploratory historical results · conditional on observed paths, not verified real-money returns.
-                      Trader totals below may mix clean-observed and gap-affected cohorts. A clean-observed label means
-                      no known gap during that position, not complete source-trade coverage.
+                      Exploratory historical results · conditional on observed paths, not verified
+                      real-money returns. Trader totals below may mix clean-observed and
+                      gap-affected cohorts. A clean-observed label means no known gap during that
+                      position, not complete source-trade coverage.
                     </p>
                   )}
                   <PressureSummary
                     pressure={history.pressure_snapshot_as_of}
                     observedAt={
-                      history.pressure_snapshot_as_of?.observed_at_utc ?? history.evidence_fence.evidence_cutoff_utc
+                      history.pressure_snapshot_as_of?.observed_at_utc ??
+                      history.evidence_fence.evidence_cutoff_utc
                     }
                     historical
                   />
@@ -773,11 +879,16 @@ export function SolanaPaperView({
                   ) : (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       {history.trader_pnl_as_of.map((t) => (
-                        <article key={t.source_wallet} className="rounded-lg border border-border bg-card/40 p-4">
+                        <article
+                          key={t.source_wallet}
+                          className="rounded-lg border border-border bg-card/40 p-4"
+                        >
                           <h3 className="font-mono font-semibold" title={t.source_wallet}>
                             Trader {walletTail(t.source_wallet)}
                           </h3>
-                          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{t.source_wallet}</p>
+                          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                            {t.source_wallet}
+                          </p>
                           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                             <div>
                               <dt className="text-xs text-muted-foreground">Realized at cutoff</dt>
@@ -786,29 +897,35 @@ export function SolanaPaperView({
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-xs text-muted-foreground">Open estimate at cutoff</dt>
+                              <dt className="text-xs text-muted-foreground">
+                                Open estimate at cutoff
+                              </dt>
                               <dd className="mt-1">
                                 <Money value={t.open_net_pnl_lamports_at_cutoff} />
                               </dd>
                             </div>
                             <div>
                               <dt className="text-xs text-muted-foreground">
-                                {history.exploratory_mode ? "Conditional total at cutoff" : "Total at cutoff"}
+                                {history.exploratory_mode
+                                  ? "Conditional total at cutoff"
+                                  : "Total at cutoff"}
                               </dt>
                               <dd className="mt-1">
                                 <Money value={t.total_net_pnl_lamports_at_cutoff} />
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-xs text-muted-foreground">Closed / open / unresolved</dt>
+                              <dt className="text-xs text-muted-foreground">
+                                Closed / open / unresolved
+                              </dt>
                               <dd className="mt-1 font-mono">
                                 {t.closed_count} / {t.open_count} / {t.unresolved_count}
                               </dd>
                             </div>
                           </dl>
                           <p className="mt-3 text-xs text-muted-foreground">
-                            {t.failed_entry_count} failed entries · {t.skipped_opportunity_count} skipped opportunities.
-                            Modeled costs are already included.
+                            {t.failed_entry_count} failed entries · {t.skipped_opportunity_count}{" "}
+                            skipped opportunities. Modeled costs are already included.
                           </p>
                           {t.source_coverage_gap_latched && (
                             <p className="mt-2 text-xs text-amber-500">
@@ -832,15 +949,16 @@ export function SolanaPaperView({
                     </div>
                   )}
                   <p className="mt-3 text-xs text-muted-foreground">
-                    — means unresolved or unavailable, not zero. Totals come from the copy ledger, including
-                    failed-attempt costs, not a sum of the visible trade rows.
+                    — means unresolved or unavailable, not zero. Totals come from the copy ledger,
+                    including failed-attempt costs, not a sum of the visible trade rows.
                   </p>
                   {history.source_epoch_pnl_as_of !== null && (
                     <section className="mt-6" aria-label="Observed-path cohorts">
                       <h3 className="font-semibold">Epoch and coverage cohorts · at cutoff</h3>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Separate authoritative ledger groups, including failed-attempt costs. Unresolved counts may
-                        include pending inventory, not a completed copy. Not a new fully verified total.
+                        Separate authoritative ledger groups, including failed-attempt costs.
+                        Unresolved counts may include pending inventory, not a completed copy. Not a
+                        new fully verified total.
                       </p>
                       {history.source_epoch_pnl_as_of.length === 0 ? (
                         <p className="mt-2 text-sm text-muted-foreground">
@@ -856,35 +974,46 @@ export function SolanaPaperView({
                               <h4 className="font-mono" title={t.source_wallet}>
                                 Trader {walletTail(t.source_wallet)} · Epoch {t.source_epoch_id}
                               </h4>
-                              <p className="mt-1 text-xs text-amber-500">{coverageLabel(t.coverage_class)}</p>
+                              <p className="mt-1 text-xs text-amber-500">
+                                {coverageLabel(t.coverage_class)}
+                              </p>
                               <dl className="mt-3 grid grid-cols-2 gap-2">
                                 <div>
-                                  <dt className="text-xs text-muted-foreground">Realized at cutoff</dt>
+                                  <dt className="text-xs text-muted-foreground">
+                                    Realized at cutoff
+                                  </dt>
                                   <dd>
                                     <Money value={t.realized_net_pnl_lamports} />
                                   </dd>
                                 </div>
                                 <div>
-                                  <dt className="text-xs text-muted-foreground">Open estimate at cutoff</dt>
+                                  <dt className="text-xs text-muted-foreground">
+                                    Open estimate at cutoff
+                                  </dt>
                                   <dd>
                                     <Money value={t.open_net_pnl_lamports_at_cutoff} />
                                   </dd>
                                 </div>
                                 <div>
-                                  <dt className="text-xs text-muted-foreground">Conditional total at cutoff</dt>
+                                  <dt className="text-xs text-muted-foreground">
+                                    Conditional total at cutoff
+                                  </dt>
                                   <dd>
                                     <Money value={t.total_net_pnl_lamports_at_cutoff} />
                                   </dd>
                                 </div>
                                 <div>
-                                  <dt className="text-xs text-muted-foreground">Closed / open / unresolved</dt>
+                                  <dt className="text-xs text-muted-foreground">
+                                    Closed / open / unresolved
+                                  </dt>
                                   <dd>
                                     {t.closed_count} / {t.open_count} / {t.unresolved_count}
                                   </dd>
                                 </div>
                               </dl>
                               <p className="mt-2 text-xs text-muted-foreground">
-                                {t.failed_entry_count} failed entries. First source-sale coverage is not verified.
+                                {t.failed_entry_count} failed entries. First source-sale coverage is
+                                not verified.
                               </p>
                             </article>
                           ))}
@@ -897,8 +1026,8 @@ export function SolanaPaperView({
                         <ul className="mt-2 space-y-1">
                           {history.source_epochs?.map((e) => (
                             <li key={e.source_epoch_id}>
-                              Epoch {e.source_epoch_id}: {e.opened_at}, slot barrier {e.barrier_slot}. Earlier history
-                              coverage unknown.
+                              Epoch {e.source_epoch_id}: {e.opened_at}, slot barrier{" "}
+                              {e.barrier_slot}. Earlier history coverage unknown.
                             </li>
                           ))}
                         </ul>
@@ -908,11 +1037,13 @@ export function SolanaPaperView({
                   <h3 className="mt-7 font-semibold">Copied positions and exits at cutoff</h3>
                   <div className="mt-3 rounded-lg border border-border bg-card/40">
                     {history.copied_trades_as_of === null ? (
-                      <p className="p-5 text-sm text-muted-foreground">Trade details were not exported.</p>
+                      <p className="p-5 text-sm text-muted-foreground">
+                        Trade details were not exported.
+                      </p>
                     ) : history.copied_trades_as_of.length === 0 ? (
                       <p className="p-5 text-sm text-muted-foreground">
-                        No copied entries committed by this cutoff. An empty report is a valid result, not a sample
-                        trade.
+                        No copied entries committed by this cutoff. An empty report is a valid
+                        result, not a sample trade.
                       </p>
                     ) : (
                       <ul className="divide-y divide-border">
@@ -921,7 +1052,9 @@ export function SolanaPaperView({
                             key={`${t.position_id}:${t.source_wallet}:${t.mint}`}
                             trade={t}
                             symbol={
-                              tokenSymbols?.run_id === history.run_id ? (tokenSymbols.symbols[t.mint] ?? null) : null
+                              tokenSymbols?.run_id === history.run_id
+                                ? (tokenSymbols.symbols[t.mint] ?? null)
+                                : null
                             }
                           />
                         ))}

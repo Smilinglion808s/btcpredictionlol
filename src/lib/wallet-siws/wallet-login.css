@@ -1,0 +1,240 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #e9f2f1;
+  background: #07110f;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  background: #142520;
+  border: 1px solid #34584a;
+  border-radius: 9px;
+  padding: 0.7rem 1rem;
+}
+button:hover {
+  border-color: #82e7be;
+}
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #9cf8ce;
+  outline-offset: 3px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.wallet-login-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.wallet-login-off {
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  color: #a5b9b0;
+}
+.wallet-login-trigger,
+.wallet-login-primary {
+  background: #a2ecc8;
+  color: #10251a;
+  border-color: #a2ecc8;
+  font-weight: 700;
+}
+.wallet-login-dialog {
+  width: min(650px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  color: #ebf3ef;
+  background: #101c18;
+  border: 1px solid #416352;
+  border-radius: 18px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 70px #0008;
+}
+.wallet-login-dialog::backdrop {
+  background: #020805c9;
+}
+.wallet-login-dialog h2 {
+  font-size: 1.35rem;
+  margin: 0.4rem 0 1rem;
+  line-height: 1.25;
+}
+.wallet-login-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.wallet-login-eyebrow {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  color: #97c6ad;
+}
+.wallet-login-dialog p {
+  line-height: 1.55;
+}
+.wallet-login-note {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  padding: 0.8rem 1rem;
+  border-left: 3px solid #72b695;
+  background: #13291f;
+}
+.wallet-login-warning {
+  color: #f1c880;
+}
+.wallet-login-dialog fieldset {
+  padding: 0.9rem;
+  margin: 1.2rem 0;
+  border: 1px solid #34584a;
+  border-radius: 8px;
+}
+.wallet-login-dialog legend {
+  font-size: 0.8rem;
+  color: #b0c9bc;
+}
+.wallet-choice {
+  margin: 0 0.5rem 0.4rem 0;
+}
+.wallet-choice.selected {
+  outline: 2px solid #99e8c1;
+}
+.wallet-login-review {
+  margin: 1.4rem 0;
+}
+.wallet-login-review h3 {
+  font-size: 1rem;
+}
+.wallet-login-review dl {
+  display: grid;
+  grid-template-columns: 85px minmax(0, 1fr);
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+.wallet-login-review dt {
+  color: #9eb5a8;
+}
+.wallet-login-review dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.wallet-login-review label {
+  display: block;
+  font-size: 0.8rem;
+  color: #b1cbbb;
+  margin-top: 1rem;
+}
+.wallet-login-review textarea {
+  resize: vertical;
+  width: 100%;
+  min-height: 230px;
+  margin: 0.5rem 0 1rem;
+  padding: 0.8rem;
+  border: 1px solid #355343;
+  background: #08130d;
+  color: #c8e1d3;
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+  border-radius: 6px;
+}
+.wallet-login-session span {
+  overflow-wrap: anywhere;
+}
+.wallet-login-session button {
+  margin-right: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.wallet-login-footnote {
+  font-size: 0.75rem;
+  color: #a8bdb1;
+  border-top: 1px solid #2b4235;
+  padding-top: 1rem;
+}
+.wallet-session-summary {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #b8cdbf;
+  padding: 1rem;
+  border: 1px solid #304e3e;
+  border-radius: 10px;
+}
+.demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem max(1.5rem, 5vw);
+  border-bottom: 1px solid #1d382a;
+}
+.demo-main {
+  max-width: 1000px;
+  margin: 6rem auto;
+  padding: 0 1.5rem;
+}
+.demo-main h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  letter-spacing: -0.04em;
+}
+.demo-main p {
+  color: #a6bcae;
+  max-width: 650px;
+  line-height: 1.7;
+}
+.demo-badge {
+  font-size: 0.75rem;
+  color: #94d2ad;
+  letter-spacing: 0.1em;
+}
+@media (max-width: 560px) {
+  .demo-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .wallet-login-header {
+    gap: 0.7rem;
+  }
+  .wallet-login-dialog {
+    padding: 1rem;
+  }
+  .wallet-login-top h2 {
+    font-size: 1.15rem;
+  }
+  .wallet-login-top button {
+    padding: 0.5rem;
+  }
+  .wallet-login-dialog button {
+    max-width: 100%;
+  }
+  .wallet-login-review dl {
+    grid-template-columns: 65px minmax(0, 1fr);
+  }
+  .demo-main {
+    margin: 3rem auto;
+  }
+}
+.wallet-login-domain {
+  font-weight: 700;
+  color: #a9edc8;
+  overflow-wrap: anywhere;
+}
+.wallet-login-review details {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid #34584a;
+  border-radius: 8px;
+}
+.wallet-login-review summary {
+  cursor: pointer;
+  color: #b8d6c5;
+  font-size: 0.85rem;
+}
