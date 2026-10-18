@@ -1,0 +1,48 @@
+import {
+  parseChallenge,
+  parseSession as parseWalletSession,
+  parseAcknowledgment,
+  STATEMENT,
+} from "../wallet-siws/contract";
+import {
+  parseStatus,
+  parseSession as parseControlSession,
+  parseReceipt,
+} from "../solana-live-control";
+const CONFIG = Object.freeze({
+  origin: "https://btcpredictionlol.lovable.app",
+  uri: "https://btcpredictionlol.lovable.app/",
+  statement: STATEMENT,
+  chainId: "solana:mainnet" as const,
+});
+/** Reuse strict browser/control contracts before releasing cookie-bearing bodies. */
+export function validateSuccess(
+  value: unknown,
+  path: string,
+  status: number,
+  now: number,
+): unknown {
+  if (path.startsWith("/api/wallet-auth/")) {
+    if (status !== 200) throw new Error("Invalid success status");
+    if (path.endsWith("/challenge")) return parseChallenge(value, CONFIG, now);
+    if (path.endsWith("/verify") || path.endsWith("/session"))
+      return parseWalletSession(value, CONFIG, now);
+    if (path.endsWith("/cancel")) {
+      parseAcknowledgment(value, "canceled", now);
+      return value;
+    }
+    if (path.endsWith("/logout")) {
+      parseAcknowledgment(value, "logged_out", now);
+      return value;
+    }
+    throw new Error("Invalid route");
+  }
+  if (path === "/api/control/session" && status === 200) return parseControlSession(value);
+  if (path === "/api/control/status" && status === 200) return parseStatus(value);
+  if (
+    (path === "/api/control/commands" && (status === 200 || status === 202)) ||
+    (path.startsWith("/api/control/commands/") && status === 200)
+  )
+    return parseReceipt(value);
+  throw new Error("Invalid success status");
+}

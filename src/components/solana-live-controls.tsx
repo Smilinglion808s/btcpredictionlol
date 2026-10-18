@@ -4,7 +4,7 @@ import {
   ENROLLMENT_JOURNAL_KEY,
   type LoginState,
 } from "../lib/owner-auth/owner-login";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ControlClient,
   canCommand,
@@ -16,7 +16,10 @@ import {
   type ControlState,
 } from "../lib/solana-live-control";
 import { createOwnerControlRuntime } from "../lib/owner-control-runtime";
-import { createBrowserOwnerControlAdapter, createBrowserOwnerLoginAdapter } from "../lib/owner-control-browser";
+import {
+  createBrowserOwnerControlAdapter,
+  createBrowserOwnerLoginAdapter,
+} from "../lib/owner-control-browser";
 import { createControlPoller, type ControlPoller } from "../lib/owner-control-polling";
 import { AUTH_STORAGE_KEY } from "../lib/owner-auth/pinned-supabase-adapter";
 import { emitOwnerSessionInvalidation } from "../lib/owner-session-invalidation";
@@ -110,11 +113,13 @@ export function LiveControlPanel({
   now,
   onCommand,
   onRefresh,
+  ownerStatus,
 }: {
   state: ControlState;
   now: number;
   onCommand: (action: "OFF" | "PAUSE_ENTRIES") => void;
   onRefresh: () => void;
+  ownerStatus?: ReactNode;
 }) {
   const s = state.status;
   const connected = transportFresh(state, now);
@@ -126,7 +131,9 @@ export function LiveControlPanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-amber-500">Separate from PAPER</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-amber-500">
+            Separate from PAPER
+          </p>
           <h2 id="live-control-title" className="mt-1 text-xl font-semibold">
             Real-money controls
           </h2>
@@ -136,11 +143,15 @@ export function LiveControlPanel({
         </span>
       </div>
       <p className="mt-3 text-sm">
-        Preparation only. No wallet signer or live execution adapter is connected. Sharing a public account does not
-        enable trading. These controls do not start, stop or alter the paper session.
+        Preparation only. No transaction signer or live execution adapter is connected. Wallet login
+        does not enable trading. These controls do not start, stop or alter the paper session.
       </p>
-      <OwnerSessionStatus />
-      <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Real-money on and off controls">
+      {ownerStatus === undefined ? <OwnerSessionStatus /> : ownerStatus}
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label="Real-money on and off controls"
+      >
         <button
           type="button"
           disabled
@@ -165,13 +176,18 @@ export function LiveControlPanel({
         >
           {state.sending === "PAUSE_ENTRIES" ? "Requesting pause…" : "Pause entries"}
         </button>
-        <button type="button" onClick={onRefresh} className="rounded-lg border border-border px-4 py-2 text-sm">
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded-lg border border-border px-4 py-2 text-sm"
+        >
           Refresh status
         </button>
       </div>
       <p id="live-on-blocker" className="mt-2 text-xs text-muted-foreground">
-        ON remains locked in this candidate. Owner authorization, backend readiness, reconciled balances, current worker
-        acknowledgement and a separately reviewed user-controlled financial boundary are still required.
+        ON remains locked in this candidate. Owner authorization, backend readiness, reconciled
+        balances, current worker acknowledgement and a separately reviewed user-controlled financial
+        boundary are still required.
       </p>
       <div className="mt-4 rounded-lg border border-border p-3" role="status" aria-live="polite">
         <p className="font-semibold">Worker: {observedLabel(state, now)}</p>
@@ -191,14 +207,16 @@ export function LiveControlPanel({
         {state.journalError && <p className="mt-2 text-sm text-amber-500">{state.journalError}</p>}
         {state.pending && (
           <p className="mt-2 break-all font-mono text-xs">
-            {state.pending.uncertain ? "Unconfirmed request" : "Accepted request, awaiting application"}:{" "}
-            {state.pending.command.command_id}. No automatic retry.
+            {state.pending.uncertain
+              ? "Unconfirmed request"
+              : "Accepted request, awaiting application"}
+            : {state.pending.command.command_id}. No automatic retry.
           </p>
         )}
       </div>
       <p className="mt-4 text-xs text-amber-500">
-        Any displayed counts are synthetic test fixtures, not wallet data. Real holdings and pending transactions are
-        unknown; zero fixtures does not mean zero real exposure.
+        Any displayed counts are synthetic test fixtures, not wallet data. Real holdings and pending
+        transactions are unknown; zero fixtures does not mean zero real exposure.
       </p>
       <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div>
@@ -213,7 +231,9 @@ export function LiveControlPanel({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Owner session</dt>
-          <dd className="mt-1">{ownerReady(state, now) ? "Verified by backend" : "Not verified / expired"}</dd>
+          <dd className="mt-1">
+            {ownerReady(state, now) ? "Verified by backend" : "Not verified / expired"}
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Worker heartbeat</dt>
@@ -234,7 +254,11 @@ export function LiveControlPanel({
         <div>
           <dt className="text-xs text-muted-foreground">Safety halt</dt>
           <dd className="mt-1">
-            {s ? (s.halted ? `Latched · generation ${s.halt_generation}` : "Not latched") : "Unknown"}
+            {s
+              ? s.halted
+                ? `Latched · generation ${s.halt_generation}`
+                : "Not latched"
+              : "Unknown"}
           </dd>
         </div>
       </dl>
@@ -242,15 +266,16 @@ export function LiveControlPanel({
         <div className="rounded-lg border border-red-500/30 p-3">
           <h3 className="font-semibold">OFF is not a sale</h3>
           <p className="mt-1 text-muted-foreground">
-            Requests no new financial execution, including exits. Held assets remain held. Already submitted
-            transactions cannot be recalled and may still complete. Read-only reconciliation should continue.
+            Requests no new financial execution, including exits. Held assets remain held. Already
+            submitted transactions cannot be recalled and may still complete. Read-only
+            reconciliation should continue.
           </p>
         </div>
         <div className="rounded-lg border border-border p-3">
           <h3 className="font-semibold">Pause entries is different</h3>
           <p className="mt-1 text-muted-foreground">
-            Blocks new exposure. Existing-position management may continue only through its independently authorized
-            boundary. It does not order any sale.
+            Blocks new exposure. Existing-position management may continue only through its
+            independently authorized boundary. It does not order any sale.
           </p>
           <p className="mt-2 text-xs">
             Existing exit monitoring:{" "}
@@ -262,16 +287,23 @@ export function LiveControlPanel({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
-        <button type="button" disabled className="rounded border border-border px-3 py-2 text-sm opacity-50">
+        <button
+          type="button"
+          disabled
+          className="rounded border border-border px-3 py-2 text-sm opacity-50"
+        >
           Liquidate holdings · not implemented
         </button>
-        <p className="text-xs text-muted-foreground">A separate consequential action. OFF and pause never liquidate.</p>
+        <p className="text-xs text-muted-foreground">
+          A separate consequential action. OFF and pause never liquidate.
+        </p>
       </div>
       <details className="mt-4 text-xs">
         <summary className="cursor-pointer font-semibold">Readiness and audit details</summary>
         <div className="mt-3 space-y-2">
           <p>
-            Readiness: BLOCKED. Live execution is unavailable. Owner access is independently verified by the backend.
+            Readiness: BLOCKED. Live execution is unavailable. Owner access is independently
+            verified by the backend.
           </p>
           {s?.readiness.blockers.length ? (
             <ul className="list-disc space-y-1 pl-4">
@@ -280,20 +312,25 @@ export function LiveControlPanel({
               ))}
             </ul>
           ) : (
-            <p>Backend readiness evidence is not available. No green readiness state is inferred.</p>
+            <p>
+              Backend readiness evidence is not available. No green readiness state is inferred.
+            </p>
           )}
           {s?.halt_reasons.length ? <p>Halt reasons: {s.halt_reasons.join("; ")}</p> : null}
           <p>
             Reconciliation:{" "}
-            {s?.reconciliation_required !== false ? "Required / unverified" : "Backend reports complete"} · last
-            successful: {timestamp(s?.reconciliation_as_of)}.
+            {s?.reconciliation_required !== false
+              ? "Required / unverified"
+              : "Backend reports complete"}{" "}
+            · last successful: {timestamp(s?.reconciliation_as_of)}.
           </p>
           <p className="break-all">Policy: {s?.policy_hash ?? "Not configured"}</p>
           <p className="break-all">Runtime: {s?.runtime_identity ?? "Not configured"}</p>
           <p>Worker heartbeat: {timestamp(s?.worker_heartbeat_at)}.</p>
           <p>
-            Refreshing and reopening this page never replays a control request. A request receipt means accepted, not
-            applied. Only a current matching worker acknowledgement can confirm OFF or pause.
+            Refreshing and reopening this page never replays a control request. A request receipt
+            means accepted, not applied. Only a current matching worker acknowledgement can confirm
+            OFF or pause.
           </p>
         </div>
       </details>
@@ -320,7 +357,8 @@ export function OwnerSessionStatus() {
     const update = () => {
       const state = controller.snapshot();
       const checking = ["waiting", "checking", "changed"].includes(state.phase);
-      if (["requesting", "checking"].includes(state.enrollment.phase)) enrollmentCheckPending = true;
+      if (["requesting", "checking"].includes(state.enrollment.phase))
+        enrollmentCheckPending = true;
       if (previous !== null && state !== previous) {
         const unsafeOutcome = [
           "signing_out",
@@ -334,17 +372,20 @@ export function OwnerSessionStatus() {
         ].includes(state.phase);
         const identityChanged =
           state.phase === "signed_in" &&
-          (!state.emailVerified || (verifiedDisplay !== null && verifiedDisplay.email !== state.email));
+          (!state.emailVerified ||
+            (verifiedDisplay !== null && verifiedDisplay.email !== state.email));
         // A focus hint can mark old enrollment metadata unknown. Only a completed
         // operation's uncertain or not-enrolled result is a new outcome to relay.
         const enrollmentFailed =
           !checking &&
           (state.enrollment.phase === "rejected" ||
-            (enrollmentCheckPending && ["unknown", "not_requested"].includes(state.enrollment.phase)));
+            (enrollmentCheckPending &&
+              ["unknown", "not_requested"].includes(state.enrollment.phase)));
         if (unsafeOutcome || identityChanged || enrollmentFailed) emitOwnerSessionInvalidation();
       }
       if (!checking) {
-        verifiedDisplay = state.phase === "signed_in" && state.emailVerified ? { email: state.email } : null;
+        verifiedDisplay =
+          state.phase === "signed_in" && state.emailVerified ? { email: state.email } : null;
         enrollmentCheckPending = false;
       }
       previous = state;
@@ -412,7 +453,10 @@ export function OwnerSessionPanel({
 }) {
   const signedIn = state?.phase === "signed_in";
   const busy =
-    !state || ["checking", "waiting", "changed", "exchanging", "sending", "signing_out"].includes(state.phase);
+    !state ||
+    ["checking", "waiting", "changed", "exchanging", "sending", "signing_out"].includes(
+      state.phase,
+    );
   return (
     <section aria-label="Your sign-in" className="mt-3 rounded-lg border border-border p-3">
       <p role="status" aria-live="polite" className="font-semibold">
@@ -446,7 +490,9 @@ export function OwnerSessionPanel({
           </>
         )}
       </p>
-      <p className="mt-2 text-sm">Signing in does not enable real-money trading. Live trading remains OFF.</p>
+      <p className="mt-2 text-sm">
+        Signing in does not enable real-money trading. Live trading remains OFF.
+      </p>
       <details id="owner-session-access" className="mt-2 text-sm">
         <summary>Session access for controls</summary>
         <p className="mt-2" role="status">
@@ -462,7 +508,11 @@ export function OwnerSessionPanel({
             >
               Enable this session for controls
             </button>
-            <button type="button" disabled={busy || !state?.enrollment.canCheck} onClick={checkEnrollment}>
+            <button
+              type="button"
+              disabled={busy || !state?.enrollment.canCheck}
+              onClick={checkEnrollment}
+            >
               Check session access
             </button>
           </div>
