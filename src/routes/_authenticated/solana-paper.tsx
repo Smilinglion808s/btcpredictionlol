@@ -1,4 +1,5 @@
 import { SolanaLiveControls } from "@/components/solana-live-controls";
+import { OwnerWalletConnection } from "@/components/owner-wallet-connection";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -578,6 +579,7 @@ export function SolanaPaperView({
           </summary>
           <div className="sr-disclosure-body">
             <SolanaLiveControls />
+            <OwnerWalletConnection />
           </div>
         </details>
         <details className="sr-disclosure sr-diagnostics">
