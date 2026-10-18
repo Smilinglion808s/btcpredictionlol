@@ -1,4 +1,9 @@
-import { OwnerRequestError, type OwnerRequest, type OwnerResultMap, type OwnerSignOutResult } from "./owner-request-contract";
+import {
+  OwnerRequestError,
+  type OwnerRequest,
+  type OwnerResultMap,
+  type OwnerSignOutResult,
+} from "./owner-request-contract";
 /** Uninstalled passwordless flow. Browser state is NEVER owner authorization. */
 export const PROVIDER_URL = "https://alevdzyisibxcvwoyrqb.supabase.co";
 export const CALLBACK_PATH = "/owner/auth/callback";
@@ -8,9 +13,7 @@ export const JOURNAL_KEY = "owner-login-flow-v2";
 export const ENROLLMENT_JOURNAL_KEY = "owner-session-enrollment-v1";
 const FLOW_TTL_MS = 15 * 60 * 1000;
 
-export type Identity =
-  | { kind: "signed_out" }
-  | { kind: "signed_in"; emailVerified: boolean };
+export type Identity = { kind: "signed_out" } | { kind: "signed_in"; emailVerified: boolean; email?: string };
 /** Only usable while the adapter owns the origin-wide exclusive Web Lock. */
 export interface LockedOwnerAuth {
   readonly store: FlowStore;
@@ -54,7 +57,8 @@ export type LoginPhase =
   | "invalid_callback"
   | "uncertain"
   | "error";
-export type EnrollmentPhase = "unavailable" | "not_requested" | "requesting" | "checking" | "enrolled" | "unknown" | "rejected";
+export type EnrollmentPhase =
+  "unavailable" | "not_requested" | "requesting" | "checking" | "enrolled" | "unknown" | "rejected";
 export interface EnrollmentState {
   phase: EnrollmentPhase;
   canEnroll: boolean;
@@ -64,21 +68,32 @@ export interface EnrollmentState {
 export interface LoginState {
   phase: LoginPhase;
   emailVerified: boolean;
+  /** Fresh provider response only; never a public default or token claim. */
+  email: string | null;
   ownerAccess: "unavailable";
   liveEnabled: false;
   canRequestLink: boolean;
   message: string;
   enrollment: Readonly<EnrollmentState>;
 }
-type EnrollmentJournal = { version: 1; operationId: string; phase: "requested" | "enrolled" | "unknown" | "rejected"; startedAt: number };
+type EnrollmentJournal = {
+  version: 1;
+  operationId: string;
+  phase: "requested" | "enrolled" | "unknown" | "rejected";
+  startedAt: number;
+};
 const enrollmentMessages: Record<EnrollmentPhase, string> = {
   unavailable: "Session enrollment is not configured. Controls remain unavailable.",
-  not_requested: "No enrollment has been confirmed for this session here. Only the server can verify the configured owner.",
+  not_requested:
+    "No enrollment has been confirmed for this session here. Only the server can verify the configured owner.",
   requesting: "Requesting enrollment of this signed-in session… This does not enable live trading.",
   checking: "Checking this session’s enrollment without changing it…",
-  enrolled: "The server confirmed enrollment of this session only. This is not a control acknowledgement or live-trading activation.",
-  unknown: "Session enrollment is unknown. No automatic retry was made. Check current sign-in, then check session enrollment before another request.",
-  rejected: "Session enrollment was rejected. A revoked session cannot be reopened. Sign in with a new session if needed, then check its enrollment.",
+  enrolled:
+    "The server confirmed enrollment of this session only. This is not a control acknowledgement or live-trading activation.",
+  unknown:
+    "Session enrollment is unknown. No automatic retry was made. Check current sign-in, then check session enrollment before another request.",
+  rejected:
+    "Session enrollment was rejected. A revoked session cannot be reopened. Sign in with a new session if needed, then check its enrollment.",
 };
 type Journal = {
   version: 2;
@@ -88,44 +103,33 @@ type Journal = {
   expiresAt: number;
 };
 const messages: Record<LoginPhase, string> = {
-  unavailable: "Owner sign-in is not configured. Controls remain unavailable.",
-  ready: "Use the existing owner account. This form does not create accounts.",
-  sending: "Requesting a sign-in link…",
-  check_email:
-    "If the account is eligible, check its email. Open the link in the same browser and device (a new tab is supported). No delivery has been confirmed.",
-  exchanging: "Checking the sign-in link…",
-  changed: "Sign-in state changed in another tab. Check current sign-in; owner controls remain unavailable.",
-  waiting: "Waiting for another sign-in operation in this browser…",
-  signout_partial: "Sign-out is only partly confirmed. App-session revocation or provider sign-out remains uncertain; existing access may persist until token expiry. Controls remain unavailable.",
-  signing_out: "Signing out of this app in this browser…",
-  checking: "Checking the current sign-in with the provider…",
-  signed_out: "No current sign-in was verified. Controls remain unavailable.",
-  signed_in:
-    "Signed in. Owner access has not been verified; controls remain unavailable.",
+  unavailable: "Sign-in is unavailable right now. Please try again later.",
+  ready: "Log in with your email.",
+  sending: "Sending your sign-in link…",
+  check_email: "Check your email for a sign-in link. Open it in this browser on this device.",
+  exchanging: "Checking your sign-in link…",
+  changed: "Your session changed. Checking your sign-in…",
+  waiting: "Checking your sign-in…",
+  signout_partial: "Sign-out could not be fully confirmed. Check again before leaving a shared device.",
+  signing_out: "Signing out…",
+  checking: "Checking your sign-in…",
+  signed_out: "You’re signed out.",
+  signed_in: "You’re signed in.",
   invalid_callback:
-    "This sign-in link is invalid, expired, already used, or was opened outside its initiating browser, or belongs to an older request. Controls remain unavailable.",
-  uncertain:
-    "The sign-in outcome is uncertain. No automatic retry was made. Check current sign-in before starting over.",
-  error:
-    "The sign-in request could not be confirmed. No account or owner permission has been granted.",
+    "This link could not be used. Open your latest link in the browser where you requested it, or check your sign-in again.",
+  uncertain: "We couldn’t confirm your sign-in. Please check again.",
+  error: "We couldn’t send a sign-in link. Check your email address and try again.",
 };
 export function exactOrigin(value: string): string {
   const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    value !== url.origin ||
-    url.username ||
-    url.password
-  )
+  if (url.protocol !== "https:" || value !== url.origin || url.username || url.password)
     throw new Error("Exact HTTPS origin required");
   return value;
 }
 export function confirmedEmail(value: unknown, nowMs: number): boolean {
   if (
     typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(
-      value,
-    )
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
   )
     return false;
   const year = Number(value.slice(0, 4)),
@@ -142,36 +146,45 @@ export function confirmedEmail(value: unknown, nowMs: number): boolean {
   )
     return false;
   const parsed = Date.parse(value);
-  return (
-    Number.isFinite(parsed) &&
-    Number.isSafeInteger(nowMs) &&
-    parsed > 0 &&
-    parsed <= nowMs
-  );
+  return Number.isFinite(parsed) && Number.isSafeInteger(nowMs) && parsed > 0 && parsed <= nowMs;
 }
-function validEmail(value: string): boolean {
+export function validEmail(value: string): boolean {
   return (
     value.length <= 254 &&
     // eslint-disable-next-line no-control-regex -- Reject ASCII control characters before transmission.
-    /^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/.test(
-      value,
-    )
+    /^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/.test(value)
   );
 }
 export function validFlowId(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+  return (
+    typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+  );
 }
 export function parseCallback(raw: string, origin: string): { code: string; flowId: string } | null {
   try {
     if (typeof raw !== "string" || raw.length > 2048) return null;
     const url = new URL(raw);
-    if (url.origin !== exactOrigin(origin) || url.pathname !== CALLBACK_PATH || url.hash || url.username || url.password) return null;
+    if (
+      url.origin !== exactOrigin(origin) ||
+      url.pathname !== CALLBACK_PATH ||
+      url.hash ||
+      url.username ||
+      url.password
+    )
+      return null;
     const params = [...url.searchParams];
-    if (params.length !== 2 || params.filter(([k]) => k === "code").length !== 1 || params.filter(([k]) => k === "flow").length !== 1) return null;
+    if (
+      params.length !== 2 ||
+      params.filter(([k]) => k === "code").length !== 1 ||
+      params.filter(([k]) => k === "flow").length !== 1
+    )
+      return null;
     const code = url.searchParams.get("code")!;
     const flowId = url.searchParams.get("flow");
     return /^[A-Za-z0-9_-]{16,512}$/.test(code) && validFlowId(flowId) ? { code, flowId } : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export class OwnerLoginController {
@@ -187,6 +200,7 @@ export class OwnerLoginController {
   private enrollmentJournal: EnrollmentJournal | null = null;
   private enrollmentRaw: string | null = null;
   private cancelWait: (() => void) | null = null;
+  private verifiedIdentity: Extract<Identity, { kind: "signed_in" }> | null = null;
   constructor(
     private readonly auth: OwnerAuthAdapter,
     private readonly origin: string,
@@ -196,15 +210,10 @@ export class OwnerLoginController {
     this.state = this.makeState("unavailable");
     try {
       exactOrigin(origin);
-      if (
-        auth.available !== true ||
-        !Number.isFinite(timeoutMs) ||
-        timeoutMs <= 0
-      )
-        return;
+      if (auth.available !== true || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
       // No journal/auth-storage access or SDK construction outside the Web Lock.
       this.configured = true;
-      this.state = this.makeState("ready");
+      this.state = this.makeState("checking");
     } catch {
       /* Missing/unreliable storage is unavailable, never a fresh empty flow. */
     }
@@ -213,17 +222,43 @@ export class OwnerLoginController {
     return Object.freeze({
       phase,
       emailVerified,
+      email:
+        phase === "signed_in" &&
+        emailVerified &&
+        this.verifiedIdentity?.email &&
+        validEmail(this.verifiedIdentity.email)
+          ? this.verifiedIdentity.email
+          : null,
       ownerAccess: "unavailable",
       liveEnabled: false,
       canRequestLink:
         this.configured &&
         !this.activeJournal() &&
-        !["sending", "exchanging", "checking", "waiting", "changed", "signing_out", "unavailable"].includes(phase),
+        ![
+          "sending",
+          "exchanging",
+          "checking",
+          "waiting",
+          "changed",
+          "signing_out",
+          "unavailable",
+          "signed_in",
+        ].includes(phase),
       message: messages[phase],
       enrollment: Object.freeze({
         phase: this.auth.ownerApiAvailable === true ? this.enrollmentPhase : "unavailable",
-        canEnroll: this.configured && this.auth.ownerApiAvailable === true && phase === "signed_in" && emailVerified && this.enrollmentPhase === "not_requested",
-        canCheck: this.configured && this.auth.ownerApiAvailable === true && phase === "signed_in" && emailVerified && !["requesting", "checking"].includes(this.enrollmentPhase),
+        canEnroll:
+          this.configured &&
+          this.auth.ownerApiAvailable === true &&
+          phase === "signed_in" &&
+          emailVerified &&
+          this.enrollmentPhase === "not_requested",
+        canCheck:
+          this.configured &&
+          this.auth.ownerApiAvailable === true &&
+          phase === "signed_in" &&
+          emailVerified &&
+          !["requesting", "checking"].includes(this.enrollmentPhase),
         message: enrollmentMessages[this.auth.ownerApiAvailable === true ? this.enrollmentPhase : "unavailable"],
       }),
     });
@@ -237,6 +272,10 @@ export class OwnerLoginController {
   };
   private emit(phase: LoginPhase, emailVerified = false) {
     if (this.closed) return;
+    if (this.pendingInvalidation && phase === "signed_in") {
+      phase = "changed";
+      emailVerified = false;
+    }
     this.state = this.makeState(phase, emailVerified);
     for (const listener of this.listeners) listener();
   }
@@ -258,8 +297,7 @@ export class OwnerLoginController {
       j.expiresAt !== j.startedAt + FLOW_TTL_MS
     )
       throw new Error("Invalid flow record");
-    if (!Number.isSafeInteger(this.now()) || j.startedAt > this.now())
-      throw new Error("Invalid flow clock");
+    if (!Number.isSafeInteger(this.now()) || j.startedAt > this.now()) throw new Error("Invalid flow clock");
     return j;
   }
   private activeJournal() {
@@ -290,7 +328,19 @@ export class OwnerLoginController {
     }
     if (raw.length > 512) throw new Error("Invalid enrollment record");
     const j = JSON.parse(raw) as EnrollmentJournal;
-    if (!j || typeof j !== "object" || Object.keys(j).sort().join(",") !== "operationId,phase,startedAt,version" || j.version !== 1 || !validFlowId(j.operationId) || !["requested", "enrolled", "unknown", "rejected"].includes(j.phase) || !Number.isSafeInteger(j.startedAt) || j.startedAt < 0 || !Number.isSafeInteger(this.now()) || j.startedAt > this.now()) throw new Error("Invalid enrollment record");
+    if (
+      !j ||
+      typeof j !== "object" ||
+      Object.keys(j).sort().join(",") !== "operationId,phase,startedAt,version" ||
+      j.version !== 1 ||
+      !validFlowId(j.operationId) ||
+      !["requested", "enrolled", "unknown", "rejected"].includes(j.phase) ||
+      !Number.isSafeInteger(j.startedAt) ||
+      j.startedAt < 0 ||
+      !Number.isSafeInteger(this.now()) ||
+      j.startedAt > this.now()
+    )
+      throw new Error("Invalid enrollment record");
     this.enrollmentJournal = j;
     this.enrollmentRaw = raw;
     // Reload/cross-tab metadata is an uncertainty marker, never current-session evidence.
@@ -306,16 +356,18 @@ export class OwnerLoginController {
   private finishEnrollment(store: FlowStore, phase: "enrolled" | "unknown" | "rejected") {
     this.enrollmentPhase = phase;
     if (this.enrollmentJournal) {
-      try { this.writeEnrollment(store, { ...this.enrollmentJournal, phase }); }
-      catch { this.enrollmentPhase = "unknown"; }
+      try {
+        this.writeEnrollment(store, { ...this.enrollmentJournal, phase });
+      } catch {
+        this.enrollmentPhase = "unknown";
+      }
     }
   }
   private invalidateEnrollment() {
     if (this.enrollmentPhase !== "not_requested") this.enrollmentPhase = "unknown";
   }
   private run(task: (generation: number, lease: LockedOwnerAuth) => Promise<void>): Promise<void> {
-    if (this.closed || !this.configured || this.operation)
-      return this.operation ?? Promise.resolve();
+    if (this.closed || !this.configured || this.operation) return this.operation ?? Promise.resolve();
     const generation = ++this.generation;
     // Register the operation before any task body runs, fencing synchronous double clicks.
     this.operation = Promise.resolve()
@@ -325,16 +377,32 @@ export class OwnerLoginController {
         if (!this.current(generation)) return;
         return this.auth.transact(async (lease) => {
           if (this.current(generation)) {
-            if (this.auth.ownerApiAvailable === true) this.readEnrollment(lease.store);
+            if (this.auth.ownerApiAvailable === true) {
+              try {
+                this.readEnrollment(lease.store);
+              } catch {
+                // Unusable enrollment metadata cannot erase provider sign-in evidence.
+                // It still blocks any implicit or repeated enrollment mutation.
+                this.enrollmentPhase = "unknown";
+                this.enrollmentJournal = null;
+              }
+            }
             await task(generation, lease);
           }
         });
       })
-      .catch(() => { if (this.current(generation)) this.emit("unavailable"); })
+      .catch(() => {
+        if (this.current(generation)) this.emit("unavailable");
+      })
       .finally(() => {
         if (generation === this.generation) {
           this.operation = null;
-          if (this.pendingInvalidation) { this.pendingInvalidation = false; this.invalidateEnrollment(); this.emit("changed"); }
+          if (this.pendingInvalidation) {
+            this.pendingInvalidation = false;
+            this.invalidateEnrollment();
+            this.emit("changed");
+            void this.checkCurrentSignIn();
+          }
         }
       });
     return this.operation;
@@ -344,10 +412,7 @@ export class OwnerLoginController {
   }
   private bounded<T>(work: Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("Timed out")),
-        this.timeoutMs,
-      );
+      const timer = setTimeout(() => reject(new Error("Timed out")), this.timeoutMs);
       const cancel = () => {
         clearTimeout(timer);
         reject(new Error("Closed"));
@@ -364,14 +429,16 @@ export class OwnerLoginController {
       let providerStarted = false;
       try {
         this.journal = this.readJournal(lease.store);
-        if (this.activeJournal()) { this.emit(this.journal?.phase === "requested" ? "check_email" : "uncertain"); return; } // No overlap, resend, or retry while prior link may be alive.
+        if (this.activeJournal()) {
+          this.emit(this.journal?.phase === "requested" ? "check_email" : "uncertain");
+          return;
+        } // No overlap, resend, or retry while prior link may be alive.
         if (!validEmail(email.trim())) {
           this.emit("error");
           return;
         }
         const startedAt = this.now();
-        if (!Number.isSafeInteger(startedAt) || startedAt < 0)
-          throw new Error("Clock");
+        if (!Number.isSafeInteger(startedAt) || startedAt < 0) throw new Error("Clock");
         this.writeJournal(lease.store, {
           version: 2,
           flowId: lease.newFlowId(),
@@ -401,10 +468,7 @@ export class OwnerLoginController {
       }
     });
   }
-  completeCallback(
-    rawUrl: string,
-    navigation: CallbackNavigation,
-  ): Promise<void> {
+  completeCallback(rawUrl: string, navigation: CallbackNavigation): Promise<void> {
     let callback = parseCallback(rawUrl, this.origin);
     // Scrub synchronously, even if this controller is unconfigured or already closed.
     rawUrl = "";
@@ -444,7 +508,7 @@ export class OwnerLoginController {
         if (!this.current(generation)) return;
         const identity = await this.bounded(lease.currentIdentity());
         if (!this.current(generation)) return;
-        this.emitIdentity(identity);
+        if (!this.pendingInvalidation) this.emitIdentity(identity);
       } catch {
         callback = null;
         if (!this.current(generation)) return;
@@ -470,7 +534,11 @@ export class OwnerLoginController {
       if (!this.current(generation)) return;
       try {
         const identity = await this.bounded(lease.currentIdentity());
-        if (this.current(generation)) this.emitIdentity(identity);
+        if (this.current(generation) && !this.pendingInvalidation) {
+          if (identity.kind === "signed_out" && this.activeJournal() && this.journal?.phase === "requested")
+            this.emit("check_email");
+          else this.emitIdentity(identity);
+        }
       } catch {
         if (this.current(generation)) this.emit("uncertain");
       }
@@ -486,7 +554,7 @@ export class OwnerLoginController {
         this.emit("changed");
         return;
       }
-      let attempted = false;
+      let verified: Identity | null = null;
       try {
         this.enrollmentPhase = "requesting";
         this.emit("checking");
@@ -497,12 +565,18 @@ export class OwnerLoginController {
           this.emitIdentity(identity, true);
           return;
         }
+        verified = identity;
+        this.verifiedIdentity = identity;
         const startedAt = this.now();
         if (!Number.isSafeInteger(startedAt) || startedAt < 0) throw new Error("Clock");
-        this.writeEnrollment(lease.store, { version: 1, operationId: lease.newFlowId(), phase: "requested", startedAt });
+        this.writeEnrollment(lease.store, {
+          version: 1,
+          operationId: lease.newFlowId(),
+          phase: "requested",
+          startedAt,
+        });
         this.emit("checking", true);
         if (!this.current(generation) || this.pendingInvalidation) return;
-        attempted = true;
         await this.bounded(lease.ownerRequest({ kind: "enroll-current-session" }));
         if (!this.current(generation)) return;
         this.finishEnrollment(lease.store, this.pendingInvalidation ? "unknown" : "enrolled");
@@ -512,7 +586,8 @@ export class OwnerLoginController {
         const definitive = error instanceof OwnerRequestError && error.outcome !== "uncertain";
         this.finishEnrollment(lease.store, definitive ? "rejected" : "unknown");
         // Failure before transmission is not fresh provider evidence; no error text is exposed.
-        this.emit(attempted && definitive ? "signed_in" : "uncertain", attempted && definitive);
+        if (verified && !this.pendingInvalidation) this.emitIdentity(verified, true);
+        else this.emit("uncertain");
       }
     });
   }
@@ -521,7 +596,10 @@ export class OwnerLoginController {
     if (this.operation) return this.operation;
     if (!this.state.enrollment.canCheck) return Promise.resolve();
     return this.run(async (generation, lease) => {
-      if (!lease.ownerRequest || this.pendingInvalidation) { this.emit("changed"); return; }
+      if (!lease.ownerRequest || this.pendingInvalidation) {
+        this.emit("changed");
+        return;
+      }
       let verified = false;
       try {
         this.enrollmentPhase = "checking";
@@ -534,14 +612,24 @@ export class OwnerLoginController {
           return;
         }
         verified = true;
+        this.verifiedIdentity = identity;
         await this.bounded(lease.ownerRequest({ kind: "session-evidence" }));
         if (!this.current(generation)) return;
         this.finishEnrollment(lease.store, this.pendingInvalidation ? "unknown" : "enrolled");
         this.emit("signed_in", true);
       } catch (error) {
         if (!this.current(generation)) return;
-        if (error instanceof OwnerRequestError && error.outcome !== "uncertain" && error.code === "APP_SESSION_ENROLL_REQUIRED") this.enrollmentPhase = "not_requested";
-        else this.finishEnrollment(lease.store, error instanceof OwnerRequestError && error.outcome === "rejected" ? "rejected" : "unknown");
+        if (
+          error instanceof OwnerRequestError &&
+          error.outcome !== "uncertain" &&
+          error.code === "APP_SESSION_ENROLL_REQUIRED"
+        )
+          this.enrollmentPhase = "not_requested";
+        else
+          this.finishEnrollment(
+            lease.store,
+            error instanceof OwnerRequestError && error.outcome === "rejected" ? "rejected" : "unknown",
+          );
         this.emit(verified ? "signed_in" : "uncertain", verified);
       }
     });
@@ -550,7 +638,7 @@ export class OwnerLoginController {
   initialize(): Promise<void> {
     return this.run(async (_generation, lease) => {
       this.journal = this.readJournal(lease.store);
-      this.emit(this.activeJournal() ? this.journal?.phase === "requested" ? "check_email" : "uncertain" : "ready");
+      this.emit(this.activeJournal() ? (this.journal?.phase === "requested" ? "check_email" : "uncertain") : "ready");
     });
   }
   signOut(): Promise<void> {
@@ -564,7 +652,16 @@ export class OwnerLoginController {
         const outcome = lease.signOutWithRevocation
           ? await this.bounded(lease.signOutWithRevocation())
           : (await this.bounded(lease.signOut()), null);
-        if (this.current(generation)) this.emit(outcome?.appRevocation === "not_configured" && outcome.providerSignOut !== "confirmed" ? "uncertain" : outcome && (outcome.providerSignOut !== "confirmed" || !["confirmed", "not_configured"].includes(outcome.appRevocation)) ? "signout_partial" : "signed_out");
+        if (this.current(generation))
+          this.emit(
+            outcome?.appRevocation === "not_configured" && outcome.providerSignOut !== "confirmed"
+              ? "uncertain"
+              : outcome &&
+                  (outcome.providerSignOut !== "confirmed" ||
+                    !["confirmed", "not_configured"].includes(outcome.appRevocation))
+                ? "signout_partial"
+                : "signed_out",
+          );
       } catch {
         if (this.current(generation)) this.emit("uncertain");
       }
@@ -572,10 +669,8 @@ export class OwnerLoginController {
   }
   private emitIdentity(identity: Identity, preserveEnrollment = false) {
     if (!preserveEnrollment) this.invalidateEnrollment();
-    if (
-      identity.kind === "signed_in" &&
-      typeof identity.emailVerified === "boolean"
-    )
+    this.verifiedIdentity = identity.kind === "signed_in" ? identity : null;
+    if (identity.kind === "signed_in" && typeof identity.emailVerified === "boolean")
       this.emit("signed_in", identity.emailVerified);
     else if (identity.kind === "signed_out") this.emit("signed_out");
     else this.emit("uncertain");
@@ -584,14 +679,20 @@ export class OwnerLoginController {
   notifySessionChanged() {
     if (!this.configured || this.closed) return;
     this.invalidateEnrollment();
+    this.verifiedIdentity = null;
+    this.emit("changed");
     if (this.operation) this.pendingInvalidation = true;
-    else this.emit("changed");
+    else void this.checkCurrentSignIn();
   }
   close() {
     this.closed = true;
     this.generation++;
     this.cancelWait?.();
-    try { this.auth.close?.(); } catch { /* Teardown must never expose provider errors. */ }
+    try {
+      this.auth.close?.();
+    } catch {
+      /* Teardown must never expose provider errors. */
+    }
     this.listeners.clear();
     // Owned SDK adapter fences late responses/storage writes; injected adapters must honor close themselves.
   }
