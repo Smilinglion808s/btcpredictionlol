@@ -320,8 +320,7 @@ export function OwnerSessionStatus() {
     const update = () => {
       const state = controller.snapshot();
       const checking = ["waiting", "checking", "changed"].includes(state.phase);
-      if (["requesting", "checking"].includes(state.enrollment.phase))
-        enrollmentCheckPending = true;
+      if (["requesting", "checking"].includes(state.enrollment.phase)) enrollmentCheckPending = true;
       if (previous !== null && state !== previous) {
         const unsafeOutcome = [
           "signing_out",
@@ -335,20 +334,17 @@ export function OwnerSessionStatus() {
         ].includes(state.phase);
         const identityChanged =
           state.phase === "signed_in" &&
-          (!state.emailVerified ||
-            (verifiedDisplay !== null && verifiedDisplay.email !== state.email));
+          (!state.emailVerified || (verifiedDisplay !== null && verifiedDisplay.email !== state.email));
         // A focus hint can mark old enrollment metadata unknown. Only a completed
         // operation's uncertain or not-enrolled result is a new outcome to relay.
         const enrollmentFailed =
           !checking &&
           (state.enrollment.phase === "rejected" ||
-            (enrollmentCheckPending &&
-              ["unknown", "not_requested"].includes(state.enrollment.phase)));
+            (enrollmentCheckPending && ["unknown", "not_requested"].includes(state.enrollment.phase)));
         if (unsafeOutcome || identityChanged || enrollmentFailed) emitOwnerSessionInvalidation();
       }
       if (!checking) {
-        verifiedDisplay =
-          state.phase === "signed_in" && state.emailVerified ? { email: state.email } : null;
+        verifiedDisplay = state.phase === "signed_in" && state.emailVerified ? { email: state.email } : null;
         enrollmentCheckPending = false;
       }
       previous = state;
@@ -451,14 +447,19 @@ export function OwnerSessionPanel({
         )}
       </p>
       <p className="mt-2 text-sm">Signing in does not enable real-money trading. Live trading remains OFF.</p>
-      <details className="mt-2 text-sm">
+      <details id="owner-session-access" className="mt-2 text-sm">
         <summary>Session access for controls</summary>
         <p className="mt-2" role="status">
           {state?.enrollment.message ?? "Checking session access…"}
         </p>
         {state?.enrollment.phase !== "unavailable" && (
           <div className="mt-2 flex flex-wrap gap-3">
-            <button type="button" disabled={busy || !state?.enrollment.canEnroll} onClick={enroll}>
+            <button
+              id="owner-session-enable"
+              type="button"
+              disabled={busy || !state?.enrollment.canEnroll}
+              onClick={enroll}
+            >
               Enable this session for controls
             </button>
             <button type="button" disabled={busy || !state?.enrollment.canCheck} onClick={checkEnrollment}>
