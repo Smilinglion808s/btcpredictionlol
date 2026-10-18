@@ -5,20 +5,20 @@ import type { ReviewedBrowserConfig } from "./pinned-supabase-adapter";
 
 export const APPLICATION_ORIGIN = "https://btcpredictionlol.lovable.app";
 export const LOGIN_PATH = "/owner/login";
-const privacyHeaders = { "cache-control": "no-store, max-age=0", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'" };
-export const ENTRY_ASSET_PATH = "/owner-auth-entry-v4.js";
+const privacyHeaders = {
+  "cache-control": "no-store, max-age=0",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+};
+export const ENTRY_ASSET_PATH = "/owner-auth-entry-v4.js?rev=login-status-20261018-v1";
 /** A separate response overlay. Caller must intercept these routes BEFORE normal app handling.
  * It is never installed by importing this file. It embeds no credentials by default.
  */
-export function standaloneOwnerResponse(
-  request: Request,
-  reviewed?: ReviewedBrowserConfig,
-): Response | null {
+export function standaloneOwnerResponse(request: Request, reviewed?: ReviewedBrowserConfig): Response | null {
   const url = new URL(request.url);
-  if (url.pathname !== LOGIN_PATH && url.pathname !== CALLBACK_PATH)
-    return null;
-  if (url.origin !== APPLICATION_ORIGIN)
-    return new Response("Not found", { status: 404, headers: privacyHeaders });
+  if (url.pathname !== LOGIN_PATH && url.pathname !== CALLBACK_PATH) return null;
+  if (url.origin !== APPLICATION_ORIGIN) return new Response("Not found", { status: 404, headers: privacyHeaders });
   if (request.method !== "GET" && request.method !== "HEAD")
     return new Response("Method not allowed", {
       status: 405,
@@ -33,7 +33,9 @@ export function standaloneOwnerResponse(
           applicationOrigin: APPLICATION_ORIGIN,
           publishableKey: reviewed.publishableKey,
           callbackMode: reviewed.callbackMode,
-          ...(reviewed.ownerApiPolicyRevision === OWNER_API_POLICY_REVISION ? { ownerApiPolicyRevision: OWNER_API_POLICY_REVISION } : {}),
+          ...(reviewed.ownerApiPolicyRevision === OWNER_API_POLICY_REVISION
+            ? { ownerApiPolicyRevision: OWNER_API_POLICY_REVISION }
+            : {}),
         }
       : null;
   const nonce = crypto.randomUUID().replaceAll("-", "");
@@ -49,7 +51,7 @@ export function standaloneOwnerResponse(
     const mode = ${JSON.stringify(url.pathname === CALLBACK_PATH ? "callback" : "login")};
     let captured = null;
     let closed = false;
-    const fail = () => { const node = document.getElementById("owner-auth-root"); if (node) node.textContent = "Owner sign-in unavailable. No owner access was granted. Reload this clean page to try again."; };
+    const fail = () => { const node = document.getElementById("owner-auth-root"); if (node) node.textContent = "Sign-in is unavailable. Reload this page to try again."; };
     const leave = () => { closed = true; captured = null; fail(); document.addEventListener("DOMContentLoaded", fail, { once: true }); };
     const events = ["pagehide", "popstate", "hashchange"];
     for (const event of events) window.addEventListener(event, leave);
@@ -74,11 +76,11 @@ export function standaloneOwnerResponse(
     else void launch();
   })();`;
   const html =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Owner sign-in</title><script nonce="' +
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Log in</title><script nonce="' +
     nonce +
     '">' +
     script +
-    '</script></head><body><main id="owner-auth-root" aria-live="polite"><p>Owner sign-in is loading. Controls remain unavailable.</p></main><noscript>JavaScript is required for owner sign-in. Do not share this link.</noscript></body></html>';
+    '</script></head><body><main id="owner-auth-root" aria-live="polite"><p>Checking your sign-in…</p></main><noscript>JavaScript is required for owner sign-in. Do not share this link.</noscript></body></html>';
   return new Response(request.method === "HEAD" ? null : html, {
     status: 200,
     headers: {
