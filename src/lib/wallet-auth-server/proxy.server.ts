@@ -47,7 +47,9 @@ function allowed(method: string, path: string): boolean {
         "/api/control/commands",
       ].includes(path)) ||
     (method === "GET" &&
-      (["/api/wallet-auth/session", "/api/control/session", "/api/control/status"].includes(path) ||
+      (["/api/wallet-auth/session", "/api/control/session", "/api/control/status", "/api/control/readiness"].includes(
+        path,
+      ) ||
         /^\/api\/control\/commands\/[A-Za-z0-9_-]{1,240}$/.test(path)))
   );
 }
@@ -206,11 +208,13 @@ export function createWalletControlProxy(
     const url = new URL(request.url),
       kind = scope(url.pathname);
     if (kind === null) return null;
-    const wallet = kind === "wallet";
+    const wallet = kind === "wallet" || url.pathname === "/api/control/readiness";
     if (kind === "legacy") return failure(false, "OWNER_AUTH_REPLACED", 410);
     if (!configured) return failure(wallet, "UNCONFIGURED", 503);
     let handedOff = false,
       upstreamStarted = false;
+    let failureStage: "REQUEST" | "FETCH" | "HEADERS" | "BODY" | "DTO" | "COOKIE" = "REQUEST";
+    let deadline: AbortSignal | undefined;
     try {
       const origin = request.headers.get("Origin");
       if (
@@ -223,11 +227,8 @@ export function createWalletControlProxy(
       )
         throw new BoundaryError("ORIGIN_FORBIDDEN", 403);
       if (!allowed(request.method, url.pathname)) throw new BoundaryError("NOT_FOUND", 404);
-      const deadline = AbortSignal.timeout(3000);
-      const headers = new Headers({
-        Accept: "application/json",
-        Origin: WALLET_APP_ORIGIN,
-      });
+      deadline = AbortSignal.timeout(url.pathname === "/api/control/readiness" ? 8000 : 3000);
+      const headers = new Headers({ Accept: "application/json", Origin: WALLET_APP_ORIGIN });
       const cookie = selectedCookies(request.headers.get("Cookie"));
       if (cookie) headers.set("Cookie", cookie);
       const site = request.headers.get("Sec-Fetch-Site");
@@ -250,6 +251,7 @@ export function createWalletControlProxy(
       } else if (request.body !== null) throw new BoundaryError("INVALID_BODY");
       handedOff = request.method === "POST";
       upstreamStarted = true;
+      failureStage = "FETCH";
       const upstream = await boundedAwait(
         send(WALLET_SERVICE_ORIGIN + url.pathname, {
           method: request.method,
@@ -262,6 +264,7 @@ export function createWalletControlProxy(
         }),
         deadline,
       );
+      failureStage = "HEADERS";
       if (
         upstream.status < 200 ||
         upstream.status >= 500 ||
@@ -270,8 +273,10 @@ export function createWalletControlProxy(
         upstream.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json"
       )
         throw new Error("Unavailable");
-      const raw = await bytes(upstream, 65536, deadline),
-        value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw));
+      failureStage = "BODY";
+      const raw = await bytes(upstream, 65536, deadline);
+      failureStage = "DTO";
+      const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw));
       if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid DTO");
       if (upstream.status >= 400) {
         const dto = value as Record<string, unknown>,
@@ -293,12 +298,17 @@ export function createWalletControlProxy(
           throw new Error("Invalid error DTO");
       }
       const valid = upstream.status < 300 ? validateSuccess(value, url.pathname, upstream.status, now()) : value;
+      failureStage = "COOKIE";
       const cookies = upstreamCookies(upstream.headers, url.pathname, upstream.status);
       return response(valid, upstream.status, cookies);
     } catch (error) {
-      if (handedOff) return failure(wallet, "RESULT_UNCERTAIN", 503);
       if (!upstreamStarted && error instanceof BoundaryError) return failure(wallet, error.code, error.status);
-      return failure(wallet, "SERVICE_UNAVAILABLE", 503);
+      const result = failure(wallet, handedOff ? "RESULT_UNCERTAIN" : "SERVICE_UNAVAILABLE", 503);
+      // Bounded operational diagnostics only. Never expose exception messages,
+      // URLs, request/response values, identity, cookie data or authentication proofs.
+      const category = deadline?.aborted ? "TIMEOUT" : error instanceof TypeError ? "TYPE_ERROR" : "ERROR";
+      result.headers.set("X-Wallet-Proxy-Failure", `${failureStage}_${category}`);
+      return result;
     }
   };
 }
