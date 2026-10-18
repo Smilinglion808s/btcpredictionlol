@@ -1,136 +1,117 @@
 import { useState, useSyncExternalStore } from "react";
-import {
-  RETURN_PATH,
-  type OwnerLoginController,
-  type LoginState,
-} from "./owner-login";
+import { RETURN_PATH, type OwnerLoginController, type LoginState } from "./owner-login";
 
-/** Presentational only. It cannot enable controls or infer an owner from an email. */
+/** Only provider-confirmed state may identify the signed-in email. */
 export function OwnerLoginPanel({
   state,
   requestLink,
   checkCurrentSignIn,
   signOut,
-  enrollCurrentSession,
-  checkSessionEnrollment,
 }: {
   state: LoginState;
   requestLink: (email: string) => void;
   checkCurrentSignIn: () => void;
   signOut: () => void;
-  enrollCurrentSession?: () => void;
-  checkSessionEnrollment?: () => void;
 }) {
   const [email, setEmail] = useState("");
-  const busy = ["sending", "checking", "exchanging", "waiting", "signing_out"].includes(state.phase);
-  const canSend = state.canRequestLink;
+  const busy = ["sending", "checking", "exchanging", "waiting", "changed", "signing_out"].includes(state.phase);
+  const signedIn = state.phase === "signed_in";
+  const recovery = ["uncertain", "signout_partial", "invalid_callback", "error"].includes(state.phase);
   return (
     <section
       aria-labelledby="owner-login-title"
       style={{
-        maxWidth: "34rem",
-        margin: "1.5rem auto",
-        padding: "1.25rem",
-        border: "1px solid #64748b",
-        borderRadius: "1rem",
+        maxWidth: "26rem",
+        margin: "4rem auto",
+        padding: "1.5rem",
+        fontFamily: "system-ui, sans-serif",
+        lineHeight: 1.5,
       }}
     >
-      <h2 id="owner-login-title">Owner sign-in</h2>
-      <p>
-        The paper dashboard remains public. Sign-in alone does not unlock
-        trading controls.
-      </p>
+      <h1 id="owner-login-title">
+        {signedIn ? "You’re signed in" : state.phase === "check_email" ? "Check your email" : "Log in with your email"}
+      </h1>
       <p role="status" aria-live="polite">
-        {state.message}
+        {signedIn && state.email ? (
+          <>
+            Signed in as <strong>{state.email}</strong> <span>· Verified</span>
+          </>
+        ) : (
+          state.message
+        )}
       </p>
-      {state.phase === "signed_in" && (
+      {signedIn && !state.email && <p>Your email address could not be verified.</p>}
+      {!signedIn && state.phase !== "check_email" && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (state.canRequestLink && !busy) {
+              requestLink(email);
+              setEmail("");
+            }
+          }}
+        >
+          <label htmlFor="owner-login-email">Email</label>
+          <input
+            id="owner-login-email"
+            type="email"
+            autoComplete="email"
+            maxLength={254}
+            required
+            disabled={!state.canRequestLink || busy}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            style={{
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              margin: "0.5rem 0 1rem",
+              padding: "0.75rem",
+              borderRadius: "0.4rem",
+              border: "1px solid #64748b",
+            }}
+          />
+          <button type="submit" disabled={!state.canRequestLink || busy} style={{ padding: "0.75rem 1rem" }}>
+            Send sign-in link
+          </button>
+        </form>
+      )}
+      {state.phase === "check_email" && (
+        <p>A new tab is fine. This browser remembers your sign-in, but sessions can expire or be revoked.</p>
+      )}
+      {(recovery || state.phase === "check_email") && (
         <p>
-          {state.emailVerified
-            ? "The provider reports this email as verified."
-            : "Email verification has not been confirmed."}{" "}
-          This is not owner authorization.
+          <button type="button" disabled={busy} onClick={checkCurrentSignIn}>
+            Check sign-in again
+          </button>
         </p>
       )}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSend && !busy) {
-            requestLink(email);
-            setEmail("");
-          }
-        }}
-      >
-        <label htmlFor="owner-login-email">Account email</label>
-        <input
-          id="owner-login-email"
-          type="email"
-          autoComplete="email"
-          maxLength={254}
-          required
-          disabled={!canSend || busy}
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          style={{
-            display: "block",
-            width: "100%",
-            boxSizing: "border-box",
-            margin: "0.5rem 0 1rem",
-            padding: "0.75rem",
-          }}
-        />
-        <button type="submit" disabled={!canSend || busy}>
-          Send sign-in link
-        </button>
-      </form>
       <p>
-        Open the link in the same browser and device; a new tab is supported. This app stores the sign-in session in this browser until you sign out. A link cannot create an account.
-        New owner setup is a separate, unconfigured step.
+        <a href={RETURN_PATH}>Back to dashboard</a>
+        {signedIn && (
+          <>
+            {" "}
+            ·{" "}
+            <button type="button" onClick={signOut}>
+              Sign out
+            </button>
+          </>
+        )}
       </p>
-      <button
-        type="button"
-        disabled={busy || state.phase === "unavailable"}
-        onClick={checkCurrentSignIn}
-      >
-        Check current sign-in
-      </button>
-      <button type="button" disabled={busy || state.phase === "unavailable"} onClick={signOut}>Sign out of this app</button>
-      <section aria-labelledby="owner-enrollment-title">
-        <h3 id="owner-enrollment-title">Enable this session for controls</h3>
-        <p role="status" aria-live="polite">{state.enrollment.message}</p>
-        <p>After a verified sign-in, you can ask the server to enroll this session. The server must verify the configured owner. This does not enable live trading or acknowledge a control command.</p>
-        <button type="button" disabled={busy || !state.enrollment.canEnroll || !enrollCurrentSession} onClick={enrollCurrentSession}>Enable this signed-in session for controls</button>
-        <button type="button" disabled={busy || !state.enrollment.canCheck || !checkSessionEnrollment} onClick={checkSessionEnrollment}>Check session enrollment</button>
-      </section>
-      <p>Owner control access: unavailable on this sign-in page. ON remains disabled.</p>
-      <button type="button" disabled aria-describedby="owner-live-blocker">
-        ON unavailable
-      </button>
-      <p id="owner-live-blocker">
-        Real-money execution is not configured or authorized by signing in.
-      </p>
-      <a href={RETURN_PATH}>Return to paper dashboard</a>
     </section>
   );
 }
-export function OwnerLoginPage({
-  controller,
-}: {
-  controller: OwnerLoginController;
-}) {
-  const state = useSyncExternalStore(
-    controller.subscribe,
-    controller.snapshot,
-    controller.snapshot,
-  );
+export function OwnerLoginPage({ controller }: { controller: OwnerLoginController }) {
+  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   return (
     <OwnerLoginPanel
       state={state}
       requestLink={(email) => {
         void controller.requestLink(email);
       }}
-      signOut={() => { void controller.signOut(); }}
-      enrollCurrentSession={() => { void controller.enrollCurrentSession(); }}
-      checkSessionEnrollment={() => { void controller.checkSessionEnrollment(); }}
+      signOut={() => {
+        void controller.signOut();
+      }}
       checkCurrentSignIn={() => {
         void controller.checkCurrentSignIn();
       }}
