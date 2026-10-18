@@ -255,7 +255,7 @@ export function createWalletControlProxy(
           method: request.method,
           headers,
           body: body as BodyInit | undefined,
-          redirect: "error",
+          redirect: "manual",
           credentials: "omit",
           cache: "no-store",
           signal: deadline,
