@@ -6938,6 +6938,27 @@ export type Database = {
         }
         Relationships: []
       }
+      owner_control_session_events: {
+        Row: {
+          event_kind: string
+          policy_revision: string
+          session_id: string
+          subject: string
+        }
+        Insert: {
+          event_kind: string
+          policy_revision: string
+          session_id: string
+          subject: string
+        }
+        Update: {
+          event_kind?: string
+          policy_revision?: string
+          session_id?: string
+          subject?: string
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           actual_direction: string | null
