@@ -338,9 +338,7 @@ export function SolanaPaperView({
             ← Dashboard
           </Link>
           <span className="sr-eyebrow">SOLANA / COPY DESK</span>
-          <a href="#solana-live-panel" className="sr-top-link">
-            Owner controls ↓
-          </a>
+          <OwnerWalletConnection />
         </div>
         <header className="sr-hero">
           <div className="sr-hero-copy">
@@ -579,7 +577,6 @@ export function SolanaPaperView({
           </summary>
           <div className="sr-disclosure-body">
             <SolanaLiveControls />
-            <OwnerWalletConnection />
           </div>
         </details>
         <details className="sr-disclosure sr-diagnostics">
