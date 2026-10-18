@@ -1,1 +1,250 @@
-.wallet-public-panel{--wp-ink:#f4efff;--wp-muted:#b9adca;--wp-line:#534369;box-sizing:border-box;max-width:52rem;border:1px solid var(--wp-line);border-radius:1rem;background:#1c162a;color:var(--wp-ink);padding:1.25rem;font-family:inherit;line-height:1.5}.wallet-public-panel *{box-sizing:border-box}.wallet-public-panel header,.wallet-public-owner,.wallet-public-actions{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap}.wallet-public-panel h3{margin:0;font-size:1.35rem}.wallet-public-panel p{margin:.65rem 0}.wallet-public-eyebrow{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#d7abff}.wallet-public-off{border:1px solid #d7a474;border-radius:999px;color:#ffd6a6;font-size:.75rem;padding:.3rem .6rem}.wallet-public-description,.wallet-public-muted{color:var(--wp-muted);font-size:.875rem}.wallet-public-owner{padding:.8rem 0;border-block:1px solid var(--wp-line);margin:1rem 0;font-size:.875rem}.wallet-public-panel button,.wallet-public-panel select{font:inherit;color:var(--wp-ink);background:#2c203e;border:1px solid #76618f;border-radius:.5rem;min-height:44px;padding:.6rem .8rem}.wallet-public-panel button{cursor:pointer}.wallet-public-panel button:disabled,.wallet-public-panel select:disabled{opacity:.45;cursor:not-allowed}.wallet-public-panel button:focus-visible,.wallet-public-panel select:focus-visible,.wallet-public-panel input:focus-visible,.wallet-public-panel summary:focus-visible{outline:3px solid #f1baff;outline-offset:3px}.wallet-public-panel select{display:block;width:100%;margin:.4rem 0 1rem;overflow:hidden;text-overflow:ellipsis}.wallet-public-panel label{font-weight:600;font-size:.875rem}.wallet-public-consent{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem 0}.wallet-public-consent input{width:20px;height:20px;flex:0 0 auto;accent-color:#e7aaff}.wallet-public-details{color:var(--wp-muted);font-size:.8rem;margin:.7rem 0 1rem}.wallet-public-details summary{cursor:pointer}.wallet-public-primary{background:#efb4d2!important;color:#221527!important;border-color:#efb4d2!important;font-weight:700!important}.wallet-public-actions{justify-content:flex-start}.wallet-public-notice,.wallet-public-warning{font-size:.85rem}.wallet-public-warning{color:#ffd6a6}.wallet-public-account{border-top:1px solid var(--wp-line);padding-top:1rem;margin-top:1rem}.wallet-public-address{overflow-wrap:anywhere;font-family:monospace;font-size:.85rem}@media(max-width:480px){.wallet-public-panel{padding:1rem}.wallet-public-actions>*{width:100%}.wallet-public-owner{align-items:flex-start}.wallet-public-owner button{width:100%}}
+.wallet-public-panel {
+  --wp-ink: #f4efff;
+  --wp-muted: #b9adca;
+  --wp-line: #534369;
+  box-sizing: border-box;
+  max-width: 52rem;
+  border: 1px solid var(--wp-line);
+  border-radius: 1rem;
+  background: #1c162a;
+  color: var(--wp-ink);
+  padding: 1.25rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.wallet-public-panel * {
+  box-sizing: border-box;
+}
+.wallet-public-panel header,
+.wallet-public-owner,
+.wallet-public-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.wallet-public-panel h3 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.wallet-public-panel p {
+  margin: 0.65rem 0;
+}
+.wallet-public-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #d7abff;
+}
+.wallet-public-off {
+  border: 1px solid #d7a474;
+  border-radius: 999px;
+  color: #ffd6a6;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.6rem;
+}
+.wallet-public-description,
+.wallet-public-muted {
+  color: var(--wp-muted);
+  font-size: 0.875rem;
+}
+.wallet-public-owner {
+  padding: 0.8rem 0;
+  border-block: 1px solid var(--wp-line);
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+.wallet-public-panel button,
+.wallet-public-panel select {
+  font: inherit;
+  color: var(--wp-ink);
+  background: #2c203e;
+  border: 1px solid #76618f;
+  border-radius: 0.5rem;
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
+}
+.wallet-public-panel button {
+  cursor: pointer;
+}
+.wallet-public-panel button:disabled,
+.wallet-public-panel select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.wallet-public-panel button:focus-visible,
+.wallet-public-panel select:focus-visible,
+.wallet-public-panel input:focus-visible,
+.wallet-public-panel summary:focus-visible {
+  outline: 3px solid #f1baff;
+  outline-offset: 3px;
+}
+.wallet-public-panel select {
+  display: block;
+  width: 100%;
+  margin: 0.4rem 0 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wallet-public-panel label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.wallet-public-consent {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.6rem 0;
+}
+.wallet-public-consent input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: #e7aaff;
+}
+.wallet-public-details {
+  color: var(--wp-muted);
+  font-size: 0.8rem;
+  margin: 0.7rem 0 1rem;
+}
+.wallet-public-details summary {
+  cursor: pointer;
+}
+.wallet-public-primary {
+  background: #efb4d2 !important;
+  color: #221527 !important;
+  border-color: #efb4d2 !important;
+  font-weight: 700 !important;
+}
+.wallet-public-actions {
+  justify-content: flex-start;
+}
+.wallet-public-notice,
+.wallet-public-warning {
+  font-size: 0.85rem;
+}
+.wallet-public-warning {
+  color: #ffd6a6;
+}
+.wallet-public-account {
+  border-top: 1px solid var(--wp-line);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+.wallet-public-address {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+@media (max-width: 480px) {
+  .wallet-public-panel {
+    padding: 1rem;
+  }
+  .wallet-public-actions > * {
+    width: 100%;
+  }
+  .wallet-public-owner {
+    align-items: flex-start;
+  }
+  .wallet-public-owner button {
+    width: 100%;
+  }
+}
+
+.wallet-public-panel[hidden] {
+  display: none;
+}
+.wallet-public-panel a {
+  color: #f1baff;
+  text-decoration: underline;
+}
+.wallet-public-next {
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+.wallet-header {
+  position: relative;
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: right;
+  z-index: 20;
+}
+.wallet-header-trigger {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0.55rem 1rem;
+  border: 1px solid #d4a1f3;
+  border-radius: 0.65rem;
+  background: #342344;
+  color: #ffe8f4;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #f39bc950;
+}
+.wallet-header-trigger small {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: #dccbe8;
+}
+.wallet-header-trigger:focus-visible,
+.wallet-header-next a:focus-visible,
+.wallet-header-next button:focus-visible {
+  outline: 3px solid #f1baff;
+  outline-offset: 3px;
+}
+.wallet-header-next {
+  font-size: 0.72rem;
+  margin-top: 0.35rem;
+}
+.wallet-header-next button,
+.wallet-header-next a {
+  border: 0;
+  background: none;
+  color: #f6bcdf;
+  text-decoration: underline;
+  padding: 0.2rem;
+  font: inherit;
+  cursor: pointer;
+}
+.wallet-header > .wallet-public-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.65rem);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: 70vh;
+  overflow: auto;
+  box-shadow: 0 18px 60px #08050fc9;
+  text-align: left;
+}
+.wallet-header .wallet-public-panel h3 {
+  font-size: 1.15rem;
+}
+.wallet-header .wallet-public-description {
+  margin-top: 0.5rem;
+}
+.wallet-header .wallet-public-owner {
+  margin: 0.65rem 0;
+}
+.wallet-header .wallet-public-next p {
+  margin-top: 0;
+}
+@media (max-width: 480px) {
+  .wallet-header-trigger {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.7rem;
+  }
+  .wallet-header > .wallet-public-panel {
+    width: min(26rem, calc(100vw - 2rem));
+  }
+  .wallet-header .wallet-public-owner button {
+    width: auto;
+  }
+}
