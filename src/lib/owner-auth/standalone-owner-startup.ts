@@ -1,8 +1,4 @@
-import {
-  CALLBACK_PATH,
-  OwnerLoginController,
-  type OwnerAuthAdapter,
-} from "./owner-login";
+import { CALLBACK_PATH, OwnerLoginController, type OwnerAuthAdapter } from "./owner-login";
 import type { ReviewedBrowserConfig } from "./pinned-supabase-adapter";
 export interface StartupInput {
   mode: "login" | "callback";
@@ -32,8 +28,7 @@ export function startOwnerPage(
   view: StartupView,
   createAuth: (config: ReviewedBrowserConfig | null) => OwnerAuthAdapter,
 ): () => void {
-  const expectedPath =
-    input.mode === "callback" ? CALLBACK_PATH : "/owner/login";
+  const expectedPath = input.mode === "callback" ? CALLBACK_PATH : "/owner/login";
   const origin = "https://btcpredictionlol.lovable.app";
   let controller: OwnerLoginController | null = null;
   let auth: OwnerAuthAdapter | null = null;
@@ -97,10 +92,13 @@ export function startOwnerPage(
     }
     const ownedController = controller;
     offStorage = runtime.onSessionChange?.(() => ownedController.notifySessionChanged()) ?? null;
-    if (closed) { offStorage?.(); return dispose; }
+    if (closed) {
+      offStorage?.();
+      return dispose;
+    }
     view.mount(controller);
     if (closed) return dispose;
-    if (input.mode === "login") void controller.initialize();
+    if (input.mode === "login") void controller.initialize().then(() => ownedController.checkCurrentSignIn());
     if (input.mode === "callback" && callbackUrl) {
       const local = callbackUrl;
       callbackUrl = null;
