@@ -2,6 +2,7 @@ import {
   lamportsToSol,
   retainPaperHistory,
   type HistoricalTrade,
+  type HistoricalTrader,
   type PaperHistory,
   type PaperMonitorLoad,
   type ScannerHealth,
@@ -118,4 +119,41 @@ export function newestTrades(trades: readonly HistoricalTrade[]): HistoricalTrad
     return Number.isFinite(parsed) ? parsed : -Infinity;
   };
   return [...trades].sort((a, b) => stamp(b.entry_at) - stamp(a.entry_at));
+}
+
+export function realizedWalletAmount(raw: string | null | undefined) {
+  if (typeof raw !== "string" || !/^-?\d{1,60}$/.test(raw))
+    return { value: "Unavailable", label: "Realized unavailable" };
+  const amount = BigInt(raw);
+  return {
+    value: `${lamportsToSol(raw, true)} SOL`,
+    label: amount > 0n ? "Realized gain" : amount < 0n ? "Realized loss" : "Realized · break-even",
+  };
+}
+
+/** One accepted paper snapshot, never accumulated or inferred from displayed trades. */
+export function walletRealizedRows(history: PaperHistory | null, selectedWallets: readonly string[] = []) {
+  const paper = history?.historical_only === true && history.executable === false &&
+    history.financial_data_is_current === false &&
+    (history.evidence_kind === "observed_estimated_paper" || history.evidence_kind === "observed_protocol_paper");
+  const aggregates = paper ? history.trader_pnl_as_of : [];
+  const byWallet = new Map<string, HistoricalTrader[]>();
+  for (const row of aggregates) {
+    const entries = byWallet.get(row.source_wallet) ?? [];
+    byWallet.set(row.source_wallet, [...entries, row]);
+  }
+  const identities = new Set([...byWallet.keys(), ...selectedWallets]);
+  return [...identities].map((wallet) => {
+    const entries = byWallet.get(wallet);
+    const aggregate = entries?.length === 1 && entries[0]?.pnl_scope === "our_modeled_copies_not_source_wallet_returns"
+      ? entries[0] : null;
+    return {
+      wallet,
+      aggregate,
+      thisRun: realizedWalletAmount(aggregate?.realized_net_pnl_lamports),
+      allRecordedRuns: "Unavailable" as const,
+      cutoff: paper ? history.evidence_fence.evidence_cutoff_utc : null,
+      runId: paper ? history.run_id : null,
+    };
+  });
 }
