@@ -151,8 +151,6 @@ function TopNav() {
         </Link>
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap" aria-label="Main navigation">
           <Link to="/stats" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>Stats</Link>
-          <Link to="/history" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>CSV Data</Link>
-          <Link to="/paper" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>DOT Paper</Link>
           <Link to="/solana-paper" className={navItem} activeProps={{ className: `${navItem} ${active}` }}>SOL Paper</Link>
         </nav>
 
