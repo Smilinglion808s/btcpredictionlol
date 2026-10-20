@@ -1373,7 +1373,7 @@
 .solana-retro .sr-row-detail dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 18px 0; }
 .solana-retro .sr-row-detail dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--sr-white); }
 .solana-retro .sr-empty { padding: 64px 20px; text-align: center; color: var(--sr-muted); border-bottom: 1px solid var(--sr-line); }
-.solana-retro .sr-empty > span { font-size: 32px; color: var(--sr-brand); text-shadow: 0 0 20px var(--sr-cyan-light); }
+.solana-retro .sr-empty > span { display: inline-flex; font-size: 32px; color: var(--sr-brand); text-shadow: 0 0 20px var(--sr-cyan-light); }
 .solana-retro .sr-empty h3 { font-size: 18px; margin: 8px 0; color: var(--sr-white); }
 .solana-retro .sr-empty p { font-size: 13px; margin: 0; }
 .solana-retro .sr-disclosure { border-block: 1px solid var(--sr-line); margin-top: 22px; scroll-margin-top: 20px; }
