@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
+- Solana wallet headline PnL is derived purely from one accepted paper trader aggregate per wallet; duplicate aggregates are unavailable and cross-run totals stay unavailable until a complete canonical cross-run read contract exists. Why: prevent replay accumulation, open-estimate substitution and paper/live mixing.
 - Solana dashboard formatting and pure session-bound historical check attribution are isolated in `solana-paper-display`; history refresh is browser-only and independent of health/control polling, with unchanged parsers and server cadence. Why: keep report outcomes, accepted session identity and historical cutoffs distinct from scanner transport without changing execution.
 - Retired DOT Paper and CSV Data URLs redirect to Stats without mounting their former polling, realtime, or export code; keep V1.2/V3 records intact because shared prediction history is still required.
 - V2 Final R1 records via `services/v2-worker` -> signed `/api/public/hooks/v2-record` -> `v2_*` tables, and forwards each candle intent through `v2_forward_outbox` (trigger-enqueued, gated by `v2_forward_settings.enabled`) to the betting app's own V2 receiver only; never to V1.2 receivers/executors. V1.2 sending (v12-shadow-adapter + site route) is restored and V2 forwarding is switched off. Why: user switched live betting back from V2 to V1.2 on 2026-10-05.
