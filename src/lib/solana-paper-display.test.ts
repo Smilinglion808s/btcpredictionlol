@@ -53,7 +53,7 @@ const success = () => historyCheckDisplay(emptyHistoryCheckDisplay, acceptedLoad
 describe("session-bound historical check attribution", () => {
   it("does not turn a health-only outage into a failed historical read", () => {
     const initial = success();
-    const outage = historyCheckDisplay(initial, { ...acceptedLoad(), fetchedAt: 0 });
+    const outage = historyCheckDisplay(initial, { ...acceptedLoad(initial.history ?? historyFixture()), fetchedAt: 0 });
     expect(outage.outcome).toBe("accepted");
     expect(outage.lastSuccessfulRead).toBe(100);
     expect(outage.history).toBe(initial.history);
