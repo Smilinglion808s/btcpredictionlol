@@ -65,7 +65,10 @@ export function historyCheckDisplay(
       candidate.run_id === history.run_id &&
       candidate.evidence_fence.fixed_deadline_utc === history.evidence_fence.fixed_deadline_utc &&
       candidate.exploratory_mode === history.exploratory_mode;
-    if (sameIdentity) lastSuccessfulRead = load.historyCheckedAt;
+    if (sameIdentity) {
+      lastSuccessfulRead = load.historyCheckedAt;
+      outcome = "accepted";
+    }
   }
   return { history, verifiedSession, lastSuccessfulRead, outcome };
 }
