@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import {
   boiseTime,
+  emptyHistoryCheckDisplay,
   entryMarketCap,
+  historyCheckDisplay,
   newestTrades,
   realizedTradeDisplay,
   shortMint,
@@ -23,7 +25,6 @@ import {
   loadSolanaPaperHistoryMonitor,
   loadSolanaPaperTokenSymbols,
   monitorTransportFresh,
-  retainPaperHistory,
   scannerHeartbeatFresh,
   startIndependentMonitorRefresh,
   tokenQuantity,
@@ -31,7 +32,6 @@ import {
   walletTail,
   type CapacityInfo,
   type HistoricalTrade,
-  type PaperHistory,
   type PaperTokenSymbols,
   type PaperMonitorLoad,
   type PaperMonitorLoader,
@@ -322,37 +322,29 @@ export function SolanaPaperView({
   historyLoader?: PaperMonitorLoader;
 }) {
   const [load, setLoad] = useState<PaperMonitorLoad | null>(null);
-  const [history, setHistory] = useState<PaperHistory | null>(null);
+  const [historyCheck, setHistoryCheck] = useState(emptyHistoryCheckDisplay);
+  const { history, lastSuccessfulRead } = historyCheck;
   const [tokenSymbols, setTokenSymbols] = useState<PaperTokenSymbols | null>(null);
   const refreshRef = useRef<(() => void) | null>(null);
   const [historyPending, setHistoryPending] = useState(false);
-  const [historyReadUnavailable, setHistoryReadUnavailable] = useState(false);
-  const [lastSuccessfulRead, setLastSuccessfulRead] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setLoad(null);
-    setHistory(null);
-    setLastSuccessfulRead(null);
-    setHistoryReadUnavailable(false);
+    setHistoryCheck(emptyHistoryCheckDisplay);
+    let reportResult: PaperMonitorLoad | undefined;
     const stop = startIndependentMonitorRefresh(
       loader,
       historyLoader,
       (value) => {
         setLoad(value);
-        setHistory((previous) => retainPaperHistory(previous, value));
-        if (
-          value.state === "ready" &&
-          value.history.state === "available" &&
-          value.historyCheckedAt !== undefined
-        ) {
-          setLastSuccessfulRead(value.historyCheckedAt);
-        }
+        const result = reportResult;
+        reportResult = undefined;
+        setHistoryCheck((previous) => historyCheckDisplay(previous, value, result));
       },
       {
         historyIntervalMs: 180_000,
         onHistoryPending: setHistoryPending,
-        onHistoryResult: (value) =>
-          setHistoryReadUnavailable(value.state !== "ready" || value.history.state !== "available"),
+        onHistoryResult: (value) => { reportResult = value; },
       },
     );
     refreshRef.current = stop.refreshHistory;
@@ -391,12 +383,12 @@ export function SolanaPaperView({
   const source = health?.source_status;
   const heartbeatFresh = health ? scannerHeartbeatFresh(health, now) : false;
   const latestHistory =
-    load?.state === "ready" && freshTransport && load.history.state === "available"
+    load?.state === "ready" && load.history.state === "available"
       ? load.history.data
       : null;
   const retained =
     history !== null &&
-    (!latestHistory ||
+    (historyCheck.outcome !== "accepted" || !latestHistory ||
       latestHistory.run_id !== history.run_id ||
       latestHistory.evidence_fence.evidence_cutoff_utc !==
         history.evidence_fence.evidence_cutoff_utc);
@@ -488,10 +480,15 @@ export function SolanaPaperView({
                 {historyPending ? "Checking…" : "Refresh"}
               </Button>
             </div>
-            {historyReadUnavailable && !historyPending && !retained && (
+            {historyCheck.outcome === "unavailable" && !historyPending && (
               <p className="sr-notice">
-                Report check unavailable. No successful read or fresh evidence is established.
+                Latest report check unavailable. {history
+                  ? "Prior same-session historical evidence is retained, not current."
+                  : "No accepted historical evidence is available."}
               </p>
+            )}
+            {historyCheck.outcome === "rejected" && !historyPending && (
+              <p className="sr-notice">Latest report did not match the verified session and was not accepted.</p>
             )}
             <div className="sr-check-meta" role="status">
               <p>
@@ -513,8 +510,7 @@ export function SolanaPaperView({
             </div>
             {retained && (
               <p className="sr-notice">
-                Report check unavailable or rejected. Retained historical rows — not current
-                evidence.
+                Retained historical rows at their original cutoff — not current evidence.
               </p>
             )}
             {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && (
@@ -904,11 +900,11 @@ export function SolanaPaperView({
                       .
                     </p>
                     <p className="mt-1 break-all font-mono">Run: {history.run_id}</p>
-                    {load?.state === "ready" && load.historyCheckedAt !== undefined && (
+                    {lastSuccessfulRead !== null && (
                       <p className="mt-1">
                         Report last checked:{" "}
                         <span className="font-mono">
-                          {new Date(load.historyCheckedAt).toISOString()}
+                          {new Date(lastSuccessfulRead).toISOString()}
                         </span>
                         . This does not change its cutoff.
                       </p>

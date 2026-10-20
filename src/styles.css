@@ -1276,6 +1276,8 @@
   --card: var(--sr-panel);
   --muted-foreground: var(--sr-muted);
   --border: var(--sr-line);
+  --primary: var(--sr-brand);
+  --primary-foreground: var(--sr-white);
   --bull: var(--sr-white);
   --bear: var(--sr-silver);
   background: var(--sr-ink);
