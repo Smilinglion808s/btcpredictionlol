@@ -71,6 +71,13 @@
       "when": 1791754906697,
       "tag": "0009_v3_kalshi_monotonic",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792516714587,
+      "tag": "0010_remove_non_v3_schedules",
+      "breakpoints": true
     }
   ]
 }

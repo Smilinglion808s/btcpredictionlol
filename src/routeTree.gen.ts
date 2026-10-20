@@ -11,32 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedDailyRouteImport } from './routes/_authenticated/daily'
-import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
-import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
-import { Route as AuthenticatedPaperRouteImport } from './routes/_authenticated/paper'
 import { Route as AuthenticatedSolanaPaperRouteImport } from './routes/_authenticated/solana-paper'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
-import { Route as ApiC85SelfcheckRouteImport } from './routes/api/c85-selfcheck'
-import { Route as ApiExportC85CsvRouteImport } from './routes/api/export/c85-csv'
-import { Route as ApiExportT45pfCsvRouteImport } from './routes/api/export/t45pf-csv'
-import { Route as ApiPublicHooksB4x4Es1WarmupRouteImport } from './routes/api/public/hooks/b4x4-es1-warmup'
-import { Route as ApiPublicHooksBinanceObFinalizeRouteImport } from './routes/api/public/hooks/binance-ob-finalize'
-import { Route as ApiPublicHooksBinanceObIngestRouteImport } from './routes/api/public/hooks/binance-ob-ingest'
-import { Route as ApiPublicHooksC85DecisionRouteImport } from './routes/api/public/hooks/c85-decision'
-import { Route as ApiPublicHooksC85OpsRouteImport } from './routes/api/public/hooks/c85-ops'
-import { Route as ApiPublicHooksDailyArchiveRouteImport } from './routes/api/public/hooks/daily-archive'
-import { Route as ApiPublicHooksEs1BoundaryRunRouteImport } from './routes/api/public/hooks/es1-boundary-run'
-import { Route as ApiPublicHooksModel8V3BootstrapRouteImport } from './routes/api/public/hooks/model8-v3-bootstrap'
-import { Route as ApiPublicHooksScheduled15mRunRouteImport } from './routes/api/public/hooks/scheduled-15m-run'
-import { Route as ApiPublicHooksT45BoundaryRunRouteImport } from './routes/api/public/hooks/t45-boundary-run'
-import { Route as ApiPublicHooksT45IngestRouteImport } from './routes/api/public/hooks/t45-ingest'
-import { Route as ApiPublicHooksV12ShadowRouteImport } from './routes/api/public/hooks/v12-shadow'
-import { Route as ApiPublicHooksV2RecordRouteImport } from './routes/api/public/hooks/v2-record'
 import { Route as ApiPublicHooksV3RecordRouteImport } from './routes/api/public/hooks/v3-record'
-import { Route as ApiPublicPredictionsLatestRouteImport } from './routes/api/public/predictions/latest'
-import { Route as ApiPublicPredictionsUpcomingRouteImport } from './routes/api/public/predictions/upcoming'
-import { Route as ApiPublicTimingBtc15mRouteImport } from './routes/api/public/timing/btc-15m'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -45,26 +22,6 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDailyRoute = AuthenticatedDailyRouteImport.update({
-  id: '/daily',
-  path: '/daily',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedModelsRoute = AuthenticatedModelsRouteImport.update({
-  id: '/models',
-  path: '/models',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedPaperRoute = AuthenticatedPaperRouteImport.update({
-  id: '/paper',
-  path: '/paper',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSolanaPaperRoute =
@@ -78,320 +35,49 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiC85SelfcheckRoute = ApiC85SelfcheckRouteImport.update({
-  id: '/api/c85-selfcheck',
-  path: '/api/c85-selfcheck',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExportC85CsvRoute = ApiExportC85CsvRouteImport.update({
-  id: '/api/export/c85-csv',
-  path: '/api/export/c85-csv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExportT45pfCsvRoute = ApiExportT45pfCsvRouteImport.update({
-  id: '/api/export/t45pf-csv',
-  path: '/api/export/t45pf-csv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicHooksB4x4Es1WarmupRoute =
-  ApiPublicHooksB4x4Es1WarmupRouteImport.update({
-    id: '/api/public/hooks/b4x4-es1-warmup',
-    path: '/api/public/hooks/b4x4-es1-warmup',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksBinanceObFinalizeRoute =
-  ApiPublicHooksBinanceObFinalizeRouteImport.update({
-    id: '/api/public/hooks/binance-ob-finalize',
-    path: '/api/public/hooks/binance-ob-finalize',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksBinanceObIngestRoute =
-  ApiPublicHooksBinanceObIngestRouteImport.update({
-    id: '/api/public/hooks/binance-ob-ingest',
-    path: '/api/public/hooks/binance-ob-ingest',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksC85DecisionRoute =
-  ApiPublicHooksC85DecisionRouteImport.update({
-    id: '/api/public/hooks/c85-decision',
-    path: '/api/public/hooks/c85-decision',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksC85OpsRoute = ApiPublicHooksC85OpsRouteImport.update({
-  id: '/api/public/hooks/c85-ops',
-  path: '/api/public/hooks/c85-ops',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicHooksDailyArchiveRoute =
-  ApiPublicHooksDailyArchiveRouteImport.update({
-    id: '/api/public/hooks/daily-archive',
-    path: '/api/public/hooks/daily-archive',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksEs1BoundaryRunRoute =
-  ApiPublicHooksEs1BoundaryRunRouteImport.update({
-    id: '/api/public/hooks/es1-boundary-run',
-    path: '/api/public/hooks/es1-boundary-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksModel8V3BootstrapRoute =
-  ApiPublicHooksModel8V3BootstrapRouteImport.update({
-    id: '/api/public/hooks/model8-v3-bootstrap',
-    path: '/api/public/hooks/model8-v3-bootstrap',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksScheduled15mRunRoute =
-  ApiPublicHooksScheduled15mRunRouteImport.update({
-    id: '/api/public/hooks/scheduled-15m-run',
-    path: '/api/public/hooks/scheduled-15m-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksT45BoundaryRunRoute =
-  ApiPublicHooksT45BoundaryRunRouteImport.update({
-    id: '/api/public/hooks/t45-boundary-run',
-    path: '/api/public/hooks/t45-boundary-run',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksT45IngestRoute = ApiPublicHooksT45IngestRouteImport.update({
-  id: '/api/public/hooks/t45-ingest',
-  path: '/api/public/hooks/t45-ingest',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicHooksV12ShadowRoute = ApiPublicHooksV12ShadowRouteImport.update({
-  id: '/api/public/hooks/v12-shadow',
-  path: '/api/public/hooks/v12-shadow',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicHooksV2RecordRoute = ApiPublicHooksV2RecordRouteImport.update({
-  id: '/api/public/hooks/v2-record',
-  path: '/api/public/hooks/v2-record',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicHooksV3RecordRoute = ApiPublicHooksV3RecordRouteImport.update({
   id: '/api/public/hooks/v3-record',
   path: '/api/public/hooks/v3-record',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicPredictionsLatestRoute =
-  ApiPublicPredictionsLatestRouteImport.update({
-    id: '/api/public/predictions/latest',
-    path: '/api/public/predictions/latest',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicPredictionsUpcomingRoute =
-  ApiPublicPredictionsUpcomingRouteImport.update({
-    id: '/api/public/predictions/upcoming',
-    path: '/api/public/predictions/upcoming',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicTimingBtc15mRoute = ApiPublicTimingBtc15mRouteImport.update({
-  id: '/api/public/timing/btc-15m',
-  path: '/api/public/timing/btc-15m',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/daily': typeof AuthenticatedDailyRoute
-  '/history': typeof AuthenticatedHistoryRoute
-  '/models': typeof AuthenticatedModelsRoute
-  '/paper': typeof AuthenticatedPaperRoute
   '/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
-  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
-  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
-  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
-  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
-  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
-  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
-  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
-  '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
-  '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
   '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
-  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
-  '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
-  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesByTo {
-  '/daily': typeof AuthenticatedDailyRoute
-  '/history': typeof AuthenticatedHistoryRoute
-  '/models': typeof AuthenticatedModelsRoute
-  '/paper': typeof AuthenticatedPaperRoute
   '/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/stats': typeof AuthenticatedStatsRoute
-  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/': typeof AuthenticatedIndexRoute
-  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
-  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
-  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
-  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
-  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
-  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
-  '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
-  '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
   '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
-  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
-  '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
-  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/_authenticated/daily': typeof AuthenticatedDailyRoute
-  '/_authenticated/history': typeof AuthenticatedHistoryRoute
-  '/_authenticated/models': typeof AuthenticatedModelsRoute
-  '/_authenticated/paper': typeof AuthenticatedPaperRoute
   '/_authenticated/solana-paper': typeof AuthenticatedSolanaPaperRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
-  '/api/c85-selfcheck': typeof ApiC85SelfcheckRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/api/export/c85-csv': typeof ApiExportC85CsvRoute
-  '/api/export/t45pf-csv': typeof ApiExportT45pfCsvRoute
-  '/api/public/hooks/b4x4-es1-warmup': typeof ApiPublicHooksB4x4Es1WarmupRoute
-  '/api/public/hooks/binance-ob-finalize': typeof ApiPublicHooksBinanceObFinalizeRoute
-  '/api/public/hooks/binance-ob-ingest': typeof ApiPublicHooksBinanceObIngestRoute
-  '/api/public/hooks/c85-decision': typeof ApiPublicHooksC85DecisionRoute
-  '/api/public/hooks/c85-ops': typeof ApiPublicHooksC85OpsRoute
-  '/api/public/hooks/daily-archive': typeof ApiPublicHooksDailyArchiveRoute
-  '/api/public/hooks/es1-boundary-run': typeof ApiPublicHooksEs1BoundaryRunRoute
-  '/api/public/hooks/model8-v3-bootstrap': typeof ApiPublicHooksModel8V3BootstrapRoute
-  '/api/public/hooks/scheduled-15m-run': typeof ApiPublicHooksScheduled15mRunRoute
-  '/api/public/hooks/t45-boundary-run': typeof ApiPublicHooksT45BoundaryRunRoute
-  '/api/public/hooks/t45-ingest': typeof ApiPublicHooksT45IngestRoute
-  '/api/public/hooks/v12-shadow': typeof ApiPublicHooksV12ShadowRoute
-  '/api/public/hooks/v2-record': typeof ApiPublicHooksV2RecordRoute
   '/api/public/hooks/v3-record': typeof ApiPublicHooksV3RecordRoute
-  '/api/public/predictions/latest': typeof ApiPublicPredictionsLatestRoute
-  '/api/public/predictions/upcoming': typeof ApiPublicPredictionsUpcomingRoute
-  '/api/public/timing/btc-15m': typeof ApiPublicTimingBtc15mRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/daily'
-    | '/history'
-    | '/models'
-    | '/paper'
-    | '/solana-paper'
-    | '/stats'
-    | '/api/c85-selfcheck'
-    | '/api/export/c85-csv'
-    | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/binance-ob-finalize'
-    | '/api/public/hooks/binance-ob-ingest'
-    | '/api/public/hooks/c85-decision'
-    | '/api/public/hooks/c85-ops'
-    | '/api/public/hooks/daily-archive'
-    | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t45-boundary-run'
-    | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/v12-shadow'
-    | '/api/public/hooks/v2-record'
-    | '/api/public/hooks/v3-record'
-    | '/api/public/predictions/latest'
-    | '/api/public/predictions/upcoming'
-    | '/api/public/timing/btc-15m'
+  fullPaths: '/' | '/solana-paper' | '/stats' | '/api/public/hooks/v3-record'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/daily'
-    | '/history'
-    | '/models'
-    | '/paper'
-    | '/solana-paper'
-    | '/stats'
-    | '/api/c85-selfcheck'
-    | '/'
-    | '/api/export/c85-csv'
-    | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/binance-ob-finalize'
-    | '/api/public/hooks/binance-ob-ingest'
-    | '/api/public/hooks/c85-decision'
-    | '/api/public/hooks/c85-ops'
-    | '/api/public/hooks/daily-archive'
-    | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t45-boundary-run'
-    | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/v12-shadow'
-    | '/api/public/hooks/v2-record'
-    | '/api/public/hooks/v3-record'
-    | '/api/public/predictions/latest'
-    | '/api/public/predictions/upcoming'
-    | '/api/public/timing/btc-15m'
+  to: '/solana-paper' | '/stats' | '/' | '/api/public/hooks/v3-record'
   id:
     | '__root__'
     | '/_authenticated'
-    | '/_authenticated/daily'
-    | '/_authenticated/history'
-    | '/_authenticated/models'
-    | '/_authenticated/paper'
     | '/_authenticated/solana-paper'
     | '/_authenticated/stats'
-    | '/api/c85-selfcheck'
     | '/_authenticated/'
-    | '/api/export/c85-csv'
-    | '/api/export/t45pf-csv'
-    | '/api/public/hooks/b4x4-es1-warmup'
-    | '/api/public/hooks/binance-ob-finalize'
-    | '/api/public/hooks/binance-ob-ingest'
-    | '/api/public/hooks/c85-decision'
-    | '/api/public/hooks/c85-ops'
-    | '/api/public/hooks/daily-archive'
-    | '/api/public/hooks/es1-boundary-run'
-    | '/api/public/hooks/model8-v3-bootstrap'
-    | '/api/public/hooks/scheduled-15m-run'
-    | '/api/public/hooks/t45-boundary-run'
-    | '/api/public/hooks/t45-ingest'
-    | '/api/public/hooks/v12-shadow'
-    | '/api/public/hooks/v2-record'
     | '/api/public/hooks/v3-record'
-    | '/api/public/predictions/latest'
-    | '/api/public/predictions/upcoming'
-    | '/api/public/timing/btc-15m'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  ApiC85SelfcheckRoute: typeof ApiC85SelfcheckRoute
-  ApiExportC85CsvRoute: typeof ApiExportC85CsvRoute
-  ApiExportT45pfCsvRoute: typeof ApiExportT45pfCsvRoute
-  ApiPublicHooksB4x4Es1WarmupRoute: typeof ApiPublicHooksB4x4Es1WarmupRoute
-  ApiPublicHooksBinanceObFinalizeRoute: typeof ApiPublicHooksBinanceObFinalizeRoute
-  ApiPublicHooksBinanceObIngestRoute: typeof ApiPublicHooksBinanceObIngestRoute
-  ApiPublicHooksC85DecisionRoute: typeof ApiPublicHooksC85DecisionRoute
-  ApiPublicHooksC85OpsRoute: typeof ApiPublicHooksC85OpsRoute
-  ApiPublicHooksDailyArchiveRoute: typeof ApiPublicHooksDailyArchiveRoute
-  ApiPublicHooksEs1BoundaryRunRoute: typeof ApiPublicHooksEs1BoundaryRunRoute
-  ApiPublicHooksModel8V3BootstrapRoute: typeof ApiPublicHooksModel8V3BootstrapRoute
-  ApiPublicHooksScheduled15mRunRoute: typeof ApiPublicHooksScheduled15mRunRoute
-  ApiPublicHooksT45BoundaryRunRoute: typeof ApiPublicHooksT45BoundaryRunRoute
-  ApiPublicHooksT45IngestRoute: typeof ApiPublicHooksT45IngestRoute
-  ApiPublicHooksV12ShadowRoute: typeof ApiPublicHooksV12ShadowRoute
-  ApiPublicHooksV2RecordRoute: typeof ApiPublicHooksV2RecordRoute
   ApiPublicHooksV3RecordRoute: typeof ApiPublicHooksV3RecordRoute
-  ApiPublicPredictionsLatestRoute: typeof ApiPublicPredictionsLatestRoute
-  ApiPublicPredictionsUpcomingRoute: typeof ApiPublicPredictionsUpcomingRoute
-  ApiPublicTimingBtc15mRoute: typeof ApiPublicTimingBtc15mRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -410,34 +96,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/daily': {
-      id: '/_authenticated/daily'
-      path: '/daily'
-      fullPath: '/daily'
-      preLoaderRoute: typeof AuthenticatedDailyRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/history': {
-      id: '/_authenticated/history'
-      path: '/history'
-      fullPath: '/history'
-      preLoaderRoute: typeof AuthenticatedHistoryRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/models': {
-      id: '/_authenticated/models'
-      path: '/models'
-      fullPath: '/models'
-      preLoaderRoute: typeof AuthenticatedModelsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/paper': {
-      id: '/_authenticated/paper'
-      path: '/paper'
-      fullPath: '/paper'
-      preLoaderRoute: typeof AuthenticatedPaperRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/solana-paper': {
       id: '/_authenticated/solana-paper'
       path: '/solana-paper'
@@ -452,118 +110,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/c85-selfcheck': {
-      id: '/api/c85-selfcheck'
-      path: '/api/c85-selfcheck'
-      fullPath: '/api/c85-selfcheck'
-      preLoaderRoute: typeof ApiC85SelfcheckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/export/c85-csv': {
-      id: '/api/export/c85-csv'
-      path: '/api/export/c85-csv'
-      fullPath: '/api/export/c85-csv'
-      preLoaderRoute: typeof ApiExportC85CsvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/export/t45pf-csv': {
-      id: '/api/export/t45pf-csv'
-      path: '/api/export/t45pf-csv'
-      fullPath: '/api/export/t45pf-csv'
-      preLoaderRoute: typeof ApiExportT45pfCsvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/b4x4-es1-warmup': {
-      id: '/api/public/hooks/b4x4-es1-warmup'
-      path: '/api/public/hooks/b4x4-es1-warmup'
-      fullPath: '/api/public/hooks/b4x4-es1-warmup'
-      preLoaderRoute: typeof ApiPublicHooksB4x4Es1WarmupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/binance-ob-finalize': {
-      id: '/api/public/hooks/binance-ob-finalize'
-      path: '/api/public/hooks/binance-ob-finalize'
-      fullPath: '/api/public/hooks/binance-ob-finalize'
-      preLoaderRoute: typeof ApiPublicHooksBinanceObFinalizeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/binance-ob-ingest': {
-      id: '/api/public/hooks/binance-ob-ingest'
-      path: '/api/public/hooks/binance-ob-ingest'
-      fullPath: '/api/public/hooks/binance-ob-ingest'
-      preLoaderRoute: typeof ApiPublicHooksBinanceObIngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/c85-decision': {
-      id: '/api/public/hooks/c85-decision'
-      path: '/api/public/hooks/c85-decision'
-      fullPath: '/api/public/hooks/c85-decision'
-      preLoaderRoute: typeof ApiPublicHooksC85DecisionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/c85-ops': {
-      id: '/api/public/hooks/c85-ops'
-      path: '/api/public/hooks/c85-ops'
-      fullPath: '/api/public/hooks/c85-ops'
-      preLoaderRoute: typeof ApiPublicHooksC85OpsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/daily-archive': {
-      id: '/api/public/hooks/daily-archive'
-      path: '/api/public/hooks/daily-archive'
-      fullPath: '/api/public/hooks/daily-archive'
-      preLoaderRoute: typeof ApiPublicHooksDailyArchiveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/es1-boundary-run': {
-      id: '/api/public/hooks/es1-boundary-run'
-      path: '/api/public/hooks/es1-boundary-run'
-      fullPath: '/api/public/hooks/es1-boundary-run'
-      preLoaderRoute: typeof ApiPublicHooksEs1BoundaryRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/model8-v3-bootstrap': {
-      id: '/api/public/hooks/model8-v3-bootstrap'
-      path: '/api/public/hooks/model8-v3-bootstrap'
-      fullPath: '/api/public/hooks/model8-v3-bootstrap'
-      preLoaderRoute: typeof ApiPublicHooksModel8V3BootstrapRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/scheduled-15m-run': {
-      id: '/api/public/hooks/scheduled-15m-run'
-      path: '/api/public/hooks/scheduled-15m-run'
-      fullPath: '/api/public/hooks/scheduled-15m-run'
-      preLoaderRoute: typeof ApiPublicHooksScheduled15mRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t45-boundary-run': {
-      id: '/api/public/hooks/t45-boundary-run'
-      path: '/api/public/hooks/t45-boundary-run'
-      fullPath: '/api/public/hooks/t45-boundary-run'
-      preLoaderRoute: typeof ApiPublicHooksT45BoundaryRunRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/t45-ingest': {
-      id: '/api/public/hooks/t45-ingest'
-      path: '/api/public/hooks/t45-ingest'
-      fullPath: '/api/public/hooks/t45-ingest'
-      preLoaderRoute: typeof ApiPublicHooksT45IngestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/v12-shadow': {
-      id: '/api/public/hooks/v12-shadow'
-      path: '/api/public/hooks/v12-shadow'
-      fullPath: '/api/public/hooks/v12-shadow'
-      preLoaderRoute: typeof ApiPublicHooksV12ShadowRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/v2-record': {
-      id: '/api/public/hooks/v2-record'
-      path: '/api/public/hooks/v2-record'
-      fullPath: '/api/public/hooks/v2-record'
-      preLoaderRoute: typeof ApiPublicHooksV2RecordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/v3-record': {
       id: '/api/public/hooks/v3-record'
       path: '/api/public/hooks/v3-record'
@@ -571,45 +117,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksV3RecordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/predictions/latest': {
-      id: '/api/public/predictions/latest'
-      path: '/api/public/predictions/latest'
-      fullPath: '/api/public/predictions/latest'
-      preLoaderRoute: typeof ApiPublicPredictionsLatestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/predictions/upcoming': {
-      id: '/api/public/predictions/upcoming'
-      path: '/api/public/predictions/upcoming'
-      fullPath: '/api/public/predictions/upcoming'
-      preLoaderRoute: typeof ApiPublicPredictionsUpcomingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/timing/btc-15m': {
-      id: '/api/public/timing/btc-15m'
-      path: '/api/public/timing/btc-15m'
-      fullPath: '/api/public/timing/btc-15m'
-      preLoaderRoute: typeof ApiPublicTimingBtc15mRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedDailyRoute: typeof AuthenticatedDailyRoute
-  AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
-  AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
-  AuthenticatedPaperRoute: typeof AuthenticatedPaperRoute
   AuthenticatedSolanaPaperRoute: typeof AuthenticatedSolanaPaperRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedDailyRoute: AuthenticatedDailyRoute,
-  AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
-  AuthenticatedModelsRoute: AuthenticatedModelsRoute,
-  AuthenticatedPaperRoute: AuthenticatedPaperRoute,
   AuthenticatedSolanaPaperRoute: AuthenticatedSolanaPaperRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -620,26 +137,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  ApiC85SelfcheckRoute: ApiC85SelfcheckRoute,
-  ApiExportC85CsvRoute: ApiExportC85CsvRoute,
-  ApiExportT45pfCsvRoute: ApiExportT45pfCsvRoute,
-  ApiPublicHooksB4x4Es1WarmupRoute: ApiPublicHooksB4x4Es1WarmupRoute,
-  ApiPublicHooksBinanceObFinalizeRoute: ApiPublicHooksBinanceObFinalizeRoute,
-  ApiPublicHooksBinanceObIngestRoute: ApiPublicHooksBinanceObIngestRoute,
-  ApiPublicHooksC85DecisionRoute: ApiPublicHooksC85DecisionRoute,
-  ApiPublicHooksC85OpsRoute: ApiPublicHooksC85OpsRoute,
-  ApiPublicHooksDailyArchiveRoute: ApiPublicHooksDailyArchiveRoute,
-  ApiPublicHooksEs1BoundaryRunRoute: ApiPublicHooksEs1BoundaryRunRoute,
-  ApiPublicHooksModel8V3BootstrapRoute: ApiPublicHooksModel8V3BootstrapRoute,
-  ApiPublicHooksScheduled15mRunRoute: ApiPublicHooksScheduled15mRunRoute,
-  ApiPublicHooksT45BoundaryRunRoute: ApiPublicHooksT45BoundaryRunRoute,
-  ApiPublicHooksT45IngestRoute: ApiPublicHooksT45IngestRoute,
-  ApiPublicHooksV12ShadowRoute: ApiPublicHooksV12ShadowRoute,
-  ApiPublicHooksV2RecordRoute: ApiPublicHooksV2RecordRoute,
   ApiPublicHooksV3RecordRoute: ApiPublicHooksV3RecordRoute,
-  ApiPublicPredictionsLatestRoute: ApiPublicPredictionsLatestRoute,
-  ApiPublicPredictionsUpcomingRoute: ApiPublicPredictionsUpcomingRoute,
-  ApiPublicTimingBtc15mRoute: ApiPublicTimingBtc15mRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
