@@ -182,7 +182,7 @@ function StatsPage() {
     setRefreshing(true);
     try {
       await forceRefreshFn();
-      await qc.invalidateQueries();
+      await Promise.all(["v11-stats","v12-live","v3-live"].map((k)=>qc.invalidateQueries({ queryKey: [k] })));
     } finally {
       setRefreshing(false);
     }
