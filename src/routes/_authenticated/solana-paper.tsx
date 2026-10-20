@@ -344,7 +344,9 @@ export function SolanaPaperView({
       {
         historyIntervalMs: 180_000,
         onHistoryPending: setHistoryPending,
-        onHistoryResult: (value) => { reportResult = value; },
+        onHistoryResult: (value) => {
+          reportResult = value;
+        },
       },
     );
     refreshRef.current = stop.refreshHistory;
@@ -383,12 +385,11 @@ export function SolanaPaperView({
   const source = health?.source_status;
   const heartbeatFresh = health ? scannerHeartbeatFresh(health, now) : false;
   const latestHistory =
-    load?.state === "ready" && load.history.state === "available"
-      ? load.history.data
-      : null;
+    load?.state === "ready" && load.history.state === "available" ? load.history.data : null;
   const retained =
     history !== null &&
-    (historyCheck.outcome !== "accepted" || !latestHistory ||
+    (historyCheck.outcome !== "accepted" ||
+      !latestHistory ||
       latestHistory.run_id !== history.run_id ||
       latestHistory.evidence_fence.evidence_cutoff_utc !==
         history.evidence_fence.evidence_cutoff_utc);
@@ -482,13 +483,16 @@ export function SolanaPaperView({
             </div>
             {historyCheck.outcome === "unavailable" && !historyPending && (
               <p className="sr-notice">
-                Latest report check unavailable. {history
+                Latest report check unavailable.{" "}
+                {history
                   ? "Prior same-session historical evidence is retained, not current."
                   : "No accepted historical evidence is available."}
               </p>
             )}
             {historyCheck.outcome === "rejected" && !historyPending && (
-              <p className="sr-notice">Latest report did not match the verified session and was not accepted.</p>
+              <p className="sr-notice">
+                Latest report did not match the verified session and was not accepted.
+              </p>
             )}
             <div className="sr-check-meta" role="status">
               <p>

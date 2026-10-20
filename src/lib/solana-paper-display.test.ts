@@ -8,7 +8,13 @@ import {
   realizedTradeDisplay,
   shortMint,
 } from "./solana-paper-display";
-import { walletTail, type HistoricalTrade, type PaperHistory, type PaperMonitorLoad, type ScannerHealth } from "./solana-paper";
+import {
+  walletTail,
+  type HistoricalTrade,
+  type PaperHistory,
+  type PaperMonitorLoad,
+  type ScannerHealth,
+} from "./solana-paper";
 
 const trade = (changes: Partial<HistoricalTrade> = {}): HistoricalTrade => ({
   position_id: "synthetic-position",
@@ -33,19 +39,35 @@ const trade = (changes: Partial<HistoricalTrade> = {}): HistoricalTrade => ({
 });
 
 // Synthetic session metadata only; no production rows, wallets or credentials.
-const historyFixture = (run = "synthetic-run-a", cutoff = "2026-01-20T12:00:00Z"): PaperHistory => ({
-  schema_version: "synthetic", run_id: run, exploratory_mode: false,
-  evidence_fence: { evidence_cutoff_utc: cutoff, fixed_deadline_utc: "2026-01-21T12:00:00Z", journal_sequence: 1 },
-} as PaperHistory);
+const historyFixture = (run = "synthetic-run-a", cutoff = "2026-01-20T12:00:00Z"): PaperHistory =>
+  ({
+    schema_version: "synthetic",
+    run_id: run,
+    exploratory_mode: false,
+    evidence_fence: {
+      evidence_cutoff_utc: cutoff,
+      fixed_deadline_utc: "2026-01-21T12:00:00Z",
+      journal_sequence: 1,
+    },
+  }) as PaperHistory;
 const acceptedLoad = (history = historyFixture(), checked = 100): PaperMonitorLoad => ({
-  state: "ready", fetchedAt: 10, historyCheckedAt: checked,
-  health: { state: "unavailable" }, history: { state: "available", data: history },
+  state: "ready",
+  fetchedAt: 10,
+  historyCheckedAt: checked,
+  health: { state: "unavailable" },
+  history: { state: "available", data: history },
 });
 const sessionLoad = (run: string): PaperMonitorLoad => ({
-  state: "ready", fetchedAt: 20,
-  health: { state: "available", data: {
-    run_id: run, fixed_deadline_utc: "2026-01-21T12:00:00Z", exploratory_mode: false,
-  } as ScannerHealth },
+  state: "ready",
+  fetchedAt: 20,
+  health: {
+    state: "available",
+    data: {
+      run_id: run,
+      fixed_deadline_utc: "2026-01-21T12:00:00Z",
+      exploratory_mode: false,
+    } as ScannerHealth,
+  },
   history: { state: "unavailable" },
 });
 const success = () => historyCheckDisplay(emptyHistoryCheckDisplay, acceptedLoad(), acceptedLoad());
@@ -53,7 +75,10 @@ const success = () => historyCheckDisplay(emptyHistoryCheckDisplay, acceptedLoad
 describe("session-bound historical check attribution", () => {
   it("does not turn a health-only outage into a failed historical read", () => {
     const initial = success();
-    const outage = historyCheckDisplay(initial, { ...acceptedLoad(initial.history ?? historyFixture()), fetchedAt: 0 });
+    const outage = historyCheckDisplay(initial, {
+      ...acceptedLoad(initial.history ?? historyFixture()),
+      fetchedAt: 0,
+    });
     expect(outage.outcome).toBe("accepted");
     expect(outage.lastSuccessfulRead).toBe(100);
     expect(outage.history).toBe(initial.history);
@@ -73,9 +98,16 @@ describe("session-bound historical check attribution", () => {
   });
   it("retains the successful check and original cutoff on a same-session failed read", () => {
     const initial = success();
-    const failed = historyCheckDisplay(initial, {
-      state: "ready", fetchedAt: 20, health: { state: "unavailable" }, history: { state: "unavailable" },
-    }, { state: "error", message: "synthetic failure" });
+    const failed = historyCheckDisplay(
+      initial,
+      {
+        state: "ready",
+        fetchedAt: 20,
+        health: { state: "unavailable" },
+        history: { state: "unavailable" },
+      },
+      { state: "error", message: "synthetic failure" },
+    );
     expect(failed.history).toBe(initial.history);
     expect(failed.lastSuccessfulRead).toBe(100);
     expect(failed.outcome).toBe("unavailable");
@@ -89,15 +121,18 @@ describe("session-bound historical check attribution", () => {
     expect(retained.lastSuccessfulRead).toBe(200);
     expect(retained.outcome).toBe("accepted");
   });
-  it.each(["deadline", "mode"])("invalidates successful checks on a verified %s switch", (field) => {
-    const load = sessionLoad("synthetic-run-a");
-    if (load.state !== "ready" || load.health.state !== "available") throw Error("fixture");
-    if (field === "deadline") load.health.data.fixed_deadline_utc = "2026-01-22T12:00:00Z";
-    else load.health.data.exploratory_mode = true;
-    const cleared = historyCheckDisplay(success(), load);
-    expect(cleared.history).toBeNull();
-    expect(cleared.lastSuccessfulRead).toBeNull();
-  });
+  it.each(["deadline", "mode"])(
+    "invalidates successful checks on a verified %s switch",
+    (field) => {
+      const load = sessionLoad("synthetic-run-a");
+      if (load.state !== "ready" || load.health.state !== "available") throw Error("fixture");
+      if (field === "deadline") load.health.data.fixed_deadline_utc = "2026-01-22T12:00:00Z";
+      else load.health.data.exploratory_mode = true;
+      const cleared = historyCheckDisplay(success(), load);
+      expect(cleared.history).toBeNull();
+      expect(cleared.lastSuccessfulRead).toBeNull();
+    },
+  );
 });
 
 describe("Solana historical display", () => {

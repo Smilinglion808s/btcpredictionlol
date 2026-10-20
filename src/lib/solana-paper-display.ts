@@ -36,24 +36,33 @@ export function historyCheckDisplay(
       ? load.health.data
       : previous.verifiedSession;
   const invalidated = !!(
-    previous.history && verifiedSession && !matchesSession(previous.history, verifiedSession)
+    previous.history &&
+    verifiedSession &&
+    !matchesSession(previous.history, verifiedSession)
   );
-  const candidate = load.state === "ready" && load.history.state === "available"
-    ? load.history.data : null;
-  const accepted = candidate !== null &&
-    (!verifiedSession || matchesSession(candidate, verifiedSession));
-  const safeLoad: PaperMonitorLoad = load.state === "ready" && candidate && !accepted
-    ? { ...load, history: { state: "unavailable" } } : load;
+  const candidate =
+    load.state === "ready" && load.history.state === "available" ? load.history.data : null;
+  const accepted =
+    candidate !== null && (!verifiedSession || matchesSession(candidate, verifiedSession));
+  const safeLoad: PaperMonitorLoad =
+    load.state === "ready" && candidate && !accepted
+      ? { ...load, history: { state: "unavailable" } }
+      : load;
   const history = retainPaperHistory(invalidated ? null : previous.history, safeLoad);
   let lastSuccessfulRead = invalidated ? null : previous.lastSuccessfulRead;
-  let outcome = invalidated ? "unchecked" as const : previous.outcome;
+  let outcome = invalidated ? ("unchecked" as const) : previous.outcome;
   if (reportResult) {
-    outcome = reportResult.state !== "ready" || reportResult.history.state !== "available"
-      ? "unavailable" : accepted ? "accepted" : "rejected";
+    outcome =
+      reportResult.state !== "ready" || reportResult.history.state !== "available"
+        ? "unavailable"
+        : accepted
+          ? "accepted"
+          : "rejected";
   }
   if (accepted && history && load.state === "ready" && load.historyCheckedAt !== undefined) {
     // The retained cutoff may be newer than this same-session response; never replace it.
-    const sameIdentity = candidate.run_id === history.run_id &&
+    const sameIdentity =
+      candidate.run_id === history.run_id &&
       candidate.evidence_fence.fixed_deadline_utc === history.evidence_fence.fixed_deadline_utc &&
       candidate.exploratory_mode === history.exploratory_mode;
     if (sameIdentity) lastSuccessfulRead = load.historyCheckedAt;
