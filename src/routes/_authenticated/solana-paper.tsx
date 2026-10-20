@@ -576,9 +576,13 @@ export function SolanaPaperView({
               <h2 id="sr-wallets-title">Wallet performance</h2>
               <span className="sr-chip">Paper · realized SOL</span>
             </div>
-            <p className="sr-panel-note">Our copied trades · {retained ? "retained snapshot" : "at report cutoff"}</p>
+            <p className="sr-panel-note">
+              Our copied trades · {retained ? "retained snapshot" : "at report cutoff"}
+            </p>
             {walletResults.length === 0 ? (
-              <p className="sr-wallet-empty">No verified wallet report yet. Realized results are unavailable.</p>
+              <p className="sr-wallet-empty">
+                No verified wallet report yet. Realized results are unavailable.
+              </p>
             ) : (
               <ul className="sr-wallets sr-realized-wallets">
                 {walletResults.map((result) => (
@@ -587,7 +591,9 @@ export function SolanaPaperView({
                       <summary aria-label={`Wallet ${result.wallet}, realized results and details`}>
                         <span className="sr-wallet-name">
                           <strong title={result.wallet}>Wallet {walletTail(result.wallet)}</strong>
-                          <small>Our paper copies <span aria-hidden="true">↗</span></small>
+                          <small>
+                            Our paper copies <span aria-hidden="true">↗</span>
+                          </small>
                         </span>
                         <span className="sr-wallet-result">
                           <small>This run</small>
@@ -601,15 +607,31 @@ export function SolanaPaperView({
                       </summary>
                       <div className="sr-row-detail">
                         <p className="sr-address">{result.wallet}</p>
-                        <p>Run: {result.runId ?? "Unavailable"} · Cutoff: {boiseTime(result.cutoff)}</p>
+                        <p>
+                          Run: {result.runId ?? "Unavailable"} · Cutoff: {boiseTime(result.cutoff)}
+                        </p>
                         {result.aggregate ? (
                           <>
-                            <p>{result.aggregate.closed_count} closed · {result.aggregate.open_count} open · {result.aggregate.unresolved_count} unresolved</p>
-                            <p>Open estimate (not realized): <Money value={result.aggregate.open_net_pnl_lamports_at_cutoff} /></p>
-                            <p>{result.aggregate.failed_entry_count} failed entries · {result.aggregate.skipped_opportunity_count} skipped. Modeled costs included.</p>
-                            {result.aggregate.source_coverage_gap_latched && <p className="sr-warning">Coverage gap · observed path only.</p>}
+                            <p>
+                              {result.aggregate.closed_count} closed · {result.aggregate.open_count}{" "}
+                              open · {result.aggregate.unresolved_count} unresolved
+                            </p>
+                            <p>
+                              Open estimate (not realized):{" "}
+                              <Money value={result.aggregate.open_net_pnl_lamports_at_cutoff} />
+                            </p>
+                            <p>
+                              {result.aggregate.failed_entry_count} failed entries ·{" "}
+                              {result.aggregate.skipped_opportunity_count} skipped. Modeled costs
+                              included.
+                            </p>
+                            {result.aggregate.source_coverage_gap_latched && (
+                              <p className="sr-warning">Coverage gap · observed path only.</p>
+                            )}
                           </>
-                        ) : <p>No unique validated realized aggregate for this wallet.</p>}
+                        ) : (
+                          <p>No unique validated realized aggregate for this wallet.</p>
+                        )}
                       </div>
                     </details>
                   </li>
@@ -617,11 +639,20 @@ export function SolanaPaperView({
               </ul>
             )}
             <details className="sr-source-details sr-wallet-source">
-              <summary><span>Realized results from our copies</span><span>Details</span></summary>
-              <div className="sr-source-body"><p>Cross-run history is not connected.</p><p>This run uses the accepted report’s wallet aggregate, not the displayed trade subset. Open estimates are excluded; these are not source wallet investment returns.</p></div>
+              <summary>
+                <span>Realized results from our copies</span>
+                <span>Details</span>
+              </summary>
+              <div className="sr-source-body">
+                <p>Cross-run history is not connected.</p>
+                <p>
+                  This run uses the accepted report’s wallet aggregate, not the displayed trade
+                  subset. Open estimates are excluded; these are not source wallet investment
+                  returns.
+                </p>
+              </div>
             </details>
           </section>
-
         </div>
 
         <details id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
