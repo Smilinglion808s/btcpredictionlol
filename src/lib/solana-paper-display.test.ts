@@ -103,6 +103,24 @@ describe("session-bound historical check attribution", () => {
     expect(late.lastSuccessfulRead).toBeNull();
     expect(late.outcome).toBe("rejected");
   });
+  it("accepts cached run B history when health verifies B after the report check", () => {
+    const healthA = sessionLoad("synthetic-run-a");
+    const healthB = sessionLoad("synthetic-run-b");
+    if (healthA.state !== "ready" || healthB.state !== "ready") throw Error("fixture");
+    const initial = historyCheckDisplay(success(), healthA);
+    const reportB = acceptedLoad(historyFixture("synthetic-run-b"), 200);
+    const rejected = historyCheckDisplay(initial, { ...reportB, health: healthA.health }, reportB);
+    expect(rejected.outcome).toBe("rejected");
+    expect(rejected.history?.run_id).toBe("synthetic-run-a");
+    expect(rejected.lastSuccessfulRead).toBe(100);
+
+    // Health-only event reuses B's original checked timestamp and evidence, without a new read.
+    const accepted = historyCheckDisplay(rejected, { ...reportB, health: healthB.health });
+    expect(accepted.outcome).toBe("accepted");
+    expect(accepted.history?.run_id).toBe("synthetic-run-b");
+    expect(accepted.lastSuccessfulRead).toBe(200);
+    expect(accepted.history?.evidence_fence.evidence_cutoff_utc).toBe("2026-01-20T12:00:00Z");
+  });
   it("retains the successful check and original cutoff on a same-session failed read", () => {
     const initial = success();
     const failed = historyCheckDisplay(
