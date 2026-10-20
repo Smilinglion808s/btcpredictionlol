@@ -389,6 +389,51 @@ export function SolanaPaperView({
           </p>
         )}
 
+        <div className="sr-data-grid">
+          <section className="sr-panel" aria-labelledby="sr-trades-title">
+            <div className="sr-panel-heading">
+              <div>
+                <span className="sr-eyebrow">THE LEDGER</span>
+                <h2 id="sr-trades-title">Recent Trades</h2>
+              </div>
+              <Button variant="outline" className="sr-refresh" disabled={historyPending} onClick={() => refreshRef.current?.()}><RefreshCw aria-hidden="true" size={16} />{historyPending ? "Checking…" : "Refresh"}</Button>
+            </div>
+            <div className="sr-check-meta" role="status">
+              <p>Last updated · successful report check: {lastSuccessfulRead === null ? "Not yet available" : boiseTime(new Date(lastSuccessfulRead).toISOString())}</p>
+              <p>Snapshot cutoff: {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} · Historical age: {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}</p>
+              <p>Checks every 3 minutes; reports no more often than every 10 minutes. A successful check may return the same historical evidence.</p>
+            </div>
+            {retained && <p className="sr-notice">Report check unavailable or rejected. Retained historical rows — not current evidence.</p>}
+            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && <p className="sr-note">Historical snapshot is at least 10 minutes old; not live trade evidence.</p>}
+            <p className="sr-panel-note">Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.</p>
+            {!history || history.copied_trades_as_of === null ? (
+              <div className="sr-empty">
+                <span aria-hidden="true">↗</span>
+                <h3>Waiting for trade details</h3>
+                <p>No verified trade rows are available.</p>
+              </div>
+            ) : history.copied_trades_as_of.length === 0 ? (
+              <div className="sr-empty">
+                <span aria-hidden="true">↗</span>
+                <h3>No copied entries yet</h3>
+                <p>No entries committed by this cutoff.</p>
+              </div>
+            ) : (
+              <ul className="sr-trades">
+                {newestTrades(history.copied_trades_as_of).map((trade) => (
+                  <BriefPosition
+                    key={`${trade.position_id}:${trade.source_wallet}:${trade.mint}`}
+                    trade={trade}
+                    symbol={
+                      tokenSymbols?.run_id === history.run_id
+                        ? (tokenSymbols.symbols[trade.mint] ?? null)
+                        : null
+                    }
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
         <section className="sr-results" aria-labelledby="sr-results-title">
           <div className="sr-section-heading">
             <div>
@@ -460,51 +505,6 @@ export function SolanaPaperView({
           </p>
         </section>
 
-        <div className="sr-data-grid">
-          <section className="sr-panel" aria-labelledby="sr-trades-title">
-            <div className="sr-panel-heading">
-              <div>
-                <span className="sr-eyebrow">THE LEDGER</span>
-                <h2 id="sr-trades-title">Recent Trades</h2>
-              </div>
-              <Button variant="outline" className="sr-refresh" disabled={historyPending} onClick={() => refreshRef.current?.()}><RefreshCw aria-hidden="true" size={16} />{historyPending ? "Checking…" : "Refresh"}</Button>
-            </div>
-            <div className="sr-check-meta" role="status">
-              <p>Last updated · successful report check: {lastSuccessfulRead === null ? "Not yet available" : boiseTime(new Date(lastSuccessfulRead).toISOString())}</p>
-              <p>Snapshot cutoff: {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} · Historical age: {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}</p>
-              <p>Checks every 3 minutes; reports no more often than every 10 minutes. A successful check may return the same historical evidence.</p>
-            </div>
-            {retained && <p className="sr-notice">Report check unavailable or rejected. Retained historical rows — not current evidence.</p>}
-            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && <p className="sr-note">Historical snapshot is at least 10 minutes old; not live trade evidence.</p>}
-            <p className="sr-panel-note">Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.</p>
-            {!history || history.copied_trades_as_of === null ? (
-              <div className="sr-empty">
-                <span aria-hidden="true">↗</span>
-                <h3>Waiting for trade details</h3>
-                <p>No verified trade rows are available.</p>
-              </div>
-            ) : history.copied_trades_as_of.length === 0 ? (
-              <div className="sr-empty">
-                <span aria-hidden="true">↗</span>
-                <h3>No copied entries yet</h3>
-                <p>No entries committed by this cutoff.</p>
-              </div>
-            ) : (
-              <ul className="sr-trades">
-                {newestTrades(history.copied_trades_as_of).map((trade) => (
-                  <BriefPosition
-                    key={`${trade.position_id}:${trade.source_wallet}:${trade.mint}`}
-                    trade={trade}
-                    symbol={
-                      tokenSymbols?.run_id === history.run_id
-                        ? (tokenSymbols.symbols[trade.mint] ?? null)
-                        : null
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
           <details className="sr-disclosure sr-wallet-disclosure">
             <summary><strong>Wallet performance</strong><span className="sr-summary-hint">Conditional ledger totals</span></summary>
             <section aria-labelledby="sr-wallets-title">
