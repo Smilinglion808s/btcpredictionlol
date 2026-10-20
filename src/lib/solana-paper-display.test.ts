@@ -109,11 +109,7 @@ describe("session-bound historical check attribution", () => {
     if (healthA.state !== "ready" || healthB.state !== "ready") throw Error("fixture");
     const initial = historyCheckDisplay(success(), healthA);
     const reportB = acceptedLoad(historyFixture("synthetic-run-b"), 200);
-    const rejected = historyCheckDisplay(
-      initial,
-      { ...reportB, health: healthA.health },
-      reportB,
-    );
+    const rejected = historyCheckDisplay(initial, { ...reportB, health: healthA.health }, reportB);
     expect(rejected.outcome).toBe("rejected");
     expect(rejected.history?.run_id).toBe("synthetic-run-a");
     expect(rejected.lastSuccessfulRead).toBe(100);
