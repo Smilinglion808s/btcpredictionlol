@@ -434,14 +434,18 @@ export function SolanaPaperView({
           <Link to="/stats" className="sr-back">
             ← Dashboard
           </Link>
-          <a href="#solana-live-panel" className="sr-back">Controls ↗</a>
+          <a href="#solana-live-panel" className="sr-back">
+            Controls ↗
+          </a>
           <SolanaWalletHeader />
         </div>
         <div className="sr-data-grid">
           <section className="sr-panel" aria-labelledby="sr-trades-title">
             <div className="sr-panel-heading">
               <div>
-                <span className="sr-eyebrow">SOLANA <span aria-hidden="true"> / </span> PAPER</span>
+                <span className="sr-eyebrow">
+                  SOLANA <span aria-hidden="true"> / </span> PAPER
+                </span>
                 <h1 id="sr-trades-title">Recent Trades</h1>
               </div>
               <Button
@@ -455,26 +459,65 @@ export function SolanaPaperView({
               </Button>
             </div>
             <div className="sr-check-meta" role="status">
-              <p>Last checked {lastSuccessfulRead === null
-                ? "—"
-                : boiseTime(new Date(lastSuccessfulRead).toISOString())}</p>
-              <span>{historyPending ? "Checking report…" : historyCheck.outcome === "rejected"
-                ? "Session mismatch · report rejected"
-                : historyCheck.outcome === "unavailable"
-                  ? history ? "Check unavailable · prior snapshot retained" : "Report unavailable"
-                  : retained ? "Prior snapshot retained" : history ? "Historical snapshot" : "Awaiting report"}</span>
+              <p>
+                Last checked{" "}
+                {lastSuccessfulRead === null
+                  ? "—"
+                  : boiseTime(new Date(lastSuccessfulRead).toISOString())}
+              </p>
+              <span>
+                {historyPending
+                  ? "Checking report…"
+                  : historyCheck.outcome === "rejected"
+                    ? "Session mismatch · report rejected"
+                    : historyCheck.outcome === "unavailable"
+                      ? history
+                        ? "Check unavailable · prior snapshot retained"
+                        : "Report unavailable"
+                      : retained
+                        ? "Prior snapshot retained"
+                        : history
+                          ? "Historical snapshot"
+                          : "Awaiting report"}
+              </span>
             </div>
             {(source?.gap_latched || gapAffected) && (
               <p className="sr-notice">Coverage gaps · observed events only.</p>
             )}
             <details className="sr-source-details">
-              <summary><span>Paper simulations · historical only</span><span>Details</span></summary>
+              <summary>
+                <span>Paper simulations · historical only</span>
+                <span>Details</span>
+              </summary>
               <div className="sr-source-body">
-                <p>Snapshot cutoff: {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} · Age: {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}. Never live evidence; retained rows keep their original cutoff.</p>
-                <p>Checks every 3 minutes; reports at most every 10 minutes. A successful check can return unchanged evidence.</p>
-                <p>Simulated 1 SOL entries, not transaction receipts. Tickers are unverified; mint is identity. Entry market cap is unavailable. Conditional observed-path results include modeled costs; finality and source event age may be unknown. No real funds or funded balance.</p>
-                <p>Current status: {scannerHeading} · {entriesLabel}. {health ? "Health checked independently." : "Current scanner state unknown."} Live unavailable · default OFF.</p>
-                {retained && <p>Prior same-session evidence is retained, not current. A failed check does not refresh its cutoff.</p>}
+                <p>
+                  Snapshot cutoff:{" "}
+                  {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} ·
+                  Age:{" "}
+                  {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}.
+                  Never live evidence; retained rows keep their original cutoff.
+                </p>
+                <p>
+                  Checks every 3 minutes; reports at most every 10 minutes. A successful check can
+                  return unchanged evidence.
+                </p>
+                <p>
+                  Simulated 1 SOL entries, not transaction receipts. Tickers are unverified; mint is
+                  identity. Entry market cap is unavailable. Conditional observed-path results
+                  include modeled costs; finality and source event age may be unknown. No real funds
+                  or funded balance.
+                </p>
+                <p>
+                  Current status: {scannerHeading} · {entriesLabel}.{" "}
+                  {health ? "Health checked independently." : "Current scanner state unknown."} Live
+                  unavailable · default OFF.
+                </p>
+                {retained && (
+                  <p>
+                    Prior same-session evidence is retained, not current. A failed check does not
+                    refresh its cutoff.
+                  </p>
+                )}
               </div>
             </details>
             {!history || history.copied_trades_as_of === null ? (
@@ -509,11 +552,15 @@ export function SolanaPaperView({
             <section className="sr-metrics" aria-label="Paper totals at snapshot cutoff">
               <article className="sr-metric">
                 <span className="sr-eyebrow">Realized net</span>
-                <strong><Money value={sumMoney("realized_net_pnl_lamports")} /></strong>
+                <strong>
+                  <Money value={sumMoney("realized_net_pnl_lamports")} />
+                </strong>
               </article>
               <article className="sr-metric">
                 <span className="sr-eyebrow">Closed / open</span>
-                <strong>{closedCount ?? "—"} / {openCount ?? "—"}</strong>
+                <strong>
+                  {closedCount ?? "—"} / {openCount ?? "—"}
+                </strong>
               </article>
               <article className="sr-metric">
                 <span className="sr-eyebrow">Unresolved</span>
@@ -1032,7 +1079,6 @@ export function SolanaPaperView({
             </section>
           </div>
         </details>
-
       </div>
     </div>
   );
