@@ -489,7 +489,9 @@ export function SolanaPaperView({
               </Button>
             </div>
             {historyReadUnavailable && !historyPending && !retained && (
-              <p className="sr-notice">Report check unavailable. No successful read or fresh evidence is established.</p>
+              <p className="sr-notice">
+                Report check unavailable. No successful read or fresh evidence is established.
+              </p>
             )}
             <div className="sr-check-meta" role="status">
               <p>
