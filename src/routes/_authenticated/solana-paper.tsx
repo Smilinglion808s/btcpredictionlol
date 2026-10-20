@@ -15,6 +15,7 @@ import {
   newestTrades,
   realizedTradeDisplay,
   shortMint,
+  walletRealizedRows,
 } from "@/lib/solana-paper-display";
 import {
   ageLabel,
@@ -408,6 +409,7 @@ export function SolanaPaperView({
                 ? `Owner heartbeat received · ${label(health.status)}`
                 : "Awaiting fresh heartbeat";
   const rows = history?.trader_pnl_as_of ?? [];
+  const walletResults = walletRealizedRows(history, health?.selected_wallets ?? []);
   const sumMoney = (key: "realized_net_pnl_lamports" | "open_net_pnl_lamports_at_cutoff") => {
     if (!history || rows.length === 0 || rows.some((row) => row[key] === null)) return null;
     return rows.reduce((sum, row) => sum + BigInt(row[key] ?? "0"), 0n).toString();
@@ -569,85 +571,88 @@ export function SolanaPaperView({
             </section>
           )}
 
-          <details className="sr-disclosure sr-wallet-disclosure">
-            <summary>
-              <strong>Wallet performance</strong>
-              <span className="sr-summary-hint">Conditional ledger totals</span>
-            </summary>
-            <section aria-labelledby="sr-wallets-title">
-              <div className="sr-panel-heading">
-                <div>
-                  <span className="sr-eyebrow">SOURCE WATCHLIST</span>
-                  <h2 id="sr-wallets-title">Wallet performance</h2>
-                </div>
-                <span className="sr-chip">{history ? rows.length : "—"} WALLETS</span>
-              </div>
-              <p className="sr-panel-note">Our modeled copies, not the source wallet's returns.</p>
-              {rows.length === 0 ? (
-                <div className="sr-empty">
-                  <span aria-hidden="true">◎</span>
-                  <h3>No wallet report yet</h3>
-                  <p>Unknown values stay unknown.</p>
-                </div>
-              ) : (
-                <ul className="sr-wallets">
-                  {rows.map((row, index) => (
-                    <li key={row.source_wallet}>
-                      <details>
-                        <summary>
-                          <span className="sr-wallet-index" aria-hidden="true">
-                            {String(index + 1).padStart(2, "0")}
-                          </span>
-                          <span className="sr-wallet-name">
-                            <strong title={row.source_wallet}>
-                              Wallet {walletTail(row.source_wallet)}
-                            </strong>
-                            <small>
-                              {row.closed_count} closed · {row.open_count} open
-                              {row.unresolved_count > 0
-                                ? ` · ${row.unresolved_count} unresolved`
-                                : ""}
-                              {row.source_coverage_gap_latched ? " · Coverage gap" : ""}
-                            </small>
-                          </span>
-                          <span className="sr-wallet-value">
-                            <Money value={row.total_net_pnl_lamports_at_cutoff} />
-                            <small>Conditional total</small>
-                          </span>
-                        </summary>
-                        <div className="sr-row-detail">
-                          <p className="sr-address">{row.source_wallet}</p>
-                          <dl>
-                            <div>
-                              <dt>Realized net</dt>
-                              <dd>
-                                <Money value={row.realized_net_pnl_lamports} />
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Open estimate</dt>
-                              <dd>
-                                <Money value={row.open_net_pnl_lamports_at_cutoff} />
-                              </dd>
-                            </div>
-                          </dl>
-                          <p>
-                            {row.failed_entry_count} failed entries ·{" "}
-                            {row.skipped_opportunity_count} skipped. Modeled costs included.
-                          </p>
-                          {row.source_coverage_gap_latched && (
-                            <p className="sr-warning">
-                              Observed path only. The first source sale may be missing.
+          <section className="sr-wallet-section" aria-labelledby="sr-wallets-title">
+            <div className="sr-section-heading">
+              <h2 id="sr-wallets-title">Wallet performance</h2>
+              <span className="sr-chip">Paper · realized SOL</span>
+            </div>
+            <p className="sr-panel-note">
+              Our copied trades · {retained ? "retained snapshot" : "at report cutoff"}
+            </p>
+            {walletResults.length === 0 ? (
+              <p className="sr-wallet-empty">
+                No verified wallet report yet. Realized results are unavailable.
+              </p>
+            ) : (
+              <ul className="sr-wallets sr-realized-wallets">
+                {walletResults.map((result) => (
+                  <li key={result.wallet}>
+                    <details>
+                      <summary aria-label={`Wallet ${result.wallet}, realized results and details`}>
+                        <span className="sr-wallet-name">
+                          <strong title={result.wallet}>Wallet {walletTail(result.wallet)}</strong>
+                          <small>
+                            Our paper copies <span aria-hidden="true">↗</span>
+                          </small>
+                        </span>
+                        <span className="sr-wallet-result">
+                          <small>This run</small>
+                          <strong>{result.thisRun.value}</strong>
+                          <small>{result.thisRun.label}</small>
+                        </span>
+                        <span className="sr-wallet-result sr-wallet-all">
+                          <small>All recorded runs</small>
+                          <strong>{result.allRecordedRuns}</strong>
+                        </span>
+                      </summary>
+                      <div className="sr-row-detail">
+                        <p className="sr-address">{result.wallet}</p>
+                        <p>
+                          Run: {result.runId ?? "Unavailable"} · Cutoff: {boiseTime(result.cutoff)}
+                        </p>
+                        {result.aggregate ? (
+                          <>
+                            <p>
+                              {result.aggregate.closed_count} closed · {result.aggregate.open_count}{" "}
+                              open · {result.aggregate.unresolved_count} unresolved
                             </p>
-                          )}
-                        </div>
-                      </details>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </details>
+                            <p>
+                              Open estimate (not realized):{" "}
+                              <Money value={result.aggregate.open_net_pnl_lamports_at_cutoff} />
+                            </p>
+                            <p>
+                              {result.aggregate.failed_entry_count} failed entries ·{" "}
+                              {result.aggregate.skipped_opportunity_count} skipped. Modeled costs
+                              included.
+                            </p>
+                            {result.aggregate.source_coverage_gap_latched && (
+                              <p className="sr-warning">Coverage gap · observed path only.</p>
+                            )}
+                          </>
+                        ) : (
+                          <p>No unique validated realized aggregate for this wallet.</p>
+                        )}
+                      </div>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <details className="sr-source-details sr-wallet-source">
+              <summary>
+                <span>Realized results from our copies</span>
+                <span>Details</span>
+              </summary>
+              <div className="sr-source-body">
+                <p>Cross-run history is not connected.</p>
+                <p>
+                  This run uses the accepted report’s wallet aggregate, not the displayed trade
+                  subset. Open estimates are excluded; these are not source wallet investment
+                  returns.
+                </p>
+              </div>
+            </details>
+          </section>
         </div>
 
         <details id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
