@@ -326,12 +326,14 @@ export function SolanaPaperView({
   const [tokenSymbols, setTokenSymbols] = useState<PaperTokenSymbols | null>(null);
   const refreshRef = useRef<(() => void) | null>(null);
   const [historyPending, setHistoryPending] = useState(false);
+  const [historyReadUnavailable, setHistoryReadUnavailable] = useState(false);
   const [lastSuccessfulRead, setLastSuccessfulRead] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setLoad(null);
     setHistory(null);
     setLastSuccessfulRead(null);
+    setHistoryReadUnavailable(false);
     const stop = startIndependentMonitorRefresh(
       loader,
       historyLoader,
@@ -346,7 +348,12 @@ export function SolanaPaperView({
           setLastSuccessfulRead(value.historyCheckedAt);
         }
       },
-      { historyIntervalMs: 180_000, onHistoryPending: setHistoryPending },
+      {
+        historyIntervalMs: 180_000,
+        onHistoryPending: setHistoryPending,
+        onHistoryResult: (value) =>
+          setHistoryReadUnavailable(value.state !== "ready" || value.history.state !== "available"),
+      },
     );
     refreshRef.current = stop.refreshHistory;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -481,6 +488,9 @@ export function SolanaPaperView({
                 {historyPending ? "Checking…" : "Refresh"}
               </Button>
             </div>
+            {historyReadUnavailable && !historyPending && !retained && (
+              <p className="sr-notice">Report check unavailable. No successful read or fresh evidence is established.</p>
+            )}
             <div className="sr-check-meta" role="status">
               <p>
                 Last updated · successful report check:{" "}
