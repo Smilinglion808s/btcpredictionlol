@@ -54,18 +54,18 @@ const load = (history: PaperHistory): PaperMonitorLoad => ({
 describe("authoritative paper wallet realized display", () => {
   it("uses wallet aggregates even when copied trades are missing or partial", () => {
     const history = report();
-    expect(walletRealizedRows(history)[0]?.thisRun.value).toBe("+1.0000 SOL");
+    expect(walletRealizedRows(history)[0]?.thisRun.value).toBe("+1 SOL");
     expect(walletRealizedRows({ ...history, copied_trades_as_of: [] })[0]?.thisRun.value).toBe(
-      "+1.0000 SOL",
+      "+1 SOL",
     );
   });
   it("never includes open estimates or conditional totals in realized PnL", () => {
-    expect(walletRealizedRows(report())[0]?.thisRun.value).toBe("+1.0000 SOL");
+    expect(walletRealizedRows(report())[0]?.thisRun.value).toBe("+1 SOL");
   });
   it("distinguishes known zero, negative realized and absent money", () => {
     expect(realizedWalletAmount("0")).toEqual({ value: "0 SOL", label: "Realized · break-even" });
     expect(realizedWalletAmount("-1000000000")).toEqual({
-      value: "-1.0000 SOL",
+      value: "−1 SOL",
       label: "Realized loss",
     });
     expect(realizedWalletAmount(null).value).toBe("Unavailable");
@@ -96,13 +96,13 @@ describe("authoritative paper wallet realized display", () => {
   it("replaces repeated and newer snapshots, never double-counting", () => {
     const first = historyCheckDisplay(emptyHistoryCheckDisplay, load(report()), load(report()));
     const repeated = historyCheckDisplay(first, load(report()), load(report()));
-    expect(walletRealizedRows(repeated.history)[0]?.thisRun.value).toBe("+1.0000 SOL");
+    expect(walletRealizedRows(repeated.history)[0]?.thisRun.value).toBe("+1 SOL");
     const newer = {
       ...report([trader("2000000000")]),
       evidence_fence: { ...report().evidence_fence, evidence_cutoff_utc: "2026-01-20T13:00:00Z" },
     };
     const next = historyCheckDisplay(repeated, load(newer), load(newer));
-    expect(walletRealizedRows(next.history)[0]?.thisRun.value).toBe("+2.0000 SOL");
+    expect(walletRealizedRows(next.history)[0]?.thisRun.value).toBe("+2 SOL");
     expect(walletRealizedRows(next.history)[0]?.cutoff).toBe("2026-01-20T13:00:00Z");
   });
   it("clears run A money on a verified run switch before displaying run B", () => {
@@ -120,7 +120,7 @@ describe("authoritative paper wallet realized display", () => {
     });
     expect(walletRealizedRows(switched.history, [wallet])[0]?.thisRun.value).toBe("Unavailable");
     const next = historyCheckDisplay(switched, load(report([trader("3000000000")], "synthetic-b")));
-    expect(walletRealizedRows(next.history)[0]?.thisRun.value).toBe("+3.0000 SOL");
+    expect(walletRealizedRows(next.history)[0]?.thisRun.value).toBe("+3 SOL");
     expect(walletRealizedRows(next.history)[0]?.runId).toBe("synthetic-b");
   });
 });
