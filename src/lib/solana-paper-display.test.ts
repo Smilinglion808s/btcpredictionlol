@@ -52,7 +52,10 @@ const historyFixture = (run = "synthetic-run-a", cutoff = "2026-01-20T12:00:00Z"
       journal_sequence: 1,
     },
   }) as PaperHistory;
-const acceptedLoad = (history = historyFixture(), checked = 100): Extract<PaperMonitorLoad, { state: "ready" }> => ({
+const acceptedLoad = (
+  history = historyFixture(),
+  checked = 100,
+): Extract<PaperMonitorLoad, { state: "ready" }> => ({
   state: "ready",
   fetchedAt: 10,
   historyCheckedAt: checked,
