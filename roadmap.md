@@ -207,3 +207,6 @@ model, executor, stake, gate, receiver or Railway change.
 - [ ] 2026-09-29: V2 frozen model package + seed bars (awaiting user ZIP); btc-trader v2-record forwarding (awaiting wire contract).
 - [x] V3 PF-E008: isolated services/v3-worker, signed webhook (delivery OFF), tests, runbook (2026-10-05)
 - DOT-Zero SOL/DOGE paper-only altcoin extension in services/dot-paper-worker (disabled by default) — 2026-10-14
+
+- [x] 2026-10-20: Retire DOT Paper and CSV Data tabs and their page polling/realtime/export activity; old URLs redirect to Stats.
+- [ ] 2026-10-20: Stop external DOT paper workers and reclaim dedicated Railway storage (requires Railway management access; shared prediction history must remain).
