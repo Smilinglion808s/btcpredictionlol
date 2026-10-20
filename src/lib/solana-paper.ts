@@ -1771,7 +1771,11 @@ export function startIndependentMonitorRefresh(
   healthLoader: PaperMonitorLoader,
   historyLoader: PaperMonitorLoader,
   emit: (load: PaperMonitorLoad) => void,
-  options: RefreshOptions & { historyIntervalMs?: number; onHistoryPending?: (pending: boolean) => void } = {},
+  options: RefreshOptions & {
+    historyIntervalMs?: number;
+    onHistoryPending?: (pending: boolean) => void;
+    onHistoryResult?: (value: PaperMonitorLoad) => void;
+  } = {},
 ): (() => void) & { refreshHistory: () => void } {
   let healthLoad: PaperMonitorLoad | null = null;
   let historyLoad: PaperMonitorLoad | null = null;
@@ -1825,6 +1829,8 @@ export function startIndependentMonitorRefresh(
     },
     (value) => {
       historyLoad = value;
+      options.onHistoryPending?.(false);
+      options.onHistoryResult?.(value);
       publish();
     },
     {
