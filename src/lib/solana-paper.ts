@@ -1718,7 +1718,7 @@ export function startMonitorRefresh(
   loader: PaperMonitorLoader,
   emit: (load: PaperMonitorLoad) => void,
   options: RefreshOptions = {},
-): () => void {
+): (() => void) & { refresh: () => void } {
   const scheduler = options.scheduler ?? {
     set: (fn: () => void, ms: number) => setTimeout(fn, ms),
     clear: (id: ReturnType<typeof setTimeout> | undefined) => {
@@ -1730,7 +1730,8 @@ export function startMonitorRefresh(
     deadline: ReturnType<typeof setTimeout> | undefined,
     active: AbortController | undefined;
   const run = async () => {
-    if (stopped) return;
+    if (stopped || active) return;
+    scheduler.clear(next);
     active = new AbortController();
     let timedOut = false;
     deadline = scheduler.set(() => {
@@ -1746,6 +1747,7 @@ export function startMonitorRefresh(
         emit({ state: "error", message: "Paper monitor unavailable. Values cleared, not zero." });
     } finally {
       scheduler.clear(deadline);
+      active = undefined;
       if (!stopped)
         next = scheduler.set(() => {
           void run();
@@ -1753,23 +1755,24 @@ export function startMonitorRefresh(
     }
   };
   void run();
-  return () => {
+  const stop = () => {
     stopped = true;
     scheduler.clear(next);
     scheduler.clear(deadline);
     active?.abort();
   };
+  return Object.assign(stop, { refresh: () => void run() });
 }
 /** Independent serial loops: heartbeat retries never refetch the large report.
- * One history read on mount, then >=600s after completion even on errors/run changes.
+ * One history read on mount, then completion-relative checks (default 600s).
  * This bounds a normal open page, not arbitrary clients or multiple tabs.
  */
 export function startIndependentMonitorRefresh(
   healthLoader: PaperMonitorLoader,
   historyLoader: PaperMonitorLoader,
   emit: (load: PaperMonitorLoad) => void,
-  options: RefreshOptions = {},
-): () => void {
+  options: RefreshOptions & { historyIntervalMs?: number; onHistoryPending?: (pending: boolean) => void } = {},
+): (() => void) & { refreshHistory: () => void } {
   let healthLoad: PaperMonitorLoad | null = null;
   let historyLoad: PaperMonitorLoad | null = null;
   let verifiedSession: ScannerHealth | null = null;
@@ -1811,20 +1814,28 @@ export function startIndependentMonitorRefresh(
     options,
   );
   const stopHistory = startMonitorRefresh(
-    historyLoader,
+    async (signal) => {
+      options.onHistoryPending?.(true);
+      try {
+        return await historyLoader(signal);
+      } finally {
+        if (!signal?.aborted) options.onHistoryPending?.(false);
+      }
+    },
     (value) => {
       historyLoad = value;
       publish();
     },
     {
       ...options,
-      intervalMs: PAPER_HISTORY_REFRESH_MS,
+      intervalMs: options.historyIntervalMs ?? PAPER_HISTORY_REFRESH_MS,
     },
   );
-  return () => {
+  const stop = () => {
     stopHealth();
     stopHistory();
   };
+  return Object.assign(stop, { refreshHistory: stopHistory.refresh });
 }
 /** Only historical evidence may survive a failed request, always with its original cutoff. */
 export function retainPaperHistory(previous: PaperHistory | null, load: PaperMonitorLoad): PaperHistory | null {
