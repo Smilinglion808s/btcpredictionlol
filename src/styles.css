@@ -1262,32 +1262,32 @@
 
 /* Scoped Solana presentation only. Global theme and controls are unchanged. */
 .solana-retro {
-  --sr-ink: oklch(0.14 0 0);
-  --sr-panel: oklch(0.19 0 0);
-  --sr-raised: oklch(0.25 0 0);
+  --sr-ink: oklch(0.17 0.035 260);
+  --sr-panel: oklch(0.22 0.04 260);
+  --sr-raised: oklch(0.29 0.045 260);
   --sr-white: oklch(0.99 0 0);
-  --sr-silver: oklch(0.82 0.005 260);
-  --sr-muted: oklch(0.72 0.005 260);
-  --sr-line: oklch(0.38 0.005 260);
-  --sr-brand: oklch(0.57 0.22 22);
+  --sr-accent: oklch(0.78 0.105 295);
+  --sr-muted: oklch(0.76 0.025 260);
+  --sr-line: oklch(0.34 0.04 260);
+  --sr-brand: oklch(0.83 0.13 200);
   --sr-warn: oklch(0.85 0.09 90);
-  --sr-edge-light: color-mix(in oklab, var(--sr-silver) 30%, transparent);
-  --sr-crimson-light: color-mix(in oklab, var(--sr-brand) 22%, transparent);
-  --sr-button-light: 0 0 20px var(--sr-crimson-light), inset 0 1px 0 var(--sr-edge-light);
-  --sr-surface-light: 0 -1px 0 var(--sr-edge-light), -14px -12px 40px -24px var(--sr-crimson-light);
+  --sr-edge-light: color-mix(in oklab, var(--sr-accent) 30%, transparent);
+  --sr-cyan-light: color-mix(in oklab, var(--sr-brand) 22%, transparent);
+  --sr-button-light: 0 0 20px var(--sr-cyan-light), inset 0 1px 0 var(--sr-edge-light);
+  --sr-surface-light: 0 -1px 0 var(--sr-edge-light), -14px -12px 40px -24px var(--sr-cyan-light);
   --foreground: var(--sr-white);
   --background: var(--sr-ink);
   --card: var(--sr-panel);
   --muted-foreground: var(--sr-muted);
   --border: var(--sr-line);
   --primary: var(--sr-brand);
-  --primary-foreground: var(--sr-white);
+  --primary-foreground: var(--sr-ink);
   --bull: var(--sr-white);
-  --bear: var(--sr-silver);
+  --bear: var(--sr-accent);
   background: var(--sr-ink);
   color: var(--sr-white);
   min-height: 100vh;
-  font-family: "Trebuchet MS", "Manrope", sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 14px;
   line-height: 1.6;
   color-scheme: dark;
@@ -1304,17 +1304,17 @@
 .solana-retro .sr-back:hover { color: var(--sr-white); }
 .solana-retro .wallet-login-trigger { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
 .solana-retro .sr-eyebrow { display: block; font: 11px/1.5 var(--font-mono); color: var(--sr-muted); }
-.solana-retro .sr-chip { display: inline-flex; align-items: center; border: 1px solid var(--sr-line); border-radius: 3px; padding: 4px 8px; font: 11px/1.4 var(--font-mono); color: var(--sr-silver); }
-.solana-retro .sr-chip-paper { background: var(--sr-brand); border-color: var(--sr-brand); color: var(--sr-white); font-weight: 700; }
-.solana-retro .sr-desk-header { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 26px 0 24px; border-bottom: 3px solid var(--sr-silver); position: relative; }
+.solana-retro .sr-chip { display: inline-flex; align-items: center; border: 1px solid var(--sr-line); border-radius: 8px; padding: 4px 8px; font: 11px/1.4 var(--font-mono); color: var(--sr-accent); }
+.solana-retro .sr-chip-paper { background: var(--sr-brand); border-color: var(--sr-brand); color: var(--sr-ink); font-weight: 700; }
+.solana-retro .sr-desk-header { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 26px 0 24px; border-bottom: 1px solid var(--sr-line); position: relative; }
 .solana-retro .sr-desk-header::after { content: ""; position: absolute; bottom: -3px; left: 0; width: 88px; height: 3px; background: var(--sr-brand); }
-.solana-retro h1 { margin: 6px 0 0; font-size: 32px; line-height: 1.2; font-weight: 800; }
+.solana-retro h1 { margin: 6px 0 0; font-size: 32px; line-height: 1.2; font-weight: 700; }
 .solana-retro h1 span { color: var(--sr-brand); }
 .solana-retro h2 { font-size: 22px; font-weight: 700; margin: 4px 0 0; line-height: 1.3; }
 .solana-retro .sr-status-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 16px 0; font-size: 12px; color: var(--sr-muted); }
 .solana-retro .sr-status-strip > div { display: flex; align-items: center; gap: 8px; }
 .solana-retro .sr-status-strip strong { font-weight: 600; color: var(--sr-white); }
-.solana-retro .sr-status-dot { width: 6px; height: 6px; background: var(--sr-silver); flex-shrink: 0; }
+.solana-retro .sr-status-dot { width: 6px; height: 6px; background: var(--sr-accent); flex-shrink: 0; }
 .solana-retro .sr-status-strip > :last-child { color: var(--sr-white); }
 .solana-retro .sr-notice { font-size: 13px; padding: 10px 14px; margin: 12px 0; color: var(--sr-warn); border-left: 3px solid var(--sr-warn); background: var(--sr-panel); }
 .solana-retro .sr-section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 24px 0 12px; }
@@ -1328,9 +1328,9 @@
 .solana-retro .sr-note { font-size: 12px; color: var(--sr-muted); margin: 10px 0; }
 .solana-retro .sr-warning { color: var(--sr-warn); }
 .solana-retro .sr-data-grid { margin-top: 24px; }
-.solana-retro .sr-panel { min-width: 0; border-top: 1px solid var(--sr-silver); box-shadow: var(--sr-surface-light); position: relative; }
-.solana-retro .sr-panel::before { content: ""; position: absolute; top: -2px; left: 0; width: 68px; height: 3px; background: var(--sr-brand); box-shadow: var(--sr-button-light); }
-.solana-retro .sr-panel::after { content: ""; position: absolute; top: 0; right: 150px; width: 96px; height: 40px; pointer-events: none; background: repeating-linear-gradient(120deg, transparent 0 14px, var(--sr-edge-light) 14px 15px, transparent 15px 25px); mask-image: linear-gradient(to bottom, var(--sr-ink), transparent); }
+.solana-retro .sr-panel { min-width: 0; border-top: 1px solid var(--sr-line); box-shadow: var(--sr-surface-light); position: relative; background: linear-gradient(145deg, var(--sr-panel), var(--sr-ink)); border-radius: 16px 16px 0 0; padding: 0 24px; }
+.solana-retro .sr-panel::before { content: ""; position: absolute; top: 0; left: 24px; width: 68px; height: 2px; background: var(--sr-brand); box-shadow: var(--sr-button-light); }
+.solana-retro .sr-panel::after { content: ""; position: absolute; top: 0; right: 150px; width: 96px; height: 40px; pointer-events: none; background: linear-gradient(120deg, transparent, var(--sr-edge-light), transparent); mask-image: linear-gradient(to bottom, var(--sr-ink), transparent); }
 .solana-retro .wallet-login-trigger { box-shadow: var(--sr-button-light); }
 .solana-retro .sr-source-details { margin: 16px 0 24px; color: var(--sr-muted); font-size: 12px; }
 .solana-retro .sr-source-details > summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; list-style: none; border-bottom: 1px solid var(--sr-line); }
@@ -1345,35 +1345,35 @@
 .solana-retro .sr-check-meta { color: var(--sr-muted); font-size: 12px; padding: 14px 0 0; }
 .solana-retro .sr-check-meta p { margin: 2px 0; }
 .solana-retro .sr-check-meta p:first-child { color: var(--sr-white); }
-.solana-retro .sr-refresh { background: var(--sr-panel); color: var(--sr-white); border-color: var(--sr-line); box-shadow: inset 0 1px 0 var(--sr-edge-light); min-width: 118px; border-radius: 4px; }
+.solana-retro .sr-refresh { background: var(--sr-panel); color: var(--sr-white); border-color: var(--sr-line); box-shadow: inset 0 1px 0 var(--sr-edge-light); min-width: 118px; border-radius: 8px; }
 .solana-retro .sr-refresh:hover { background: var(--sr-raised); }
 .solana-retro .sr-trades, .solana-retro .sr-wallets { margin: 0; padding: 0; list-style: none; }
 .solana-retro :is(.sr-trades, .sr-wallets) > li { border-bottom: 1px solid var(--sr-line); }
 .solana-retro :is(.sr-trade, .sr-wallets details) > summary { display: flex; align-items: center; list-style: none; gap: 18px; padding: 22px 12px; min-height: 108px; }
 .solana-retro :is(.sr-trade, .sr-wallets details) > summary::-webkit-details-marker { display: none; }
 .solana-retro :is(.sr-trade, .sr-wallets details) > summary:hover { background: var(--sr-panel); }
-.solana-retro .sr-token-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 4px; background: var(--sr-silver); color: var(--sr-ink); border: 2px solid var(--sr-white); font-size: 20px; font-weight: 800; flex-shrink: 0; transform: skewY(-5deg); }
+.solana-retro .sr-token-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 8px; background: var(--sr-accent); color: var(--sr-ink); border: 1px solid var(--sr-line); font-size: 20px; font-weight: 700; flex-shrink: 0; transform: none; }
 .solana-retro .sr-trade-identity, .solana-retro .sr-wallet-name { flex: 1; min-width: 0; }
 .solana-retro :is(.sr-trade-identity, .sr-wallet-name) strong { display: block; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
 .solana-retro .sr-trade-identity .sr-chip { vertical-align: middle; margin-left: 8px; }
 .solana-retro :is(.sr-trade-identity, .sr-wallet-name) small { display: block; margin-top: 5px; font-size: 12px; color: var(--sr-muted); }
-.solana-retro .sr-trade-identity time { display: block; font-size: 12px; color: var(--sr-silver); margin-top: 4px; }
-.solana-retro .sr-trade-state { display: block; font-size: 12px; color: var(--sr-silver); margin-top: 4px; text-transform: capitalize; }
+.solana-retro .sr-trade-identity time { display: block; font-size: 12px; color: var(--sr-accent); margin-top: 4px; }
+.solana-retro .sr-trade-state { display: block; font-size: 12px; color: var(--sr-accent); margin-top: 4px; text-transform: capitalize; }
 .solana-retro .sr-entry-cap { flex: 0 0 145px; }
 .solana-retro .sr-entry-cap small { display: block; font-size: 12px; color: var(--sr-muted); }
 .solana-retro .sr-entry-cap strong { font-size: 14px; }
 .solana-retro .sr-trade-value, .solana-retro .sr-wallet-value { text-align: right; width: 190px; max-width: 35%; font: 600 17px/1.4 var(--font-mono); flex-shrink: 0; overflow-wrap: anywhere; }
 .solana-retro :is(.sr-trade-value, .sr-wallet-value) small { display: block; font: 12px/1.5 var(--font-sans); color: var(--sr-muted); margin-top: 4px; }
-.solana-retro .sr-open-label { display: block; color: var(--sr-silver); font: 12px/1.5 var(--font-sans); margin-top: 5px; }
+.solana-retro .sr-open-label { display: block; color: var(--sr-accent); font: 12px/1.5 var(--font-sans); margin-top: 5px; }
 .solana-retro .sr-wallet-index { font: 12px var(--font-mono); color: var(--sr-muted); flex-shrink: 0; }
 .solana-retro .sr-wallets details > summary { padding: 18px 0; min-height: 80px; }
-.solana-retro .sr-row-detail { border-top: 1px dashed var(--sr-line); background: var(--sr-panel); padding: 20px; font-size: 13px; color: var(--sr-muted); }
+.solana-retro .sr-row-detail { border-top: 1px solid var(--sr-line); background: var(--sr-panel); padding: 20px; font-size: 13px; color: var(--sr-muted); }
 .solana-retro .sr-row-detail p { margin: 8px 0; }
 .solana-retro .sr-address { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .solana-retro .sr-row-detail dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 18px 0; }
 .solana-retro .sr-row-detail dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--sr-white); }
 .solana-retro .sr-empty { padding: 64px 20px; text-align: center; color: var(--sr-muted); border-bottom: 1px solid var(--sr-line); }
-.solana-retro .sr-empty > span { font-size: 32px; color: var(--sr-brand); text-shadow: 0 0 20px var(--sr-crimson-light); }
+.solana-retro .sr-empty > span { font-size: 32px; color: var(--sr-brand); text-shadow: 0 0 20px var(--sr-cyan-light); }
 .solana-retro .sr-empty h3 { font-size: 18px; margin: 8px 0; color: var(--sr-white); }
 .solana-retro .sr-empty p { font-size: 13px; margin: 0; }
 .solana-retro .sr-disclosure { border-block: 1px solid var(--sr-line); margin-top: 22px; scroll-margin-top: 20px; }
@@ -1386,8 +1386,29 @@
 .solana-retro .sr-summary-hint { font-size: 12px; color: var(--sr-muted); }
 .solana-retro .sr-disclosure-body { border-top: 1px solid var(--sr-line); padding: 0 0 24px; }
 .solana-retro .sr-footer { margin-top: 28px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font: 11px/1.5 var(--font-mono); color: var(--sr-muted); }
+/* Wallet headline values are realized only; secondary evidence stays in disclosures. */
+.solana-retro .sr-wallet-section { margin-top: 32px; }
+.solana-retro .sr-wallet-section .sr-section-heading { align-items: center; }
+.solana-retro .sr-wallet-empty { color: var(--sr-muted); padding: 20px 0; font-size: 13px; }
+.solana-retro .sr-realized-wallets > li { background: var(--sr-panel); border: 1px solid var(--sr-line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.solana-retro .sr-realized-wallets details > summary { display: grid; grid-template-columns: minmax(120px,1fr) minmax(150px,1fr) minmax(150px,1fr); padding: 20px; gap: 20px; }
+.solana-retro .sr-wallet-result { min-width: 0; text-align: right; }
+.solana-retro .sr-wallet-result strong { display: block; font: 600 17px/1.5 "Manrope", sans-serif; overflow-wrap: anywhere; }
+.solana-retro .sr-wallet-result small { display: block; font-size: 11px; color: var(--sr-muted); }
+.solana-retro .sr-wallet-all strong { color: var(--sr-accent); }
+.solana-retro .sr-wallet-source { margin-bottom: 0; }
 @media (max-width: 700px) {
   .solana-retro .sr-shell { padding: 16px; }
+  .solana-retro .sr-panel { padding: 0 16px; }
+  .solana-retro .sr-topline { gap: 8px; }
+  .solana-retro .sr-realized-wallets details > summary { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding: 16px; }
+  .solana-retro .sr-realized-wallets .sr-wallet-name { grid-column: 1 / -1; }
+  .solana-retro .sr-wallet-result { text-align: left; }
+  .solana-retro .sr-wallet-result strong { font-size: 15px; }
+  .solana-retro .sr-wallet-section .sr-section-heading { flex-direction: row; flex-wrap: wrap; }
+  .solana-retro .sr-panel-heading { gap: 8px; }
+  .solana-retro #sr-trades-title { font-size: 24px; }
+  .solana-retro .sr-refresh { min-width: 100px; }
   .solana-retro .sr-topline > .sr-eyebrow { display: none; }
   .solana-retro .sr-desk-header { align-items: flex-start; flex-direction: column; padding: 18px 0; gap: 12px; }
   .solana-retro h1 { font-size: 26px; }
@@ -1395,7 +1416,7 @@
   .solana-retro .sr-metric > strong { font-size: 19px; }
   .solana-retro .sr-section-heading { flex-direction: column; align-items: flex-start; }
   .solana-retro .sr-snapshot-meta { text-align: left; }
-  .solana-retro #sr-trades-title { font-size: 26px; }
+
   .solana-retro .sr-trade > summary { display: grid; grid-template-columns: 36px minmax(0,1fr); padding: 20px 0; gap: 12px; }
   .solana-retro .sr-token-icon { width: 36px; height: 36px; align-self: start; }
   .solana-retro .sr-entry-cap { grid-column: 2; }
