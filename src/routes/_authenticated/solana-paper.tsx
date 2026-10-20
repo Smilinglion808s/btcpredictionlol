@@ -524,13 +524,17 @@ export function SolanaPaperView({
             </details>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
-                <span aria-hidden="true"><ArrowUpRight size={32} /></span>
+                <span aria-hidden="true">
+                  <ArrowUpRight size={32} />
+                </span>
                 <h3>No trade report yet</h3>
                 <p>Trades will appear when a verified paper report is available.</p>
               </div>
             ) : history.copied_trades_as_of.length === 0 ? (
               <div className="sr-empty">
-                <span aria-hidden="true"><ArrowUpRight size={32} /></span>
+                <span aria-hidden="true">
+                  <ArrowUpRight size={32} />
+                </span>
                 <h3>No copied entries yet</h3>
                 <p>No entries committed by this cutoff.</p>
               </div>
@@ -594,7 +598,12 @@ export function SolanaPaperView({
                         <span className="sr-wallet-name">
                           <strong title={result.wallet}>Wallet {walletTail(result.wallet)}</strong>
                           <small>
-                            Our paper copies <ArrowUpRight aria-hidden="true" size={14} className="inline-block shrink-0" />
+                            Our paper copies{" "}
+                            <ArrowUpRight
+                              aria-hidden="true"
+                              size={14}
+                              className="inline-block shrink-0"
+                            />
                           </small>
                         </span>
                         <span className="sr-wallet-result">
