@@ -15,8 +15,8 @@ import { buildV12Stats } from "./v12/stats.server";
 export const getV11Stats = createServerFn({ method: "POST" })
   .handler(async (): Promise<Record<string, any>> => {
     const [baseline,predictor]=await Promise.all([
-      cachedStats("v11-stats",buildV11Stats,8_000),
-      cachedStats("v12-predictor-stats",buildV12Stats,8_000).catch(()=>null),
+      cachedStats("v11-stats",buildV11Stats,120_000),
+      cachedStats("v12-predictor-stats",buildV12Stats,120_000).catch(()=>null),
     ]);
     return {...baseline as Record<string,any>,v12:predictor};
   });

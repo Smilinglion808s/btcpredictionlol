@@ -7,6 +7,9 @@ import { createServerFn } from "@tanstack/react-start";
 const boiseDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Boise" }).format(new Date(ms));
 
 export const getV3Live = createServerFn({ method: "POST" }).handler(async () => {
+  // Shared 60s server cache: many viewers collapse into one database read.
+  const { cachedStats } = await import("./statsCache.server");
+  return cachedStats("v3-live", async () => {
   const { serviceClient } = await import("./c85/ops.server");
   const sb = serviceClient();
   const [rt, recent, all] = await Promise.all([
@@ -57,4 +60,5 @@ export const getV3Live = createServerFn({ method: "POST" }).handler(async () => 
     },
     error: rt.error || recent.error || all.error ? "READ_FAILED" : graded.unavailable ? "GRADING_UNAVAILABLE" : null,
   };
+}, 60_000);
 });
