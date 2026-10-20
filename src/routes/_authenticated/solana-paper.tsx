@@ -434,42 +434,19 @@ export function SolanaPaperView({
           <Link to="/stats" className="sr-back">
             ← Dashboard
           </Link>
-          <span className="sr-eyebrow">SOLANA / COPY DESK</span>
+          <a href="#solana-live-panel" className="sr-back">
+            Controls ↗
+          </a>
           <SolanaWalletHeader />
         </div>
-        <header className="sr-desk-header">
-          <div>
-            <span className="sr-eyebrow">OBSERVED PATH / SIMULATED COPIES</span>
-            <h1>
-              Solana Copy Desk<span aria-hidden="true"> /</span>
-            </h1>
-          </div>
-          <span className="sr-chip sr-chip-paper">Paper · 1 SOL / entry</span>
-        </header>
-
-        <section className="sr-status-strip" aria-label="Scanner summary">
-          <div>
-            <span className="sr-status-dot" aria-hidden="true" />
-            <strong role="status">{scannerHeading}</strong>
-          </div>
-          <span>{entriesLabel}</span>
-          <span>LIVE unavailable · default OFF</span>
-        </section>
-        {source?.gap_latched && (
-          <p className="sr-notice">Source gaps recorded. Results cover observed events only.</p>
-        )}
-        {!health && (
-          <p className="sr-note">
-            Current scanner state is unknown. Historical results below are not a live status.
-          </p>
-        )}
-
         <div className="sr-data-grid">
           <section className="sr-panel" aria-labelledby="sr-trades-title">
             <div className="sr-panel-heading">
               <div>
-                <span className="sr-eyebrow">THE LEDGER</span>
-                <h2 id="sr-trades-title">Recent Trades</h2>
+                <span className="sr-eyebrow">
+                  SOLANA <span aria-hidden="true"> / </span> PAPER
+                </span>
+                <h1 id="sr-trades-title">Recent Trades</h1>
               </div>
               <Button
                 variant="outline"
@@ -481,55 +458,73 @@ export function SolanaPaperView({
                 {historyPending ? "Checking…" : "Refresh"}
               </Button>
             </div>
-            {historyCheck.outcome === "unavailable" && !historyPending && (
-              <p className="sr-notice">
-                Latest report check unavailable.{" "}
-                {history
-                  ? "Prior same-session historical evidence is retained, not current."
-                  : "No accepted historical evidence is available."}
-              </p>
-            )}
-            {historyCheck.outcome === "rejected" && !historyPending && (
-              <p className="sr-notice">
-                Latest report did not match the verified session and was not accepted.
-              </p>
-            )}
             <div className="sr-check-meta" role="status">
               <p>
-                Last updated · successful report check:{" "}
+                Last checked{" "}
                 {lastSuccessfulRead === null
-                  ? "Not yet available"
+                  ? "—"
                   : boiseTime(new Date(lastSuccessfulRead).toISOString())}
               </p>
-              <p>
-                Snapshot cutoff:{" "}
-                {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} ·
-                Historical age:{" "}
-                {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}
-              </p>
-              <p>
-                Checks every 3 minutes; reports no more often than every 10 minutes. A successful
-                check may return the same historical evidence.
-              </p>
+              <span>
+                {historyPending
+                  ? "Checking report…"
+                  : historyCheck.outcome === "rejected"
+                    ? "Session mismatch · report rejected"
+                    : historyCheck.outcome === "unavailable"
+                      ? history
+                        ? "Check unavailable · prior snapshot retained"
+                        : "Report unavailable"
+                      : retained
+                        ? "Prior snapshot retained"
+                        : history
+                          ? "Historical snapshot"
+                          : "Awaiting report"}
+              </span>
             </div>
-            {retained && (
-              <p className="sr-notice">
-                Retained historical rows at their original cutoff — not current evidence.
-              </p>
+            {(source?.gap_latched || gapAffected) && (
+              <p className="sr-notice">Coverage gaps · observed events only.</p>
             )}
-            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && (
-              <p className="sr-note">
-                Historical snapshot is at least 10 minutes old; not live trade evidence.
-              </p>
-            )}
-            <p className="sr-panel-note">
-              Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.
-            </p>
+            <details className="sr-source-details">
+              <summary>
+                <span>Paper simulations · historical only</span>
+                <span>Details</span>
+              </summary>
+              <div className="sr-source-body">
+                <p>
+                  Snapshot cutoff:{" "}
+                  {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} ·
+                  Age:{" "}
+                  {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}.
+                  Never live evidence; retained rows keep their original cutoff.
+                </p>
+                <p>
+                  Checks every 3 minutes; reports at most every 10 minutes. A successful check can
+                  return unchanged evidence.
+                </p>
+                <p>
+                  Simulated 1 SOL entries, not transaction receipts. Tickers are unverified; mint is
+                  identity. Entry market cap is unavailable. Conditional observed-path results
+                  include modeled costs; finality and source event age may be unknown. No real funds
+                  or funded balance.
+                </p>
+                <p>
+                  Current status: {scannerHeading} · {entriesLabel}.{" "}
+                  {health ? "Health checked independently." : "Current scanner state unknown."} Live
+                  unavailable · default OFF.
+                </p>
+                {retained && (
+                  <p>
+                    Prior same-session evidence is retained, not current. A failed check does not
+                    refresh its cutoff.
+                  </p>
+                )}
+              </div>
+            </details>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
                 <span aria-hidden="true">↗</span>
-                <h3>Waiting for trade details</h3>
-                <p>No verified trade rows are available.</p>
+                <h3>No trade report yet</h3>
+                <p>Trades will appear when a verified paper report is available.</p>
               </div>
             ) : history.copied_trades_as_of.length === 0 ? (
               <div className="sr-empty">
@@ -553,77 +548,26 @@ export function SolanaPaperView({
               </ul>
             )}
           </section>
-          <section className="sr-results" aria-labelledby="sr-results-title">
-            <div className="sr-section-heading">
-              <div>
-                <span className="sr-eyebrow">THE SNAPSHOT</span>
-                <h2 id="sr-results-title">Paper summary</h2>
-              </div>
-              <div className="sr-snapshot-meta">
-                {history ? (
-                  <>
-                    <span>
-                      {retained ? "Retained snapshot" : "Historical snapshot"} ·{" "}
-                      {ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}
-                    </span>
-                    <time dateTime={history.evidence_fence.evidence_cutoff_utc}>
-                      {history.evidence_fence.evidence_cutoff_utc}
-                    </time>
-                  </>
-                ) : (
-                  <span>No verified snapshot yet</span>
-                )}
-              </div>
-            </div>
-            {retained && (
-              <p className="sr-notice">
-                Latest request did not confirm a newer report. These values are retained, not
-                current.
-              </p>
-            )}
-            <div className="sr-metrics">
-              <article className="sr-metric sr-metric-featured">
+          {history && rows.length > 0 && (
+            <section className="sr-metrics" aria-label="Paper totals at snapshot cutoff">
+              <article className="sr-metric">
                 <span className="sr-eyebrow">Realized net</span>
                 <strong>
                   <Money value={sumMoney("realized_net_pnl_lamports")} />
                 </strong>
-                <small>Copy ledger · at cutoff</small>
               </article>
               <article className="sr-metric">
-                <span className="sr-eyebrow">Open estimate</span>
+                <span className="sr-eyebrow">Closed / open</span>
                 <strong>
-                  <Money value={sumMoney("open_net_pnl_lamports_at_cutoff")} />
+                  {closedCount ?? "—"} / {openCount ?? "—"}
                 </strong>
-                <small>
-                  {openCount === null ? "Open count unavailable" : `${openCount} open at cutoff`} ·
-                  Not a live quote
-                </small>
-              </article>
-              <article className="sr-metric">
-                <span className="sr-eyebrow">Closed copies</span>
-                <strong>{closedCount ?? "—"}</strong>
-                <small>At the report cutoff</small>
               </article>
               <article className="sr-metric">
                 <span className="sr-eyebrow">Unresolved</span>
-                <strong
-                  className={
-                    unresolvedCount !== null && unresolvedCount !== "0" ? "sr-warning" : undefined
-                  }
-                >
-                  {unresolvedCount ?? "—"}
-                </strong>
-                <small>Unknown is never zero</small>
+                <strong>{unresolvedCount ?? "—"}</strong>
               </article>
-            </div>
-            <p className="sr-note">
-              {history?.exploratory_mode || gapAffected
-                ? "Conditional, observed-path results. "
-                : "Simulated copy results. "}
-              No real funds. No funded balance. — means unavailable or unresolved. Observed events
-              only. Finality is not verified; source event age may be unknown.
-            </p>
-          </section>
+            </section>
+          )}
 
           <details className="sr-disclosure sr-wallet-disclosure">
             <summary>
@@ -709,8 +653,7 @@ export function SolanaPaperView({
         <details id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
           <summary>
             <span>
-              <span className="sr-eyebrow">SEPARATE FROM PAPER</span>
-              <strong>Owner & live controls</strong>
+              <strong>Owner controls</strong>
             </span>
             <span className="sr-chip">LIVE unavailable · default OFF</span>
           </summary>
@@ -721,7 +664,6 @@ export function SolanaPaperView({
         <details className="sr-disclosure sr-diagnostics">
           <summary>
             <span>
-              <span className="sr-eyebrow">DEEPER LOOK</span>
               <strong>Full report & diagnostics</strong>
             </span>
             <span className="sr-summary-hint">Scanner · coverage · methodology</span>
@@ -1137,10 +1079,6 @@ export function SolanaPaperView({
             </section>
           </div>
         </details>
-        <footer className="sr-footer">
-          <span>SOLANA COPY DESK / PAPER LAB</span>
-          <span>Historical estimates. Not executable quotes.</span>
-        </footer>
       </div>
     </div>
   );
