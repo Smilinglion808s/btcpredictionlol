@@ -43,14 +43,16 @@ const historyFixture = (run = "synthetic-run-a", cutoff = "2026-01-20T12:00:00Z"
   ({
     schema_version: "synthetic",
     run_id: run,
-    exploratory_mode: false,
+    exploratory_mode: null,
+    returns_scope: null,
+    source_observation_policy: null,
     evidence_fence: {
       evidence_cutoff_utc: cutoff,
       fixed_deadline_utc: "2026-01-21T12:00:00Z",
       journal_sequence: 1,
     },
   }) as PaperHistory;
-const acceptedLoad = (history = historyFixture(), checked = 100): PaperMonitorLoad => ({
+const acceptedLoad = (history = historyFixture(), checked = 100): Extract<PaperMonitorLoad, { state: "ready" }> => ({
   state: "ready",
   fetchedAt: 10,
   historyCheckedAt: checked,
@@ -65,7 +67,9 @@ const sessionLoad = (run: string): PaperMonitorLoad => ({
     data: {
       run_id: run,
       fixed_deadline_utc: "2026-01-21T12:00:00Z",
-      exploratory_mode: false,
+      exploratory_mode: null,
+      returns_scope: null,
+      source_observation_policy: null,
     } as ScannerHealth,
   },
   history: { state: "unavailable" },
