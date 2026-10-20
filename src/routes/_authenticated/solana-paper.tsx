@@ -6,7 +6,7 @@ import {
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { ArrowUpRight, RefreshCw } from "lucide-react";
 import {
   boiseTime,
   emptyHistoryCheckDisplay,
@@ -437,7 +437,7 @@ export function SolanaPaperView({
             ← Dashboard
           </Link>
           <a href="#solana-live-panel" className="sr-back">
-            Controls ↗
+            Controls <ArrowUpRight aria-hidden="true" size={16} className="inline-block shrink-0" />
           </a>
           <SolanaWalletHeader />
         </div>
@@ -462,7 +462,7 @@ export function SolanaPaperView({
             </div>
             <div className="sr-check-meta" role="status">
               <p>
-                Last checked{" "}
+                Last successful check{" "}
                 {lastSuccessfulRead === null
                   ? "—"
                   : boiseTime(new Date(lastSuccessfulRead).toISOString())}
@@ -524,13 +524,17 @@ export function SolanaPaperView({
             </details>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">
+                  <ArrowUpRight size={32} />
+                </span>
                 <h3>No trade report yet</h3>
                 <p>Trades will appear when a verified paper report is available.</p>
               </div>
             ) : history.copied_trades_as_of.length === 0 ? (
               <div className="sr-empty">
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">
+                  <ArrowUpRight size={32} />
+                </span>
                 <h3>No copied entries yet</h3>
                 <p>No entries committed by this cutoff.</p>
               </div>
@@ -588,11 +592,18 @@ export function SolanaPaperView({
                 {walletResults.map((result) => (
                   <li key={result.wallet}>
                     <details>
-                      <summary aria-label={`Wallet ${result.wallet}, realized results and details`}>
+                      <summary
+                        aria-label={`Wallet ${result.wallet}; This run ${result.thisRun.value}, ${result.thisRun.label}; All recorded runs ${result.allRecordedRuns}`}
+                      >
                         <span className="sr-wallet-name">
                           <strong title={result.wallet}>Wallet {walletTail(result.wallet)}</strong>
                           <small>
-                            Our paper copies <span aria-hidden="true">↗</span>
+                            Our paper copies{" "}
+                            <ArrowUpRight
+                              aria-hidden="true"
+                              size={14}
+                              className="inline-block shrink-0"
+                            />
                           </small>
                         </span>
                         <span className="sr-wallet-result">

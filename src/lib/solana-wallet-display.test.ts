@@ -83,6 +83,34 @@ describe("authoritative paper wallet realized display", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.thisRun.value).toBe("Unavailable");
   });
+  it("uses selected-wallet identities with unavailable results when history is null", () => {
+    const rows = walletRealizedRows(null, [wallet]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      wallet,
+      thisRun: { value: "Unavailable" },
+      allRecordedRuns: "Unavailable",
+      runId: null,
+      cutoff: null,
+    });
+  });
+  it("keeps the aggregate authoritative alongside selected-only identities without duplicates", () => {
+    const selectedOnly = "synthetic-selected-EFGH";
+    const rows = walletRealizedRows(report(), [wallet, selectedOnly, wallet]);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.wallet === wallet)?.thisRun.value).toBe("+1 SOL");
+    expect(rows.find((row) => row.wallet === selectedOnly)?.thisRun.value).toBe("Unavailable");
+  });
+  it("keeps distinct full wallets sharing the same last four characters separate", () => {
+    const otherWallet = "synthetic-other-ABCD";
+    const rows = walletRealizedRows(
+      report([trader(), { ...trader("2000000000"), source_wallet: otherWallet }]),
+      [wallet, otherWallet],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.wallet === wallet)?.thisRun.value).toBe("+1 SOL");
+    expect(rows.find((row) => row.wallet === otherWallet)?.thisRun.value).toBe("+2 SOL");
+  });
   it("rejects live or wrong-scope aggregates rather than mixing paper and live", () => {
     expect(
       walletRealizedRows({ ...report(), executable: true } as unknown as PaperHistory),
