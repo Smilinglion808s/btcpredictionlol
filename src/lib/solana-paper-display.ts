@@ -1,4 +1,74 @@
-import { lamportsToSol, type HistoricalTrade } from "./solana-paper";
+import {
+  lamportsToSol,
+  retainPaperHistory,
+  type HistoricalTrade,
+  type PaperHistory,
+  type PaperMonitorLoad,
+  type ScannerHealth,
+} from "./solana-paper";
+
+type HistorySession = Pick<ScannerHealth, "run_id" | "fixed_deadline_utc" | "exploratory_mode">;
+export type HistoryCheckDisplay = {
+  history: PaperHistory | null;
+  verifiedSession: HistorySession | null;
+  lastSuccessfulRead: number | null;
+  outcome: "unchecked" | "accepted" | "unavailable" | "rejected";
+};
+export const emptyHistoryCheckDisplay: HistoryCheckDisplay = {
+  history: null,
+  verifiedSession: null,
+  lastSuccessfulRead: null,
+  outcome: "unchecked",
+};
+const matchesSession = (history: PaperHistory, session: HistorySession) =>
+  (session.run_id === null || session.run_id === history.run_id) &&
+  session.fixed_deadline_utc === history.evidence_fence.fixed_deadline_utc &&
+  session.exploratory_mode === history.exploratory_mode;
+
+/** Pure UI attribution: health transport never determines a report read outcome. */
+export function historyCheckDisplay(
+  previous: HistoryCheckDisplay,
+  load: PaperMonitorLoad,
+  reportResult?: PaperMonitorLoad,
+): HistoryCheckDisplay {
+  const verifiedSession =
+    load.state === "ready" && load.health.state === "available"
+      ? load.health.data
+      : previous.verifiedSession;
+  const invalidated = !!(
+    previous.history &&
+    verifiedSession &&
+    !matchesSession(previous.history, verifiedSession)
+  );
+  const candidate =
+    load.state === "ready" && load.history.state === "available" ? load.history.data : null;
+  const accepted =
+    candidate !== null && (!verifiedSession || matchesSession(candidate, verifiedSession));
+  const safeLoad: PaperMonitorLoad =
+    load.state === "ready" && candidate && !accepted
+      ? { ...load, history: { state: "unavailable" } }
+      : load;
+  const history = retainPaperHistory(invalidated ? null : previous.history, safeLoad);
+  let lastSuccessfulRead = invalidated ? null : previous.lastSuccessfulRead;
+  let outcome = invalidated ? ("unchecked" as const) : previous.outcome;
+  if (reportResult) {
+    outcome =
+      reportResult.state !== "ready" || reportResult.history.state !== "available"
+        ? "unavailable"
+        : accepted
+          ? "accepted"
+          : "rejected";
+  }
+  if (accepted && history && load.state === "ready" && load.historyCheckedAt !== undefined) {
+    // The retained cutoff may be newer than this same-session response; never replace it.
+    const sameIdentity =
+      candidate.run_id === history.run_id &&
+      candidate.evidence_fence.fixed_deadline_utc === history.evidence_fence.fixed_deadline_utc &&
+      candidate.exploratory_mode === history.exploratory_mode;
+    if (sameIdentity) lastSuccessfulRead = load.historyCheckedAt;
+  }
+  return { history, verifiedSession, lastSuccessfulRead, outcome };
+}
 
 /** Presentation only: canonical timestamps and raw accounting remain untouched. */
 export function boiseTime(value: string | null | undefined): string {

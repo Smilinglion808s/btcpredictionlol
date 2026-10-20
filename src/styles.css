@@ -1276,6 +1276,8 @@
   --card: var(--sr-panel);
   --muted-foreground: var(--sr-muted);
   --border: var(--sr-line);
+  --primary: var(--sr-brand);
+  --primary-foreground: var(--sr-white);
   --bull: var(--sr-white);
   --bear: var(--sr-silver);
   background: var(--sr-ink);
@@ -1296,6 +1298,7 @@
 .solana-retro .sr-topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .solana-retro .sr-back { display: inline-flex; align-items: center; font-size: 13px; text-decoration: none; color: var(--sr-muted); }
 .solana-retro .sr-back:hover { color: var(--sr-white); }
+.solana-retro .wallet-login-trigger { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
 .solana-retro .sr-eyebrow { display: block; font: 11px/1.5 var(--font-mono); color: var(--sr-muted); }
 .solana-retro .sr-chip { display: inline-flex; align-items: center; border: 1px solid var(--sr-line); border-radius: 3px; padding: 4px 8px; font: 11px/1.4 var(--font-mono); color: var(--sr-silver); }
 .solana-retro .sr-chip-paper { background: var(--sr-brand); border-color: var(--sr-brand); color: var(--sr-white); font-weight: 700; }
