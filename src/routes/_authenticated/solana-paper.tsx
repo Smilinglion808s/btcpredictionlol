@@ -7,7 +7,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
-import { boiseTime, entryMarketCap, newestTrades, realizedTradeDisplay, shortMint } from "@/lib/solana-paper-display";
+import {
+  boiseTime,
+  entryMarketCap,
+  newestTrades,
+  realizedTradeDisplay,
+  shortMint,
+} from "@/lib/solana-paper-display";
 import {
   ageLabel,
   coverageLabel,
@@ -36,7 +42,11 @@ export const Route = createFileRoute("/_authenticated/solana-paper")({
     meta: [
       { title: "Solana Paper Copy Desk | BTC Predictor Pro" },
       { property: "og:title", content: "Solana Paper Copy Desk | BTC Predictor Pro" },
-      { property: "og:description", content: "Historical simulated Solana copy trades, realized SOL results and observed-path evidence." },
+      {
+        property: "og:description",
+        content:
+          "Historical simulated Solana copy trades, realized SOL results and observed-path evidence.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       {
@@ -204,34 +214,85 @@ function BriefPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: s
     <li>
       <details className="sr-trade">
         <summary>
-          <span className="sr-token-icon" aria-hidden="true">{symbol ? symbol.slice(0, 1).toUpperCase() : "?"}</span>
-          <span className="sr-trade-identity">
-            <strong>{symbol ?? "Unknown"} <span className="sr-chip sr-chip-paper">Paper</span></strong>
-            <small>Wallet {walletTail(t.source_wallet)} · Mint {shortMint(t.mint)}</small>
-            <time dateTime={t.entry_at}>{boiseTime(t.entry_at)}</time>
-            <span className="sr-trade-state">{label(t.position_status_at_cutoff)}{t.source_coverage_gap_latched ? " · Coverage gap" : ""}</span>
+          <span className="sr-token-icon" aria-hidden="true">
+            {symbol ? symbol.slice(0, 1).toUpperCase() : "?"}
           </span>
-          <span className="sr-entry-cap"><small>Entry market cap</small><strong>{entryMarketCap(t)}</strong></span>
-          <span className="sr-trade-value"><strong>{realized.value}</strong><small>{realized.label}</small><span className="sr-open-label">Details +</span></span>
+          <span className="sr-trade-identity">
+            <strong>
+              {symbol ?? "Unknown"} <span className="sr-chip sr-chip-paper">Paper</span>
+            </strong>
+            <small>
+              Wallet {walletTail(t.source_wallet)} · Mint {shortMint(t.mint)}
+            </small>
+            <time dateTime={t.entry_at}>{boiseTime(t.entry_at)}</time>
+            <span className="sr-trade-state">
+              {label(t.position_status_at_cutoff)}
+              {t.source_coverage_gap_latched ? " · Coverage gap" : ""}
+            </span>
+          </span>
+          <span className="sr-entry-cap">
+            <small>Entry market cap</small>
+            <strong>{entryMarketCap(t)}</strong>
+          </span>
+          <span className="sr-trade-value">
+            <strong>{realized.value}</strong>
+            <small>{realized.label}</small>
+            <span className="sr-open-label">Details +</span>
+          </span>
         </summary>
         <div className="sr-row-detail">
           <p className="sr-address">Copied source wallet: {t.source_wallet}</p>
           <p className="sr-address">Mint: {t.mint}</p>
           <p>Ticker is unverified metadata. The mint identifies the asset.</p>
-          <p>Entry market cap: Unknown — not supplied in the historical report. Current valuations are not entry values.</p>
+          <p>
+            Entry market cap: Unknown — not supplied in the historical report. Current valuations
+            are not entry values.
+          </p>
           <dl>
-            <div><dt>Paper entry · Boise</dt><dd>{boiseTime(t.entry_at)}</dd></div>
-            <div><dt>Paper exit · Boise</dt><dd>{boiseTime(t.exit_at)}</dd></div>
-            <div><dt>Canonical entry UTC</dt><dd>{time(t.entry_at)}</dd></div>
-            <div><dt>Canonical exit UTC</dt><dd>{time(t.exit_at)}</dd></div>
-            <div><dt>Entry notional</dt><dd>1 SOL · simulated</dd></div>
-            <div><dt>Recorded tokens</dt><dd>{tokenQuantity(t)}</dd></div>
-            <div><dt>{realized.label}</dt><dd>{realized.value}</dd></div>
+            <div>
+              <dt>Paper entry · Boise</dt>
+              <dd>{boiseTime(t.entry_at)}</dd>
+            </div>
+            <div>
+              <dt>Paper exit · Boise</dt>
+              <dd>{boiseTime(t.exit_at)}</dd>
+            </div>
+            <div>
+              <dt>Canonical entry UTC</dt>
+              <dd>{time(t.entry_at)}</dd>
+            </div>
+            <div>
+              <dt>Canonical exit UTC</dt>
+              <dd>{time(t.exit_at)}</dd>
+            </div>
+            <div>
+              <dt>Entry notional</dt>
+              <dd>1 SOL · simulated</dd>
+            </div>
+            <div>
+              <dt>Recorded tokens</dt>
+              <dd>{tokenQuantity(t)}</dd>
+            </div>
+            <div>
+              <dt>{realized.label}</dt>
+              <dd>{realized.value}</dd>
+            </div>
           </dl>
           <p>Historical paper simulation, not an actual transaction receipt.</p>
-          {t.coverage_class !== null && <p>Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive coverage.</p>}
-          {t.unresolved_reason && <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>}
-          {t.source_coverage_gap_latched && <p className="sr-warning">First source sale may be missing. Observed copy model only.</p>}
+          {t.coverage_class !== null && (
+            <p>
+              Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive
+              coverage.
+            </p>
+          )}
+          {t.unresolved_reason && (
+            <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>
+          )}
+          {t.source_coverage_gap_latched && (
+            <p className="sr-warning">
+              First source sale may be missing. Observed copy model only.
+            </p>
+          )}
         </div>
       </details>
     </li>
@@ -271,13 +332,22 @@ export function SolanaPaperView({
     setLoad(null);
     setHistory(null);
     setLastSuccessfulRead(null);
-    const stop = startIndependentMonitorRefresh(loader, historyLoader, (value) => {
-      setLoad(value);
-      setHistory((previous) => retainPaperHistory(previous, value));
-      if (value.state === "ready" && value.history.state === "available" && value.historyCheckedAt !== undefined) {
-        setLastSuccessfulRead(value.historyCheckedAt);
-      }
-    }, { historyIntervalMs: 180_000, onHistoryPending: setHistoryPending });
+    const stop = startIndependentMonitorRefresh(
+      loader,
+      historyLoader,
+      (value) => {
+        setLoad(value);
+        setHistory((previous) => retainPaperHistory(previous, value));
+        if (
+          value.state === "ready" &&
+          value.history.state === "available" &&
+          value.historyCheckedAt !== undefined
+        ) {
+          setLastSuccessfulRead(value.historyCheckedAt);
+        }
+      },
+      { historyIntervalMs: 180_000, onHistoryPending: setHistoryPending },
+    );
     refreshRef.current = stop.refreshHistory;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => {
@@ -368,7 +438,12 @@ export function SolanaPaperView({
           <SolanaWalletHeader />
         </div>
         <header className="sr-desk-header">
-          <div><span className="sr-eyebrow">OBSERVED PATH / SIMULATED COPIES</span><h1>Solana Copy Desk<span aria-hidden="true"> /</span></h1></div>
+          <div>
+            <span className="sr-eyebrow">OBSERVED PATH / SIMULATED COPIES</span>
+            <h1>
+              Solana Copy Desk<span aria-hidden="true"> /</span>
+            </h1>
+          </div>
           <span className="sr-chip sr-chip-paper">Paper · 1 SOL / entry</span>
         </header>
 
@@ -396,16 +471,48 @@ export function SolanaPaperView({
                 <span className="sr-eyebrow">THE LEDGER</span>
                 <h2 id="sr-trades-title">Recent Trades</h2>
               </div>
-              <Button variant="outline" className="sr-refresh" disabled={historyPending} onClick={() => refreshRef.current?.()}><RefreshCw aria-hidden="true" size={16} />{historyPending ? "Checking…" : "Refresh"}</Button>
+              <Button
+                variant="outline"
+                className="sr-refresh"
+                disabled={historyPending}
+                onClick={() => refreshRef.current?.()}
+              >
+                <RefreshCw aria-hidden="true" size={16} />
+                {historyPending ? "Checking…" : "Refresh"}
+              </Button>
             </div>
             <div className="sr-check-meta" role="status">
-              <p>Last updated · successful report check: {lastSuccessfulRead === null ? "Not yet available" : boiseTime(new Date(lastSuccessfulRead).toISOString())}</p>
-              <p>Snapshot cutoff: {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} · Historical age: {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}</p>
-              <p>Checks every 3 minutes; reports no more often than every 10 minutes. A successful check may return the same historical evidence.</p>
+              <p>
+                Last updated · successful report check:{" "}
+                {lastSuccessfulRead === null
+                  ? "Not yet available"
+                  : boiseTime(new Date(lastSuccessfulRead).toISOString())}
+              </p>
+              <p>
+                Snapshot cutoff:{" "}
+                {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} ·
+                Historical age:{" "}
+                {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}
+              </p>
+              <p>
+                Checks every 3 minutes; reports no more often than every 10 minutes. A successful
+                check may return the same historical evidence.
+              </p>
             </div>
-            {retained && <p className="sr-notice">Report check unavailable or rejected. Retained historical rows — not current evidence.</p>}
-            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && <p className="sr-note">Historical snapshot is at least 10 minutes old; not live trade evidence.</p>}
-            <p className="sr-panel-note">Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.</p>
+            {retained && (
+              <p className="sr-notice">
+                Report check unavailable or rejected. Retained historical rows — not current
+                evidence.
+              </p>
+            )}
+            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && (
+              <p className="sr-note">
+                Historical snapshot is at least 10 minutes old; not live trade evidence.
+              </p>
+            )}
+            <p className="sr-panel-note">
+              Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.
+            </p>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
                 <span aria-hidden="true">↗</span>
@@ -434,152 +541,156 @@ export function SolanaPaperView({
               </ul>
             )}
           </section>
-        <section className="sr-results" aria-labelledby="sr-results-title">
-          <div className="sr-section-heading">
-            <div>
-              <span className="sr-eyebrow">THE SNAPSHOT</span>
-              <h2 id="sr-results-title">Paper summary</h2>
+          <section className="sr-results" aria-labelledby="sr-results-title">
+            <div className="sr-section-heading">
+              <div>
+                <span className="sr-eyebrow">THE SNAPSHOT</span>
+                <h2 id="sr-results-title">Paper summary</h2>
+              </div>
+              <div className="sr-snapshot-meta">
+                {history ? (
+                  <>
+                    <span>
+                      {retained ? "Retained snapshot" : "Historical snapshot"} ·{" "}
+                      {ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}
+                    </span>
+                    <time dateTime={history.evidence_fence.evidence_cutoff_utc}>
+                      {history.evidence_fence.evidence_cutoff_utc}
+                    </time>
+                  </>
+                ) : (
+                  <span>No verified snapshot yet</span>
+                )}
+              </div>
             </div>
-            <div className="sr-snapshot-meta">
-              {history ? (
-                <>
-                  <span>
-                    {retained ? "Retained snapshot" : "Historical snapshot"} ·{" "}
-                    {ageLabel(history.evidence_fence.evidence_cutoff_utc, now)}
-                  </span>
-                  <time dateTime={history.evidence_fence.evidence_cutoff_utc}>
-                    {history.evidence_fence.evidence_cutoff_utc}
-                  </time>
-                </>
-              ) : (
-                <span>No verified snapshot yet</span>
-              )}
+            {retained && (
+              <p className="sr-notice">
+                Latest request did not confirm a newer report. These values are retained, not
+                current.
+              </p>
+            )}
+            <div className="sr-metrics">
+              <article className="sr-metric sr-metric-featured">
+                <span className="sr-eyebrow">Realized net</span>
+                <strong>
+                  <Money value={sumMoney("realized_net_pnl_lamports")} />
+                </strong>
+                <small>Copy ledger · at cutoff</small>
+              </article>
+              <article className="sr-metric">
+                <span className="sr-eyebrow">Open estimate</span>
+                <strong>
+                  <Money value={sumMoney("open_net_pnl_lamports_at_cutoff")} />
+                </strong>
+                <small>
+                  {openCount === null ? "Open count unavailable" : `${openCount} open at cutoff`} ·
+                  Not a live quote
+                </small>
+              </article>
+              <article className="sr-metric">
+                <span className="sr-eyebrow">Closed copies</span>
+                <strong>{closedCount ?? "—"}</strong>
+                <small>At the report cutoff</small>
+              </article>
+              <article className="sr-metric">
+                <span className="sr-eyebrow">Unresolved</span>
+                <strong
+                  className={
+                    unresolvedCount !== null && unresolvedCount !== "0" ? "sr-warning" : undefined
+                  }
+                >
+                  {unresolvedCount ?? "—"}
+                </strong>
+                <small>Unknown is never zero</small>
+              </article>
             </div>
-          </div>
-          {retained && (
-            <p className="sr-notice">
-              Latest request did not confirm a newer report. These values are retained, not current.
+            <p className="sr-note">
+              {history?.exploratory_mode || gapAffected
+                ? "Conditional, observed-path results. "
+                : "Simulated copy results. "}
+              No real funds. No funded balance. — means unavailable or unresolved. Observed events
+              only. Finality is not verified; source event age may be unknown.
             </p>
-          )}
-          <div className="sr-metrics">
-            <article className="sr-metric sr-metric-featured">
-              <span className="sr-eyebrow">Realized net</span>
-              <strong>
-                <Money value={sumMoney("realized_net_pnl_lamports")} />
-              </strong>
-              <small>Copy ledger · at cutoff</small>
-            </article>
-            <article className="sr-metric">
-              <span className="sr-eyebrow">Open estimate</span>
-              <strong>
-                <Money value={sumMoney("open_net_pnl_lamports_at_cutoff")} />
-              </strong>
-              <small>
-                {openCount === null ? "Open count unavailable" : `${openCount} open at cutoff`} ·
-                Not a live quote
-              </small>
-            </article>
-            <article className="sr-metric">
-              <span className="sr-eyebrow">Closed copies</span>
-              <strong>{closedCount ?? "—"}</strong>
-              <small>At the report cutoff</small>
-            </article>
-            <article className="sr-metric">
-              <span className="sr-eyebrow">Unresolved</span>
-              <strong
-                className={
-                  unresolvedCount !== null && unresolvedCount !== "0" ? "sr-warning" : undefined
-                }
-              >
-                {unresolvedCount ?? "—"}
-              </strong>
-              <small>Unknown is never zero</small>
-            </article>
-          </div>
-          <p className="sr-note">
-            {history?.exploratory_mode || gapAffected
-              ? "Conditional, observed-path results. "
-              : "Simulated copy results. "}
-            No real funds. No funded balance. — means unavailable or unresolved. Observed events
-            only. Finality is not verified; source event age may be unknown.
-          </p>
-        </section>
+          </section>
 
           <details className="sr-disclosure sr-wallet-disclosure">
-            <summary><strong>Wallet performance</strong><span className="sr-summary-hint">Conditional ledger totals</span></summary>
+            <summary>
+              <strong>Wallet performance</strong>
+              <span className="sr-summary-hint">Conditional ledger totals</span>
+            </summary>
             <section aria-labelledby="sr-wallets-title">
-            <div className="sr-panel-heading">
-              <div>
-                <span className="sr-eyebrow">SOURCE WATCHLIST</span>
-                <h2 id="sr-wallets-title">Wallet performance</h2>
+              <div className="sr-panel-heading">
+                <div>
+                  <span className="sr-eyebrow">SOURCE WATCHLIST</span>
+                  <h2 id="sr-wallets-title">Wallet performance</h2>
+                </div>
+                <span className="sr-chip">{history ? rows.length : "—"} WALLETS</span>
               </div>
-              <span className="sr-chip">{history ? rows.length : "—"} WALLETS</span>
-            </div>
-            <p className="sr-panel-note">Our modeled copies, not the source wallet's returns.</p>
-            {rows.length === 0 ? (
-              <div className="sr-empty">
-                <span aria-hidden="true">◎</span>
-                <h3>No wallet report yet</h3>
-                <p>Unknown values stay unknown.</p>
-              </div>
-            ) : (
-              <ul className="sr-wallets">
-                {rows.map((row, index) => (
-                  <li key={row.source_wallet}>
-                    <details>
-                      <summary>
-                        <span className="sr-wallet-index" aria-hidden="true">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span className="sr-wallet-name">
-                          <strong title={row.source_wallet}>
-                            Wallet {walletTail(row.source_wallet)}
-                          </strong>
-                          <small>
-                            {row.closed_count} closed · {row.open_count} open
-                            {row.unresolved_count > 0
-                              ? ` · ${row.unresolved_count} unresolved`
-                              : ""}
-                            {row.source_coverage_gap_latched ? " · Coverage gap" : ""}
-                          </small>
-                        </span>
-                        <span className="sr-wallet-value">
-                          <Money value={row.total_net_pnl_lamports_at_cutoff} />
-                          <small>Conditional total</small>
-                        </span>
-                      </summary>
-                      <div className="sr-row-detail">
-                        <p className="sr-address">{row.source_wallet}</p>
-                        <dl>
-                          <div>
-                            <dt>Realized net</dt>
-                            <dd>
-                              <Money value={row.realized_net_pnl_lamports} />
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Open estimate</dt>
-                            <dd>
-                              <Money value={row.open_net_pnl_lamports_at_cutoff} />
-                            </dd>
-                          </div>
-                        </dl>
-                        <p>
-                          {row.failed_entry_count} failed entries · {row.skipped_opportunity_count}{" "}
-                          skipped. Modeled costs included.
-                        </p>
-                        {row.source_coverage_gap_latched && (
-                          <p className="sr-warning">
-                            Observed path only. The first source sale may be missing.
+              <p className="sr-panel-note">Our modeled copies, not the source wallet's returns.</p>
+              {rows.length === 0 ? (
+                <div className="sr-empty">
+                  <span aria-hidden="true">◎</span>
+                  <h3>No wallet report yet</h3>
+                  <p>Unknown values stay unknown.</p>
+                </div>
+              ) : (
+                <ul className="sr-wallets">
+                  {rows.map((row, index) => (
+                    <li key={row.source_wallet}>
+                      <details>
+                        <summary>
+                          <span className="sr-wallet-index" aria-hidden="true">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span className="sr-wallet-name">
+                            <strong title={row.source_wallet}>
+                              Wallet {walletTail(row.source_wallet)}
+                            </strong>
+                            <small>
+                              {row.closed_count} closed · {row.open_count} open
+                              {row.unresolved_count > 0
+                                ? ` · ${row.unresolved_count} unresolved`
+                                : ""}
+                              {row.source_coverage_gap_latched ? " · Coverage gap" : ""}
+                            </small>
+                          </span>
+                          <span className="sr-wallet-value">
+                            <Money value={row.total_net_pnl_lamports_at_cutoff} />
+                            <small>Conditional total</small>
+                          </span>
+                        </summary>
+                        <div className="sr-row-detail">
+                          <p className="sr-address">{row.source_wallet}</p>
+                          <dl>
+                            <div>
+                              <dt>Realized net</dt>
+                              <dd>
+                                <Money value={row.realized_net_pnl_lamports} />
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Open estimate</dt>
+                              <dd>
+                                <Money value={row.open_net_pnl_lamports_at_cutoff} />
+                              </dd>
+                            </div>
+                          </dl>
+                          <p>
+                            {row.failed_entry_count} failed entries ·{" "}
+                            {row.skipped_opportunity_count} skipped. Modeled costs included.
                           </p>
-                        )}
-                      </div>
-                    </details>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                          {row.source_coverage_gap_latched && (
+                            <p className="sr-warning">
+                              Observed path only. The first source sale may be missing.
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </details>
         </div>
 
@@ -754,11 +865,11 @@ export function SolanaPaperView({
             <section className="mt-7" aria-label="Historical copy PnL">
               <h2 className="text-lg font-semibold">Our copy PnL · Historical snapshot</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                History is checked on opening this page, then three minutes after each completed check, separately
-                from scanner status. Reports are generated no more often than every 10 minutes. Open
-                estimates are valid only at the snapshot cutoff, not current or executable quotes. A
-                successful check may return the same report and never advances its evidence cutoff. Fetching this page does
-                not refresh its valuation.
+                History is checked on opening this page, then three minutes after each completed
+                check, separately from scanner status. Reports are generated no more often than
+                every 10 minutes. Open estimates are valid only at the snapshot cutoff, not current
+                or executable quotes. A successful check may return the same report and never
+                advances its evidence cutoff. Fetching this page does not refresh its valuation.
               </p>
               {history ? (
                 <>
