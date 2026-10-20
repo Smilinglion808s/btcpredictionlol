@@ -16,13 +16,14 @@ import { getV11Stats } from "@/lib/v11.functions";
 import { getV12Live } from "@/lib/v12Live.functions";
 import { getV3Live } from "@/lib/v3Live.functions";
 import { V3Card } from "@/components/v3-card";
+import { dashboardStatusRefresh, dashboardTotalsRefresh } from "@/lib/dashboard-refresh";
 
 function V3Tile() {
   const fetchV3 = useServerFn(getV3Live);
   const q = useQuery({
     queryKey: ["v3-live"],
     queryFn: () => fetchV3(),
-    refetchInterval: () => (typeof document !== "undefined" && document.hidden ? 60_000 : 10_000),
+    ...dashboardTotalsRefresh,
   });
   return <V3Card data={q.data ?? null} error={q.isError} />;
 }
@@ -59,41 +60,25 @@ function StatsPage() {
 
 
   // Version 1.1 — combined historical stream stats. Read-only and expensive,
-  // so it stays on the slow cadence; the live V1.2 state below is what has to
-  // be current to the second.
+  // so it stays on the two-minute cadence, independent of live status.
   const v11Fn = useServerFn(getV11Stats);
   const v11Q = useQuery({
     queryKey: ["v11-stats"],
     queryFn: () => v11Fn(),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
+    ...dashboardTotalsRefresh,
     refetchOnMount: "always",
-    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    staleTime: 5_000,
   });
 
   // Version 1.2 — current 15-minute interval only. Four small rows, so it can
-  // poll about once a second while a call is live without loading the
-  // database. Realtime is unavailable for these tables (they are not in the
+  // poll every five seconds without changing execution timing.
+  // Realtime is unavailable for these tables (they are not in the
   // publication and carry no reader grant), so polling is the transport.
   const v12LiveFn = useServerFn(getV12Live);
   const v12LiveQ = useQuery({
     queryKey: ["v12-live"],
     queryFn: () => v12LiveFn(),
-    // 1s while the interval is unresolved, 5s once a delivery has actually been
-    // accepted and nothing is still in flight, 15s when the tab is hidden.
-    // Routing is mutually exclusive — only one leg is ever called per interval —
-    // so "every leg reported" is never true and must not be the settled test.
-    refetchInterval: (q) => {
-      if (typeof document !== "undefined" && document.hidden) return 15_000;
-      const d = q.state.data as any;
-      if (!d) return 2_000;
-      const accepted =
-        Array.isArray(d.legs) && d.legs.some((l: any) => l.status === "ACKNOWLEDGED");
-      return d.isCurrentInterval && accepted && !d.pending ? 5_000 : 1_000;
-    },
-    refetchIntervalInBackground: false,
+    ...dashboardStatusRefresh,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -174,16 +159,16 @@ function StatsPage() {
         qc.invalidateQueries({ queryKey: ["model-versions"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "v11_decisions" }, () => {
-        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+        qc.invalidateQueries({ queryKey: ["v11-stats"], refetchType: "none" });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "v11_context_rows" }, () => {
-        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+        qc.invalidateQueries({ queryKey: ["v11-stats"], refetchType: "none" });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "v11_heads" }, () => {
-        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+        qc.invalidateQueries({ queryKey: ["v11-stats"], refetchType: "none" });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "webhook_deliveries" }, () => {
-        qc.invalidateQueries({ queryKey: ["v11-stats"] });
+        qc.invalidateQueries({ queryKey: ["v11-stats"], refetchType: "none" });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };

@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
+- Stats display polling is configured in the browser-only dashboard-refresh module; historical realtime events mark totals stale without immediate refetch, while manual refresh and live rollover stay immediate. Why: reduce dashboard downloads without touching worker or trading timing.
 - Solana wallet headline PnL is derived purely from one accepted paper trader aggregate per wallet; duplicate aggregates are unavailable and cross-run totals stay unavailable until a complete canonical cross-run read contract exists. Why: prevent replay accumulation, open-estimate substitution and paper/live mixing.
 - Solana dashboard formatting and pure session-bound historical check attribution are isolated in `solana-paper-display`; history refresh is browser-only and independent of health/control polling, with unchanged parsers and server cadence. Why: keep report outcomes, accepted session identity and historical cutoffs distinct from scanner transport without changing execution.
 - Retired DOT Paper and CSV Data URLs redirect to Stats without mounting their former polling, realtime, or export code; keep V1.2/V3 records intact because shared prediction history is still required.

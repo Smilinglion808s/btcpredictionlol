@@ -211,3 +211,4 @@ model, executor, stake, gate, receiver or Railway change.
 - [x] 2026-10-20: Retire DOT Paper and CSV Data tabs and their page polling/realtime/export activity; old URLs redirect to Stats.
 - [ ] 2026-10-20: Stop external DOT paper workers and reclaim dedicated Railway storage (requires Railway management access; shared prediction history must remain).
 - [x] 2026-10-20: Solana-only read-only preview cleanup: primary historical trade ledger, scoped retro styling, Boise display, serial three-minute history checks; no publication or execution changes.
+- [x] Dashboard network reduction: user-approved two-minute totals and five-second live-status browser checks; historical realtime invalidation no longer bypasses the totals cadence. Solana and workers unchanged.
