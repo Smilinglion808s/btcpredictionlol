@@ -4,7 +4,10 @@ import {
   WalletSolanaControls,
 } from "@/components/solana-wallet-session";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+import { boiseTime, entryMarketCap, newestTrades, realizedTradeDisplay, shortMint } from "@/lib/solana-paper-display";
 import {
   ageLabel,
   coverageLabel,
@@ -31,7 +34,11 @@ import {
 export const Route = createFileRoute("/_authenticated/solana-paper")({
   head: () => ({
     meta: [
-      { title: "Solana Copy PnL | BTC 15m" },
+      { title: "Solana Paper Copy Desk | BTC Predictor Pro" },
+      { property: "og:title", content: "Solana Paper Copy Desk | BTC Predictor Pro" },
+      { property: "og:description", content: "Historical simulated Solana copy trades, realized SOL results and observed-path evidence." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       {
         name: "description",
         content: "Read-only scanner status and historical PnL from our fixed-1-SOL paper copies.",
@@ -45,7 +52,7 @@ const time = (value: string | null) => value ?? "Unavailable";
 function Money({ value }: { value: string | null }) {
   return (
     <span className={`font-mono ${toneOf(value)}`}>
-      {value == null ? "—" : `${lamportsToSol(value, true)} SOL`}
+      {value == null ? "Unknown" : `${lamportsToSol(value, true)} SOL`}
     </span>
   );
 }
@@ -192,73 +199,39 @@ function HistoricalPosition({
 }
 
 function BriefPosition({ trade: t, symbol }: { trade: HistoricalTrade; symbol: string | null }) {
-  const closed = t.position_status_at_cutoff === "closed";
+  const realized = realizedTradeDisplay(t);
   return (
     <li>
       <details className="sr-trade">
         <summary>
-          <span className="sr-token-icon" aria-hidden="true">
-            {symbol ? symbol.slice(0, 1).toUpperCase() : "?"}
-          </span>
+          <span className="sr-token-icon" aria-hidden="true">{symbol ? symbol.slice(0, 1).toUpperCase() : "?"}</span>
           <span className="sr-trade-identity">
-            <strong>{symbol ?? "Unknown token"}</strong>
-            <small>Wallet {walletTail(t.source_wallet)} · 1 SOL</small>
-            <span className="sr-trade-state">
-              {historicalPositionLabel(t)}
-              {t.source_coverage_gap_latched ? " · Coverage gap" : ""}
-            </span>
+            <strong>{symbol ?? "Unknown"} <span className="sr-chip sr-chip-paper">Paper</span></strong>
+            <small>Wallet {walletTail(t.source_wallet)} · Mint {shortMint(t.mint)}</small>
+            <time dateTime={t.entry_at}>{boiseTime(t.entry_at)}</time>
+            <span className="sr-trade-state">{label(t.position_status_at_cutoff)}{t.source_coverage_gap_latched ? " · Coverage gap" : ""}</span>
           </span>
-          <span className="sr-trade-value">
-            <Money
-              value={closed ? t.realized_net_pnl_lamports : t.open_net_pnl_lamports_at_cutoff}
-            />
-            <small>{closed ? "Realized" : "Open estimate"}</small>
-            <span className="sr-open-label">Details ↗</span>
-          </span>
+          <span className="sr-entry-cap"><small>Entry market cap</small><strong>{entryMarketCap(t)}</strong></span>
+          <span className="sr-trade-value"><strong>{realized.value}</strong><small>{realized.label}</small><span className="sr-open-label">Details +</span></span>
         </summary>
         <div className="sr-row-detail">
+          <p className="sr-address">Copied source wallet: {t.source_wallet}</p>
           <p className="sr-address">Mint: {t.mint}</p>
-          <p>Asset labels are unverified DEX Screener metadata. The mint identifies the asset.</p>
+          <p>Ticker is unverified metadata. The mint identifies the asset.</p>
+          <p>Entry market cap: Unknown — not supplied in the historical report. Current valuations are not entry values.</p>
           <dl>
-            <div>
-              <dt>Paper entry</dt>
-              <dd>{time(t.entry_at)}</dd>
-            </div>
-            <div>
-              <dt>Paper exit</dt>
-              <dd>{time(t.exit_at)}</dd>
-            </div>
-            <div>
-              <dt>Recorded tokens</dt>
-              <dd>{tokenQuantity(t)}</dd>
-            </div>
-            <div>
-              <dt>Realized net at cutoff</dt>
-              <dd>
-                <Money value={t.realized_net_pnl_lamports} />
-              </dd>
-            </div>
-            <div>
-              <dt>Open estimate at cutoff</dt>
-              <dd>
-                <Money value={t.open_net_pnl_lamports_at_cutoff} />
-              </dd>
-            </div>
+            <div><dt>Paper entry · Boise</dt><dd>{boiseTime(t.entry_at)}</dd></div>
+            <div><dt>Paper exit · Boise</dt><dd>{boiseTime(t.exit_at)}</dd></div>
+            <div><dt>Canonical entry UTC</dt><dd>{time(t.entry_at)}</dd></div>
+            <div><dt>Canonical exit UTC</dt><dd>{time(t.exit_at)}</dd></div>
+            <div><dt>Entry notional</dt><dd>1 SOL · simulated</dd></div>
+            <div><dt>Recorded tokens</dt><dd>{tokenQuantity(t)}</dd></div>
+            <div><dt>{realized.label}</dt><dd>{realized.value}</dd></div>
           </dl>
-          {t.coverage_class !== null && (
-            <p>
-              Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive
-              coverage.
-            </p>
-          )}
-          {t.unresolved_reason && (
-            <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>
-          )}
-          {t.source_coverage_gap_latched && (
-            <p className="sr-warning">
-              First source sale may be missing. Observed copy model only.
-            </p>
-          )}
+          <p>Historical paper simulation, not an actual transaction receipt.</p>
+          {t.coverage_class !== null && <p>Epoch {t.source_epoch_id} · {coverageLabel(t.coverage_class)}. Not exhaustive coverage.</p>}
+          {t.unresolved_reason && <p className="sr-warning">Unresolved: {label(t.unresolved_reason)}</p>}
+          {t.source_coverage_gap_latched && <p className="sr-warning">First source sale may be missing. Observed copy model only.</p>}
         </div>
       </details>
     </li>
@@ -290,16 +263,25 @@ export function SolanaPaperView({
   const [load, setLoad] = useState<PaperMonitorLoad | null>(null);
   const [history, setHistory] = useState<PaperHistory | null>(null);
   const [tokenSymbols, setTokenSymbols] = useState<PaperTokenSymbols | null>(null);
+  const refreshRef = useRef<(() => void) | null>(null);
+  const [historyPending, setHistoryPending] = useState(false);
+  const [lastSuccessfulRead, setLastSuccessfulRead] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setLoad(null);
     setHistory(null);
+    setLastSuccessfulRead(null);
     const stop = startIndependentMonitorRefresh(loader, historyLoader, (value) => {
       setLoad(value);
       setHistory((previous) => retainPaperHistory(previous, value));
-    });
+      if (value.state === "ready" && value.history.state === "available" && value.historyCheckedAt !== undefined) {
+        setLastSuccessfulRead(value.historyCheckedAt);
+      }
+    }, { historyIntervalMs: 180_000, onHistoryPending: setHistoryPending });
+    refreshRef.current = stop.refreshHistory;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => {
+      refreshRef.current = null;
       stop();
       clearInterval(timer);
     };
@@ -358,7 +340,7 @@ export function SolanaPaperView({
   const rows = history?.trader_pnl_as_of ?? [];
   const sumMoney = (key: "realized_net_pnl_lamports" | "open_net_pnl_lamports_at_cutoff") => {
     if (!history || rows.length === 0 || rows.some((row) => row[key] === null)) return null;
-    return rows.reduce((sum, row) => sum + BigInt(row[key]!), 0n).toString();
+    return rows.reduce((sum, row) => sum + BigInt(row[key] ?? "0"), 0n).toString();
   };
   const sumCount = (key: "closed_count" | "open_count" | "unresolved_count") =>
     !history || rows.length === 0
@@ -385,58 +367,9 @@ export function SolanaPaperView({
           <span className="sr-eyebrow">SOLANA / COPY DESK</span>
           <SolanaWalletHeader />
         </div>
-        <header className="sr-hero">
-          <div className="sr-hero-copy">
-            <span className="sr-chip sr-chip-paper">PAPER MODE</span>
-            <h1>
-              Solana
-              <br />
-              <span>Copy Desk.</span>
-            </h1>
-            <p>Follow the copies. See the results.</p>
-            <div className="sr-hero-foot">
-              <span>01 / PAPER LAB</span>
-              <span>1 SOL per entry · Modeled costs included</span>
-            </div>
-          </div>
-          <div className="sr-scene" aria-hidden="true">
-            <svg viewBox="0 0 500 340" fill="none">
-              <circle cx="298" cy="137" r="91" fill="#ff8c87" />
-              <path
-                d="M206 151H389M210 165H387M218 179H380M228 194H371M246 208H351"
-                stroke="#172238"
-                strokeWidth="5"
-              />
-              <ellipse
-                cx="296"
-                cy="144"
-                rx="154"
-                ry="34"
-                transform="rotate(-24 296 144)"
-                stroke="#8de8dc"
-                strokeWidth="2"
-              />
-              <path
-                d="M43 283 154 185 230 270 294 224 421 315H43Z"
-                fill="#26364f"
-                stroke="#93d3cc"
-                strokeWidth="1.5"
-              />
-              <path d="m77 314 84-75 61 73 37-34 53 37H77Z" fill="#101a2c" />
-              <path d="m148 193-15 51 23-13 19 9 8-21" stroke="#f8dfc0" strokeWidth="2" />
-              <path d="M43 315H449M82 327H429M111 339H408" stroke="#8de8dc" strokeOpacity=".3" />
-              <path
-                d="M100 63v20M90 73h20M410 73v12M404 79h12M182 112v12M176 118h12"
-                stroke="#f6e9ce"
-                strokeWidth="2"
-              />
-              <circle cx="358" cy="36" r="2" fill="#f6e9ce" />
-              <circle cx="70" cy="163" r="2" fill="#f6e9ce" />
-              <path d="m340 266 44-17-8 25-36-8Z" fill="#f6e9ce" />
-              <path d="m346 265 28-9-5 13-23-4Z" fill="#ff8c87" />
-            </svg>
-            <span className="sr-scene-stamp">OBSERVE / DON'T ASSUME</span>
-          </div>
+        <header className="sr-desk-header">
+          <div><span className="sr-eyebrow">OBSERVED PATH / SIMULATED COPIES</span><h1>Solana Copy Desk<span aria-hidden="true"> /</span></h1></div>
+          <span className="sr-chip sr-chip-paper">Paper · 1 SOL / entry</span>
         </header>
 
         <section className="sr-status-strip" aria-label="Scanner summary">
@@ -460,7 +393,7 @@ export function SolanaPaperView({
           <div className="sr-section-heading">
             <div>
               <span className="sr-eyebrow">THE SNAPSHOT</span>
-              <h2 id="sr-results-title">Paper performance</h2>
+              <h2 id="sr-results-title">Paper summary</h2>
             </div>
             <div className="sr-snapshot-meta">
               {history ? (
@@ -532,13 +465,18 @@ export function SolanaPaperView({
             <div className="sr-panel-heading">
               <div>
                 <span className="sr-eyebrow">THE LEDGER</span>
-                <h2 id="sr-trades-title">Copied trades</h2>
+                <h2 id="sr-trades-title">Recent Trades</h2>
               </div>
-              <span className="sr-chip">AT CUTOFF</span>
+              <Button variant="outline" className="sr-refresh" disabled={historyPending} onClick={() => refreshRef.current?.()}><RefreshCw aria-hidden="true" size={16} />{historyPending ? "Checking…" : "Refresh"}</Button>
             </div>
-            <p className="sr-panel-note">
-              Open each trade for identity, timing and coverage details.
-            </p>
+            <div className="sr-check-meta" role="status">
+              <p>Last updated · successful report check: {lastSuccessfulRead === null ? "Not yet available" : boiseTime(new Date(lastSuccessfulRead).toISOString())}</p>
+              <p>Snapshot cutoff: {history ? boiseTime(history.evidence_fence.evidence_cutoff_utc) : "Unknown"} · Historical age: {history ? ageLabel(history.evidence_fence.evidence_cutoff_utc, now) : "Unknown"}</p>
+              <p>Checks every 3 minutes; reports no more often than every 10 minutes. A successful check may return the same historical evidence.</p>
+            </div>
+            {retained && <p className="sr-notice">Report check unavailable or rejected. Retained historical rows — not current evidence.</p>}
+            {history && now - Date.parse(history.evidence_fence.evidence_cutoff_utc) >= 600_000 && <p className="sr-note">Historical snapshot is at least 10 minutes old; not live trade evidence.</p>}
+            <p className="sr-panel-note">Paper simulations, not transaction receipts. Tickers are unverified; mint is identity.</p>
             {!history || history.copied_trades_as_of === null ? (
               <div className="sr-empty">
                 <span aria-hidden="true">↗</span>
@@ -553,7 +491,7 @@ export function SolanaPaperView({
               </div>
             ) : (
               <ul className="sr-trades">
-                {history.copied_trades_as_of.map((trade) => (
+                {newestTrades(history.copied_trades_as_of).map((trade) => (
                   <BriefPosition
                     key={`${trade.position_id}:${trade.source_wallet}:${trade.mint}`}
                     trade={trade}
@@ -567,7 +505,9 @@ export function SolanaPaperView({
               </ul>
             )}
           </section>
-          <section className="sr-panel" aria-labelledby="sr-wallets-title">
+          <details className="sr-disclosure sr-wallet-disclosure">
+            <summary><strong>Wallet performance</strong><span className="sr-summary-hint">Conditional ledger totals</span></summary>
+            <section aria-labelledby="sr-wallets-title">
             <div className="sr-panel-heading">
               <div>
                 <span className="sr-eyebrow">SOURCE WATCHLIST</span>
@@ -640,6 +580,7 @@ export function SolanaPaperView({
               </ul>
             )}
           </section>
+          </details>
         </div>
 
         <details id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
@@ -813,10 +754,10 @@ export function SolanaPaperView({
             <section className="mt-7" aria-label="Historical copy PnL">
               <h2 className="text-lg font-semibold">Our copy PnL · Historical snapshot</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                History is checked on opening this page, then at least 10 minutes apart, separately
+                History is checked on opening this page, then three minutes after each completed check, separately
                 from scanner status. Reports are generated no more often than every 10 minutes. Open
                 estimates are valid only at the snapshot cutoff, not current or executable quotes. A
-                new report may take up to 10 more minutes to appear here. Fetching this page does
+                successful check may return the same report and never advances its evidence cutoff. Fetching this page does
                 not refresh its valuation.
               </p>
               {history ? (
