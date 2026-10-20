@@ -1776,6 +1776,7 @@ export function startIndependentMonitorRefresh(
   let healthLoad: PaperMonitorLoad | null = null;
   let historyLoad: PaperMonitorLoad | null = null;
   let verifiedSession: ScannerHealth | null = null;
+  let closed = false;
   const publish = () => {
     if (healthLoad?.state === "not_started" && historyLoad?.state === "not_started") {
       emit({ state: "not_started" });
@@ -1819,7 +1820,7 @@ export function startIndependentMonitorRefresh(
       try {
         return await historyLoader(signal);
       } finally {
-        if (!signal?.aborted) options.onHistoryPending?.(false);
+        if (!closed) options.onHistoryPending?.(false);
       }
     },
     (value) => {
@@ -1832,6 +1833,7 @@ export function startIndependentMonitorRefresh(
     },
   );
   const stop = () => {
+    closed = true;
     stopHealth();
     stopHistory();
   };
