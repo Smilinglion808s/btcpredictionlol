@@ -1271,6 +1271,10 @@
   --sr-line: oklch(0.38 0.005 260);
   --sr-brand: oklch(0.57 0.22 22);
   --sr-warn: oklch(0.85 0.09 90);
+  --sr-edge-light: color-mix(in oklab, var(--sr-silver) 30%, transparent);
+  --sr-crimson-light: color-mix(in oklab, var(--sr-brand) 22%, transparent);
+  --sr-button-light: 0 0 20px var(--sr-crimson-light), inset 0 1px 0 var(--sr-edge-light);
+  --sr-surface-light: 0 -1px 0 var(--sr-edge-light), -14px -12px 40px -24px var(--sr-crimson-light);
   --foreground: var(--sr-white);
   --background: var(--sr-ink);
   --card: var(--sr-panel);
@@ -1316,22 +1320,32 @@
 .solana-retro .sr-section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 24px 0 12px; }
 .solana-retro .sr-snapshot-meta { text-align: right; color: var(--sr-muted); font-size: 12px; }
 .solana-retro .sr-snapshot-meta time { display: block; font: 11px/1.5 var(--font-mono); overflow-wrap: anywhere; }
-.solana-retro .sr-metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); border-block: 1px solid var(--sr-line); }
+.solana-retro .sr-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); border-block: 1px solid var(--sr-line); }
 .solana-retro .sr-metric { padding: 16px 16px 16px 0; min-width: 0; }
 .solana-retro .sr-metric > strong { display: block; margin: 5px 0; font: 600 22px/1.3 var(--font-mono); overflow-wrap: anywhere; }
 .solana-retro .sr-metric > strong > span { font: inherit; }
 .solana-retro .sr-metric small { font-size: 12px; color: var(--sr-muted); }
 .solana-retro .sr-note { font-size: 12px; color: var(--sr-muted); margin: 10px 0; }
 .solana-retro .sr-warning { color: var(--sr-warn); }
-.solana-retro .sr-data-grid { margin-top: 28px; }
-.solana-retro .sr-panel { min-width: 0; }
-.solana-retro .sr-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 0 16px; border-bottom: 2px solid var(--sr-silver); }
+.solana-retro .sr-data-grid { margin-top: 24px; }
+.solana-retro .sr-panel { min-width: 0; border-top: 1px solid var(--sr-silver); box-shadow: var(--sr-surface-light); position: relative; }
+.solana-retro .sr-panel::before { content: ""; position: absolute; top: -2px; left: 0; width: 68px; height: 3px; background: var(--sr-brand); box-shadow: var(--sr-button-light); }
+.solana-retro .sr-panel::after { content: ""; position: absolute; top: 0; right: 150px; width: 96px; height: 40px; pointer-events: none; background: repeating-linear-gradient(120deg, transparent 0 14px, var(--sr-edge-light) 14px 15px, transparent 15px 25px); mask-image: linear-gradient(to bottom, var(--sr-ink), transparent); }
+.solana-retro .wallet-login-trigger { box-shadow: var(--sr-button-light); }
+.solana-retro .sr-source-details { margin: 16px 0 24px; color: var(--sr-muted); font-size: 12px; }
+.solana-retro .sr-source-details > summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; list-style: none; border-bottom: 1px solid var(--sr-line); }
+.solana-retro .sr-source-details > summary::-webkit-details-marker { display: none; }
+.solana-retro .sr-source-details > summary > :last-child::after { content: " +"; color: var(--sr-white); }
+.solana-retro .sr-source-details[open] > summary > :last-child::after { content: " −"; }
+.solana-retro .sr-source-body { max-width: 780px; padding-top: 8px; }
+.solana-retro .sr-source-body p { margin: 8px 0; }
+.solana-retro .sr-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 0 16px; }
 .solana-retro #sr-trades-title { font-size: 30px; }
 .solana-retro .sr-panel-note { font-size: 12px; color: var(--sr-muted); margin: 10px 0 18px; }
 .solana-retro .sr-check-meta { color: var(--sr-muted); font-size: 12px; padding: 14px 0 0; }
 .solana-retro .sr-check-meta p { margin: 2px 0; }
 .solana-retro .sr-check-meta p:first-child { color: var(--sr-white); }
-.solana-retro .sr-refresh { background: var(--sr-panel); color: var(--sr-white); border-color: var(--sr-line); min-width: 118px; border-radius: 4px; }
+.solana-retro .sr-refresh { background: var(--sr-panel); color: var(--sr-white); border-color: var(--sr-line); box-shadow: inset 0 1px 0 var(--sr-edge-light); min-width: 118px; border-radius: 4px; }
 .solana-retro .sr-refresh:hover { background: var(--sr-raised); }
 .solana-retro .sr-trades, .solana-retro .sr-wallets { margin: 0; padding: 0; list-style: none; }
 .solana-retro :is(.sr-trades, .sr-wallets) > li { border-bottom: 1px solid var(--sr-line); }
@@ -1358,8 +1372,8 @@
 .solana-retro .sr-address { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .solana-retro .sr-row-detail dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 18px 0; }
 .solana-retro .sr-row-detail dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--sr-white); }
-.solana-retro .sr-empty { padding: 36px 20px; color: var(--sr-muted); border-block: 1px solid var(--sr-line); background-image: repeating-linear-gradient(135deg, transparent 0 18px, var(--sr-panel) 18px 19px); }
-.solana-retro .sr-empty > span { font-size: 26px; color: var(--sr-silver); }
+.solana-retro .sr-empty { padding: 64px 20px; text-align: center; color: var(--sr-muted); border-bottom: 1px solid var(--sr-line); }
+.solana-retro .sr-empty > span { font-size: 32px; color: var(--sr-brand); text-shadow: 0 0 20px var(--sr-crimson-light); }
 .solana-retro .sr-empty h3 { font-size: 18px; margin: 8px 0; color: var(--sr-white); }
 .solana-retro .sr-empty p { font-size: 13px; margin: 0; }
 .solana-retro .sr-disclosure { border-block: 1px solid var(--sr-line); margin-top: 22px; scroll-margin-top: 20px; }
@@ -1377,7 +1391,7 @@
   .solana-retro .sr-topline > .sr-eyebrow { display: none; }
   .solana-retro .sr-desk-header { align-items: flex-start; flex-direction: column; padding: 18px 0; gap: 12px; }
   .solana-retro h1 { font-size: 26px; }
-  .solana-retro .sr-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .solana-retro .sr-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .solana-retro .sr-metric > strong { font-size: 19px; }
   .solana-retro .sr-section-heading { flex-direction: column; align-items: flex-start; }
   .solana-retro .sr-snapshot-meta { text-align: left; }
