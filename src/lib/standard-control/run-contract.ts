@@ -7,7 +7,11 @@ function exact(v: Record<string, unknown>, keys: string[]) { if (Object.keys(v).
 function integer(v: unknown) { if (!Number.isSafeInteger(v) || (v as number) < 0) throw Error("Invalid time"); }
 function money(v: unknown) { if (v !== null && (typeof v !== "string" || !/^(0|[1-9][0-9]*)$/.test(v))) throw Error("Invalid atomic amount"); }
 function label(v: unknown, nullable = false) { if (!(nullable && v === null) && (typeof v !== "string" || !v.length || v.length > 256)) throw Error("Invalid identity"); }
-function stamp(v: unknown) { const d=object(v); exact(d,["wall_ms","mono_ns","domain"]); integer(d.wall_ms); integer(d.mono_ns); label(d.domain); }
+// JSON mono_ns can exceed JavaScript exact precision on long-lived hosts.
+// It is opaque, potentially rounded telemetry only: never use it for display,
+// age, authentication, ordering or decisions. Freshness uses request-bound timing.
+function opaqueMono(v: unknown) { if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v) || v < 0) throw Error("Invalid monotonic telemetry"); }
+function stamp(v: unknown) { const d=object(v); exact(d,["wall_ms","mono_ns","domain"]); integer(d.wall_ms); opaqueMono(d.mono_ns); label(d.domain); }
 function balance(v: unknown, anchor: boolean) {
  if (v === null) return;
  const d=object(v);exact(d,anchor?["authorized_cash_lamports","observed_lamports","received"]:["lamports","received"]);
