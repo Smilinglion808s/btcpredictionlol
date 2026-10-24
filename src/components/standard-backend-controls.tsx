@@ -1,3 +1,4 @@
+import { StandardRunStatus } from "./standard-run-status";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { WalletLoginController } from "../lib/wallet-siws/controller";
 import { WalletSessionStatus } from "../lib/wallet-siws/wallet-login-header";
@@ -53,10 +54,7 @@ function Controls({client}:{client:ReturnType<typeof createClient>}) {
   {!!s?.blockers.length&&<p>ON unavailable: {s.blockers.join(", ")}</p>}
   {v.error&&<p role="alert">{v.error}. A missing response is not an OFF acknowledgment.</p>}
   {!!s?.errors.length&&<p>Backend conditions: {s.errors.join(", ")}</p>}
-  <div className="grid gap-3 sm:grid-cols-2">
-   <div className="rounded-xl border border-slate-700 p-4"><p className="text-xs uppercase tracking-wide text-slate-400">Wallet balance</p><p className="mt-2 text-xl font-semibold">Unavailable</p><p className="mt-2 text-xs text-slate-400">This control contract does not expose current balance. Allocation is a limit, not proof of available funds.</p></div>
-   <div className="rounded-xl border border-slate-700 p-4"><p className="text-xs uppercase tracking-wide text-slate-400">Run & countdown</p><p className="mt-2 text-xl font-semibold">Awaiting run status</p><p className="mt-2 text-xs text-slate-400">No authenticated run-status connection is installed in this candidate. No countdown or active run is inferred.</p></div>
-  </div>
+  <StandardRunStatus client={client} view={v} clock={clock}/>
   <details className="rounded-xl border border-slate-700 p-4" open={!s || !s.on_permitted}><summary className="cursor-pointer font-semibold">Before you can start</summary><ul className="mt-3 space-y-2 text-sm text-slate-300"><li>1. Sign in to owner controls with the approved wallet.</li><li>2. Confirm the dedicated bot wallet, backend connection and configured limits.</li><li>3. Review the backend's readiness and run status, then explicitly request ON.</li></ul><p className="mt-3 text-xs text-slate-400">The planned run uses fixed-size buys, one position at a time, and reuses sale proceeds without compounding. Required allocation, per-buy amount and cost limits must come from reviewed backend configuration. They are not set by this page.</p></details>
   <h3 className="border-t border-slate-700 pt-5 text-lg font-semibold">Current position</h3>
   {!current?<p>Current inventory unavailable. Last observed exposure, if shown below, remains unresolved until refreshed.</p>:!s?.positions.length?<p>No current position recorded in this backend session.</p>:null}

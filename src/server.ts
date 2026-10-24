@@ -1,9 +1,6 @@
 // Local, uninstalled composition. No credential values or owner identity are stored here.
 // Root and owner auth responses run before ordinary app/error/telemetry imports.
-import {
-  createWalletControlProxy,
-  WALLET_SERVICE_ORIGIN,
-} from "./lib/wallet-auth-server/proxy.server";
+import { createAuthenticatedWalletControlProxy } from "./lib/wallet-auth-server/hop.server";
 import { rootLandingResponse } from "./lib/owner-root-landing";
 import { standaloneOwnerResponse } from "./lib/owner-auth/standalone-owner-response.server";
 import {
@@ -15,7 +12,7 @@ import { reviewedOwnerApiPolicy } from "./lib/owner-review-capabilities";
 import { deployedCallbackReview } from "./owner-callback-review.server";
 // Exact approved Solana-only replacement. The backend independently authenticates
 // wallet cookies; old email/bearer owner endpoints are denied by this namespace.
-const walletControlResponse = createWalletControlProxy(WALLET_SERVICE_ORIGIN);
+const walletControlResponse = createAuthenticatedWalletControlProxy();
 
 type AppEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
