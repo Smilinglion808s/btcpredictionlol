@@ -32,6 +32,7 @@ function failure(wallet: boolean, code: string, status: number): Response {
 }
 function scope(path: string): "wallet" | "control" | "legacy" | null {
   if (path === "/api/wallet-auth" || path.startsWith("/api/wallet-auth/")) return "wallet";
+  if (path === "/api/standard-control" || path.startsWith("/api/standard-control/")) return "control";
   if (path === "/api/control" || path.startsWith("/api/control/")) return "control";
   if (path === "/api/owner-control" || path.startsWith("/api/owner-control/")) return "legacy";
   return null;
@@ -45,9 +46,10 @@ function allowed(method: string, path: string): boolean {
         "/api/wallet-auth/cancel",
         "/api/wallet-auth/logout",
         "/api/control/commands",
+        "/api/standard-control/commands",
       ].includes(path)) ||
     (method === "GET" &&
-      (["/api/wallet-auth/session", "/api/control/session", "/api/control/status", "/api/control/readiness"].includes(
+      (["/api/standard-control/status", "/api/wallet-auth/session", "/api/control/session", "/api/control/status", "/api/control/readiness"].includes(
         path,
       ) ||
         /^\/api\/control\/commands\/[A-Za-z0-9_-]{1,240}$/.test(path)))

@@ -83,7 +83,7 @@ export function WalletLoginHeader({
     ].includes(s.phase);
   return (
     <div className="wallet-login-header">
-      <span className="wallet-login-off">REAL EXECUTION OFF</span>
+      <span className="wallet-login-off">LOGIN ONLY · SEE BACKEND CONTROLS</span>
       <button
         ref={trigger}
         className="wallet-login-trigger"
@@ -266,8 +266,8 @@ export function WalletLoginHeader({
           <button onClick={() => controller.close()}>Cancel and close</button>
         )}
         <p className="wallet-login-footnote">
-          Real execution stays OFF. A verified login is not permission to move
-          funds.
+          A verified login is not permission to move funds. Backend controls show
+          the acknowledged execution state.
         </p>
       </dialog>
     </div>
@@ -283,7 +283,7 @@ export function WalletSessionStatus() {
         : s.session
           ? "Owner wallet verified for this short session."
           : "Sign in with your owner wallet in the header to review controls."}{" "}
-      Real execution is OFF.
+      Execution state is shown separately in backend controls.
     </div>
   );
 }

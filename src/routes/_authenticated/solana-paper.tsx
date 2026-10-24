@@ -441,6 +441,18 @@ export function SolanaPaperView({
           </a>
           <SolanaWalletHeader />
         </div>
+        <details open id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
+          <summary>
+            <span>
+              <strong>Owner controls</strong>
+            </span>
+            <span className="sr-chip">Backend controls · acknowledged state below</span>
+          </summary>
+          <div className="sr-disclosure-body">
+            <WalletSolanaControls />
+          </div>
+        </details>
+
         <div className="sr-data-grid">
           <section className="sr-panel" aria-labelledby="sr-trades-title">
             <div className="sr-panel-heading">
@@ -666,17 +678,6 @@ export function SolanaPaperView({
           </section>
         </div>
 
-        <details id="solana-live-panel" className="sr-disclosure sr-live-disclosure">
-          <summary>
-            <span>
-              <strong>Owner controls</strong>
-            </span>
-            <span className="sr-chip">LIVE unavailable · default OFF</span>
-          </summary>
-          <div className="sr-disclosure-body">
-            <WalletSolanaControls />
-          </div>
-        </details>
         <details className="sr-disclosure sr-diagnostics">
           <summary>
             <span>
