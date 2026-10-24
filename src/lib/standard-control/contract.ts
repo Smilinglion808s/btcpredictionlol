@@ -47,7 +47,8 @@ export function parseStatus(input: unknown) {
 }
 export type Status = ReturnType<typeof parseStatus>;
 export interface Command {command_id:string; session_id:string; expected_version:number; action:"ON"|"OFF"}
-export interface View {status:Status|null; receivedMono:number|null; connection:"signed_out"|"loading"|"ready"|"unavailable"; error:string|null; pending:Pending[]; busy:boolean; journalError:boolean}
+export type StatusDiagnostic = Readonly<{httpStatus:number|null;proxyFailure:string|null;publicCode:string|null;category:"HTTP_ERROR"|"TRANSPORT"|"TIMEOUT"|"CONTENT_TYPE"|"BODY"|"DTO"|"GENERATION_CHANGED"|"SESSION_MISMATCH"|"EXPIRY_MISMATCH"|"SESSION_EXPIRED"|"FUTURE_TIMESTAMP"|"STALE_TIMESTAMP"|"UNKNOWN"}>;
+export interface View {diagnostic?:StatusDiagnostic|null;status:Status|null; receivedMono:number|null; connection:"signed_out"|"loading"|"ready"|"unavailable"; error:string|null; pending:Pending[]; busy:boolean; journalError:boolean}
 export interface Pending {authSession:string; command:Command}
 export function fresh(v:View,wall:number,mono:number):boolean {
  const s=v.status;
