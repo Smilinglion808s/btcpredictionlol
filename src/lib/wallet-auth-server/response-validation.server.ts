@@ -1,3 +1,4 @@
+import { parseStatus as parseStandardStatus, STATUS_PATH, COMMAND_PATH } from "../standard-control/contract";
 import {
   parseChallenge,
   parseSession as parseWalletSession,
@@ -15,6 +16,12 @@ const CONFIG = Object.freeze({
 });
 /** Reuse strict browser/control contracts before releasing cookie-bearing bodies. */
 export function validateSuccess(value: unknown, path: string, status: number, now: number): unknown {
+  if ((path === STATUS_PATH || path === COMMAND_PATH) && status === 200) {
+    const dto = parseStandardStatus(value);
+    if (dto.sampled_at_ms > now || now - dto.sampled_at_ms > dto.valid_for_ms || dto.auth_expires_at_ms <= now) throw new Error("Stale backend status");
+    if ((path === COMMAND_PATH) !== (dto.command !== null)) throw new Error("Invalid acknowledgment shape");
+    return dto;
+  }
   if (path.startsWith("/api/wallet-auth/")) {
     if (status !== 200) throw new Error("Invalid success status");
     if (path.endsWith("/challenge")) return parseChallenge(value, CONFIG, now);

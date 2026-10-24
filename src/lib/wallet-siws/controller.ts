@@ -549,7 +549,7 @@ export class WalletLoginController {
           expiresAt: new Date(unixTime(fresh.expires_at)).toISOString(),
         }),
         detail:
-          "Wallet login verified. Owner controls are available for review. Real execution remains OFF.",
+          "Wallet login verified. Owner controls are available for review. Execution state is shown separately in backend controls.",
       });
     } catch (error) {
       op.walletPending = false;
@@ -744,7 +744,7 @@ export class WalletLoginController {
           expiresAt: new Date(unixTime(fresh.expires_at)).toISOString(),
         }),
         detail:
-          "Current wallet session verified by the server. Real execution remains OFF.",
+          "Current wallet session verified by the server. Execution state is shown separately in backend controls.",
       });
       return fresh;
     } catch (error) {
