@@ -1,3 +1,4 @@
+import { RUN_PATH, parseRun } from "../standard-control/run-contract";
 import { parseStatus as parseStandardStatus, STATUS_PATH, COMMAND_PATH } from "../standard-control/contract";
 import {
   parseChallenge,
@@ -16,6 +17,7 @@ const CONFIG = Object.freeze({
 });
 /** Reuse strict browser/control contracts before releasing cookie-bearing bodies. */
 export function validateSuccess(value: unknown, path: string, status: number, now: number): unknown {
+  if (path === RUN_PATH && status === 200) return parseRun(value, now);
   if ((path === STATUS_PATH || path === COMMAND_PATH) && status === 200) {
     const dto = parseStandardStatus(value);
     if (dto.sampled_at_ms > now || now - dto.sampled_at_ms > dto.valid_for_ms || dto.auth_expires_at_ms <= now) throw new Error("Stale backend status");

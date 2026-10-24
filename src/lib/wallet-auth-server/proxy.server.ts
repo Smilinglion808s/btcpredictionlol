@@ -49,7 +49,7 @@ function allowed(method: string, path: string): boolean {
         "/api/standard-control/commands",
       ].includes(path)) ||
     (method === "GET" &&
-      (["/api/standard-control/status", "/api/wallet-auth/session", "/api/control/session", "/api/control/status", "/api/control/readiness"].includes(
+      (["/api/standard-control/run", "/api/standard-control/status", "/api/wallet-auth/session", "/api/control/session", "/api/control/status", "/api/control/readiness"].includes(
         path,
       ) ||
         /^\/api\/control\/commands\/[A-Za-z0-9_-]{1,240}$/.test(path)))
