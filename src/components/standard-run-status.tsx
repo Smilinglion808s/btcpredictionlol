@@ -5,7 +5,9 @@ import {readRun} from '../lib/standard-control/run-client';
 import {runReads,runDisplay,sol,duration,sameBinding,type Binding,type RunResult} from '../lib/standard-control/run-view';
 
 /** Authenticated sidecar read; cannot enable, renew or stop a run. */
-export function StandardRunStatus({client,view,clock}:{client:ReturnType<typeof createClient>;view:View;clock:{wall:number;mono:number}}){
+export function StandardRunStatus({client,view}:{client:ReturnType<typeof createClient>;view:View}){
+ // Sidecar responses also render independently of the parent timer.
+ const clock={wall:Date.now(),mono:performance.now()};
  const currentBinding=():Binding|null=>{const v=client.snapshot();return fresh(v,Date.now(),performance.now())&&v.status?{auth:v.status.auth_session_id,runtime:v.status.runtime_session_id}:null;};
  const binding=fresh(view,clock.wall,clock.mono)&&view.status?{auth:view.status.auth_session_id,runtime:view.status.runtime_session_id}:null;
  const tracker=useRef(runReads());

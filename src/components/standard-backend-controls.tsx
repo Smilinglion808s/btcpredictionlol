@@ -33,8 +33,10 @@ export function StandardBackendControls({controller}:{controller:WalletLoginCont
 }
 function Controls({client}:{client:ReturnType<typeof createClient>}) {
  const v=useSyncExternalStore(client.subscribe,client.snapshot,client.snapshot);
- const [clock,setClock]=useState({wall:Date.now(),mono:performance.now()});
- useEffect(()=>{const t=setInterval(()=>setClock({wall:Date.now(),mono:performance.now()}),500);return()=>clearInterval(t)},[]);
+ const [,setRenderTick]=useState(0);
+ useEffect(()=>{const t=setInterval(()=>setRenderTick(tick=>tick+1),500);return()=>clearInterval(t)},[]);
+ // Responses render between timer ticks: sample now, not the previous tick.
+ const clock={wall:Date.now(),mono:performance.now()};
  const current=fresh(v,clock.wall,clock.mono),s=v.status;
  return <section aria-label="Backend trading controls" className="space-y-5 rounded-2xl border border-cyan-500/25 bg-slate-950/40 p-4 text-slate-100 sm:p-6">
   <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Solana copy desk</p><h2 className="mt-1 text-2xl font-semibold">Bot controls</h2><p className="mt-2 max-w-2xl text-sm text-slate-400">Your backend is the source of truth. Connecting a wallet or opening this page never starts trading.</p></div><span className="rounded-full border border-slate-600 px-3 py-1 text-xs">{current?s?.mode:"Status unavailable"}</span></div>
@@ -55,7 +57,7 @@ function Controls({client}:{client:ReturnType<typeof createClient>}) {
   {v.error&&<p role="alert">{v.error}. A missing response is not an OFF acknowledgment.</p>}
   {!!s?.errors.length&&<p>Backend conditions: {s.errors.join(", ")}</p>}
   {v.diagnostic&&<details className="rounded-lg border border-slate-700 p-3 text-xs text-slate-400"><summary>Connection details</summary><p>HTTP: {v.diagnostic.httpStatus??"unavailable"} · Proxy: {v.diagnostic.proxyFailure??"not reported"} · Code: {v.diagnostic.publicCode??"not reported"} · Check: {v.diagnostic.category}</p><p>No account or authentication values are included. These details do not enable trading.</p></details>}
-  <StandardRunStatus client={client} view={v} clock={clock}/>
+  <StandardRunStatus client={client} view={v}/>
   <details className="rounded-xl border border-slate-700 p-4" open={!s || !s.on_permitted}><summary className="cursor-pointer font-semibold">Before you can start</summary><ul className="mt-3 space-y-2 text-sm text-slate-300"><li>1. Sign in to owner controls with the approved wallet.</li><li>2. Confirm the dedicated bot wallet, backend connection and configured limits.</li><li>3. Review the backend's readiness and run status, then explicitly request ON.</li></ul><p className="mt-3 text-xs text-slate-400">The planned run uses fixed-size buys, one position at a time, and reuses sale proceeds without compounding. Required allocation, per-buy amount and cost limits must come from reviewed backend configuration. They are not set by this page.</p></details>
   <h3 className="border-t border-slate-700 pt-5 text-lg font-semibold">Current position</h3>
   {!current?<p>Current inventory unavailable. Last observed exposure, if shown below, remains unresolved until refreshed.</p>:!s?.positions.length?<p>No current position recorded in this backend session.</p>:null}
