@@ -1,3 +1,4 @@
+import {ageFresh} from "./freshness";
 import type { readRun } from './run-client';
 export type RunResult = Awaited<ReturnType<typeof readRun>>;
 export type Binding = {auth:string;runtime:string};
@@ -20,10 +21,11 @@ export function runReads() {
 }
 export function runDisplay(result:RunResult|null,now:number,receivedMono:number|null,mono:number,statusFresh:boolean){
  const run=result?.availability==='available'?result.run:null;
- if(!run||!statusFresh||receivedMono===null||mono<receivedMono||mono-receivedMono>5000||now<Number(run.observed_at_ms)||now-Number(run.observed_at_ms)>5000)return null;
+ const timing=result?.availability==='available'?result.timing:undefined;
+ if(!run||!statusFresh||receivedMono===null||(timing?!ageFresh(timing,mono):mono<receivedMono||mono-receivedMono>5000||now<Number(run.observed_at_ms)||now-Number(run.observed_at_ms)>5000))return null;
  const end=typeof run.entries_until_ms==='number'?run.entries_until_ms:null;
- const remaining=end===null?null:Math.max(0,end-now);
- return {run,remaining,expired:end!==null&&now>=end};
+ const remaining=timing?(timing.runRemainingMs===null||timing.runRemainingMs===undefined?null:Math.max(0,timing.runRemainingMs-(mono-timing.receivedMono))):end===null?null:Math.max(0,end-now);
+ return {run,remaining,expired:remaining!==null&&remaining<=0};
 }
 export function sol(value:unknown){
  if(typeof value!=='string'||!/^(0|[1-9][0-9]*)$/.test(value))return 'Not configured';

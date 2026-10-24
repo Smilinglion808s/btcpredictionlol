@@ -302,7 +302,22 @@ export function createWalletControlProxy(
       const valid = upstream.status < 300 ? validateSuccess(value, url.pathname, upstream.status, now()) : value;
       failureStage = "COOKIE";
       const cookies = upstreamCookies(upstream.headers, url.pathname, upstream.status);
-      return response(valid, upstream.status, cookies);
+      const result=response(valid, upstream.status, cookies);
+      if(upstream.status===200&&(url.pathname==="/api/standard-control/status"||url.pathname==="/api/standard-control/commands"||url.pathname==="/api/standard-control/run")){
+        const readId=request.headers.get("X-Control-Read-Id");
+        if(readId!==null){
+          if(!/^[a-f0-9]{32}$/.test(readId))throw new Error("Invalid read binding");
+          const dto=valid as {sampled_at_ms?:number;observed_at_ms?:number;auth_expires_at_ms?:number;entries_until_ms?:number|null},observed=now();
+          const run=url.pathname==="/api/standard-control/run",sample=run?dto.observed_at_ms:dto.sampled_at_ms;
+          if(sample===undefined)throw new Error("Invalid status timing");
+          const age=Math.ceil(observed-sample);
+          if(!Number.isSafeInteger(observed)||age<0||age>5000)throw new Error("Invalid status timing");
+          result.headers.set("X-Control-Read-Id",readId);result.headers.set("X-Control-Sample-Age-Ms",String(age));
+          if(run){const end=dto.entries_until_ms;if(end===undefined)throw new Error("Invalid run timing");const remaining=end===null?null:Math.max(0,Math.floor(end-observed));if(remaining!==null&&remaining>86400000)throw new Error("Invalid run timing");result.headers.set("X-Control-Run-Remaining-Ms",remaining===null?"none":String(remaining));}
+          else{if(dto.auth_expires_at_ms===undefined)throw new Error("Invalid auth timing");const remaining=Math.floor(dto.auth_expires_at_ms-observed);if(remaining<=0||remaining>600000)throw new Error("Invalid auth timing");result.headers.set("X-Control-Auth-Remaining-Ms",String(remaining));}
+        }
+      }
+      return result;
     } catch (error) {
       if (!upstreamStarted && error instanceof BoundaryError) return failure(wallet, error.code, error.status);
       const result = failure(wallet, handedOff ? "RESULT_UNCERTAIN" : "SERVICE_UNAVAILABLE", 503);

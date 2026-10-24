@@ -46,16 +46,24 @@ export function parseStatus(input: unknown) {
   return {schema:SCHEMA,runtime_session_id:str(v.runtime_session_id),auth_session_id:str(v.auth_session_id),auth_expires_at_ms:num(v.auth_expires_at_ms),sampled_at_ms:num(v.sampled_at_ms),valid_for_ms:5000,acknowledged:true,version:num(v.version),mode,entry_enabled:entry,on_permitted:permitted,blockers,dataset,live_ready:false,positions,activity,activity_total:total,activity_truncated:truncated,pending_orders:num(v.pending_orders),errors:list(v.errors,10,x=>choice(x,codes)),command,balance:{availability:"unavailable",lamports:null,observed_at_ms:null,reason:"NOT_EXPOSED_BY_RUNTIME"}};
 }
 export type Status = ReturnType<typeof parseStatus>;
+/** Server-validated age, conservatively increased by full monotonic request RTT. */
+export type StatusTiming=Readonly<{sampleAgeMs:number;authRemainingMs:number;receivedMono:number}>;
+const timing=new WeakMap<Status,StatusTiming>();
+export function bindStatusTiming(status:Status,value:StatusTiming){timing.set(status,Object.freeze({...value}));}
+export function statusTiming(status:Status){return timing.get(status);}
+export function timingFresh(t:StatusTiming,mono:number){const elapsed=mono-t.receivedMono;return Number.isFinite(elapsed)&&elapsed>=0&&t.sampleAgeMs+elapsed<=5000&&t.authRemainingMs-elapsed>0;}
+export function authFresh(v:View,wall:number,mono:number){const t=v.timing;return !!v.status&&(t?Number.isFinite(mono)&&mono>=t.receivedMono&&mono-t.receivedMono<t.authRemainingMs:wall<v.status.auth_expires_at_ms);}
+
 export interface Command {command_id:string; session_id:string; expected_version:number; action:"ON"|"OFF"}
-export type StatusDiagnostic = Readonly<{httpStatus:number|null;proxyFailure:string|null;publicCode:string|null;category:"HTTP_ERROR"|"TRANSPORT"|"TIMEOUT"|"CONTENT_TYPE"|"BODY"|"DTO"|"GENERATION_CHANGED"|"SESSION_MISMATCH"|"EXPIRY_MISMATCH"|"SESSION_EXPIRED"|"FUTURE_TIMESTAMP"|"STALE_TIMESTAMP"|"UNKNOWN"}>;
-export interface View {diagnostic?:StatusDiagnostic|null;status:Status|null; receivedMono:number|null; connection:"signed_out"|"loading"|"ready"|"unavailable"; error:string|null; pending:Pending[]; busy:boolean; journalError:boolean}
+export type StatusDiagnostic = Readonly<{httpStatus:number|null;proxyFailure:string|null;publicCode:string|null;category:"HTTP_ERROR"|"TRANSPORT"|"TIMEOUT"|"CONTENT_TYPE"|"BODY"|"DTO"|"GENERATION_CHANGED"|"SESSION_MISMATCH"|"EXPIRY_MISMATCH"|"SESSION_EXPIRED"|"FUTURE_TIMESTAMP"|"STALE_TIMESTAMP"|"TIMING_METADATA"|"UNKNOWN"}>;
+export interface View {timing?:StatusTiming|null;diagnostic?:StatusDiagnostic|null;status:Status|null; receivedMono:number|null; connection:"signed_out"|"loading"|"ready"|"unavailable"; error:string|null; pending:Pending[]; busy:boolean; journalError:boolean}
 export interface Pending {authSession:string; command:Command}
 export function fresh(v:View,wall:number,mono:number):boolean {
  const s=v.status;
- return !!s && v.connection==="ready" && v.receivedMono!==null && mono>=v.receivedMono && mono-v.receivedMono<=s.valid_for_ms && wall>=s.sampled_at_ms && wall-s.sampled_at_ms<=s.valid_for_ms && wall<s.auth_expires_at_ms;
+ return !!s && v.connection==="ready" && v.receivedMono!==null && (v.timing?timingFresh(v.timing,mono):mono>=v.receivedMono && mono-v.receivedMono<=s.valid_for_ms && wall>=s.sampled_at_ms && wall-s.sampled_at_ms<=s.valid_for_ms && wall<s.auth_expires_at_ms);
 }
 export function canCommand(v:View,action:"ON"|"OFF",wall:number,mono:number):boolean {
  if (v.journalError || !v.status || v.connection==="signed_out") return false;
- if (action==="OFF") return wall<v.status.auth_expires_at_ms; // Restrictive command allowed with stale status/pending ON; server version still checked.
+ if (action==="OFF") return authFresh(v,wall,mono); // Restrictive command allowed with stale status/pending ON; server version still checked.
  return fresh(v,wall,mono) && !v.busy && !v.pending.length && v.status.on_permitted;
 }
