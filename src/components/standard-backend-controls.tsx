@@ -1,4 +1,5 @@
 import { StandardRunStatus } from "./standard-run-status";
+import { StandardOnConfirmation } from "./standard-on-confirmation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { WalletLoginController } from "../lib/wallet-siws/controller";
 import { WalletSessionStatus } from "../lib/wallet-siws/wallet-login-header";
@@ -47,7 +48,7 @@ function Controls({client}:{client:ReturnType<typeof createClient>}) {
    <p>{current&&s?.entry_enabled?"Entries enabled by backend acknowledgment.":"No current acknowledgment that entries are enabled."}</p>
   </div>
   <div className="flex flex-wrap gap-2">
-   <button className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40" type="button" disabled={!canCommand(v,"ON",clock.wall,clock.mono)} onClick={()=>{if(window.confirm("Request ON for this backend session using its reviewed configured limits?"))void client.command("ON")}}>Request ON</button>
+   <StandardOnConfirmation client={client}/>
    <button className="rounded-lg border border-rose-400/60 px-5 py-3 font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-40" type="button" disabled={!canCommand(v,"OFF",clock.wall,clock.mono)} onClick={()=>void client.command("OFF")}>Stop new entries (OFF)</button>
    <button className="rounded-lg border border-slate-600 px-4 py-3 text-sm" type="button" onClick={()=>void client.refresh()}>Refresh status</button>
   </div>
